@@ -73,7 +73,6 @@ namespace R.MessageBus
                     catch (Exception ex)
                     {
                         Logger.Error(string.Format("Error executing handler. {0}", instanceRef.PluginType.FullName), ex);
-                        throw; //todo this needs to be taken out
                     }
                 }
             }
