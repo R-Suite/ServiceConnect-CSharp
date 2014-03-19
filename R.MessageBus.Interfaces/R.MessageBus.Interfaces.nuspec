@@ -1,17 +1,17 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
   <metadata>
-    <id>SchoolGem.MessageBus.Interfaces</id>
+    <id>R.MessageBus.Interfaces</id>
     <version>1.0.0.0</version>
-    <title>SchoolGem.MessageBus.Interfaces</title>
+    <title>R.MessageBus.Interfaces</title>
     <authors>Jakub Pachansky,Time Watson</authors>
     <owners>NA</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>SchoolGem MessageBus Interfaces</description>
+    <description>R MessageBus Interfaces</description>
     <language>en-GB</language>
-    <tags>MessageBus Interfaces,MessageBus.Interfaces,SchoolGem.MessageBus,SchoolGem MessageBus,MessageBus</tags>
+    <tags>MessageBus Interfaces,MessageBus.Interfaces,R.MessageBus,R MessageBus,MessageBus</tags>
   </metadata>
   <files>
-    <file src="bin\Release\SchoolGem.MessageBus.Interfaces.dll" target="lib\net40\SchoolGem.MessageBus.Interfaces.dll" />
+    <file src="bin\Release\R.MessageBus.Interfaces.dll" target="lib\net40\R.MessageBus.Interfaces.dll" />
   </files>
 </package>
