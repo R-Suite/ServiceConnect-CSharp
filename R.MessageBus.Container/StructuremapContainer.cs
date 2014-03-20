@@ -31,5 +31,14 @@ namespace R.MessageBus.Container
         {
             return ObjectFactory.GetInstance(handlerType);
         }
+
+        public void ScanForHandlers()
+        {
+            ObjectFactory.Configure(x => x.Scan(y =>
+            {
+                y.AssembliesFromApplicationBaseDirectory();
+                y.ConnectImplementationsToTypesClosing(typeof(IMessageHandler<>));
+            }));
+        }
     }
 }

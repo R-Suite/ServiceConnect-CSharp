@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Reflection;
 using R.MessageBus.Client.RabbitMQ;
+using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus
@@ -8,19 +8,21 @@ namespace R.MessageBus
     public class Configuration : IConfiguration
     {
         public Type ConsumerType { get; set; }
-        public IBusContainer Container { get; set; }
+        public Type Container { get; set; }
         public string EndPoint { get; set; }
         public string ConfigurationPath { get; set; }
+        public bool ScanForMesssageHandlers { get; set; }
 
         public Configuration()
         {
             ConfigurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
             ConsumerType = typeof(Consumer);
+            Container = typeof(StructuremapContainer);
         }
 
         public void SetContainer<T>() where T : class, IBusContainer
         {
-            Container = (T)Activator.CreateInstance(typeof(T));
+            Container = typeof(T);
         }
 
         public void SetConsumer<T>() where T : class, IConsumer 
@@ -31,6 +33,11 @@ namespace R.MessageBus
         public IConsumer GetConsumer()
         {
             return (IConsumer)Activator.CreateInstance(ConsumerType, EndPoint, ConfigurationPath);
+        }
+
+        public IBusContainer GetContainer()
+        {
+            return (IBusContainer)Activator.CreateInstance(Container);
         }
     }
 }

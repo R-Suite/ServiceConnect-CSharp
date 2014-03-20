@@ -10,10 +10,11 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>R.MessageBus</RootNamespace>
     <AssemblyName>R.MessageBus</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
     <RestorePackages>true</RestorePackages>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -24,6 +25,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -32,6 +34,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="log4net">
@@ -52,7 +55,6 @@
   <ItemGroup>
     <Compile Include="Bus.cs" />
     <Compile Include="Configuration.cs" />
-    <Compile Include="Container.cs" />
     <Compile Include="ProcessManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -61,6 +63,10 @@
     <None Include="R.MessageBus.nuspec" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\R.MessageBus.Container\R.MessageBus.Container.csproj">
+      <Project>{9fa4aa16-d8c4-4b0c-af09-a17112655152}</Project>
+      <Name>R.MessageBus.Container</Name>
+    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
       <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
       <Name>R.MessageBus.Interfaces</Name>

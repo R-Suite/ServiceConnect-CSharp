@@ -20,7 +20,12 @@ namespace R.MessageBus.IntegrationTests
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
             Assert.Equal(AppDomain.CurrentDomain.SetupInformation.ConfigurationFile, configuration.ConfigurationPath);
+            Assert.Equal(typeof(StructuremapContainer), configuration.Container.GetType());
             Assert.Equal(null, configuration.EndPoint);
+        }
+
+        public class StructuremapContainer
+        {
         }
 
         [Fact]
@@ -69,6 +74,22 @@ namespace R.MessageBus.IntegrationTests
         }
 
         [Fact]
+        public void ShouldSetupBusToScanForAllHandlers()
+        {
+            // Arrange
+            IBus bus = Bus.Initialize(config =>
+            {
+                config.ScanForMesssageHandlers = true;
+            });
+
+            // Act
+            IConfiguration configuration = bus.Configuration;
+
+            // Assert
+            Assert.Equal(true, configuration.ScanForMesssageHandlers);
+        }
+
+        [Fact]
         public void ShouldSetupBusWithCustomContainer()
         {
             // Arrange
@@ -90,6 +111,7 @@ namespace R.MessageBus.IntegrationTests
                 config.EndPoint = "MyEndpoint";
                 config.ConfigurationPath = "MyConfigurationPath";
                 config.SetConsumer<FakeConsumer>();
+                config.SetContainer<FakeContainer>();
             });
             IConfiguration configuration = bus.Configuration;
 
@@ -116,6 +138,11 @@ namespace R.MessageBus.IntegrationTests
             }
 
             public object GetHandlerInstance(Type handlerType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void ScanForHandlers()
             {
                 throw new NotImplementedException();
             }
