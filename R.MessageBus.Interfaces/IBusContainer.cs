@@ -8,5 +8,6 @@ namespace R.MessageBus.Interfaces
         IEnumerable<HandlerReference> GetHandlerTypes();
         IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler);
         object GetHandlerInstance(Type handlerType);
+        void ScanForHandlers();
     }
 }

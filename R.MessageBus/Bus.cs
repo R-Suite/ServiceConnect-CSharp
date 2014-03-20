@@ -11,12 +11,20 @@ namespace R.MessageBus
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
+        private readonly IBusContainer _container;
 
         public IConfiguration Configuration { get; set; }
 
         public Bus(IConfiguration configuration)
         {
             Configuration = configuration;
+
+            _container = configuration.GetContainer();
+
+            if (configuration.ScanForMesssageHandlers)
+            {
+                _container.ScanForHandlers();
+            }
         }
 
         public static IBus Initialize(Action<IConfiguration> action)
@@ -34,7 +42,7 @@ namespace R.MessageBus
 
         public void StartConsuming(string configPath, string endPoint, string queue = null)
         {
-            IEnumerable<HandlerReference> instances = Configuration.Container.GetHandlerTypes(); 
+            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(); 
 
             foreach (HandlerReference reference in instances)
             {
@@ -55,7 +63,7 @@ namespace R.MessageBus
                 Type t = objectMessage.GetType();
                 Type messageHandler = typeof(IMessageHandler<>).MakeGenericType(t);
 
-                IEnumerable<HandlerReference> instances = Configuration.Container.GetHandlerTypes(messageHandler); ;
+                IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(messageHandler); ;
 
                 foreach (HandlerReference instance in instances)
                 {
@@ -79,7 +87,7 @@ namespace R.MessageBus
 
                     try
                     {
-                        var handler = Configuration.Container.GetHandlerInstance(instance.HandlerType); 
+                        var handler = _container.GetHandlerInstance(instance.HandlerType); 
                         messageHandler.GetMethod("Execute").Invoke(handler, new[] { objectMessage });
                     }
                     catch (Exception ex)
