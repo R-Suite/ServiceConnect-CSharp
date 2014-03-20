@@ -6,7 +6,9 @@ namespace R.MessageBus.Interfaces
     {
         T FindData<T>(Guid id) where T : IProcessManagerData;
 
-        void SaveData<T>(T data) where T : IProcessManagerData;
+        void InsertData<T>(T data) where T : IProcessManagerData;
+
+        void UpdateData<T>(T data) where T : IProcessManagerData;
 
         void DeleteData<T>(T data) where T : IProcessManagerData;
     }
