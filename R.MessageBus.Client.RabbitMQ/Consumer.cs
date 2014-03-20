@@ -21,7 +21,6 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly int _retryDelay;
         private readonly int _maxRetries; 
 
-
         public Consumer(string configPath, string endPoint)
         {
             var configurationManager = new ConfigurationManagerWrapper(configPath);
