@@ -28,7 +28,7 @@ Default configuration is the following,
 * Consumer - RabbitMQ
 * Container - StructureMap
 * ScanForMessageHandlers - False
-* ConfigurationPath - Applications default configuration file path.
+* ConfigurationPath - Applications default configuration file path
 * EndPoint - null
 
 #### Custom Configuration
