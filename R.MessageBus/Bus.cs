@@ -7,7 +7,7 @@ using R.MessageBus.Interfaces;
 
 namespace R.MessageBus
 {
-    public class Bus : IDisposable, IBus
+    public class Bus : IBus
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
@@ -27,6 +27,11 @@ namespace R.MessageBus
             }
         }
 
+        /// <summary>
+        /// Instantiates a Bus instance, including any configuration.
+        /// </summary>
+        /// <param name="action">A lambda that configures that sets the Bus configuration.</param>
+        /// <returns>The configured instance of the Bus.</returns>
         public static IBus Initialize(Action<IConfiguration> action)
         {
             var configuration = new Configuration();
@@ -34,13 +39,17 @@ namespace R.MessageBus
             return new Bus(configuration);
         }
 
+        /// <summary>
+        /// Instantiates Bus using the default configuration.
+        /// </summary>
+        /// <returns>The configured instance of the Bus.</returns>
         public static IBus Initialize()
         {
             var configuration = new Configuration();
             return new Bus(configuration);
         }
 
-        public void StartConsuming(string configPath, string endPoint, string queue = null)
+        public void StartConsuming(string queue = null)
         {
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(); 
 
@@ -63,36 +72,37 @@ namespace R.MessageBus
                 Type t = objectMessage.GetType();
                 Type messageHandler = typeof(IMessageHandler<>).MakeGenericType(t);
 
-                IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(messageHandler); ;
+                IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(messageHandler);
+                //IEnumerable<ProcessManagerReference> processManagerInstances = _container.GetProcessManagerTypes(messageHandler);
 
-                foreach (HandlerReference instance in instances)
+                //foreach (ProcessManagerReference processManagerReference in processManagerInstances)
+                //{
+                //    //   if IStartProcessManager
+
+                //    //    var handler = ObjectFactory.GetInstance(instanceRef.ConcreteType);
+                //    //    -> Execute handler
+                //    //    -> Persists data
+
+                //    //  else
+
+                //    //    -> Create PM Instance
+                //    //    -> Lookup PM State in persistent storage by PM Instance CorrelationId
+                //    //    -> Load PM's data
+                //    //    -> Execute handler
+                //    //    -> Persists data if not completed, else remove
+
+                //}
+
+                foreach (HandlerReference handlerReference in handlerReferences)
                 {
-                    // IF 1 Inherits Process Manager
-
-                    //   if IStartProcessManager
-
-                    //    var handler = ObjectFactory.GetInstance(instanceRef.ConcreteType);
-                    //    -> Execute handler
-                    //    -> Persists data
-
-                    //  else
-
-                    //    -> Create PM Instance
-                    //    -> Lookup PM State in persistent storage by PM Instance CorrelationId
-                    //    -> Load PM's data
-                    //    -> Execute handler
-                    //    -> Persists data if not completed, else remove
-
-                    // ELSE 1
-
                     try
                     {
-                        var handler = _container.GetHandlerInstance(instance.HandlerType); 
+                        var handler = _container.GetHandlerInstance(handlerReference.HandlerType); 
                         messageHandler.GetMethod("Execute").Invoke(handler, new[] { objectMessage });
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error(string.Format("Error executing handler. {0}", instance.HandlerType.FullName), ex);
+                        Logger.Error(string.Format("Error executing handler. {0}", handlerReference.HandlerType.FullName), ex);
                     }
                 }
             }

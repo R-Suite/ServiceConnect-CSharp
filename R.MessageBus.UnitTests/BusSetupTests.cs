@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using R.MessageBus.Client.RabbitMQ;
+using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using Xunit;
 
-namespace R.MessageBus.IntegrationTests
+namespace R.MessageBus.UnitTests
 {
     public class BusSetupTests
     {
@@ -20,12 +21,8 @@ namespace R.MessageBus.IntegrationTests
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
             Assert.Equal(AppDomain.CurrentDomain.SetupInformation.ConfigurationFile, configuration.ConfigurationPath);
-            Assert.Equal(typeof(StructuremapContainer), configuration.Container.GetType());
+            Assert.Equal(typeof(StructuremapContainer), configuration.Container);
             Assert.Equal(null, configuration.EndPoint);
-        }
-
-        public class StructuremapContainer
-        {
         }
 
         [Fact]
@@ -99,7 +96,7 @@ namespace R.MessageBus.IntegrationTests
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.Equal(typeof(FakeContainer), configuration.Container.GetType());
+            Assert.Equal(typeof(FakeContainer), configuration.Container);
         }
 
         [Fact]
