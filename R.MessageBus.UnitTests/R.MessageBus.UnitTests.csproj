@@ -48,6 +48,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BusSetupTests.cs" />
+    <Compile Include="BusTests.cs" />
     <Compile Include="ConfigurationTests.cs" />
     <Compile Include="InMemoryProcessManagerFinderTests.cs" />
     <Compile Include="ProcessManagerTests.cs" />

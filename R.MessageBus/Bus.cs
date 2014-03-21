@@ -72,36 +72,37 @@ namespace R.MessageBus
                 Type t = objectMessage.GetType();
                 Type messageHandler = typeof(IMessageHandler<>).MakeGenericType(t);
 
-                IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(messageHandler); 
+                IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(messageHandler);
+                //IEnumerable<ProcessManagerReference> processManagerInstances = _container.GetProcessManagerTypes(messageHandler);
 
-                foreach (HandlerReference instance in instances)
+                //foreach (ProcessManagerReference processManagerReference in processManagerInstances)
+                //{
+                //    //   if IStartProcessManager
+
+                //    //    var handler = ObjectFactory.GetInstance(instanceRef.ConcreteType);
+                //    //    -> Execute handler
+                //    //    -> Persists data
+
+                //    //  else
+
+                //    //    -> Create PM Instance
+                //    //    -> Lookup PM State in persistent storage by PM Instance CorrelationId
+                //    //    -> Load PM's data
+                //    //    -> Execute handler
+                //    //    -> Persists data if not completed, else remove
+
+                //}
+
+                foreach (HandlerReference handlerReference in handlerReferences)
                 {
-                    // IF 1 Inherits Process Manager
-
-                    //   if IStartProcessManager
-
-                    //    var handler = ObjectFactory.GetInstance(instanceRef.ConcreteType);
-                    //    -> Execute handler
-                    //    -> Persists data
-
-                    //  else
-
-                    //    -> Create PM Instance
-                    //    -> Lookup PM State in persistent storage by PM Instance CorrelationId
-                    //    -> Load PM's data
-                    //    -> Execute handler
-                    //    -> Persists data if not completed, else remove
-
-                    // ELSE 1
-
                     try
                     {
-                        var handler = _container.GetHandlerInstance(instance.HandlerType); 
+                        var handler = _container.GetHandlerInstance(handlerReference.HandlerType); 
                         messageHandler.GetMethod("Execute").Invoke(handler, new[] { objectMessage });
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error(string.Format("Error executing handler. {0}", instance.HandlerType.FullName), ex);
+                        Logger.Error(string.Format("Error executing handler. {0}", handlerReference.HandlerType.FullName), ex);
                     }
                 }
             }
