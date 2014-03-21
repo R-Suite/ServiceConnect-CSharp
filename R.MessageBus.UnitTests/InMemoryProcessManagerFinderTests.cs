@@ -10,6 +10,7 @@ namespace R.MessageBus.UnitTests
         public class TestData : IProcessManagerData
         {
             public Guid CorrelationId { get; set; }
+            public int Version { get; set; }
             public string Name {get; set;}
         }
 
@@ -23,10 +24,10 @@ namespace R.MessageBus.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
 
             // Act
-            processManagerFinder.InsertData(data);
+            processManagerFinder.InsertData(new VersionData<IProcessManagerData> { Data = data });
 
             // Assert
-            Assert.Equal("TestData", ((TestData)processManagerFinder.FindData<IProcessManagerData>(_correlationId)).Name);
+            Assert.Equal("TestData", processManagerFinder.FindData<TestData>(_correlationId).Data.Name);
         }
 
         [Fact]
@@ -36,10 +37,10 @@ namespace R.MessageBus.UnitTests
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerData dataWithDuplicateId = new TestData { CorrelationId = _correlationId, Name = "TestDataWithDuplicateId" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
-            processManagerFinder.InsertData(data);
+            processManagerFinder.InsertData(new VersionData<IProcessManagerData> { Data = data });
 
             // Act / Assert
-            Assert.Throws<ArgumentException>(() => processManagerFinder.InsertData(dataWithDuplicateId));
+            Assert.Throws<ArgumentException>(() => processManagerFinder.InsertData(new VersionData<IProcessManagerData> { Data = dataWithDuplicateId}));
         }
 
         [Fact]
@@ -49,13 +50,13 @@ namespace R.MessageBus.UnitTests
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerData dataUpdated = new TestData { CorrelationId = _correlationId, Name = "TestDataUpdated" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
-            processManagerFinder.InsertData(data);
+            processManagerFinder.InsertData(new VersionData<IProcessManagerData> { Data = data });
 
             // Act
-            processManagerFinder.UpdateData(dataUpdated);
+            processManagerFinder.UpdateData(new VersionData<IProcessManagerData> { Data = dataUpdated });
 
             // Assert
-            Assert.Equal("TestDataUpdated", ((TestData)processManagerFinder.FindData<IProcessManagerData>(_correlationId)).Name);
+            Assert.Equal("TestDataUpdated", processManagerFinder.FindData<TestData>(_correlationId).Data.Name);
         }
 
         [Fact]
@@ -66,7 +67,7 @@ namespace R.MessageBus.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
 
             // Act / Assert
-            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(data));
+            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(new VersionData<IProcessManagerData> { Data = data }));
         }
 
         [Fact]
@@ -75,13 +76,13 @@ namespace R.MessageBus.UnitTests
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
-            processManagerFinder.InsertData(data);
+            processManagerFinder.InsertData(new VersionData<IProcessManagerData> { Data = data });
 
             // Act
-            processManagerFinder.DeleteData(data);
+            processManagerFinder.DeleteData(new VersionData<IProcessManagerData> { Data = data });
 
             // Assert
-            Assert.Null(processManagerFinder.FindData<IProcessManagerData>(_correlationId));
+            Assert.Null(processManagerFinder.FindData<IProcessManagerData>(_correlationId).Data);
         }
 
         [Fact]
@@ -94,7 +95,7 @@ namespace R.MessageBus.UnitTests
             var result = processManagerFinder.FindData<IProcessManagerData>(_correlationId);
 
             // Assert
-            Assert.Null(result);
+            Assert.Null(result.Data);
         }
     }
 }
