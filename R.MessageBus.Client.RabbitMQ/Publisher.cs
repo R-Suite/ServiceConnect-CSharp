@@ -13,7 +13,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly string _exchange;
         private readonly Settings.Settings _settings;
 
-        public Publisher(string configPath, string endPoint)
+        public Publisher(string configPath = null, string endPoint = null)
         {
             var configurationManager = new ConfigurationManagerWrapper(configPath);
 

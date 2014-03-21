@@ -1,37 +1,57 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using log4net;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
-using StructureMap;
-using StructureMap.Query;
 
 namespace R.MessageBus
 {
     public class Bus : IDisposable, IBus
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-        private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>(); 
+        private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
+        private readonly IBusContainer _container;
+
+        public IConfiguration Configuration { get; set; }
+
+        public Bus(IConfiguration configuration)
+        {
+            Configuration = configuration;
+
+            _container = configuration.GetContainer();
+
+            if (configuration.ScanForMesssageHandlers)
+            {
+                _container.ScanForHandlers();
+            }
+        }
+
+        public static IBus Initialize(Action<IConfiguration> action)
+        {
+            var configuration = new Configuration();
+            action(configuration);
+            return new Bus(configuration);
+        }
+
+        public static IBus Initialize()
+        {
+            var configuration = new Configuration();
+            return new Bus(configuration);
+        }
 
         public void StartConsuming(string configPath, string endPoint, string queue = null)
         {
-            Container.Initialize();
+            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(); 
 
-            IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name);
-
-            foreach (InstanceRef instanceRef in instances)
+            foreach (HandlerReference reference in instances)
             {
-                if (instanceRef.ConcreteType != null && !string.IsNullOrEmpty(instanceRef.ConcreteType.Name))
-                {
-                    Type[] genericArguments = instanceRef.PluginType.GetGenericArguments();
-                    
-                    //todo: this could be IoCed to support different message bus clients
-                    var consumer = new Consumer(configPath, endPoint);
-                    consumer.StartConsuming(ConsumeMessageEvent, genericArguments[0].FullName.Replace(".", string.Empty), queue + "." + genericArguments[0].Name);
-                    _consumers.Add(consumer);
-                }
+                string routingKey = reference.MessageType.FullName.Replace(".", string.Empty);
+                string queueName = queue + "." + reference.MessageType.Name;
+
+                IConsumer consumer = Configuration.GetConsumer();
+                consumer.StartConsuming(ConsumeMessageEvent, routingKey, queueName);
+                _consumers.Add(consumer);
             }
         }
 
@@ -43,9 +63,9 @@ namespace R.MessageBus
                 Type t = objectMessage.GetType();
                 Type messageHandler = typeof(IMessageHandler<>).MakeGenericType(t);
 
-                IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType == messageHandler);
+                IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(messageHandler); ;
 
-                foreach (InstanceRef instanceRef in instances)
+                foreach (HandlerReference instance in instances)
                 {
                     // IF 1 Inherits Process Manager
 
@@ -67,12 +87,12 @@ namespace R.MessageBus
 
                     try
                     {
-                        var handler = ObjectFactory.GetInstance(instanceRef.ConcreteType);
+                        var handler = _container.GetHandlerInstance(instance.HandlerType); 
                         messageHandler.GetMethod("Execute").Invoke(handler, new[] { objectMessage });
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error(string.Format("Error executing handler. {0}", instanceRef.PluginType.FullName), ex);
+                        Logger.Error(string.Format("Error executing handler. {0}", instance.HandlerType.FullName), ex);
                     }
                 }
             }
