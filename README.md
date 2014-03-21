@@ -15,6 +15,39 @@ A simple, easy to use asynchronous messaging framework for .NET built on RabbitM
 
 ## Getting Started
 
+### Configuration
+
+#### Simple Configuration
+
+Calling initialize with no parameters will create an instance of the Bus with default configuration options.  
+
+```c#
+IBus bus = Bus.Initialize();
+```
+
+Default configuration is the following,
+
+* Consumer - RabbitMQ
+* Container - StructureMap
+* ScanForMessageHandlers - False
+* ConfigurationPath - Applications default configuration file path
+* EndPoint - null
+
+#### Custom Configuration
+
+Initialize also takes a single lambda/action parameter for custom configuration.
+
+```c#
+IBus bus = Bus.Initialize(config =>
+{
+    config.EndPoint = "MyEndpoint";
+    config.ConfigurationPath = "MyConfigurationPath";
+    config.SetConsumer<Consumer>();
+    config.SetContainer<Container>();
+    ScanForMesssageHandlers = true;
+});
+```
+
 ### Point To Point
 
 ### Publish/Subscribe
