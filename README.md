@@ -21,7 +21,9 @@ A simple, easy to use asynchronous messaging framework for .NET built on RabbitM
 
 Calling initialize will create an instance of the Bus with default configuration options.  
 
-	IBus bus = Bus.Initialize();
+```c#
+IBus bus = Bus.Initialize();
+```
 
 Default configuration is the following,
 
@@ -33,14 +35,16 @@ Default configuration is the following,
 
 #### Custom Configuration
 
-	IBus bus = Bus.Initialize(config =>
-	{
-	    config.EndPoint = "MyEndpoint";
-	    config.ConfigurationPath = "MyConfigurationPath";
-	    config.SetConsumer<Consumer>();
-	    config.SetContainer<Container>();
-	    ScanForMesssageHandlers = true;
-	});
+```c#
+IBus bus = Bus.Initialize(config =>
+{
+    config.EndPoint = "MyEndpoint";
+    config.ConfigurationPath = "MyConfigurationPath";
+    config.SetConsumer<Consumer>();
+    config.SetContainer<Container>();
+    ScanForMesssageHandlers = true;
+});
+```
 
 ### Point To Point
 
