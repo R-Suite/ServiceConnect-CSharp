@@ -32,10 +32,19 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="MongoDB.Bson, Version=1.8.3.9, Culture=neutral, PublicKeyToken=f686731cfb9cc103, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Bson.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Driver, Version=1.8.3.9, Culture=neutral, PublicKeyToken=f686731cfb9cc103, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Driver.dll</HintPath>
+    </Reference>
     <Reference Include="Moq">
       <HintPath>..\packages\Moq.4.2.1402.2112\lib\net40\Moq.dll</HintPath>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -48,9 +57,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BusSetupTests.cs" />
+    <Compile Include="MongoDbProcessManagerFinderTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="App.config" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -65,6 +76,10 @@
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
       <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
       <Name>R.MessageBus.Interfaces</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Persistance\R.MessageBus.Persistance.csproj">
+      <Project>{34E236AD-55DF-416B-8798-E3674DB84A85}</Project>
+      <Name>R.MessageBus.Persistance</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus\R.MessageBus.csproj">
       <Project>{6911293d-3b22-4d8a-9b23-25ec4fad1742}</Project>

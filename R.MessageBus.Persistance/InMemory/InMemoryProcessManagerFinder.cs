@@ -12,21 +12,21 @@ namespace R.MessageBus.Persistance.InMemory
         private static readonly ObjectCache Cache = MemoryCache.Default;
         readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
 
-        public T FindData<T>(Guid id) where T : IProcessManagerData
+        public VersionData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
         {
             string key = id.ToString();
 
-            return (T)Cache[key];
+            return (new VersionData<T> {Data = (T)Cache[key]});
         }
 
-        public void InsertData<T>(T data) where T : IProcessManagerData
+        public void InsertData<T>(VersionData<T> versionData) where T : IProcessManagerData
         {
 
-            string key = data.CorrelationId.ToString();
+            string key = versionData.Data.CorrelationId.ToString();
 
             if (!Cache.Contains(key))
             {
-                Cache.Set(key, data, _policy);
+                Cache.Set(key, versionData.Data, _policy);
             }
             else
             {
@@ -34,13 +34,13 @@ namespace R.MessageBus.Persistance.InMemory
             }
         }
 
-        public void UpdateData<T>(T data) where T : IProcessManagerData
+        public void UpdateData<T>(VersionData<T> versionData) where T : IProcessManagerData
         {
-            string key = data.CorrelationId.ToString();
+            string key = versionData.Data.CorrelationId.ToString();
 
             if (Cache.Contains(key))
             {
-                Cache.Set(key, data, _policy);
+                Cache.Set(key, versionData.Data, _policy);
             }
             else
             {
@@ -48,9 +48,9 @@ namespace R.MessageBus.Persistance.InMemory
             }
         }
 
-        public void DeleteData<T>(T data) where T : IProcessManagerData
+        public void DeleteData<T>(VersionData<T> versionData) where T : IProcessManagerData
         {
-            string key = data.CorrelationId.ToString();
+            string key = versionData.Data.CorrelationId.ToString();
 
             if (Cache.Contains(key))
             {
