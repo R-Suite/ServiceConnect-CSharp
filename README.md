@@ -19,7 +19,7 @@ A simple, easy to use asynchronous messaging framework for .NET built on RabbitM
 
 #### Simple Configuration
 
-Calling initialize will create an instance of the Bus with default configuration options.  
+Calling initialize with no parameters will create an instance of the Bus with default configuration options.  
 
 ```c#
 IBus bus = Bus.Initialize();
@@ -34,6 +34,8 @@ Default configuration is the following,
 * EndPoint - null
 
 #### Custom Configuration
+
+Initialize also takes a single lambda/action parameter for custom configuration.
 
 ```c#
 IBus bus = Bus.Initialize(config =>
