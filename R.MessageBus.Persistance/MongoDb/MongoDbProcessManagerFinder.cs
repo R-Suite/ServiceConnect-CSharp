@@ -18,6 +18,20 @@ namespace R.MessageBus.Persistance.MongoDb
             MongoServer server = mongoClient.GetServer();
             _mongoDatabase = server.GetDatabase(databaseName);
         }
+        
+        /// <summary>
+        /// Creates and returns a new instance of MongoDbData 
+        /// </summary>
+        /// <typeparam name="T">Type of ProcessManager Data</typeparam>
+        /// <returns></returns>
+        public IPersistanceData<T> NewData<T>() where T : class, IProcessManagerData
+        {
+            return new MongoDbData<T>
+            {
+                Version = 1
+            };
+        }
+
 
         /// <summary>
         /// Find existing instance of ProcessManager
@@ -25,13 +39,13 @@ namespace R.MessageBus.Persistance.MongoDb
         /// <typeparam name="T"></typeparam>
         /// <param name="id"></param>
         /// <returns></returns>
-        public VersionData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
+        public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
         {
             var collectionName = typeof(T).Name;
 
             MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
-            IMongoQuery query = Query<VersionData<T>>.Where(i => i.Data.CorrelationId == id);
-            return collection.FindOneAs<VersionData<T>>(query);
+            IMongoQuery query = Query<MongoDbData<T>>.Where(i => i.Data.CorrelationId == id);
+            return collection.FindOneAs<MongoDbData<T>>(query);
         }
 
         /// <summary>
@@ -39,27 +53,28 @@ namespace R.MessageBus.Persistance.MongoDb
         /// When multiple threads try to create new ProcessManager instance, only the first one is allowed. 
         /// All subsequent threads will update data instead.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="versionData"></param>
-        public void InsertData<T>(VersionData<T> versionData) where T : IProcessManagerData
+        /// <param name="persistanceData"></param>
+        public void InsertData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-            var collectionName = GetCollectionName(versionData.Data);
+            var collectionName = GetCollectionName(persistanceData.Data);
 
-            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
+            MongoCollection collection = _mongoDatabase.GetCollection<T>(collectionName);
 
-            collection.FindAndModify(Query.EQ("CorrelationId", versionData.Data.CorrelationId), SortBy.Null, Update.Replace(versionData), false, true);
+            collection.FindAndModify(Query.EQ("CorrelationId", persistanceData.Data.CorrelationId), SortBy.Null, Update.Replace(persistanceData), false, true);
         }
 
         /// <summary>
         /// Update data of existing ProcessManager. 
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="versionData"></param>
-        public void UpdateData<T>(VersionData<T> versionData) where T : IProcessManagerData
+        /// <param name="persistanceData"></param>
+        public void UpdateData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-            var collectionName = GetCollectionName(versionData.Data);
+            var collectionName = GetCollectionName(persistanceData.Data);
 
             MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
+
+            var versionData = (MongoDbData<T>)persistanceData;
 
             int currentVersion = versionData.Version;
             var query = Query.And(Query.EQ("Data.CorrelationId", versionData.Data.CorrelationId), Query.EQ("Version", currentVersion));
@@ -73,18 +88,17 @@ namespace R.MessageBus.Persistance.MongoDb
         /// <summary>
         /// Removes existing instance of ProcessManager from the database.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="versionData"></param>
-        public void DeleteData<T>(VersionData<T> versionData) where T : IProcessManagerData
+        /// <param name="persistanceData"></param>
+        public void DeleteData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-            var collectionName = GetCollectionName(versionData.Data);
+            var collectionName = GetCollectionName(persistanceData.Data);
 
-            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
+            MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
 
-            collection.Remove(Query.EQ("CorrelationId", versionData.Data.CorrelationId));
+            collection.Remove(Query.EQ("CorrelationId", persistanceData.Data.CorrelationId));
         }
 
-        private static string GetCollectionName<T>(T data) where T : IProcessManagerData
+        private static string GetCollectionName<T>(T data) where T : class, IProcessManagerData
         {
             Type typeParameterType = data.GetType();
             var collectionName = typeParameterType.Name;

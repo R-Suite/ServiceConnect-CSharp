@@ -108,7 +108,7 @@ namespace R.MessageBus
             }
             catch (Exception ex)
             {
-                Logger.Error("Error executing handlera", ex);
+                Logger.Error("Error executing handler", ex);
                 return false;
             }
 

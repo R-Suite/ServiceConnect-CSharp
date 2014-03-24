@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Runtime.Caching;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Persistance.MongoDb;
 
 namespace R.MessageBus.Persistance.InMemory
 {
@@ -12,21 +13,25 @@ namespace R.MessageBus.Persistance.InMemory
         private static readonly ObjectCache Cache = MemoryCache.Default;
         readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
 
-        public VersionData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
+        public IPersistanceData<T> NewData<T>() where T : class, IProcessManagerData
+        {
+            return new MemoryData<T>();
+        }
+
+        public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
         {
             string key = id.ToString();
 
-            return (new VersionData<T> {Data = (T)Cache[key]});
+            return (new MongoDbData<T> {Data = (T)Cache[key]});
         }
 
-        public void InsertData<T>(VersionData<T> versionData) where T : IProcessManagerData
+        public void InsertData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-
-            string key = versionData.Data.CorrelationId.ToString();
+            string key = persistanceData.Data.CorrelationId.ToString();
 
             if (!Cache.Contains(key))
             {
-                Cache.Set(key, versionData.Data, _policy);
+                Cache.Set(key, persistanceData.Data, _policy);
             }
             else
             {
@@ -34,13 +39,13 @@ namespace R.MessageBus.Persistance.InMemory
             }
         }
 
-        public void UpdateData<T>(VersionData<T> versionData) where T : IProcessManagerData
+        public void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
         {
-            string key = versionData.Data.CorrelationId.ToString();
+            string key = data.Data.CorrelationId.ToString();
 
             if (Cache.Contains(key))
             {
-                Cache.Set(key, versionData.Data, _policy);
+                Cache.Set(key, data.Data, _policy);
             }
             else
             {
@@ -48,9 +53,9 @@ namespace R.MessageBus.Persistance.InMemory
             }
         }
 
-        public void DeleteData<T>(VersionData<T> versionData) where T : IProcessManagerData
+        public void DeleteData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-            string key = versionData.Data.CorrelationId.ToString();
+            string key = persistanceData.Data.CorrelationId.ToString();
 
             if (Cache.Contains(key))
             {
