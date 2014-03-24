@@ -51,6 +51,7 @@
     <Compile Include="BusTests.cs" />
     <Compile Include="ConfigurationTests.cs" />
     <Compile Include="InMemoryProcessManagerFinderTests.cs" />
+    <Compile Include="JsonMessageSerializerTests.cs" />
     <Compile Include="ProcessManagerTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

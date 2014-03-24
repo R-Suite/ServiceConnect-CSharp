@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Text;
 using log4net;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
@@ -12,6 +13,7 @@ namespace R.MessageBus
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
         private readonly IBusContainer _container;
+        private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
         public IConfiguration Configuration { get; set; }
 
@@ -68,7 +70,8 @@ namespace R.MessageBus
         {
             try
             {
-                object objectMessage = SerializationHelper.FromByteArray(message);
+                var messageJson = Encoding.UTF8.GetString(message);
+                object objectMessage = _serializer.Deserialize(messageJson);
                 Type t = objectMessage.GetType();
                 Type messageHandler = typeof(IMessageHandler<>).MakeGenericType(t);
 
