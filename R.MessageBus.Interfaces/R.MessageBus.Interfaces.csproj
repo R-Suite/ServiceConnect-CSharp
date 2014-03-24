@@ -53,13 +53,14 @@
     <Compile Include="IConsumer.cs" />
     <Compile Include="IMessageHandler.cs" />
     <Compile Include="IJsonMessageSerializer.cs" />
+    <Compile Include="IPersistanceData.cs" />
     <Compile Include="IProcessManagerData.cs" />
     <Compile Include="IProcessManagerFinder.cs" />
     <Compile Include="IPublisher.cs" />
+    <Compile Include="ISagaPersistanceData.cs" />
     <Compile Include="IStartProcessManager.cs" />
     <Compile Include="Message.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="VersionData.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="R.MessageBus.Interfaces.nuspec" />
