@@ -5,7 +5,7 @@ using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using Xunit;
 
-namespace R.MessageBus.UnitTests
+namespace R.MessageBus.UnitTests.Bus
 {
     public class BusSetupTests
     {
@@ -13,7 +13,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithDefaultConfiguration()
         {
             // Arrange
-            IBus bus = Bus.Initialize();
+            IBus bus = MessageBus.Bus.Initialize();
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -29,7 +29,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomConsumer()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config => config.SetConsumer<FakeConsumer>());
+            IBus bus = MessageBus.Bus.Initialize(config => config.SetConsumer<FakeConsumer>());
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -42,7 +42,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomEndPoint()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = MessageBus.Bus.Initialize(config =>
             {
                 config.EndPoint = "MyEndpoint";
             });
@@ -58,7 +58,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomConfigurationPath()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = MessageBus.Bus.Initialize(config =>
             {
                 config.ConfigurationPath = "MyConfigurationPath";
             });
@@ -74,7 +74,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusToScanForAllHandlers()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = MessageBus.Bus.Initialize(config =>
             {
                 config.ScanForMesssageHandlers = true;
             });
@@ -90,7 +90,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomContainer()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config => config.SetContainer<FakeContainer>());
+            IBus bus = MessageBus.Bus.Initialize(config => config.SetContainer<FakeContainer>());
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -103,7 +103,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldBuildCustomConsumerWithCorrectEndpointAndConfigPath()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = MessageBus.Bus.Initialize(config =>
             {
                 config.EndPoint = "MyEndpoint";
                 config.ConfigurationPath = "MyConfigurationPath";

@@ -106,12 +106,13 @@ namespace R.MessageBus
                     catch (Exception ex)
                     {
                         Logger.Error(string.Format("Error executing handler. {0}", handlerReference.HandlerType.FullName), ex);
+                        throw;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error("Error executing handlera", ex);
+                Logger.Error("Error executing handler", ex);
                 return false;
             }
 

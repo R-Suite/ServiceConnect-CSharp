@@ -34,6 +34,20 @@ namespace R.MessageBus.IntegrationTests
         }
 
         [Fact]
+        public void NewDataShouldReturnAnnewInstanceOfMemoryData()
+        {
+            // Arrange
+            var processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+
+            // Act
+            var data = processManagerFinder.NewData<TestData>();
+
+            // Assumer
+            Assert.NotNull(data);
+            Assert.Equal(typeof(MongoDbData<TestData>), data.GetType());
+        }
+
+        [Fact]
         public void ShouldInsertData()
         {
             // Arrange
@@ -41,10 +55,10 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
-            processManagerFinder.InsertData(new VersionData<IProcessManagerData> { Data = data });
+            processManagerFinder.InsertData(new MongoDbData<IProcessManagerData> { Data = data });
 
             // Assert
-            var insertedData = _collection.FindOneAs<VersionData<TestData>>(Query<VersionData<TestData>>.Where(i => i.Data.CorrelationId == _correlationId));
+            var insertedData = _collection.FindOneAs<MongoDbData<TestData>>(Query<MongoDbData<TestData>>.Where(i => i.Data.CorrelationId == _correlationId));
             Assert.Equal("TestData", insertedData.Data.Name);
         }
 
@@ -53,7 +67,7 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-            _collection.Save(new VersionData<IProcessManagerData> { Data = data });
+            _collection.Save(new MongoDbData<IProcessManagerData> { Data = data });
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
@@ -81,7 +95,7 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-            var versionData = new VersionData<IProcessManagerData> {Data = data};
+            var versionData = new MongoDbData<IProcessManagerData> { Data = data };
             _collection.Save(versionData);
             ((TestData) data).Name = "TestDataUpdated";
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
@@ -90,7 +104,7 @@ namespace R.MessageBus.IntegrationTests
             processManagerFinder.UpdateData(versionData);
 
             // Assert
-            var updatedData = _collection.FindOneAs<VersionData<TestData>>(Query<VersionData<TestData>>.Where(i => i.Data.CorrelationId == _correlationId));
+            var updatedData = _collection.FindOneAs<MongoDbData<TestData>>(Query<MongoDbData<TestData>>.Where(i => i.Data.CorrelationId == _correlationId));
             Assert.Equal("TestDataUpdated", updatedData.Data.Name);
             Assert.Equal(1, updatedData.Version);
         }
@@ -100,7 +114,7 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             IProcessManagerData data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
-            _collection.Save(new VersionData<IProcessManagerData> { Data = data1 }); 
+            _collection.Save(new MongoDbData<IProcessManagerData> { Data = data1 }); 
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             var foundData1 = processManagerFinder.FindData<TestData>(_correlationId);
@@ -117,11 +131,11 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-            _collection.Save(new VersionData<IProcessManagerData> { Data = data });
+            _collection.Save(new MongoDbData<IProcessManagerData> { Data = data });
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
-            processManagerFinder.DeleteData(new VersionData<IProcessManagerData> { Data = data });
+            processManagerFinder.DeleteData(new MongoDbData<IProcessManagerData> { Data = data });
 
             // Assert
             var deletedData = _collection.FindOneAs<TestData>(Query<TestData>.Where(i => i.CorrelationId == _correlationId));

@@ -10,16 +10,7 @@ namespace R.MessageBus
         /// <summary>
         /// The ProcessManager's strongly typed data.
         /// </summary>
-        public T Data
-        {
-            get { return VersionData.Data; }
-            set { VersionData = new VersionData<T> { Data = value }; }
-        }
-
-        /// <summary>
-        /// Decorates ProcessManager's strongly typed data with version.
-        /// </summary>
-        private VersionData<T> VersionData { get; set; }
+        public T Data { get; set; }
 
         /// <summary>
         /// Use to locate/delete ProcessManager data in a persistant store 
@@ -28,19 +19,20 @@ namespace R.MessageBus
 
         /// <summary>
         /// Marks the ProcessManager as complete.
-        /// This may result in the sagas state being deleted by the persister.
         /// </summary>
         protected virtual void MarkAsComplete()
         {
-            ProcessManagerFinder.DeleteData(VersionData);
+            Complete = true;
         }
+
+        public bool Complete { get; set; }
 
         /// <summary>
         /// Provides default implementation for finding ProcessManager by message correlation id.
         /// </summary>
         /// <param name="message"></param>
         /// <returns></returns>
-        public VersionData<T> FindProcessManagerData(Message message)
+        public IPersistanceData<T> FindProcessManagerData(Message message)
         {
             return ProcessManagerFinder.FindData<T>(message.CorrelationId);
         }
