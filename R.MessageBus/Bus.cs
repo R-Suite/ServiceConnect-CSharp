@@ -97,14 +97,22 @@ namespace R.MessageBus
                 {
                     try
                     {
-                        var handler = _container.GetHandlerInstance(handlerReference.HandlerType); 
-                        messageHandler.GetMethod("Execute").Invoke(handler, new[] { objectMessage });
+                        if (handlerReference.HandlerType.IsAssignableFrom(typeof(ProcessManager<>)))
+                        {
+                        
+                        }
+                        else
+                        {
+                            var handler = _container.GetHandlerInstance(handlerReference.HandlerType);
+                            messageHandler.GetMethod("Execute").Invoke(handler, new[] { objectMessage });
+                        }
                     }
                     catch (Exception ex)
                     {
                         Logger.Error(string.Format("Error executing handler. {0}", handlerReference.HandlerType.FullName), ex);
                         throw;
                     }
+                    
                 }
             }
             catch (Exception ex)

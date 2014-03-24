@@ -56,7 +56,6 @@
     <Compile Include="IProcessManagerData.cs" />
     <Compile Include="IProcessManagerFinder.cs" />
     <Compile Include="IPublisher.cs" />
-    <Compile Include="ISagaPersistanceData.cs" />
     <Compile Include="IStartProcessManager.cs" />
     <Compile Include="Message.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

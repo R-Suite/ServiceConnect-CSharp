@@ -7,10 +7,11 @@ using R.MessageBus.UnitTests.Fakes.Handlers;
 using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace R.MessageBus.UnitTests.Bus
+namespace R.MessageBus.UnitTests.Bus.Handler
 {
     public class ConsumeMessageEventTests
     {
+        private ConsumerEventHandler _fakeEventHandler;
         private readonly Mock<IConfiguration> _mockConfiguration;
         private readonly Mock<IBusContainer> _mockContainer;
         private readonly Mock<IConsumer> _mockConsumer;
@@ -22,6 +23,12 @@ namespace R.MessageBus.UnitTests.Bus
             _mockConsumer = new Mock<IConsumer>();
             _mockConfiguration.Setup(x => x.GetContainer()).Returns(_mockContainer.Object);
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
+        }
+
+        public bool AssignEventHandler(ConsumerEventHandler eventHandler)
+        {
+            _fakeEventHandler = eventHandler;
+            return true;
         }
 
         [Fact]
@@ -59,7 +66,7 @@ namespace R.MessageBus.UnitTests.Bus
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(It.Is<Type>(y => y == typeof(IMessageHandler<FakeMessage1>))), Times.Once());
         }
-
+       
         [Fact]
         public void ShouldExecuteTheCorrectHandlers()
         {
@@ -112,12 +119,6 @@ namespace R.MessageBus.UnitTests.Bus
             _mockContainer.Verify(x => x.GetHandlerInstance(typeof (FakeHandler2)), Times.Never);
         }
 
-        public bool AssignEventHandler(ConsumerEventHandler eventHandler)
-        {
-            _fakeEventHandler = eventHandler;
-            return true;
-        }
-
-        ConsumerEventHandler _fakeEventHandler;
+        
     }
 }
