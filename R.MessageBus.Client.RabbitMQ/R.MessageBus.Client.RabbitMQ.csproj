@@ -62,7 +62,6 @@
     <Compile Include="MessageSerializationBinder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Publisher.cs" />
-    <Compile Include="SerializationHelper.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
