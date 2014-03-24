@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Text;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
 
@@ -12,6 +13,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly IConnection _connection;
         private readonly string _exchange;
         private readonly Settings.Settings _settings;
+        private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
         public Publisher(string configPath = null, string endPoint = null)
         {
@@ -58,7 +60,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Publish<T>(T message) where T : Message
         {
-            var bytes = message.ToByteArray();
+            var messageJson = _serializer.Serialize(message);
+            var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // used to keep track of retries
             basicProperties.SetPersistent(true);
