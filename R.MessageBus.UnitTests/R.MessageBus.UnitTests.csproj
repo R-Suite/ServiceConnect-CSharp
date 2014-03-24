@@ -60,7 +60,6 @@
     <Compile Include="InMemoryProcessManagerFinderTests.cs" />
     <Compile Include="Bus\ProcessManager\ConsumeMessageEventTests.cs" />
     <Compile Include="JsonMessageSerializerTests.cs" />
-    <Compile Include="ProcessManagerTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

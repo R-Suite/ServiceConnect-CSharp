@@ -70,7 +70,7 @@ namespace R.MessageBus
         {
             try
             {
-                var messageJson = Encoding.UTF8.GetString(message);
+                string messageJson = Encoding.UTF8.GetString(message);
                 object objectMessage = _serializer.Deserialize(messageJson);
                 Type t = objectMessage.GetType();
                 Type messageHandler = typeof(IMessageHandler<>).MakeGenericType(t);
