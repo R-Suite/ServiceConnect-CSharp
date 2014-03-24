@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using Moq;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
@@ -11,6 +12,7 @@ namespace R.MessageBus.UnitTests.Bus.Handler
 {
     public class ConsumeMessageEventTests
     {
+        private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
         private ConsumerEventHandler _fakeEventHandler;
         private readonly Mock<IConfiguration> _mockConfiguration;
         private readonly Mock<IBusContainer> _mockContainer;
@@ -58,10 +60,10 @@ namespace R.MessageBus.UnitTests.Bus.Handler
             bus.StartConsuming();
 
             // Act
-            _fakeEventHandler(new FakeMessage1(Guid.NewGuid())
+            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }.ToByteArray());
+            })));
 
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(It.Is<Type>(y => y == typeof(IMessageHandler<FakeMessage1>))), Times.Once());
@@ -105,20 +107,19 @@ namespace R.MessageBus.UnitTests.Bus.Handler
             {
                 Username = "Tim Watson"
             };
-            _fakeEventHandler(message1.ToByteArray());
+            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(message1)));
 
             var message2 = new FakeMessage2(Guid.NewGuid())
             {
                 DisplayName = "Tim Watson"
             };
-            _fakeEventHandler(message2.ToByteArray());
+
+            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(message2)));
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
             Assert.Equal(message1.Username, fakeHandler.Command.Username);
             _mockContainer.Verify(x => x.GetHandlerInstance(typeof (FakeHandler2)), Times.Never);
         }
-
-        
     }
 }
