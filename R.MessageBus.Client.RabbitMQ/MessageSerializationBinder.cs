@@ -26,7 +26,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (_messageTypes != null) // when message types are know in advance
             {
-                typeToDeserialize = _messageTypes.SingleOrDefault(t => t.Name.Contains(typeName));
+                typeToDeserialize = _messageTypes.SingleOrDefault(t => t.FullName.Contains(typeName));
             }
 
             if (typeToDeserialize == null) // when the message type has been loaded before
