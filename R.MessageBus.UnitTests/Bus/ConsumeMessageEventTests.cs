@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Moq;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
+using R.MessageBus.UnitTests.Fakes.Handlers;
+using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
 namespace R.MessageBus.UnitTests.Bus

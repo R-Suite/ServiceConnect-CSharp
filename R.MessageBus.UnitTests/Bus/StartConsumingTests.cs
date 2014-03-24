@@ -1,7 +1,8 @@
 ﻿using System.Collections.Generic;
 using Moq;
 using R.MessageBus.Interfaces;
-using R.MessageBus.UnitTests.Fakes;
+using R.MessageBus.UnitTests.Fakes.Handlers;
+using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
 namespace R.MessageBus.UnitTests.Bus
@@ -92,8 +93,8 @@ namespace R.MessageBus.UnitTests.Bus
             bus.StartConsuming();
 
             // Assert
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakeMessage1", ".FakeMessage1"), Times.Once);
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakeMessage2", ".FakeMessage2"), Times.Once);
+            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage1", ".FakeMessage1"), Times.Once);
+            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage2", ".FakeMessage2"), Times.Once);
             _mockConsumer.VerifyAll();
         }
     }
