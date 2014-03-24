@@ -50,6 +50,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="InMemory\InMemoryProcessManagerFinder.cs" />
+    <Compile Include="InMemory\MemoryData.cs" />
+    <Compile Include="MongoDb\MongoDbData.cs" />
     <Compile Include="MongoDb\MongoDbProcessManagerFinder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
