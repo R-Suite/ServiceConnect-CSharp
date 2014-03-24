@@ -11,7 +11,8 @@ namespace R.MessageBus.Container
     {
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
-            IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name);
+            IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
+                                                                                                       i.PluginType.Name == typeof(IStartProcessManager<>).Name);
             return instances.Where(instance => instance.ConcreteType != null && !string.IsNullOrEmpty(instance.ConcreteType.Name))
                             .Select(instance => new HandlerReference
             {
