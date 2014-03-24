@@ -1,20 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using Moq;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
 using Xunit;
 
-namespace R.MessageBus.UnitTests
+namespace R.MessageBus.UnitTests.Bus
 {
-    public class BusTests
+    public class ConsumeMessageEventTests
     {
         private readonly Mock<IConfiguration> _mockConfiguration;
         private readonly Mock<IBusContainer> _mockContainer;
         private readonly Mock<IConsumer> _mockConsumer;
 
-        public BusTests()
+        public ConsumeMessageEventTests()
         {
             _mockConfiguration = new Mock<IConfiguration>();
             _mockContainer = new Mock<IBusContainer>();
@@ -24,86 +23,10 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
-        public void StartConsumingShouldGetAllHandlerTypesFromContainer()
+        public void ShouldGetTheCorrectHandlerTypesFromContainer()
         {
             // Arrange
-            var bus = new Bus(_mockConfiguration.Object);
-            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(new List<HandlerReference>());
-
-            // Act
-            bus.StartConsuming();
-
-            // Assert
-            _mockContainer.Verify(x => x.GetHandlerTypes(), Times.Once);
-            _mockContainer.VerifyAll();
-        }
-
-        [Fact]
-        public void StartConsumingShouldCreateAConsumerForEachHandler()
-        {
-            // Arrange
-            var bus = new Bus(_mockConfiguration.Object);
-
-            var handlerReferences = new List<HandlerReference>
-            {
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler1),
-                    MessageType = typeof (FakeMessage1)
-                },
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler2),
-                    MessageType = typeof (FakeMessage2)
-                }
-            };
-
-            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-
-            // Act
-            bus.StartConsuming();
-
-            // Assert
-            _mockConfiguration.Verify(x => x.GetConsumer(), Times.Exactly(2));
-            _mockContainer.VerifyAll();
-        }
-
-        [Fact]
-        public void StartConsumingShouldStartConsumingAllMessagesFromTheContainer()
-        {
-            // Arrange
-            var bus = new Bus(_mockConfiguration.Object);
-
-            var handlerReferences = new List<HandlerReference>
-            {
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler1),
-                    MessageType = typeof (FakeMessage1)
-                },
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler2),
-                    MessageType = typeof (FakeMessage2)
-                }
-            };
-
-            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-
-            // Act
-            bus.StartConsuming();
-
-            // Assert
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakeMessage1", ".FakeMessage1"), Times.Once);
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakeMessage2", ".FakeMessage2"), Times.Once);
-            _mockConsumer.VerifyAll();
-        }
-
-        [Fact]
-        public void ConsumeMessageEventGetsTheCorrectHandlerTypesFromContainer()
-        {
-            // Arrange
-            var bus = new Bus(_mockConfiguration.Object);
+            var bus = new MessageBus.Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
             {
@@ -136,10 +59,10 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
-        public void ConsumeMessageEventExecutesTheCorrectHandlers()
+        public void ShouldExecuteTheCorrectHandlers()
         {
             // Arrange
-            var bus = new Bus(_mockConfiguration.Object);
+            var bus = new MessageBus.Bus(_mockConfiguration.Object);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -194,34 +117,5 @@ namespace R.MessageBus.UnitTests
         }
 
         ConsumerEventHandler _fakeEventHandler;
-    }
-
-    [Serializable]
-    public class FakeMessage1 : Message
-    {
-        public FakeMessage1(Guid correlationId) : base(correlationId){}
-        public string Username { get; set; }
-    }
-
-    public class FakeHandler1 : IMessageHandler<FakeMessage1>
-    {
-        public void Execute(FakeMessage1 command)
-        {
-            Command = command;
-        }
-
-        public FakeMessage1 Command { get; set; }
-    }
-
-    [Serializable]
-    public class FakeMessage2 : Message
-    {
-        public FakeMessage2(Guid correlationId) : base(correlationId) { }
-        public string DisplayName { get; set; }
-    }
-
-    public class FakeHandler2 : IMessageHandler<FakeMessage2>
-    {
-        public void Execute(FakeMessage2 command) { }
     }
 }
