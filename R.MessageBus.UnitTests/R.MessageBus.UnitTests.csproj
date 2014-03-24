@@ -48,7 +48,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Bus\BusSetupTests.cs" />
-    <Compile Include="Bus\ConsumeMessageEventTests.cs" />
+    <Compile Include="Bus\Handler\ConsumeMessageEventTests.cs" />
     <Compile Include="Bus\StartConsumingTests.cs" />
     <Compile Include="ConfigurationTests.cs" />
     <Compile Include="Fakes\Handlers\FakeHandler1.cs" />
@@ -58,7 +58,7 @@
     <Compile Include="Fakes\ProcessManagers\FakeProcessManager1.cs" />
     <Compile Include="Fakes\ProcessManagers\FakeProcessManagerData.cs" />
     <Compile Include="InMemoryProcessManagerFinderTests.cs" />
-    <Compile Include="ProcessManagerTests.cs" />
+    <Compile Include="Bus\ProcessManager\ConsumeMessageEventTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

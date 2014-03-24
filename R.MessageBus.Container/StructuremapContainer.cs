@@ -17,6 +17,7 @@ namespace R.MessageBus.Container
                             .Select(instance => new HandlerReference
             {
                 MessageType = instance.PluginType.GetGenericArguments()[0],
+                HandlerType = instance.ConcreteType
             });
         }
 
@@ -24,7 +25,8 @@ namespace R.MessageBus.Container
         {
             return ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
             {
-                MessageType = instance.PluginType.GetGenericArguments()[0]
+                MessageType = instance.PluginType.GetGenericArguments()[0],
+                HandlerType = instance.ConcreteType
             });
         }
 
