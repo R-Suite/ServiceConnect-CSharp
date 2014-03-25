@@ -13,11 +13,6 @@ namespace R.MessageBus.Persistance.InMemory
         private static readonly ObjectCache Cache = MemoryCache.Default;
         readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
 
-        public IPersistanceData<T> NewData<T>() where T : class, IProcessManagerData
-        {
-            return new MemoryData<T>();
-        }
-
         public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
         {
             string key = id.ToString();
@@ -25,13 +20,13 @@ namespace R.MessageBus.Persistance.InMemory
             return (new MongoDbData<T> {Data = (T)Cache[key]});
         }
 
-        public void InsertData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
+        public void InsertData(IProcessManagerData data)
         {
-            string key = persistanceData.Data.CorrelationId.ToString();
+            string key = data.CorrelationId.ToString();
 
             if (!Cache.Contains(key))
             {
-                Cache.Set(key, persistanceData.Data, _policy);
+                Cache.Set(key, data, _policy);
             }
             else
             {

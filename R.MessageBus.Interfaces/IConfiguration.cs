@@ -23,6 +23,12 @@ namespace R.MessageBus.Interfaces
         void SetContainer<T>() where T : class, IBusContainer;
 
         /// <summary>
+        /// Sets the process manager finder
+        /// </summary>
+        /// <typeparam name="T">The type must be a class that implements IProcessManagerFinder</typeparam>
+        void SetProcessManagerFinder<T>() where T : class, IProcessManagerFinder;
+
+        /// <summary>
         /// Gets an instance of the consumer.
         /// </summary>
         /// <returns></returns>
@@ -33,5 +39,11 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         IBusContainer GetContainer();
+
+        /// <summary>
+        /// Gets an instance of the ProcessManagerFinder
+        /// </summary>
+        /// <returns></returns>
+        IProcessManagerFinder GetProcessManagerFinder();
     }
 }

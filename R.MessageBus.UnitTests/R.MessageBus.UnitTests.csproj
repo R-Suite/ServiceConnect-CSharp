@@ -51,6 +51,7 @@
     <Compile Include="Bus\Handler\ConsumeMessageEventTests.cs" />
     <Compile Include="Bus\StartConsumingTests.cs" />
     <Compile Include="ConfigurationTests.cs" />
+    <Compile Include="Fakes\FakePersistanceData.cs" />
     <Compile Include="Fakes\Handlers\FakeHandler1.cs" />
     <Compile Include="Fakes\Handlers\FakeHandler2.cs" />
     <Compile Include="Fakes\Messages\FakeMessage1.cs" />
