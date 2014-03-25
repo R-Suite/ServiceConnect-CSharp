@@ -10,12 +10,12 @@ namespace R.MessageBus.UnitTests.Fakes.ProcessManagers
     {
         public void Execute(FakeMessage1 command)
         {
-            throw new NotImplementedException();
+            Data.User = command.Username;
         }
 
         public void Execute(FakeMessage2 command)
         {
-            throw new NotImplementedException();
+            Data.Email = command.Email;
         }
     }
 }

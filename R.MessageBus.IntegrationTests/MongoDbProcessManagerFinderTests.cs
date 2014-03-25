@@ -34,20 +34,6 @@ namespace R.MessageBus.IntegrationTests
         }
 
         [Fact]
-        public void NewDataShouldReturnAnnewInstanceOfMemoryData()
-        {
-            // Arrange
-            var processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
-
-            // Act
-            var data = processManagerFinder.NewData<TestData>();
-
-            // Assumer
-            Assert.NotNull(data);
-            Assert.Equal(typeof(MongoDbData<TestData>), data.GetType());
-        }
-
-        [Fact]
         public void ShouldInsertData()
         {
             // Arrange
@@ -55,7 +41,7 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
-            processManagerFinder.InsertData(new MongoDbData<IProcessManagerData> { Data = data });
+            processManagerFinder.InsertData(data);
 
             // Assert
             var insertedData = _collection.FindOneAs<MongoDbData<TestData>>(Query<MongoDbData<TestData>>.Where(i => i.Data.CorrelationId == _correlationId));

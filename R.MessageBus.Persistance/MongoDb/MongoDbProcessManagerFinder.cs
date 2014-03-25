@@ -20,20 +20,6 @@ namespace R.MessageBus.Persistance.MongoDb
         }
         
         /// <summary>
-        /// Creates and returns a new instance of MongoDbData 
-        /// </summary>
-        /// <typeparam name="T">Type of ProcessManager Data</typeparam>
-        /// <returns></returns>
-        public IPersistanceData<T> NewData<T>() where T : class, IProcessManagerData
-        {
-            return new MongoDbData<T>
-            {
-                Version = 1
-            };
-        }
-
-
-        /// <summary>
         /// Find existing instance of ProcessManager
         /// </summary>
         /// <typeparam name="T"></typeparam>
@@ -53,14 +39,21 @@ namespace R.MessageBus.Persistance.MongoDb
         /// When multiple threads try to create new ProcessManager instance, only the first one is allowed. 
         /// All subsequent threads will update data instead.
         /// </summary>
-        /// <param name="persistanceData"></param>
-        public void InsertData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
+        /// <param name="data"></param>
+        public void InsertData(IProcessManagerData data) 
         {
-            var collectionName = GetCollectionName(persistanceData.Data);
+            var collectionName = GetCollectionName(data);
 
-            MongoCollection collection = _mongoDatabase.GetCollection<T>(collectionName);
+            MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
 
-            collection.FindAndModify(Query.EQ("CorrelationId", persistanceData.Data.CorrelationId), SortBy.Null, Update.Replace(persistanceData), false, true);
+            var mongoDbData = new MongoDbData<IProcessManagerData>
+            {
+                Data = data,
+                Version = 1,
+                Id = Guid.NewGuid()
+            };
+
+            collection.FindAndModify(Query.EQ("CorrelationId", mongoDbData.Data.CorrelationId), SortBy.Null, Update.Replace(mongoDbData), false, true);
         }
 
         /// <summary>
