@@ -132,28 +132,34 @@ namespace R.MessageBus
                             // Execute FindProcessManagerData
                             object persistanceData = handlerReference.HandlerType.GetMethod("FindProcessManagerData").Invoke(processManager, new[] { objectMessage });
 
+                            // Get data type
+                            Type dataType = handlerReference.HandlerType.BaseType.GetGenericArguments()[0];
 
+                            // Get data from persistance data
+                            var persistanceType = typeof (IPersistanceData<>).MakeGenericType(dataType);
+                            PropertyInfo dataProp = persistanceType.GetProperty("Data");
+                            object data = dataProp.GetValue(persistanceData);
 
                             // Set data property value
-                            PropertyInfo prop = handlerReference.HandlerType.GetProperty("Data");
+                            PropertyInfo prop = handlerReference.HandlerType.GetProperty("Data", dataType);
                             prop.SetValue(processManager, data, null);
 
                             // Execute handler
                             handlerReference.HandlerType.GetMethod("Execute", new[] { messageType }).Invoke(processManager, new[] { objectMessage });
 
                             // Get Complete property value
-                            var completeProperty = handlerReference.HandlerType.GetProperty("Complete");
+                            PropertyInfo completeProperty = handlerReference.HandlerType.GetProperty("Complete");
                             var isComplete = (bool)completeProperty.GetValue(processManager);
 
                             if (isComplete)
                             {
                                 // Delete if the process manager is complete
-                                _processManagerFinder.GetType().GetMethod("DeleteData").Invoke(_processManagerFinder, new[] { data });
+                                _processManagerFinder.GetType().GetMethod("DeleteData").MakeGenericMethod(dataType).Invoke(_processManagerFinder, new[] { persistanceData });
                             }
                             else
                             {
                                 // Otherwise update
-                                _processManagerFinder.GetType().GetMethod("UpdateData").Invoke(_processManagerFinder, new[] { data });
+                                _processManagerFinder.GetType().GetMethod("UpdateData").MakeGenericMethod(dataType).Invoke(_processManagerFinder, new[] { persistanceData });
                             }
                         }
                         else

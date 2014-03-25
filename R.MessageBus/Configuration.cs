@@ -50,6 +50,8 @@ namespace R.MessageBus
 
         public IProcessManagerFinder GetProcessManagerFinder()
         {
+            // todo
+            return null;
             return (IProcessManagerFinder)Activator.CreateInstance(ProcessManagerFinder);
         }
     }
