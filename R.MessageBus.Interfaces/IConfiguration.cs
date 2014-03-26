@@ -6,9 +6,15 @@ namespace R.MessageBus.Interfaces
     {
         Type Container { get; set; }
         Type ConsumerType { get; set; }
-        string EndPoint { get; set; }
-        string ConfigurationPath { get; set; }
         bool ScanForMesssageHandlers { get; set; }
+        ITransportSettings TransportSettings { get; set; }
+
+        /// <summary>
+        /// Load configuration from file path an initialize Transport Settings
+        /// </summary>
+        /// <param name="configFilePath"></param>
+        /// <param name="endPoint"></param>
+        void LoadSettings(string configFilePath = null, string endPoint = null);
 
         /// <summary>
         /// Sets the consumer type.
