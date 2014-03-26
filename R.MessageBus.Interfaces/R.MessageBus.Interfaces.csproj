@@ -58,6 +58,7 @@
     <Compile Include="IProcessManagerFinder.cs" />
     <Compile Include="IPublisher.cs" />
     <Compile Include="IStartProcessManager.cs" />
+    <Compile Include="ITransportSettings.cs" />
     <Compile Include="Message.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

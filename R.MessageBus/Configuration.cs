@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Configuration;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
@@ -8,19 +9,40 @@ namespace R.MessageBus
 {
     public class Configuration : IConfiguration
     {
+        private string _endPoint;
+        private string _configurationPath;
+
         public Type ConsumerType { get; set; }
         public Type Container { get; set; }
-        public string EndPoint { get; set; }
-        public string ConfigurationPath { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public Type ProcessManagerFinder { get; set; }
+        public ITransportSettings TransportSettings { get; set; }
 
         public Configuration()
         {
-            ConfigurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
+            _configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
             ConsumerType = typeof(Consumer);
             Container = typeof(StructuremapContainer);
             ProcessManagerFinder = typeof(MongoDbProcessManagerFinder);
+        }
+
+        public void LoadSettings(string configFilePath = null, string endPoint = null)
+        {
+            var configurationManager = new ConfigurationManagerWrapper(configFilePath);
+
+            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
+
+            if (section == null)
+            {
+                throw new ConfigurationErrorsException("The configuration file must contain a BusSettings section");
+            }
+
+            Settings.Settings settings = section.Settings.GetItemByKey(endPoint);
+
+            if (settings == null)
+            {
+                throw new ConfigurationErrorsException(string.Format("Settings for endpoint {0} could not be found", endPoint));
+            }
         }
 
         public void SetContainer<T>() where T : class, IBusContainer
@@ -40,7 +62,7 @@ namespace R.MessageBus
 
         public IConsumer GetConsumer()
         {
-            return (IConsumer)Activator.CreateInstance(ConsumerType, EndPoint, ConfigurationPath);
+            return (IConsumer)Activator.CreateInstance(ConsumerType, _endPoint, _configurationPath);
         }
 
         public IBusContainer GetContainer()
