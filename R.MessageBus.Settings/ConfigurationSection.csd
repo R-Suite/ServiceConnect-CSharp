@@ -18,6 +18,11 @@
             <configurationElementCollectionMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/RabbitMq" />
           </type>
         </elementProperty>
+        <elementProperty name="PersistantStore" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="persistantStore" isReadOnly="false">
+          <type>
+            <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/PersistantStore" />
+          </type>
+        </elementProperty>
       </elementProperties>
     </configurationSection>
     <configurationElementCollection name="RabbitMq" xmlItemName="RabbitMq" codeGenOptions="Indexer, AddMethod, RemoveMethod, GetItemMethods">
@@ -67,6 +72,11 @@
         <elementProperty name="Retries" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Retries" isReadOnly="false">
           <type>
             <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/Retries" />
+          </type>
+        </elementProperty>
+        <elementProperty name="PersistantStore" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="persistantStore" isReadOnly="false">
+          <type>
+            <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/PersistantStore" />
           </type>
         </elementProperty>
       </elementProperties>
@@ -177,6 +187,20 @@
           </type>
         </elementProperty>
       </elementProperties>
+    </configurationElement>
+    <configurationElement name="PersistantStore">
+      <attributeProperties>
+        <attributeProperty name="Database" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="database" isReadOnly="false" defaultValue="&quot;RMessageBusPersistantStore&quot;">
+          <type>
+            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
+          </type>
+        </attributeProperty>
+        <attributeProperty name="ConnectionString" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="connectionString" isReadOnly="false" defaultValue="&quot;host=localhost&quot;">
+          <type>
+            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
+          </type>
+        </attributeProperty>
+      </attributeProperties>
     </configurationElement>
   </configurationElements>
   <propertyValidators>

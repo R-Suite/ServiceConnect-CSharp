@@ -99,6 +99,32 @@ namespace BusSettings
             }
         }
         #endregion
+        
+        #region PersistantStore Property
+        /// <summary>
+        /// The XML name of the <see cref="PersistantStore"/> property.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        internal const string PersistantStorePropertyName = "persistantStore";
+        
+        /// <summary>
+        /// Gets or sets the PersistantStore.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        [global::System.ComponentModel.DescriptionAttribute("The PersistantStore.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.BusSettings.PersistantStorePropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false)]
+        public virtual global::BusSettings.PersistantStore PersistantStore
+        {
+            get
+            {
+                return ((global::BusSettings.PersistantStore)(base[global::BusSettings.BusSettings.PersistantStorePropertyName]));
+            }
+            set
+            {
+                base[global::BusSettings.BusSettings.PersistantStorePropertyName] = value;
+            }
+        }
+        #endregion
     }
 }
 namespace BusSettings
@@ -496,6 +522,32 @@ namespace Settings
             set
             {
                 base[global::Settings.Settings.RetriesPropertyName] = value;
+            }
+        }
+        #endregion
+        
+        #region PersistantStore Property
+        /// <summary>
+        /// The XML name of the <see cref="PersistantStore"/> property.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        internal const string PersistantStorePropertyName = "persistantStore";
+        
+        /// <summary>
+        /// Gets or sets the PersistantStore.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        [global::System.ComponentModel.DescriptionAttribute("The PersistantStore.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::Settings.Settings.PersistantStorePropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false)]
+        public virtual global::BusSettings.PersistantStore PersistantStore
+        {
+            get
+            {
+                return ((global::BusSettings.PersistantStore)(base[global::Settings.Settings.PersistantStorePropertyName]));
+            }
+            set
+            {
+                base[global::Settings.Settings.PersistantStorePropertyName] = value;
             }
         }
         #endregion
@@ -1170,6 +1222,80 @@ namespace BusSettings
             set
             {
                 base[global::BusSettings.Retries.ArgumentsPropertyName] = value;
+            }
+        }
+        #endregion
+    }
+}
+namespace BusSettings
+{
+    
+    
+    /// <summary>
+    /// The PersistantStore Configuration Element.
+    /// </summary>
+    public partial class PersistantStore : global::System.Configuration.ConfigurationElement
+    {
+        
+        #region IsReadOnly override
+        /// <summary>
+        /// Gets a value indicating whether the element is read-only.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        public override bool IsReadOnly()
+        {
+            return false;
+        }
+        #endregion
+        
+        #region Database Property
+        /// <summary>
+        /// The XML name of the <see cref="Database"/> property.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        internal const string DatabasePropertyName = "database";
+        
+        /// <summary>
+        /// Gets or sets the Database.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        [global::System.ComponentModel.DescriptionAttribute("The Database.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.PersistantStore.DatabasePropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false, DefaultValue="RMessageBusPersistantStore")]
+        public virtual string Database
+        {
+            get
+            {
+                return ((string)(base[global::BusSettings.PersistantStore.DatabasePropertyName]));
+            }
+            set
+            {
+                base[global::BusSettings.PersistantStore.DatabasePropertyName] = value;
+            }
+        }
+        #endregion
+        
+        #region ConnectionString Property
+        /// <summary>
+        /// The XML name of the <see cref="ConnectionString"/> property.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        internal const string ConnectionStringPropertyName = "connectionString";
+        
+        /// <summary>
+        /// Gets or sets the ConnectionString.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        [global::System.ComponentModel.DescriptionAttribute("The ConnectionString.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.PersistantStore.ConnectionStringPropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false, DefaultValue="host=localhost")]
+        public virtual string ConnectionString
+        {
+            get
+            {
+                return ((string)(base[global::BusSettings.PersistantStore.ConnectionStringPropertyName]));
+            }
+            set
+            {
+                base[global::BusSettings.PersistantStore.ConnectionStringPropertyName] = value;
             }
         }
         #endregion
