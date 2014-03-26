@@ -16,6 +16,11 @@
 					<xs:documentation>The Settings.</xs:documentation>
 				</xs:annotation>
 			</xs:element>
+			<xs:element minOccurs="0" name="persistantStore" type="tns:BusSettings.PersistantStoreCT">
+				<xs:annotation>
+					<xs:documentation>The PersistantStore.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
 		</xs:choice>
 	</xs:complexType>
 	<xs:complexType name="BusSettings.RabbitMqCT">
@@ -42,6 +47,11 @@
 			<xs:element minOccurs="0" name="Retries" type="tns:BusSettings.RetriesCT">
 				<xs:annotation>
 					<xs:documentation>The Retries.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element minOccurs="0" name="persistantStore" type="tns:BusSettings.PersistantStoreCT">
+				<xs:annotation>
+					<xs:documentation>The PersistantStore.</xs:documentation>
 				</xs:annotation>
 			</xs:element>
 		</xs:choice>
@@ -171,6 +181,18 @@
 		<xs:attribute name="RetryDelay" use="optional" type="xs:int">
 			<xs:annotation>
 				<xs:documentation>The RetryDelay.</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+	</xs:complexType>
+	<xs:complexType name="BusSettings.PersistantStoreCT">
+		<xs:attribute name="database" use="optional" type="xs:string">
+			<xs:annotation>
+				<xs:documentation>The Database.</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="connectionString" use="optional" type="xs:string">
+			<xs:annotation>
+				<xs:documentation>The ConnectionString.</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
 	</xs:complexType>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Persistance.MongoDb;
 using Xunit;
 
 namespace R.MessageBus.UnitTests
@@ -17,9 +18,10 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
-            //Assert.Equal(AppDomain.CurrentDomain.SetupInformation.ConfigurationFile, configuration.ConfigurationPath);
             Assert.Equal(typeof(StructuremapContainer), configuration.Container);
-            //Assert.Equal(null, configuration.EndPoint);
+            Assert.Equal(typeof(MongoDbProcessManagerFinder), configuration.ProcessManagerFinder);
+            Assert.Equal("RMessageBusPersistantStore", configuration.PersistenceStoreDatabaseName);
+            Assert.Equal("host=localhost", configuration.PersistenceStoreConnectionString);
         }
 
         [Fact]
@@ -90,13 +92,11 @@ namespace R.MessageBus.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public string ConfigPath { get; private set; }
-            public string EndPoint { get; private set; }
+            private readonly ITransportSettings _transportSettings;
 
-            public FakeConsumer(string endPoint, string configPath)
+            public FakeConsumer(ITransportSettings transportSettings)
             {
-                ConfigPath = configPath;
-                EndPoint = endPoint;
+                _transportSettings = transportSettings;
             }
 
             public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null)
