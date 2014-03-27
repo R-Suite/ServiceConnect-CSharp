@@ -38,6 +38,7 @@ namespace R.MessageBus
         #region Public Properties
 
         public Type ConsumerType { get; set; }
+        public Type PublisherType { get; set; }
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
@@ -55,6 +56,7 @@ namespace R.MessageBus
             SetPersistanceSettings();
 
             ConsumerType = typeof(Consumer);
+            PublisherType = typeof(Publisher);
             Container = typeof(StructuremapContainer);
             ProcessManagerFinder = typeof(MongoDbProcessManagerFinder);
         }
@@ -113,12 +115,30 @@ namespace R.MessageBus
         }
 
         /// <summary>
+        /// Sets publisher
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        public void SetPublisher<T>() where T : class, IPublisher
+        {
+            PublisherType = typeof(T);
+        }
+
+        /// <summary>
         /// Gets instance of IConsumer type
         /// </summary>
         /// <returns></returns>
         public IConsumer GetConsumer()
         {
             return (IConsumer)Activator.CreateInstance(ConsumerType, TransportSettings);
+        }
+
+        /// <summary>
+        /// Gets instance of IPublisher type
+        /// </summary>
+        /// <returns></returns>
+        public IPublisher GetPublisher()
+        {
+            return (IPublisher)Activator.CreateInstance(PublisherType, TransportSettings);
         }
 
         /// <summary>
