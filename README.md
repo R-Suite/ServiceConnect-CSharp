@@ -40,9 +40,9 @@ Initialize also takes a single lambda/action parameter for custom configuration.
 ```c#
 IBus bus = Bus.Initialize(config =>
 {
-    config.EndPoint = "MyEndpoint";
-    config.ConfigurationPath = "MyConfigurationPath";
+    config.LoadSettings("MyConfigurationPath", "MyEndpoint");
     config.SetConsumer<Consumer>();
+    config.SetPublisher<Publisher>();
     config.SetContainer<Container>();
     ScanForMesssageHandlers = true;
 });
