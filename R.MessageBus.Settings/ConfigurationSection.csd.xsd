@@ -11,28 +11,28 @@
 	<xs:element name="BusSettings" type="tns:BusSettings.BusSettingsCT" />
 	<xs:complexType name="BusSettings.BusSettingsCT">
 		<xs:choice minOccurs="0" maxOccurs="unbounded">
-			<xs:element minOccurs="0" name="Settings" type="tns:BusSettings.RabbitMqCT">
+			<xs:element minOccurs="0" name="TransportSettings" type="tns:BusSettings.RabbitMqCT">
 				<xs:annotation>
-					<xs:documentation>The Settings.</xs:documentation>
+					<xs:documentation>The TransportSettings.</xs:documentation>
 				</xs:annotation>
 			</xs:element>
-			<xs:element minOccurs="0" name="persistantStore" type="tns:BusSettings.PersistantStoreCT">
+			<xs:element minOccurs="0" name="PersistanceSettings" type="tns:BusSettings.MongoDbCT">
 				<xs:annotation>
-					<xs:documentation>The PersistantStore.</xs:documentation>
+					<xs:documentation>The PersistanceSettings.</xs:documentation>
 				</xs:annotation>
 			</xs:element>
 		</xs:choice>
 	</xs:complexType>
 	<xs:complexType name="BusSettings.RabbitMqCT">
 		<xs:choice minOccurs="0" maxOccurs="unbounded">
-			<xs:element minOccurs="0" maxOccurs="unbounded" name="RabbitMq" type="tns:Settings.SettingsCT">
+			<xs:element minOccurs="0" maxOccurs="unbounded" name="RabbitMq" type="tns:BusConfiguration.TransportSettingsCT">
 				<xs:annotation>
-					<xs:documentation>The Settings Configuration Element.</xs:documentation>
+					<xs:documentation>The TransportSettings Configuration Element.</xs:documentation>
 				</xs:annotation>
 			</xs:element>
 		</xs:choice>
 	</xs:complexType>
-	<xs:complexType name="Settings.SettingsCT">
+	<xs:complexType name="BusConfiguration.TransportSettingsCT">
 		<xs:choice minOccurs="0" maxOccurs="unbounded">
 			<xs:element minOccurs="0" name="Queue" type="tns:BusSettings.QueueCT">
 				<xs:annotation>
@@ -47,11 +47,6 @@
 			<xs:element minOccurs="0" name="Retries" type="tns:BusSettings.RetriesCT">
 				<xs:annotation>
 					<xs:documentation>The Retries.</xs:documentation>
-				</xs:annotation>
-			</xs:element>
-			<xs:element minOccurs="0" name="persistantStore" type="tns:BusSettings.PersistantStoreCT">
-				<xs:annotation>
-					<xs:documentation>The PersistantStore.</xs:documentation>
 				</xs:annotation>
 			</xs:element>
 		</xs:choice>
@@ -184,16 +179,25 @@
 			</xs:annotation>
 		</xs:attribute>
 	</xs:complexType>
-	<xs:complexType name="BusSettings.PersistantStoreCT">
-		<xs:attribute name="database" use="optional" type="xs:string">
+	<xs:complexType name="BusConfiguration.PersistanceSettingsCT">
+		<xs:attribute name="Database" use="optional" type="xs:string">
 			<xs:annotation>
 				<xs:documentation>The Database.</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
-		<xs:attribute name="connectionString" use="optional" type="xs:string">
+		<xs:attribute name="ConnectionString" use="required" type="xs:string">
 			<xs:annotation>
 				<xs:documentation>The ConnectionString.</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
+	</xs:complexType>
+	<xs:complexType name="BusSettings.MongoDbCT">
+		<xs:choice minOccurs="0" maxOccurs="unbounded">
+			<xs:element minOccurs="0" maxOccurs="unbounded" name="MongoDb" type="tns:BusConfiguration.PersistanceSettingsCT">
+				<xs:annotation>
+					<xs:documentation>The PersistanceSettings Configuration Element.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:choice>
 	</xs:complexType>
 </xs:schema>

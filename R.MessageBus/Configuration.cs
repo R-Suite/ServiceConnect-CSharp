@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using BusSettings;
+using BusConfiguration;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
@@ -10,6 +10,17 @@ using Queue = R.MessageBus.Interfaces.Queue;
 
 namespace R.MessageBus
 {
+    /// <summary>
+    /// Bus configuration.
+    /// 
+    /// Implicit initialization <see cref="Configuration"/>:
+    /// Initialize from BusSettings configuration section, 
+    /// use preconfigured defaults if the section is not found.
+    /// 
+    /// Explicit initialization <see cref="LoadSettings"/>:
+    /// Initialize from BusSettings section of a custom configuration file,
+    /// throw exception if the section is not found
+    /// </summary>
     public class Configuration : IConfiguration
     {
         #region Private Fields
@@ -34,7 +45,12 @@ namespace R.MessageBus
         public Configuration()
         {
             _configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
-            SetTransportSettings(_configurationPath);
+            var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
+
+            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
+
+            SetTransportSettings(section);
+            SetPersistanceSettings(section);
 
             ConsumerType = typeof(Consumer);
             Container = typeof(StructuremapContainer);
@@ -56,7 +72,14 @@ namespace R.MessageBus
 
             _endPoint = endPoint;
 
-            SetTransportSettings(_configurationPath, _endPoint);
+            var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
+
+            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
+
+            if (section == null) throw new ArgumentException("BusSettings section not found in the configuration file.");
+
+            SetTransportSettings(section, _endPoint);
+            SetPersistanceSettings(section);
         }
         
         /// <summary>
@@ -77,21 +100,37 @@ namespace R.MessageBus
             ProcessManagerFinder = typeof (T);
         }
 
+        /// <summary>
+        /// Sets consumer
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
         public void SetConsumer<T>() where T : class, IConsumer 
         {
             ConsumerType = typeof(T);
         }
 
+        /// <summary>
+        /// Gets instance of IConsumer type
+        /// </summary>
+        /// <returns></returns>
         public IConsumer GetConsumer()
         {
             return (IConsumer)Activator.CreateInstance(ConsumerType, TransportSettings);
         }
 
+        /// <summary>
+        /// Gets instance of IBusContainer type
+        /// </summary>
+        /// <returns></returns>
         public IBusContainer GetContainer()
         {
             return (IBusContainer)Activator.CreateInstance(Container);
         }
 
+        /// <summary>
+        /// Gets instance of IProcessManagerFinder type
+        /// </summary>
+        /// <returns></returns>
         public IProcessManagerFinder GetProcessManagerFinder()
         {
             return (IProcessManagerFinder)Activator.CreateInstance(ProcessManagerFinder, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
@@ -99,63 +138,79 @@ namespace R.MessageBus
 
         #region Private Methods
 
-        private void SetTransportSettings(string configFilePath, string endPoint = null)
+        private void SetTransportSettings(BusSettings.BusSettings section, string endPoint = null)
         {
-            var configurationManager = new ConfigurationManagerWrapper(configFilePath);
-
-            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
-
-            if (section != null)
+            if (null != section)
             {
-                Settings.Settings settings = !string.IsNullOrEmpty(endPoint) ? section.Settings.GetItemByKey(endPoint) : section.Settings.GetItemAt(0);
+                var transportSettings = !string.IsNullOrEmpty(endPoint)? section.TransportSettings.GetItemByKey(endPoint): section.TransportSettings.GetItemAt(0);
 
-                if (null != settings)
+                if (null != transportSettings)
                 {
-                    PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? settings.PersistantStore.Database;
-                    PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? settings.PersistantStore.ConnectionString;
-                    
-                    TransportSettings = GetTransportSettingsFromBusSettings(settings);
+                    TransportSettings = GetTransportSettingsFromBusSettings(transportSettings);
+
+                    return;
                 }
             }
 
-            if (null == TransportSettings)
-            {
-                PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? "RMessageBusPersistantStore";
-                PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? "host=localhost";
-                
-                TransportSettings = GetTransportSettingsFromDefaults();
-            }
+            // Set defaults
+            TransportSettings = GetTransportSettingsFromDefaults();
         }
 
-        private ITransportSettings GetTransportSettingsFromBusSettings(Settings.Settings settings)
+        private void SetPersistanceSettings(BusSettings.BusSettings section)
         {
-            ITransportSettings transportSettings = new TransportSettings();
+            if (null != section)
+            {
+                PersistanceSettings persistanceSettings = section.PersistanceSettings.GetItemAt(0);
+
+                if (null != persistanceSettings)
+                {
+                    PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? persistanceSettings.Database;
+                    PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? persistanceSettings.ConnectionString;
+
+                    return;
+                }
+            }
+
+            // Set defaults
+            PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? "RMessageBusPersistantStore";
+            PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? "mongodb://localhost/";
+        }
+
+        private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
+        {
+            ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
             transportSettings.Host = settings.Host;
             transportSettings.MaxRetries = settings.Retries.MaxRetries;
             transportSettings.RetryDelay = settings.Retries.RetryDelay;
             transportSettings.Username = settings.Username;
             transportSettings.Password = settings.Password;
             transportSettings.NoAck = settings.NoAck;
-            transportSettings.Queue.Name = settings.Queue.Name;
-            transportSettings.Queue.RoutingKey = settings.Queue.RoutingKey;
-            transportSettings.Queue.Arguments = GetQueueArguments(settings);
-            transportSettings.Queue.AutoDelete = settings.Queue.AutoDelete;
-            transportSettings.Queue.Durable = settings.Queue.Durable;
-            transportSettings.Queue.Exclusive = settings.Queue.Exclusive;
-            transportSettings.Queue.IsReadOnly = settings.Queue.IsReadOnly();
-            transportSettings.Exchange.Name = settings.Exchange.Name;
-            transportSettings.Exchange.Type = settings.Exchange.Type;
-            transportSettings.Exchange.Arguments = GetExchangeArguments(settings);
-            transportSettings.Exchange.AutoDelete = settings.Exchange.AutoDelete;
-            transportSettings.Exchange.Durable = settings.Exchange.Durable;
-            transportSettings.Exchange.IsReadOnly = settings.Exchange.IsReadOnly();
+            transportSettings.Queue = new Queue
+            {
+                Name = settings.Queue.Name,
+                RoutingKey = settings.Queue.RoutingKey,
+                Arguments = GetQueueArguments(settings),
+                AutoDelete = settings.Queue.AutoDelete,
+                Durable = settings.Queue.Durable,
+                Exclusive = settings.Queue.Exclusive,
+                IsReadOnly = settings.Queue.IsReadOnly()
+            };
+            transportSettings.Exchange = new Exchange
+            {
+                Name = settings.Exchange.Name,
+                Type = settings.Exchange.Type,
+                Arguments = GetExchangeArguments(settings),
+                AutoDelete = settings.Exchange.AutoDelete,
+                Durable = settings.Exchange.Durable,
+                IsReadOnly = settings.Exchange.IsReadOnly(),
+            };
 
             return transportSettings;
         }
 
         private ITransportSettings GetTransportSettingsFromDefaults()
         {
-            ITransportSettings transportSettings = new TransportSettings();
+            ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
             transportSettings.Host = "localhost";
             transportSettings.MaxRetries = 3;
             transportSettings.RetryDelay = 3000;
@@ -185,7 +240,7 @@ namespace R.MessageBus
             return transportSettings;
         }
 
-        private static Dictionary<string, object> GetExchangeArguments(Settings.Settings settings)
+        private static Dictionary<string, object> GetExchangeArguments(BusConfiguration.TransportSettings settings)
         {
             var exchangeeArguments = new Dictionary<string, object>();
             for (var i = 0; i < settings.Exchange.Arguments.Count; i++)
@@ -195,7 +250,7 @@ namespace R.MessageBus
             return exchangeeArguments;
         }
 
-        private static Dictionary<string, object> GetQueueArguments(Settings.Settings settings)
+        private static Dictionary<string, object> GetQueueArguments(BusConfiguration.TransportSettings settings)
         {
             var queueArguments = new Dictionary<string, object>();
             for (var i = 0; i < settings.Queue.Arguments.Count; i++)

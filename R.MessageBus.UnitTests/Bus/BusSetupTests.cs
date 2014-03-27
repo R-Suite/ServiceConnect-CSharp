@@ -38,6 +38,19 @@ namespace R.MessageBus.UnitTests.Bus
             Assert.Equal(typeof(FakeConsumer), configuration.ConsumerType);
         }
 
+        [Fact]
+        public void ShouldSetupBusWithCustomConfigurationFile()
+        {
+            // Arrange
+            IBus bus = MessageBus.Bus.Initialize(config => config.LoadSettings(@"Bus/TestConfiguration.xml"));
+
+            // Act
+            IConfiguration configuration = bus.Configuration;
+
+            // Assert
+            Assert.Equal("TestDatabase", configuration.PersistenceStoreDatabaseName);
+        }
+
         //[Fact]
         //public void ShouldSetupBusWithCustomEndPoint()
         //{
@@ -58,16 +71,13 @@ namespace R.MessageBus.UnitTests.Bus
         //public void ShouldSetupBusWithCustomConfigurationPath()
         //{
         //    // Arrange
-        //    IBus bus = MessageBus.Bus.Initialize(config =>
-        //    {
-        //        config.ConfigurationPath = "MyConfigurationPath";
-        //    });
+        //    IBus bus = MessageBus.Bus.Initialize(config => config.LoadSettings("MyConfigurationPath"));
 
         //    // Act
         //    IConfiguration configuration = bus.Configuration;
 
         //    // Assert
-        //    Assert.Equal("MyConfigurationPath", configuration.ConfigurationPath);
+        //    //Assert.Equal("MyConfigurationPath", configuration.ConfigurationPath);
         //}
 
         [Fact]

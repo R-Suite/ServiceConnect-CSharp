@@ -13,24 +13,24 @@
   <configurationElements>
     <configurationSection name="BusSettings" codeGenOptions="Singleton, XmlnsProperty" xmlSectionName="BusSettings">
       <elementProperties>
-        <elementProperty name="Settings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Settings" isReadOnly="false">
+        <elementProperty name="TransportSettings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="TransportSettings" isReadOnly="false">
           <type>
             <configurationElementCollectionMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/RabbitMq" />
           </type>
         </elementProperty>
-        <elementProperty name="PersistantStore" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="persistantStore" isReadOnly="false">
+        <elementProperty name="PersistanceSettings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="PersistanceSettings" isReadOnly="false">
           <type>
-            <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/PersistantStore" />
+            <configurationElementCollectionMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/MongoDb" />
           </type>
         </elementProperty>
       </elementProperties>
     </configurationSection>
     <configurationElementCollection name="RabbitMq" xmlItemName="RabbitMq" codeGenOptions="Indexer, AddMethod, RemoveMethod, GetItemMethods">
       <itemType>
-        <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/Settings" />
+        <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/TransportSettings" />
       </itemType>
     </configurationElementCollection>
-    <configurationElement name="Settings" namespace="Settings">
+    <configurationElement name="TransportSettings" namespace="BusConfiguration">
       <attributeProperties>
         <attributeProperty name="EndPoint" isRequired="true" isKey="true" isDefaultCollection="false" xmlName="EndPoint" isReadOnly="false">
           <type>
@@ -72,11 +72,6 @@
         <elementProperty name="Retries" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Retries" isReadOnly="false">
           <type>
             <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/Retries" />
-          </type>
-        </elementProperty>
-        <elementProperty name="PersistantStore" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="persistantStore" isReadOnly="false">
-          <type>
-            <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/PersistantStore" />
           </type>
         </elementProperty>
       </elementProperties>
@@ -188,20 +183,25 @@
         </elementProperty>
       </elementProperties>
     </configurationElement>
-    <configurationElement name="PersistantStore">
+    <configurationElement name="PersistanceSettings" namespace="BusConfiguration">
       <attributeProperties>
-        <attributeProperty name="Database" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="database" isReadOnly="false" defaultValue="&quot;RMessageBusPersistantStore&quot;">
+        <attributeProperty name="Database" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Database" isReadOnly="false" defaultValue="&quot;RMessageBusPersistantStore&quot;">
           <type>
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
           </type>
         </attributeProperty>
-        <attributeProperty name="ConnectionString" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="connectionString" isReadOnly="false" defaultValue="&quot;host=localhost&quot;">
+        <attributeProperty name="ConnectionString" isRequired="true" isKey="true" isDefaultCollection="false" xmlName="ConnectionString" isReadOnly="false" defaultValue="&quot;mongodb://localhost/&quot;">
           <type>
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
           </type>
         </attributeProperty>
       </attributeProperties>
     </configurationElement>
+    <configurationElementCollection name="MongoDb" xmlItemName="MongoDb" codeGenOptions="Indexer, AddMethod, RemoveMethod, GetItemMethods">
+      <itemType>
+        <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/PersistanceSettings" />
+      </itemType>
+    </configurationElementCollection>
   </configurationElements>
   <propertyValidators>
     <validators />

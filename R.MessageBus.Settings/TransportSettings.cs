@@ -1,6 +1,6 @@
 ﻿using R.MessageBus.Interfaces;
 
-namespace BusSettings
+namespace R.MessageBus.Settings
 {
     public class TransportSettings : ITransportSettings
     {

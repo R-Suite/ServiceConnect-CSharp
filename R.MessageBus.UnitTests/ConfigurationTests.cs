@@ -21,7 +21,7 @@ namespace R.MessageBus.UnitTests
             Assert.Equal(typeof(StructuremapContainer), configuration.Container);
             Assert.Equal(typeof(MongoDbProcessManagerFinder), configuration.ProcessManagerFinder);
             Assert.Equal("RMessageBusPersistantStore", configuration.PersistenceStoreDatabaseName);
-            Assert.Equal("host=localhost", configuration.PersistenceStoreConnectionString);
+            Assert.Equal("mongodb://localhost/", configuration.PersistenceStoreConnectionString);
         }
 
         [Fact]
@@ -108,12 +108,8 @@ namespace R.MessageBus.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            private readonly ITransportSettings _transportSettings;
-
             public FakeConsumer(ITransportSettings transportSettings)
-            {
-                _transportSettings = transportSettings;
-            }
+            {}
 
             public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null)
             {
