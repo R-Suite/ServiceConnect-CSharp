@@ -1,58 +1,37 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Configuration;
 using System.Text;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
-using BusSettings = BusSettings.BusSettings;
 
 namespace R.MessageBus.Client.RabbitMQ
 {
     public class Publisher : IDisposable, IPublisher
     {
+        private readonly ITransportSettings _transportSettings;
         private readonly IModel _model;
         private readonly IConnection _connection;
         private readonly string _exchange;
-        private readonly BusConfiguration.TransportSettings _settings;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
-        public Publisher(string configPath = null, string endPoint = null)
+        public Publisher(ITransportSettings transportSettings)
         {
-            var configurationManager = new ConfigurationManagerWrapper(configPath);
-
-            var section = configurationManager.GetSection<global::BusSettings.BusSettings>("BusSettings");
-
-            if (section == null)
-            {
-                throw new ConfigurationErrorsException("The configuration file must contain a BusSettings section");
-            }
-
-            var endPointSettings = !string.IsNullOrEmpty(endPoint) ? section.EndpointSettings.GetItemByKey(endPoint) : section.EndpointSettings.GetItemAt(0);
-            BusConfiguration.TransportSettings settings = endPointSettings.TransportSettings;
-
-            if (settings == null)
-            {
-                throw new ConfigurationErrorsException(string.Format("Settings for endpoint {0} could not be found", endPoint));
-            }
-
-            _settings = settings;
-
+            _transportSettings = transportSettings;
             var connectionFactory = new ConnectionFactory 
-            { 
-                HostName = _settings.Host,
+            {
+                HostName = _transportSettings.Host,
                 VirtualHost = "/",
                 Protocol = Protocols.FromEnvironment(),
                 Port = AmqpTcpEndpoint.UseDefaultPort
             };
 
-            if (!string.IsNullOrEmpty(_settings.Username))
+            if (!string.IsNullOrEmpty(_transportSettings.Username))
             {
-                connectionFactory.UserName = _settings.Username;
+                connectionFactory.UserName = _transportSettings.Username;
             }
 
-            if (!string.IsNullOrEmpty(_settings.Password))
+            if (!string.IsNullOrEmpty(_transportSettings.Password))
             {
-                connectionFactory.Password = _settings.Password;
+                connectionFactory.Password = _transportSettings.Password;
             }
 
             _connection = connectionFactory.CreateConnection();
@@ -85,24 +64,15 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureExchange()
         {
-            if (!string.IsNullOrEmpty(_settings.Exchange.Name))
-            {
-                var arguments = new Dictionary<string, object>();
-                if (_settings.Exchange.Arguments != null)
-                {
-                    for (int i = 0; i < _settings.Exchange.Arguments.Count; i++)
-                    {
-                        arguments.Add(_settings.Exchange.Arguments[i].Name, _settings.Exchange.Arguments[i].Value);
-                    }
-                }
+            var arguments = _transportSettings.Exchange.Arguments;
 
-                _model.ExchangeDeclare(_settings.Exchange.Name,
-                                       _settings.Exchange.Type,
-                                       _settings.Exchange.Durable,
-                                       _settings.Exchange.AutoDelete,
-                                       arguments);
-            }
-            return _settings.Exchange.Name;
+            _model.ExchangeDeclare(_transportSettings.Exchange.Name,
+                                    _transportSettings.Exchange.Type,
+                                    _transportSettings.Exchange.Durable,
+                                    _transportSettings.Exchange.AutoDelete,
+                                    arguments);
+
+            return _transportSettings.Exchange.Name;
         }
     }
 }
