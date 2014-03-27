@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
