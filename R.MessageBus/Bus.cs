@@ -173,7 +173,6 @@ namespace R.MessageBus
                         Logger.Error(string.Format("Error executing handler. {0}", handlerReference.HandlerType.FullName), ex);
                         throw;
                     }
-                    
                 }
             }
             catch (Exception ex)

@@ -13,30 +13,15 @@
   <configurationElements>
     <configurationSection name="BusSettings" codeGenOptions="Singleton, XmlnsProperty" xmlSectionName="BusSettings">
       <elementProperties>
-        <elementProperty name="TransportSettings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="TransportSettings" isReadOnly="false">
+        <elementProperty name="EndpointSettings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="EndpointSettings" isReadOnly="false">
           <type>
-            <configurationElementCollectionMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/RabbitMq" />
-          </type>
-        </elementProperty>
-        <elementProperty name="PersistanceSettings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="PersistanceSettings" isReadOnly="false">
-          <type>
-            <configurationElementCollectionMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/MongoDb" />
+            <configurationElementCollectionMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/BusSettingEnpoint" />
           </type>
         </elementProperty>
       </elementProperties>
     </configurationSection>
-    <configurationElementCollection name="RabbitMq" xmlItemName="RabbitMq" codeGenOptions="Indexer, AddMethod, RemoveMethod, GetItemMethods">
-      <itemType>
-        <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/TransportSettings" />
-      </itemType>
-    </configurationElementCollection>
     <configurationElement name="TransportSettings" namespace="BusConfiguration">
       <attributeProperties>
-        <attributeProperty name="EndPoint" isRequired="true" isKey="true" isDefaultCollection="false" xmlName="EndPoint" isReadOnly="false">
-          <type>
-            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
-          </type>
-        </attributeProperty>
         <attributeProperty name="Host" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Host" isReadOnly="false" defaultValue="&quot;localhost&quot;">
           <type>
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
@@ -197,11 +182,32 @@
         </attributeProperty>
       </attributeProperties>
     </configurationElement>
-    <configurationElementCollection name="MongoDb" xmlItemName="MongoDb" codeGenOptions="Indexer, AddMethod, RemoveMethod, GetItemMethods">
+    <configurationElementCollection name="BusSettingEnpoint" xmlItemName="Enpoint" codeGenOptions="Indexer, AddMethod, RemoveMethod, GetItemMethods">
       <itemType>
-        <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/PersistanceSettings" />
+        <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/EndpointSettings" />
       </itemType>
     </configurationElementCollection>
+    <configurationElement name="EndpointSettings">
+      <attributeProperties>
+        <attributeProperty name="Name" isRequired="true" isKey="true" isDefaultCollection="false" xmlName="name" isReadOnly="false">
+          <type>
+            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
+          </type>
+        </attributeProperty>
+      </attributeProperties>
+      <elementProperties>
+        <elementProperty name="TransportSettings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="TransportSettings" isReadOnly="false">
+          <type>
+            <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/TransportSettings" />
+          </type>
+        </elementProperty>
+        <elementProperty name="PersistanceSettings" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="PersistanceSettings" isReadOnly="false">
+          <type>
+            <configurationElementMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/PersistanceSettings" />
+          </type>
+        </elementProperty>
+      </elementProperties>
+    </configurationElement>
   </configurationElements>
   <propertyValidators>
     <validators />

@@ -74,225 +74,29 @@ namespace BusSettings
         }
         #endregion
         
-        #region TransportSettings Property
+        #region EndpointSettings Property
         /// <summary>
-        /// The XML name of the <see cref="TransportSettings"/> property.
+        /// The XML name of the <see cref="EndpointSettings"/> property.
         /// </summary>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        internal const string TransportSettingsPropertyName = "TransportSettings";
+        internal const string EndpointSettingsPropertyName = "EndpointSettings";
         
         /// <summary>
-        /// Gets or sets the TransportSettings.
+        /// Gets or sets the EndpointSettings.
         /// </summary>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        [global::System.ComponentModel.DescriptionAttribute("The TransportSettings.")]
-        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.BusSettings.TransportSettingsPropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false)]
-        public virtual global::BusSettings.RabbitMq TransportSettings
+        [global::System.ComponentModel.DescriptionAttribute("The EndpointSettings.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.BusSettings.EndpointSettingsPropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false)]
+        public virtual global::BusSettings.BusSettingEnpoint EndpointSettings
         {
             get
             {
-                return ((global::BusSettings.RabbitMq)(base[global::BusSettings.BusSettings.TransportSettingsPropertyName]));
+                return ((global::BusSettings.BusSettingEnpoint)(base[global::BusSettings.BusSettings.EndpointSettingsPropertyName]));
             }
             set
             {
-                base[global::BusSettings.BusSettings.TransportSettingsPropertyName] = value;
+                base[global::BusSettings.BusSettings.EndpointSettingsPropertyName] = value;
             }
-        }
-        #endregion
-        
-        #region PersistanceSettings Property
-        /// <summary>
-        /// The XML name of the <see cref="PersistanceSettings"/> property.
-        /// </summary>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        internal const string PersistanceSettingsPropertyName = "PersistanceSettings";
-        
-        /// <summary>
-        /// Gets or sets the PersistanceSettings.
-        /// </summary>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        [global::System.ComponentModel.DescriptionAttribute("The PersistanceSettings.")]
-        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.BusSettings.PersistanceSettingsPropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false)]
-        public virtual global::BusSettings.MongoDb PersistanceSettings
-        {
-            get
-            {
-                return ((global::BusSettings.MongoDb)(base[global::BusSettings.BusSettings.PersistanceSettingsPropertyName]));
-            }
-            set
-            {
-                base[global::BusSettings.BusSettings.PersistanceSettingsPropertyName] = value;
-            }
-        }
-        #endregion
-    }
-}
-namespace BusSettings
-{
-    
-    
-    /// <summary>
-    /// A collection of TransportSettings instances.
-    /// </summary>
-    [global::System.Configuration.ConfigurationCollectionAttribute(typeof(global::BusConfiguration.TransportSettings), CollectionType=global::System.Configuration.ConfigurationElementCollectionType.BasicMapAlternate, AddItemName=global::BusSettings.RabbitMq.TransportSettingsPropertyName)]
-    public partial class RabbitMq : global::System.Configuration.ConfigurationElementCollection
-    {
-        
-        #region Constants
-        /// <summary>
-        /// The XML name of the individual <see cref="global::BusConfiguration.TransportSettings"/> instances in this collection.
-        /// </summary>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        internal const string TransportSettingsPropertyName = "RabbitMq";
-        #endregion
-        
-        #region Overrides
-        /// <summary>
-        /// Gets the type of the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
-        /// </summary>
-        /// <returns>The <see cref="global::System.Configuration.ConfigurationElementCollectionType"/> of this collection.</returns>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public override global::System.Configuration.ConfigurationElementCollectionType CollectionType
-        {
-            get
-            {
-                return global::System.Configuration.ConfigurationElementCollectionType.BasicMapAlternate;
-            }
-        }
-        
-        /// <summary>
-        /// Gets the name used to identify this collection of elements
-        /// </summary>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        protected override string ElementName
-        {
-            get
-            {
-                return global::BusSettings.RabbitMq.TransportSettingsPropertyName;
-            }
-        }
-        
-        /// <summary>
-        /// Indicates whether the specified <see cref="global::System.Configuration.ConfigurationElement"/> exists in the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
-        /// </summary>
-        /// <param name="elementName">The name of the element to verify.</param>
-        /// <returns>
-        /// <see langword="true"/> if the element exists in the collection; otherwise, <see langword="false"/>.
-        /// </returns>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        protected override bool IsElementName(string elementName)
-        {
-            return (elementName == global::BusSettings.RabbitMq.TransportSettingsPropertyName);
-        }
-        
-        /// <summary>
-        /// Gets the element key for the specified configuration element.
-        /// </summary>
-        /// <param name="element">The <see cref="global::System.Configuration.ConfigurationElement"/> to return the key for.</param>
-        /// <returns>
-        /// An <see cref="object"/> that acts as the key for the specified <see cref="global::System.Configuration.ConfigurationElement"/>.
-        /// </returns>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        protected override object GetElementKey(global::System.Configuration.ConfigurationElement element)
-        {
-            return ((global::BusConfiguration.TransportSettings)(element)).EndPoint;
-        }
-        
-        /// <summary>
-        /// Creates a new <see cref="global::BusConfiguration.TransportSettings"/>.
-        /// </summary>
-        /// <returns>
-        /// A new <see cref="global::BusConfiguration.TransportSettings"/>.
-        /// </returns>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        protected override global::System.Configuration.ConfigurationElement CreateNewElement()
-        {
-            return new global::BusConfiguration.TransportSettings();
-        }
-        #endregion
-        
-        #region Indexer
-        /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.TransportSettings"/> at the specified index.
-        /// </summary>
-        /// <param name="index">The index of the <see cref="global::BusConfiguration.TransportSettings"/> to retrieve.</param>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.TransportSettings this[int index]
-        {
-            get
-            {
-                return ((global::BusConfiguration.TransportSettings)(base.BaseGet(index)));
-            }
-        }
-        
-        /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.TransportSettings"/> with the specified key.
-        /// </summary>
-        /// <param name="EndPoint">The key of the <see cref="global::BusConfiguration.TransportSettings"/> to retrieve.</param>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.TransportSettings this[object EndPoint]
-        {
-            get
-            {
-                return ((global::BusConfiguration.TransportSettings)(base.BaseGet(EndPoint)));
-            }
-        }
-        #endregion
-        
-        #region Add
-        /// <summary>
-        /// Adds the specified <see cref="global::BusConfiguration.TransportSettings"/> to the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
-        /// </summary>
-        /// <param name="RabbitMq">The <see cref="global::BusConfiguration.TransportSettings"/> to add.</param>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public void Add(global::BusConfiguration.TransportSettings RabbitMq)
-        {
-            base.BaseAdd(RabbitMq);
-        }
-        #endregion
-        
-        #region Remove
-        /// <summary>
-        /// Removes the specified <see cref="global::BusConfiguration.TransportSettings"/> from the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
-        /// </summary>
-        /// <param name="RabbitMq">The <see cref="global::BusConfiguration.TransportSettings"/> to remove.</param>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public void Remove(global::BusConfiguration.TransportSettings RabbitMq)
-        {
-            base.BaseRemove(this.GetElementKey(RabbitMq));
-        }
-        #endregion
-        
-        #region GetItem
-        /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.TransportSettings"/> at the specified index.
-        /// </summary>
-        /// <param name="index">The index of the <see cref="global::BusConfiguration.TransportSettings"/> to retrieve.</param>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.TransportSettings GetItemAt(int index)
-        {
-            return ((global::BusConfiguration.TransportSettings)(base.BaseGet(index)));
-        }
-        
-        /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.TransportSettings"/> with the specified key.
-        /// </summary>
-        /// <param name="EndPoint">The key of the <see cref="global::BusConfiguration.TransportSettings"/> to retrieve.</param>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.TransportSettings GetItemByKey(string EndPoint)
-        {
-            return ((global::BusConfiguration.TransportSettings)(base.BaseGet(((object)(EndPoint)))));
-        }
-        #endregion
-        
-        #region IsReadOnly override
-        /// <summary>
-        /// Gets a value indicating whether the element is read-only.
-        /// </summary>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public override bool IsReadOnly()
-        {
-            return false;
         }
         #endregion
     }
@@ -315,32 +119,6 @@ namespace BusConfiguration
         public override bool IsReadOnly()
         {
             return false;
-        }
-        #endregion
-        
-        #region EndPoint Property
-        /// <summary>
-        /// The XML name of the <see cref="EndPoint"/> property.
-        /// </summary>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        internal const string EndPointPropertyName = "EndPoint";
-        
-        /// <summary>
-        /// Gets or sets the EndPoint.
-        /// </summary>
-        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        [global::System.ComponentModel.DescriptionAttribute("The EndPoint.")]
-        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusConfiguration.TransportSettings.EndPointPropertyName, IsRequired=true, IsKey=true, IsDefaultCollection=false)]
-        public virtual string EndPoint
-        {
-            get
-            {
-                return ((string)(base[global::BusConfiguration.TransportSettings.EndPointPropertyName]));
-            }
-            set
-            {
-                base[global::BusConfiguration.TransportSettings.EndPointPropertyName] = value;
-            }
         }
         #endregion
         
@@ -1280,18 +1058,18 @@ namespace BusSettings
     
     
     /// <summary>
-    /// A collection of PersistanceSettings instances.
+    /// A collection of EndpointSettings instances.
     /// </summary>
-    [global::System.Configuration.ConfigurationCollectionAttribute(typeof(global::BusConfiguration.PersistanceSettings), CollectionType=global::System.Configuration.ConfigurationElementCollectionType.BasicMapAlternate, AddItemName=global::BusSettings.MongoDb.PersistanceSettingsPropertyName)]
-    public partial class MongoDb : global::System.Configuration.ConfigurationElementCollection
+    [global::System.Configuration.ConfigurationCollectionAttribute(typeof(global::BusSettings.EndpointSettings), CollectionType=global::System.Configuration.ConfigurationElementCollectionType.BasicMapAlternate, AddItemName=global::BusSettings.BusSettingEnpoint.EndpointSettingsPropertyName)]
+    public partial class BusSettingEnpoint : global::System.Configuration.ConfigurationElementCollection
     {
         
         #region Constants
         /// <summary>
-        /// The XML name of the individual <see cref="global::BusConfiguration.PersistanceSettings"/> instances in this collection.
+        /// The XML name of the individual <see cref="global::BusSettings.EndpointSettings"/> instances in this collection.
         /// </summary>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        internal const string PersistanceSettingsPropertyName = "MongoDb";
+        internal const string EndpointSettingsPropertyName = "Enpoint";
         #endregion
         
         #region Overrides
@@ -1316,7 +1094,7 @@ namespace BusSettings
         {
             get
             {
-                return global::BusSettings.MongoDb.PersistanceSettingsPropertyName;
+                return global::BusSettings.BusSettingEnpoint.EndpointSettingsPropertyName;
             }
         }
         
@@ -1330,7 +1108,7 @@ namespace BusSettings
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
         protected override bool IsElementName(string elementName)
         {
-            return (elementName == global::BusSettings.MongoDb.PersistanceSettingsPropertyName);
+            return (elementName == global::BusSettings.BusSettingEnpoint.EndpointSettingsPropertyName);
         }
         
         /// <summary>
@@ -1343,93 +1121,93 @@ namespace BusSettings
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
         protected override object GetElementKey(global::System.Configuration.ConfigurationElement element)
         {
-            return ((global::BusConfiguration.PersistanceSettings)(element)).ConnectionString;
+            return ((global::BusSettings.EndpointSettings)(element)).Name;
         }
         
         /// <summary>
-        /// Creates a new <see cref="global::BusConfiguration.PersistanceSettings"/>.
+        /// Creates a new <see cref="global::BusSettings.EndpointSettings"/>.
         /// </summary>
         /// <returns>
-        /// A new <see cref="global::BusConfiguration.PersistanceSettings"/>.
+        /// A new <see cref="global::BusSettings.EndpointSettings"/>.
         /// </returns>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
         protected override global::System.Configuration.ConfigurationElement CreateNewElement()
         {
-            return new global::BusConfiguration.PersistanceSettings();
+            return new global::BusSettings.EndpointSettings();
         }
         #endregion
         
         #region Indexer
         /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.PersistanceSettings"/> at the specified index.
+        /// Gets the <see cref="global::BusSettings.EndpointSettings"/> at the specified index.
         /// </summary>
-        /// <param name="index">The index of the <see cref="global::BusConfiguration.PersistanceSettings"/> to retrieve.</param>
+        /// <param name="index">The index of the <see cref="global::BusSettings.EndpointSettings"/> to retrieve.</param>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.PersistanceSettings this[int index]
+        public global::BusSettings.EndpointSettings this[int index]
         {
             get
             {
-                return ((global::BusConfiguration.PersistanceSettings)(base.BaseGet(index)));
+                return ((global::BusSettings.EndpointSettings)(base.BaseGet(index)));
             }
         }
         
         /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.PersistanceSettings"/> with the specified key.
+        /// Gets the <see cref="global::BusSettings.EndpointSettings"/> with the specified key.
         /// </summary>
-        /// <param name="ConnectionString">The key of the <see cref="global::BusConfiguration.PersistanceSettings"/> to retrieve.</param>
+        /// <param name="name">The key of the <see cref="global::BusSettings.EndpointSettings"/> to retrieve.</param>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.PersistanceSettings this[object ConnectionString]
+        public global::BusSettings.EndpointSettings this[object name]
         {
             get
             {
-                return ((global::BusConfiguration.PersistanceSettings)(base.BaseGet(ConnectionString)));
+                return ((global::BusSettings.EndpointSettings)(base.BaseGet(name)));
             }
         }
         #endregion
         
         #region Add
         /// <summary>
-        /// Adds the specified <see cref="global::BusConfiguration.PersistanceSettings"/> to the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
+        /// Adds the specified <see cref="global::BusSettings.EndpointSettings"/> to the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
         /// </summary>
-        /// <param name="MongoDb">The <see cref="global::BusConfiguration.PersistanceSettings"/> to add.</param>
+        /// <param name="Enpoint">The <see cref="global::BusSettings.EndpointSettings"/> to add.</param>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public void Add(global::BusConfiguration.PersistanceSettings MongoDb)
+        public void Add(global::BusSettings.EndpointSettings Enpoint)
         {
-            base.BaseAdd(MongoDb);
+            base.BaseAdd(Enpoint);
         }
         #endregion
         
         #region Remove
         /// <summary>
-        /// Removes the specified <see cref="global::BusConfiguration.PersistanceSettings"/> from the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
+        /// Removes the specified <see cref="global::BusSettings.EndpointSettings"/> from the <see cref="global::System.Configuration.ConfigurationElementCollection"/>.
         /// </summary>
-        /// <param name="MongoDb">The <see cref="global::BusConfiguration.PersistanceSettings"/> to remove.</param>
+        /// <param name="Enpoint">The <see cref="global::BusSettings.EndpointSettings"/> to remove.</param>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public void Remove(global::BusConfiguration.PersistanceSettings MongoDb)
+        public void Remove(global::BusSettings.EndpointSettings Enpoint)
         {
-            base.BaseRemove(this.GetElementKey(MongoDb));
+            base.BaseRemove(this.GetElementKey(Enpoint));
         }
         #endregion
         
         #region GetItem
         /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.PersistanceSettings"/> at the specified index.
+        /// Gets the <see cref="global::BusSettings.EndpointSettings"/> at the specified index.
         /// </summary>
-        /// <param name="index">The index of the <see cref="global::BusConfiguration.PersistanceSettings"/> to retrieve.</param>
+        /// <param name="index">The index of the <see cref="global::BusSettings.EndpointSettings"/> to retrieve.</param>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.PersistanceSettings GetItemAt(int index)
+        public global::BusSettings.EndpointSettings GetItemAt(int index)
         {
-            return ((global::BusConfiguration.PersistanceSettings)(base.BaseGet(index)));
+            return ((global::BusSettings.EndpointSettings)(base.BaseGet(index)));
         }
         
         /// <summary>
-        /// Gets the <see cref="global::BusConfiguration.PersistanceSettings"/> with the specified key.
+        /// Gets the <see cref="global::BusSettings.EndpointSettings"/> with the specified key.
         /// </summary>
-        /// <param name="ConnectionString">The key of the <see cref="global::BusConfiguration.PersistanceSettings"/> to retrieve.</param>
+        /// <param name="name">The key of the <see cref="global::BusSettings.EndpointSettings"/> to retrieve.</param>
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
-        public global::BusConfiguration.PersistanceSettings GetItemByKey(string ConnectionString)
+        public global::BusSettings.EndpointSettings GetItemByKey(string name)
         {
-            return ((global::BusConfiguration.PersistanceSettings)(base.BaseGet(((object)(ConnectionString)))));
+            return ((global::BusSettings.EndpointSettings)(base.BaseGet(((object)(name)))));
         }
         #endregion
         
@@ -1441,6 +1219,106 @@ namespace BusSettings
         public override bool IsReadOnly()
         {
             return false;
+        }
+        #endregion
+    }
+}
+namespace BusSettings
+{
+    
+    
+    /// <summary>
+    /// The EndpointSettings Configuration Element.
+    /// </summary>
+    public partial class EndpointSettings : global::System.Configuration.ConfigurationElement
+    {
+        
+        #region IsReadOnly override
+        /// <summary>
+        /// Gets a value indicating whether the element is read-only.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        public override bool IsReadOnly()
+        {
+            return false;
+        }
+        #endregion
+        
+        #region Name Property
+        /// <summary>
+        /// The XML name of the <see cref="Name"/> property.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        internal const string NamePropertyName = "name";
+        
+        /// <summary>
+        /// Gets or sets the Name.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        [global::System.ComponentModel.DescriptionAttribute("The Name.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.EndpointSettings.NamePropertyName, IsRequired=true, IsKey=true, IsDefaultCollection=false)]
+        public virtual string Name
+        {
+            get
+            {
+                return ((string)(base[global::BusSettings.EndpointSettings.NamePropertyName]));
+            }
+            set
+            {
+                base[global::BusSettings.EndpointSettings.NamePropertyName] = value;
+            }
+        }
+        #endregion
+        
+        #region TransportSettings Property
+        /// <summary>
+        /// The XML name of the <see cref="TransportSettings"/> property.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        internal const string TransportSettingsPropertyName = "TransportSettings";
+        
+        /// <summary>
+        /// Gets or sets the TransportSettings.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        [global::System.ComponentModel.DescriptionAttribute("The TransportSettings.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.EndpointSettings.TransportSettingsPropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false)]
+        public virtual global::BusConfiguration.TransportSettings TransportSettings
+        {
+            get
+            {
+                return ((global::BusConfiguration.TransportSettings)(base[global::BusSettings.EndpointSettings.TransportSettingsPropertyName]));
+            }
+            set
+            {
+                base[global::BusSettings.EndpointSettings.TransportSettingsPropertyName] = value;
+            }
+        }
+        #endregion
+        
+        #region PersistanceSettings Property
+        /// <summary>
+        /// The XML name of the <see cref="PersistanceSettings"/> property.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        internal const string PersistanceSettingsPropertyName = "PersistanceSettings";
+        
+        /// <summary>
+        /// Gets or sets the PersistanceSettings.
+        /// </summary>
+        [global::System.CodeDom.Compiler.GeneratedCodeAttribute("ConfigurationSectionDesigner.CsdFileGenerator", "2.0.1.0")]
+        [global::System.ComponentModel.DescriptionAttribute("The PersistanceSettings.")]
+        [global::System.Configuration.ConfigurationPropertyAttribute(global::BusSettings.EndpointSettings.PersistanceSettingsPropertyName, IsRequired=false, IsKey=false, IsDefaultCollection=false)]
+        public virtual global::BusConfiguration.PersistanceSettings PersistanceSettings
+        {
+            get
+            {
+                return ((global::BusConfiguration.PersistanceSettings)(base[global::BusSettings.EndpointSettings.PersistanceSettingsPropertyName]));
+            }
+            set
+            {
+                base[global::BusSettings.EndpointSettings.PersistanceSettingsPropertyName] = value;
+            }
         }
         #endregion
     }

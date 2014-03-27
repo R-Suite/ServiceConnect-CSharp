@@ -14,8 +14,7 @@ namespace R.MessageBus
     /// Bus configuration.
     /// 
     /// Implicit initialization <see cref="Configuration"/>:
-    /// Initialize from BusSettings configuration section, 
-    /// use preconfigured defaults if the section is not found.
+    /// Initialize from default values.
     /// 
     /// Explicit initialization <see cref="LoadSettings"/>:
     /// Initialize from BusSettings section of a custom configuration file,
@@ -23,6 +22,12 @@ namespace R.MessageBus
     /// </summary>
     public class Configuration : IConfiguration
     {
+        private const string DefaultDatabaseName = "RMessageBusPersistantStore";
+        private const string DefaultConnectionString = "mongodb://localhost/";
+        private const string DefaultExchangeName = "RMessageBusExchange";
+        private const string DefaultExchangeType = "direct";
+        private const string DefaultHost= "localhost";
+
         #region Private Fields
 
         private string _endPoint;
@@ -45,12 +50,9 @@ namespace R.MessageBus
         public Configuration()
         {
             _configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
-            var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
 
-            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
-
-            SetTransportSettings(section);
-            SetPersistanceSettings(section);
+            SetTransportSettings();
+            SetPersistanceSettings();
 
             ConsumerType = typeof(Consumer);
             Container = typeof(StructuremapContainer);
@@ -72,6 +74,7 @@ namespace R.MessageBus
 
             _endPoint = endPoint;
 
+            //todo: candidate for IoC
             var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
 
             var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
@@ -79,7 +82,7 @@ namespace R.MessageBus
             if (section == null) throw new ArgumentException("BusSettings section not found in the configuration file.");
 
             SetTransportSettings(section, _endPoint);
-            SetPersistanceSettings(section);
+            SetPersistanceSettings(section, _endPoint);
         }
         
         /// <summary>
@@ -138,11 +141,12 @@ namespace R.MessageBus
 
         #region Private Methods
 
-        private void SetTransportSettings(BusSettings.BusSettings section, string endPoint = null)
+        private void SetTransportSettings(BusSettings.BusSettings section = null, string endPoint = null)
         {
             if (null != section)
             {
-                var transportSettings = !string.IsNullOrEmpty(endPoint)? section.TransportSettings.GetItemByKey(endPoint): section.TransportSettings.GetItemAt(0);
+                var endPointSettings = !string.IsNullOrEmpty(endPoint) ? section.EndpointSettings.GetItemByKey(endPoint) : section.EndpointSettings.GetItemAt(0);
+                var transportSettings = endPointSettings.TransportSettings;
 
                 if (null != transportSettings)
                 {
@@ -156,15 +160,16 @@ namespace R.MessageBus
             TransportSettings = GetTransportSettingsFromDefaults();
         }
 
-        private void SetPersistanceSettings(BusSettings.BusSettings section)
+        private void SetPersistanceSettings(BusSettings.BusSettings section = null, string endPoint = null)
         {
             if (null != section)
             {
-                PersistanceSettings persistanceSettings = section.PersistanceSettings.GetItemAt(0);
+                var endPointSettings = !string.IsNullOrEmpty(endPoint) ? section.EndpointSettings.GetItemByKey(endPoint) : section.EndpointSettings.GetItemAt(0);
+                var persistanceSettings = endPointSettings.PersistanceSettings;
 
                 if (null != persistanceSettings)
                 {
-                    PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? persistanceSettings.Database;
+                    PersistenceStoreDatabaseName = !string.IsNullOrEmpty(persistanceSettings.Database) ? persistanceSettings.Database : DefaultDatabaseName;
                     PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? persistanceSettings.ConnectionString;
 
                     return;
@@ -172,8 +177,8 @@ namespace R.MessageBus
             }
 
             // Set defaults
-            PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? "RMessageBusPersistantStore";
-            PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? "mongodb://localhost/";
+            PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? DefaultDatabaseName;
+            PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? DefaultConnectionString;
         }
 
         private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
@@ -211,7 +216,7 @@ namespace R.MessageBus
         private ITransportSettings GetTransportSettingsFromDefaults()
         {
             ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
-            transportSettings.Host = "localhost";
+            transportSettings.Host = DefaultHost;
             transportSettings.MaxRetries = 3;
             transportSettings.RetryDelay = 3000;
             transportSettings.Username = null;
@@ -229,8 +234,8 @@ namespace R.MessageBus
             };
             transportSettings.Exchange = new Exchange
             {
-                Name = "RMessageBusExchange", //todo: review default exchange name
-                Type = "direct",
+                Name = DefaultExchangeName,
+                Type = DefaultExchangeType,
                 Arguments = null,
                 AutoDelete = false,
                 Durable = false,
