@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Net;
-using R.MessageBus.Client.RabbitMQ;
-using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using Xunit;
 
@@ -11,64 +8,41 @@ namespace R.MessageBus.UnitTests.Bus
     public class BusSetupTests
     {
         [Fact]
-        public void ShouldSetupBusWithDefaultConfiguration()
-        {
-            // Arrange
-            IBus bus = MessageBus.Bus.Initialize();
-
-            // Act
-            IConfiguration configuration = bus.Configuration;
-
-            // Assert
-            Assert.Equal(typeof(Consumer), configuration.ConsumerType);
-            Assert.Equal(AppDomain.CurrentDomain.SetupInformation.ConfigurationFile, configuration.ConfigurationPath);
-            Assert.Equal(typeof(StructuremapContainer), configuration.Container);
-            Assert.Equal(null, configuration.EndPoint);
-        }
-
-        [Fact]
-        public void ShouldSetupBusWithCustomConsumer()
-        {
-            // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config => config.SetConsumer<FakeConsumer>());
-
-            // Act
-            IConfiguration configuration = bus.Configuration;
-
-            // Assert
-            Assert.Equal(typeof(FakeConsumer), configuration.ConsumerType);
-        }
-
-        [Fact]
-        public void ShouldSetupBusWithCustomEndPoint()
+        public void ShouldSetupBusWithCorrectCustomDatabaseNameAndConnectionString()
         {
             // Arrange
             IBus bus = MessageBus.Bus.Initialize(config =>
             {
-                config.EndPoint = "MyEndpoint";
+                config.SetProcessManagerFinder<FakeProcessManagerFinder>();
+                config.SetContainer<FakeContainer>();
+                config.PersistenceStoreDatabaseName = "TestDatabaseName";
+                config.PersistenceStoreConnectionString = "TestConnectionString";
             });
 
             // Act
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.Equal("MyEndpoint", configuration.EndPoint);
+            Assert.Equal("TestDatabaseName", configuration.PersistenceStoreDatabaseName);
+            Assert.Equal("TestConnectionString", configuration.PersistenceStoreConnectionString);
         }
 
         [Fact]
-        public void ShouldSetupBusWithCustomConfigurationPath()
+        public void ShouldSetupBusWithCorrectDefaultDatabaseNameAndConnectionString()
         {
             // Arrange
             IBus bus = MessageBus.Bus.Initialize(config =>
             {
-                config.ConfigurationPath = "MyConfigurationPath";
+                config.SetProcessManagerFinder<FakeProcessManagerFinder>();
+                config.SetContainer<FakeContainer>();
             });
 
             // Act
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.Equal("MyConfigurationPath", configuration.ConfigurationPath);
+            Assert.Equal("RMessageBusPersistantStore", configuration.PersistenceStoreDatabaseName);
+            Assert.Equal("mongodb://localhost/", configuration.PersistenceStoreConnectionString);
         }
 
         [Fact]
@@ -77,6 +51,8 @@ namespace R.MessageBus.UnitTests.Bus
             // Arrange
             IBus bus = MessageBus.Bus.Initialize(config =>
             {
+                config.SetProcessManagerFinder<FakeProcessManagerFinder>();
+                config.SetContainer<FakeContainer>();
                 config.ScanForMesssageHandlers = true;
             });
 
@@ -101,26 +77,42 @@ namespace R.MessageBus.UnitTests.Bus
         }
 
         [Fact]
-        public void ShouldBuildCustomConsumerWithCorrectEndpointAndConfigPath()
+        public void ShouldSetupBusWithCustomConsumer()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config =>
-            {
-                config.EndPoint = "MyEndpoint";
-                config.ConfigurationPath = "MyConfigurationPath";
-                config.SetConsumer<FakeConsumer>();
-                config.SetContainer<FakeContainer>();
-            });
-            IConfiguration configuration = bus.Configuration;
+            IBus bus = MessageBus.Bus.Initialize(config => config.SetConsumer<FakeConsumer>());
 
             // Act
-            IConsumer consumer = configuration.GetConsumer();
+            IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.Equal(typeof(FakeConsumer), consumer.GetType());
-            var fakeConsumer = (FakeConsumer) consumer;
-            Assert.Equal("MyEndpoint", fakeConsumer.EndPoint);
-            Assert.Equal("MyConfigurationPath", fakeConsumer.ConfigPath);
+            Assert.Equal(typeof(FakeConsumer), configuration.ConsumerType);
+        }
+
+        [Fact]
+        public void ShouldSetupBusWithCustomPublisher()
+        {
+            // Arrange
+            IBus bus = MessageBus.Bus.Initialize(config => config.SetPublisher<FakePublisher>());
+
+            // Act
+            IConfiguration configuration = bus.Configuration;
+
+            // Assert
+            Assert.Equal(typeof(FakePublisher), configuration.PublisherType);
+        }
+
+        [Fact]
+        public void ShouldSetupBusWithCustomProcessManagerFinder()
+        {
+            // Arrange
+            IBus bus = MessageBus.Bus.Initialize(config => config.SetProcessManagerFinder<FakeProcessManagerFinder>());
+
+            // Act
+            IConfiguration configuration = bus.Configuration;
+
+            // Assert
+            Assert.Equal(typeof(FakeProcessManagerFinder), configuration.GetProcessManagerFinder().GetType());
         }
 
         public class FakeContainer : IBusContainer
@@ -141,20 +133,13 @@ namespace R.MessageBus.UnitTests.Bus
             }
 
             public void ScanForHandlers()
-            {
-                throw new NotImplementedException();
-            }
+            {}
         }
 
         public class FakeConsumer : IConsumer
         {
-            public string ConfigPath { get; private set; }
-            public string EndPoint { get; private set; }
-
-            public FakeConsumer(string endPoint, string configPath)
+            public FakeConsumer(ITransportSettings transportSettings)
             {
-                ConfigPath = configPath;
-                EndPoint = endPoint;
             }
 
             public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null)
@@ -168,6 +153,54 @@ namespace R.MessageBus.UnitTests.Bus
             }
 
             public void Dispose()
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        public class FakePublisher : IPublisher
+        {
+            public FakePublisher(ITransportSettings transportSettings)
+            {
+            }
+
+            public void Publish<T>(T message) where T : Message
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Disconnect()
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Dispose()
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        public class FakeProcessManagerFinder : IProcessManagerFinder
+        {
+            public FakeProcessManagerFinder(string connectionString, string databaseName)
+            {}
+
+            public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
+            {
+                throw new NotImplementedException();
+            }
+
+            public void InsertData(IProcessManagerData data)
+            {
+                throw new NotImplementedException();
+            }
+
+            public void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
+            {
+                throw new NotImplementedException();
+            }
+
+            public void DeleteData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
             {
                 throw new NotImplementedException();
             }

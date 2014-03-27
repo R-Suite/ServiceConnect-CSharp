@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
 using log4net;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -12,37 +11,21 @@ namespace R.MessageBus.Client.RabbitMQ
     public class Consumer : IDisposable, IConsumer
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-        private readonly Settings.Settings _settings;
+        private readonly ITransportSettings _transportSettings;
         private IConnection _connection;
         private IModel _model;
         private ConsumerEventHandler _consumerEventHandler;
         private string _retryExchange;
         private string _errorExchange;
         private readonly int _retryDelay;
-        private readonly int _maxRetries; 
+        private readonly int _maxRetries;
 
-        public Consumer(string configPath, string endPoint)
+        public Consumer(ITransportSettings transportSettings)
         {
-            var configurationManager = new ConfigurationManagerWrapper(configPath);
+            _transportSettings = transportSettings;
 
-            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
-
-            if (section == null)
-            {
-                throw new ConfigurationErrorsException("The configuration file must contain a BusSettings section");
-            }
-
-            Settings.Settings settings = section.Settings.GetItemByKey(endPoint);
-
-            if (settings == null)
-            {
-                throw new ConfigurationErrorsException(string.Format("Settings for endpoint {0} could not be found", endPoint));
-            }
-
-            _retryDelay = settings.Retries == null ? 3 : settings.Retries.RetryDelay;
-            _maxRetries = settings.Retries == null ? 3000 : settings.Retries.MaxRetries;
-
-            _settings = settings;
+            _retryDelay = transportSettings.RetryDelay;
+            _maxRetries = transportSettings.MaxRetries;
         }
 
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
@@ -84,21 +67,21 @@ namespace R.MessageBus.Client.RabbitMQ
             _consumerEventHandler = messageReceived;
             
             var connectionFactory = new ConnectionFactory 
-            { 
-                HostName = _settings.Host,
+            {
+                HostName = _transportSettings.Host,
                 VirtualHost = "/",
                 Protocol = Protocols.FromEnvironment(),
                 Port = AmqpTcpEndpoint.UseDefaultPort
             };
 
-            if (!string.IsNullOrEmpty(_settings.Username))
+            if (!string.IsNullOrEmpty(_transportSettings.Username))
             {
-                connectionFactory.UserName = _settings.Username;
+                connectionFactory.UserName = _transportSettings.Username;
             }
 
-            if (!string.IsNullOrEmpty(_settings.Password))
+            if (!string.IsNullOrEmpty(_transportSettings.Password))
             {
-                connectionFactory.Password = _settings.Password;
+                connectionFactory.Password = _transportSettings.Password;
             }
 
             _connection = connectionFactory.CreateConnection();
@@ -134,29 +117,22 @@ namespace R.MessageBus.Client.RabbitMQ
 
             var consumer = new EventingBasicConsumer();
             consumer.Received += Event;
-            _model.BasicConsume(queueName, _settings.NoAck, consumer);
+            _model.BasicConsume(queueName, _transportSettings.NoAck, consumer);
         }
 
         private string ConfigureQueue(string queueName)
         {
-            var arguments = new Dictionary<string, object>();
-            if (_settings.Queue.Arguments != null)
-            {
-                for (int i = 0; i < _settings.Queue.Arguments.Count; i++)
-                {
-                    arguments.Add(_settings.Queue.Arguments[i].Name, _settings.Queue.Arguments[i].Value);
-                }
-            }
+            var arguments = _transportSettings.Queue.Arguments;
 
-            if (string.IsNullOrEmpty(queueName) && string.IsNullOrEmpty(_settings.Queue.Name))
+            if (string.IsNullOrEmpty(queueName) && string.IsNullOrEmpty(_transportSettings.Queue.Name))
             {
                 return _model.QueueDeclare().QueueName;
             }
 
-            return  _model.QueueDeclare(!string.IsNullOrEmpty(queueName) ? queueName : _settings.Queue.Name,
-                                        _settings.Queue.Durable,
-                                        _settings.Queue.Exclusive,
-                                        _settings.Queue.AutoDelete,
+            return _model.QueueDeclare(!string.IsNullOrEmpty(queueName) ? queueName : _transportSettings.Queue.Name,
+                                        _transportSettings.Queue.Durable,
+                                        _transportSettings.Queue.Exclusive,
+                                        _transportSettings.Queue.AutoDelete,
                                         arguments);
             
         }
@@ -181,29 +157,22 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureExchange()
         {
-            if (!string.IsNullOrEmpty(_settings.Exchange.Name))
+            if (!string.IsNullOrEmpty(_transportSettings.Exchange.Name))
             {
-                var arguments = new Dictionary<string, object>();
-                if (_settings.Exchange.Arguments != null)
-                {
-                    for (int i = 0; i < _settings.Exchange.Arguments.Count; i++)
-                    {
-                        arguments.Add(_settings.Exchange.Arguments[i].Name, _settings.Exchange.Arguments[i].Value);
-                    }
-                }
+                var arguments = _transportSettings.Exchange.Arguments;
 
-                _model.ExchangeDeclare(_settings.Exchange.Name,
-                                       _settings.Exchange.Type,
-                                       _settings.Exchange.Durable,
-                                       _settings.Exchange.AutoDelete,
+                _model.ExchangeDeclare(_transportSettings.Exchange.Name,
+                                       _transportSettings.Exchange.Type,
+                                       _transportSettings.Exchange.Durable,
+                                       _transportSettings.Exchange.AutoDelete,
                                        arguments);
             }
-            return _settings.Exchange.Name;
+            return _transportSettings.Exchange.Name;
         }
 
         private string ConfigureRetryExchange()
         {
-            string retryExchangeName = _settings.Exchange.Name + ".Retries";
+            string retryExchangeName = _transportSettings.Exchange.Name + ".Retries";
 
             _model.ExchangeDeclare(retryExchangeName, "direct");
 

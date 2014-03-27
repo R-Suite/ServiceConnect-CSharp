@@ -24,7 +24,7 @@ namespace R.MessageBus.IntegrationTests
 
         public MongoDbProcessManagerFinderTests()
         {
-            _connectionString = ConfigurationManager.AppSettings["MongoDbConnectionString"];
+            _connectionString = "mongodb://localhost/";
             _dbName = "ProcessManagerRepository";
             var mongoClient = new MongoClient(_connectionString);
             MongoServer server = mongoClient.GetServer();
