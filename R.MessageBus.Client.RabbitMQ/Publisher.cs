@@ -27,7 +27,8 @@ namespace R.MessageBus.Client.RabbitMQ
                 throw new ConfigurationErrorsException("The configuration file must contain a BusSettings section");
             }
 
-            BusConfiguration.TransportSettings settings = section.TransportSettings.GetItemByKey(endPoint);
+            var endPointSettings = !string.IsNullOrEmpty(endPoint) ? section.EndpointSettings.GetItemByKey(endPoint) : section.EndpointSettings.GetItemAt(0);
+            BusConfiguration.TransportSettings settings = endPointSettings.TransportSettings;
 
             if (settings == null)
             {

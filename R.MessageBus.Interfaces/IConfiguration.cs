@@ -6,6 +6,7 @@ namespace R.MessageBus.Interfaces
     {
         Type Container { get; set; }
         Type ConsumerType { get; set; }
+        Type ProcessManagerFinder { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
