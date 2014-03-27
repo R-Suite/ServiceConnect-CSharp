@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Persistance.MongoDb;
 using Xunit;
 
 namespace R.MessageBus.UnitTests
@@ -17,9 +18,41 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
-            Assert.Equal(AppDomain.CurrentDomain.SetupInformation.ConfigurationFile, configuration.ConfigurationPath);
             Assert.Equal(typeof(StructuremapContainer), configuration.Container);
-            Assert.Equal(null, configuration.EndPoint);
+            Assert.Equal(typeof(MongoDbProcessManagerFinder), configuration.ProcessManagerFinder);
+            Assert.Equal("RMessageBusPersistantStore", configuration.PersistenceStoreDatabaseName);
+            Assert.Equal("mongodb://localhost/", configuration.PersistenceStoreConnectionString);
+        }
+
+        [Fact]
+        public void ShouldSetDefaultTransportSettingsWhenInstantiatingConfiguration()
+        {
+            // Act
+            var configuration = new Configuration();
+
+            // Assert
+            Assert.NotNull(configuration.TransportSettings);
+            Assert.Equal("localhost", configuration.TransportSettings.Host);
+            Assert.Equal(3, configuration.TransportSettings.MaxRetries);
+            Assert.Equal(3000, configuration.TransportSettings.RetryDelay);
+            Assert.Null(configuration.TransportSettings.Username);
+            Assert.Null(configuration.TransportSettings.Password);
+            Assert.False(configuration.TransportSettings.NoAck);
+            Assert.NotNull(configuration.TransportSettings.Queue);
+            Assert.Null(configuration.TransportSettings.Queue.Name);
+            Assert.Null(configuration.TransportSettings.Queue.RoutingKey);
+            Assert.Null(configuration.TransportSettings.Queue.Arguments);
+            Assert.False(configuration.TransportSettings.Queue.AutoDelete);
+            Assert.False(configuration.TransportSettings.Queue.Exclusive);
+            Assert.False(configuration.TransportSettings.Queue.IsReadOnly);
+            Assert.True(configuration.TransportSettings.Queue.Durable);
+            Assert.NotNull(configuration.TransportSettings.Exchange);
+            Assert.Equal("RMessageBusExchange", configuration.TransportSettings.Exchange.Name);
+            Assert.Equal("direct", configuration.TransportSettings.Exchange.Type);
+            Assert.Null(configuration.TransportSettings.Exchange.Arguments);
+            Assert.False(configuration.TransportSettings.Exchange.AutoDelete);
+            Assert.False(configuration.TransportSettings.Exchange.IsReadOnly);
+            Assert.False(configuration.TransportSettings.Exchange.Durable);
         }
 
         [Fact]
@@ -50,21 +83,6 @@ namespace R.MessageBus.UnitTests
             Assert.Equal(typeof(FakeContainer), container.GetType());
         }
 
-        [Fact]
-        public void ShouldPassConfigurationPathAndEndpointToConsumer()
-        {
-            // Arrange
-            var configuration = new Configuration {EndPoint = "MyEndpoint", ConfigurationPath = "MyConfig"};
-            configuration.SetConsumer<FakeConsumer>();
-
-            // Act
-            var consumer = (FakeConsumer)configuration.GetConsumer();
-
-            // Assert
-            Assert.Equal("MyEndpoint", consumer.EndPoint);
-            Assert.Equal("MyConfig", consumer.ConfigPath);
-        }
-
         public class FakeContainer : IBusContainer
         {
             public IEnumerable<HandlerReference> GetHandlerTypes()
@@ -90,14 +108,8 @@ namespace R.MessageBus.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public string ConfigPath { get; private set; }
-            public string EndPoint { get; private set; }
-
-            public FakeConsumer(string endPoint, string configPath)
-            {
-                ConfigPath = configPath;
-                EndPoint = endPoint;
-            }
+            public FakeConsumer(ITransportSettings transportSettings)
+            {}
 
             public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null)
             {

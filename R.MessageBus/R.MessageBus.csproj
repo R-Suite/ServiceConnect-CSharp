@@ -55,6 +55,7 @@
   <ItemGroup>
     <Compile Include="Bus.cs" />
     <Compile Include="Configuration.cs" />
+    <Compile Include="ConfigurationManagerWrapper.cs" />
     <Compile Include="ProcessManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -78,6 +79,10 @@
     <ProjectReference Include="..\R.MessageBus.Persistance\R.MessageBus.Persistance.csproj">
       <Project>{34E236AD-55DF-416B-8798-E3674DB84A85}</Project>
       <Name>R.MessageBus.Persistance</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Settings\R.MessageBus.Settings.csproj">
+      <Project>{58a100ce-cc7e-43bf-a054-d28648f092ac}</Project>
+      <Name>R.MessageBus.Settings</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
