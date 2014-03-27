@@ -4,6 +4,7 @@ using System.Configuration;
 using System.Text;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
+using BusSettings = BusSettings.BusSettings;
 
 namespace R.MessageBus.Client.RabbitMQ
 {
@@ -12,21 +13,21 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly IModel _model;
         private readonly IConnection _connection;
         private readonly string _exchange;
-        private readonly Settings.Settings _settings;
+        private readonly BusConfiguration.TransportSettings _settings;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
         public Publisher(string configPath = null, string endPoint = null)
         {
             var configurationManager = new ConfigurationManagerWrapper(configPath);
 
-            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
+            var section = configurationManager.GetSection<global::BusSettings.BusSettings>("BusSettings");
 
             if (section == null)
             {
                 throw new ConfigurationErrorsException("The configuration file must contain a BusSettings section");
             }
 
-            Settings.Settings settings = section.Settings.GetItemByKey(endPoint);
+            BusConfiguration.TransportSettings settings = section.TransportSettings.GetItemByKey(endPoint);
 
             if (settings == null)
             {
