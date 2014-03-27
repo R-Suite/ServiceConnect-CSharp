@@ -70,6 +70,12 @@ namespace R.MessageBus
             }
         }
 
+        public void Publish<T>(T message) where T : Message
+        {
+            IPublisher publisher = Configuration.GetPublisher();
+            publisher.Publish(message);
+        }
+
         private bool ConsumeMessageEvent(byte[] message)
         {
             try

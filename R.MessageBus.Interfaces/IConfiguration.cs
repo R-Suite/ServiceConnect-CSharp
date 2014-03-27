@@ -6,6 +6,7 @@ namespace R.MessageBus.Interfaces
     {
         Type Container { get; set; }
         Type ConsumerType { get; set; }
+        Type PublisherType { get; set; }
         Type ProcessManagerFinder { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         string PersistenceStoreConnectionString { get; set; }
@@ -26,6 +27,12 @@ namespace R.MessageBus.Interfaces
         void SetConsumer<T>() where T : class, IConsumer;
 
         /// <summary>
+        /// Sets the publisher type.
+        /// </summary>
+        /// <typeparam name="T">The type must be a class that implements IPublisher.</typeparam>
+        void SetPublisher<T>() where T : class, IPublisher;
+
+        /// <summary>
         /// Sets the container.
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IBusContainer.</typeparam>
@@ -42,6 +49,12 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         IConsumer GetConsumer();
+
+        /// <summary>
+        /// Gets an instance of the publisher.
+        /// </summary>
+        /// <returns></returns>
+        IPublisher GetPublisher();
 
         /// <summary>
         /// Gets an instance of the container.

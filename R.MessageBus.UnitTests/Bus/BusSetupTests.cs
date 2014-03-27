@@ -86,7 +86,20 @@ namespace R.MessageBus.UnitTests.Bus
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.Equal(typeof(FakeConsumer), configuration.GetConsumer().GetType());
+            Assert.Equal(typeof(FakeConsumer), configuration.ConsumerType);
+        }
+
+        [Fact]
+        public void ShouldSetupBusWithCustomPublisher()
+        {
+            // Arrange
+            IBus bus = MessageBus.Bus.Initialize(config => config.SetPublisher<FakePublisher>());
+
+            // Act
+            IConfiguration configuration = bus.Configuration;
+
+            // Assert
+            Assert.Equal(typeof(FakePublisher), configuration.PublisherType);
         }
 
         [Fact]
@@ -135,6 +148,28 @@ namespace R.MessageBus.UnitTests.Bus
             }
 
             public void StopConsuming()
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Dispose()
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        public class FakePublisher : IPublisher
+        {
+            public FakePublisher(ITransportSettings transportSettings)
+            {
+            }
+
+            public void Publish<T>(T message) where T : Message
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Disconnect()
             {
                 throw new NotImplementedException();
             }
