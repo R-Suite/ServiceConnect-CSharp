@@ -67,6 +67,7 @@ namespace R.MessageBus.Container
             {
                 y.AssembliesFromApplicationBaseDirectory();
                 y.ConnectImplementationsToTypesClosing(typeof(IMessageHandler<>));
+                y.ConnectImplementationsToTypesClosing(typeof(IStartProcessManager<>));
             }));
         }
     }
