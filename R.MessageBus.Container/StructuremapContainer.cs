@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using StructureMap;
+using StructureMap.Pipeline;
 using StructureMap.Query;
 
 namespace R.MessageBus.Container
@@ -13,7 +15,8 @@ namespace R.MessageBus.Container
         {
             ObjectFactory.Configure(x =>
             {
-                
+                x.For<IMessageHandlerProcessor>().Use<MessageHandlerProcessor>();
+                x.For<IProcessManagerProcessor>().Use<ProcessManagerProcessor>();
             });
         }
 
@@ -41,6 +44,11 @@ namespace R.MessageBus.Container
         public object GetInstance(Type handlerType)
         {
             return ObjectFactory.GetInstance(handlerType);
+        }
+
+        public T GetInstance<T>(IDictionary<string, object> arguments)
+        { 
+            return ObjectFactory.GetInstance<T>(new ExplicitArguments(arguments));
         }
 
         public T GetInstance<T>()

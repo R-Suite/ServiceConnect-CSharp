@@ -53,9 +53,11 @@
     <Compile Include="IConsumer.cs" />
     <Compile Include="IMessageHandler.cs" />
     <Compile Include="IJsonMessageSerializer.cs" />
+    <Compile Include="IMessageHandlerProcessor.cs" />
     <Compile Include="IPersistanceData.cs" />
     <Compile Include="IProcessManagerData.cs" />
     <Compile Include="IProcessManagerFinder.cs" />
+    <Compile Include="IProcessManagerProcessor.cs" />
     <Compile Include="IPublisher.cs" />
     <Compile Include="IStartProcessManager.cs" />
     <Compile Include="ITransportSettings.cs" />

@@ -150,6 +150,11 @@ namespace R.MessageBus.UnitTests.Bus
                 throw new NotImplementedException();
             }
 
+            public T GetInstance<T>(IDictionary<string, object> arguments)
+            {
+                throw new NotImplementedException();
+            }
+
             public T GetInstance<T>()
             {
                 throw new NotImplementedException();

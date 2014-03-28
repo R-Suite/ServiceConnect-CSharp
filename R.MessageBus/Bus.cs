@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Text;
-using log4net;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
 
@@ -12,7 +10,6 @@ namespace R.MessageBus
 {
     public class Bus : IBus
     {
-        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
         private readonly IBusContainer _container;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
@@ -80,116 +77,38 @@ namespace R.MessageBus
 
         private bool ConsumeMessageEvent(byte[] message)
         {
-            try
-            {
-                string messageJson = Encoding.UTF8.GetString(message);
-                object objectMessage = _serializer.Deserialize(messageJson);
-                Type messageType = objectMessage.GetType();
-                Type messageHandler = typeof(IMessageHandler<>).MakeGenericType(messageType);
-                Type startProcessManagerType = typeof(IStartProcessManager<>).MakeGenericType(messageType);
+            string messageJson = Encoding.UTF8.GetString(message);
+            object objectMessage = _serializer.Deserialize(messageJson);
 
-                List<HandlerReference> handlerReferences = _container.GetHandlerTypes(messageHandler).ToList();
-                List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(startProcessManagerType).ToList();
-
-                foreach (HandlerReference processManagerInstance in processManagerInstances)
-                {
-                    try
-                    {
-                        // Create instance of the project manager
-                        object processManager = _container.GetInstance(processManagerInstance.HandlerType);
-                        
-                        // Get Data Type
-                        Type dataType = processManagerInstance.HandlerType.BaseType.GetGenericArguments()[0];
-
-                        // Create new instance 
-                        var data = (IProcessManagerData)Activator.CreateInstance(dataType);
-
-                        // Set data on process manager
-                        PropertyInfo prop = processManagerInstance.HandlerType.GetProperty("Data");
-                        prop.SetValue(processManager, data, null);
-
-                        // Execute process manager execute method
-                        processManagerInstance.HandlerType.GetMethod("Execute", new []{ messageType }).Invoke(processManager, new[] { objectMessage });
-
-                        // Get data after execute has finished
-                        data = (IProcessManagerData)prop.GetValue(processManager);
-                        
-                        // Persist data
-                        _processManagerFinder.InsertData(data);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error(string.Format("Error executing process manager start method. {0}", processManagerInstance.HandlerType.FullName), ex);
-                        throw;
-                    }
-                }
-
-                foreach (HandlerReference handlerReference in handlerReferences.Where(x => processManagerInstances.All(y => y.HandlerType != x.HandlerType)))
-                {
-                    try
-                    {
-                        if (handlerReference.HandlerType.BaseType != null && handlerReference.HandlerType.BaseType.Name == typeof(ProcessManager<>).Name)
-                        {
-                            // Create instance of the project manager
-                            object processManager = _container.GetInstance(handlerReference.HandlerType);
-
-                            // Set Process Manager Finder property
-                            PropertyInfo processManagerFinderProp = handlerReference.HandlerType.GetProperty("ProcessManagerFinder");
-                            processManagerFinderProp.SetValue(processManager, _processManagerFinder, null);
-
-                            // Execute FindProcessManagerData
-                            object persistanceData = handlerReference.HandlerType.GetMethod("FindProcessManagerData").Invoke(processManager, new[] { objectMessage });
-
-                            // Get data type
-                            Type dataType = handlerReference.HandlerType.BaseType.GetGenericArguments()[0];
-
-                            // Get data from persistance data
-                            var persistanceType = typeof (IPersistanceData<>).MakeGenericType(dataType);
-                            PropertyInfo dataProp = persistanceType.GetProperty("Data");
-                            object data = dataProp.GetValue(persistanceData);
-
-                            // Set data property value
-                            PropertyInfo prop = handlerReference.HandlerType.GetProperty("Data", dataType);
-                            prop.SetValue(processManager, data, null);
-
-                            // Execute handler
-                            handlerReference.HandlerType.GetMethod("Execute", new[] { messageType }).Invoke(processManager, new[] { objectMessage });
-
-                            // Get Complete property value
-                            PropertyInfo completeProperty = handlerReference.HandlerType.GetProperty("Complete");
-                            var isComplete = (bool)completeProperty.GetValue(processManager);
-
-                            if (isComplete)
-                            {
-                                // Delete if the process manager is complete
-                                _processManagerFinder.GetType().GetMethod("DeleteData").MakeGenericMethod(dataType).Invoke(_processManagerFinder, new[] { persistanceData });
-                            }
-                            else
-                            {
-                                // Otherwise update
-                                _processManagerFinder.GetType().GetMethod("UpdateData").MakeGenericMethod(dataType).Invoke(_processManagerFinder, new[] { persistanceData });
-                            }
-                        }
-                        else
-                        {
-                            object handler = _container.GetInstance(handlerReference.HandlerType);
-                            messageHandler.GetMethod("Execute", new[] { messageType }).Invoke(handler, new[] { objectMessage });
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error(string.Format("Error executing handler. {0}", handlerReference.HandlerType.FullName), ex);
-                        throw;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Error executing handler", ex);
-                return false;
-            }
+            ProcessMessageHandlers(objectMessage);
+            ProcessProcessManagerHandlers(objectMessage);
 
             return true;
+        }
+
+        private void ProcessProcessManagerHandlers(object objectMessage)
+        {
+            var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
+            {
+                {"container", _container},
+                {"processManagerFinder", _processManagerFinder}
+            });
+
+            MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
+            MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(objectMessage.GetType());
+            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new[] {objectMessage});
+        }
+
+        private void ProcessMessageHandlers(object objectMessage)
+        {
+            var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
+            {
+                {"container", _container}
+            });
+
+            MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
+            MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(objectMessage.GetType());
+            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new[] {objectMessage});
         }
 
         public void StopConsuming()

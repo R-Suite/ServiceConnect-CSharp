@@ -1,6 +1,6 @@
 ﻿using R.MessageBus.Interfaces;
 
-namespace R.MessageBus
+namespace R.MessageBus.Core
 {
     /// <summary>
     /// See ProccessManager (G. Hohpe, B. Woolf; Enterprise Integration Patterns)
