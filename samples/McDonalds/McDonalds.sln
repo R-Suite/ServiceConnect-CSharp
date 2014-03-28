@@ -9,6 +9,15 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDonalds.FoodPrep", "McDon
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDonalds.Messages", "McDonalds.Messages\McDonalds.Messages.csproj", "{176927B6-BC67-469F-8C96-286EA74260C3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MacDonalds.Burgers", "MacDonalds.Burgers\MacDonalds.Burgers.csproj", "{BB314D3F-E18C-4427-A442-068AD64ACAC0}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{4B3F8B48-F860-4535-BF90-D10B66F41185}"
+	ProjectSection(SolutionItems) = preProject
+		.nuget\NuGet.Config = .nuget\NuGet.Config
+		.nuget\NuGet.exe = .nuget\NuGet.exe
+		.nuget\NuGet.targets = .nuget\NuGet.targets
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,6 +40,10 @@ Global
 		{176927B6-BC67-469F-8C96-286EA74260C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{176927B6-BC67-469F-8C96-286EA74260C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{176927B6-BC67-469F-8C96-286EA74260C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BB314D3F-E18C-4427-A442-068AD64ACAC0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB314D3F-E18C-4427-A442-068AD64ACAC0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB314D3F-E18C-4427-A442-068AD64ACAC0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BB314D3F-E18C-4427-A442-068AD64ACAC0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

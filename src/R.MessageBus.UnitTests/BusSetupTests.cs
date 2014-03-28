@@ -132,6 +132,22 @@ namespace R.MessageBus.UnitTests.Bus
             // Assert
             mockContainer.Verify(x => x.Initialize(), Times.Once);
         }
+
+        [Fact]
+        public void SouldInjectItselfIntoTheContainer()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockContainer = new Mock<IBusContainer>();
+            mockContainer.Setup(x => x.Initialize());
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+
+            // Act
+            var bus = new MessageBus.Bus(mockConfiguration.Object);
+
+            // Assert
+            mockContainer.Verify(x => x.AddBus(bus), Times.Once);
+        }
         
         public class FakeContainer : IBusContainer
         {
@@ -166,6 +182,10 @@ namespace R.MessageBus.UnitTests.Bus
             public void Initialize()
             {
                 Initialized = true;
+            }
+
+            public void AddBus(IBus bus)
+            {
             }
 
             public bool Initialized { get; set; }

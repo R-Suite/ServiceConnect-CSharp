@@ -20,6 +20,11 @@ namespace R.MessageBus.Container
             });
         }
 
+        public void AddBus(IBus bus)
+        {
+            ObjectFactory.Configure(x => x.For<IBus>().Use(bus));
+        }
+
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
             IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||

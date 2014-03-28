@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using R.MessageBus;
 
 namespace McDonalds.Cashier
 {
@@ -10,6 +7,14 @@ namespace McDonalds.Cashier
     {
         static void Main(string[] args)
         {
+            var bus = Bus.Initialize(x =>
+            {
+                x.ScanForMesssageHandlers = true;
+            });
+
+            bus.StartConsuming();
+
+            Console.ReadLine();
         }
     }
 }
