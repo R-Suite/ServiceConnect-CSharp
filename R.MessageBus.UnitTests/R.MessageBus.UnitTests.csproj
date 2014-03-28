@@ -47,10 +47,10 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Bus\BusSetupTests.cs" />
-    <Compile Include="Bus\Handler\ConsumeMessageEventTests.cs" />
-    <Compile Include="Bus\StartConsumingTests.cs" />
+    <Compile Include="BusSetupTests.cs" />
+    <Compile Include="MessageHandlerProcessorTest.cs" />
     <Compile Include="ConfigurationTests.cs" />
+    <Compile Include="BusTests.cs" />
     <Compile Include="Fakes\FakePersistanceData.cs" />
     <Compile Include="Fakes\Handlers\FakeHandler1.cs" />
     <Compile Include="Fakes\Handlers\FakeHandler2.cs" />
@@ -59,7 +59,7 @@
     <Compile Include="Fakes\ProcessManagers\FakeProcessManager1.cs" />
     <Compile Include="Fakes\ProcessManagers\FakeProcessManagerData.cs" />
     <Compile Include="InMemoryProcessManagerFinderTests.cs" />
-    <Compile Include="Bus\ProcessManager\ConsumeMessageEventTests.cs" />
+    <Compile Include="ProcessManagerProcessorTest.cs" />
     <Compile Include="JsonMessageSerializerTests.cs" />
     <Compile Include="MessageSerializationBinderTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -75,6 +75,10 @@
     <ProjectReference Include="..\R.MessageBus.Container\R.MessageBus.Container.csproj">
       <Project>{9FA4AA16-D8C4-4B0C-AF09-A17112655152}</Project>
       <Name>R.MessageBus.Container</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
+      <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
+      <Name>R.MessageBus.Core</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
       <Project>{3bb7d53a-080f-492c-86a4-4f33fcd7ff7f}</Project>

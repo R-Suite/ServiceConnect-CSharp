@@ -1,4 +1,5 @@
 ﻿using System;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.UnitTests.Fakes.Messages;
 

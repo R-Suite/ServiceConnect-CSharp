@@ -48,6 +48,10 @@
     <Compile Include="StructuremapContainer.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
+      <Project>{3a8569fd-0779-48a7-9400-2f0e39186436}</Project>
+      <Name>R.MessageBus.Core</Name>
+    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
       <Project>{3bb7d53a-080f-492c-86a4-4f33fcd7ff7f}</Project>
       <Name>R.MessageBus.Interfaces</Name>
