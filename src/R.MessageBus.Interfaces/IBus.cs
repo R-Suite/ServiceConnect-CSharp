@@ -19,5 +19,12 @@ namespace R.MessageBus.Interfaces
         /// Stop consuming messages.
         /// </summary>
         void StopConsuming();
+
+        /// <summary>
+        /// Publish message.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="message"></param>
+        void Publish<T>(T message) where T : Message;
     }
 }
