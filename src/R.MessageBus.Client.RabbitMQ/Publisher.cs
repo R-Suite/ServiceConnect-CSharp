@@ -44,7 +44,7 @@ namespace R.MessageBus.Client.RabbitMQ
             var messageJson = _serializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
-            basicProperties.MessageId = Guid.NewGuid().ToString(); // used to keep track of retries
+            basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             basicProperties.SetPersistent(true);
             _model.BasicPublish(_exchange, typeof(T).FullName.Replace(".", string.Empty), basicProperties, bytes);
         }

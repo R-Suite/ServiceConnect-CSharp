@@ -139,6 +139,22 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureRetryQueue(string queueName, string exchangeName)
         {
+            //todo: all exchanges should be "fanout" by default
+            //todo: create "direct" deadLetterExchange, bind to the original queue and as the value of "x-dead-letter-exchange" argument
+            //todo: exchanges will no longer be configurable
+
+            /*
+            string retryDeadLetterExchangeName = exchangeName + ".Retries.DeadLetter";
+            _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct");
+            _model.QueueBind(queueName, _errorExchange, string.Empty, null);
+
+            var arguments = new Dictionary<string, object>
+            {
+                {"x-dead-letter-exchange", retryDeadLetterExchangeName},
+                {"x-message-ttl", _retryDelay}
+            };
+            */
+
             var arguments = new Dictionary<string, object>
             {
                 {"x-dead-letter-exchange", exchangeName},
