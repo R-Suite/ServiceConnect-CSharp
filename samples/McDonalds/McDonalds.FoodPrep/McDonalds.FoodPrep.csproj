@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>a89a01c0-7e52-4119-a1e9-d3f68bd46e93</ProjectGuid>
+    <ProjectGuid>{973D415E-DA29-4094-8379-7A7019B9010D}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>McDonalds.FoodPrep</RootNamespace>
