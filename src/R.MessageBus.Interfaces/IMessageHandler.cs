@@ -2,6 +2,6 @@
 {
     public interface IMessageHandler<TMessage> where TMessage : Message
     {
-        void Execute(TMessage command);
+        void Execute(TMessage message);
     }
 }

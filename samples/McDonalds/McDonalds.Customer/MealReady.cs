@@ -6,9 +6,9 @@ namespace McDonalds.Customer
 {
     public class MealReady : IMessageHandler<OrderReadyMessage>
     {
-        public void Execute(OrderReadyMessage command)
+        public void Execute(OrderReadyMessage message)
         {
-            Console.WriteLine("Meal ready: OrderId - {0}", command.CorrelationId);
+            Console.WriteLine("Meal ready: Meal - {0}, Size - {1} OrderId - {2}", message.Meal, message.Size, message.CorrelationId);
         }
     }
 }

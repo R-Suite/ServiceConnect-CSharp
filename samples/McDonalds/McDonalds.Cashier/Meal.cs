@@ -16,22 +16,24 @@ namespace McDonalds.Cashier
             _bus = bus;
         }
 
-        public void Execute(NewOrderMessage command)
+        public void Execute(NewOrderMessage message)
         {
             Data.CorrelationId = Guid.NewGuid();
+            Data.Meal = message.Name;
+            Data.Size = message.Size;
 
-            Console.WriteLine("New order recieved: Meal - {0}, Size - {1}, OrderId - {2}", command.Name, command.Size,command.CorrelationId);
+            Console.WriteLine("New order recieved: Meal - {0}, Size - {1}, OrderId - {2}", message.Name, message.Size, message.CorrelationId);
 
             var prepFoodMessage = new PrepFoodMessage(Data.CorrelationId)
             {
-                BunSize = command.Size
+                BunSize = message.Size
             };
             Console.WriteLine("Prepping meal");
             _bus.Publish(prepFoodMessage);
 
             var flipBurgerMessage = new CookBurgerMessage(Data.CorrelationId)
             {
-                BurgerSize = command.Size
+                BurgerSize = message.Size
             };
             Console.WriteLine("Cooking burger");
             _bus.Publish(flipBurgerMessage);
@@ -44,7 +46,11 @@ namespace McDonalds.Cashier
             Data.BurgerCooked = true;
             if (Data.FoodPrepped)
             {
-                _bus.Publish(new OrderReadyMessage(message.CorrelationId));
+                _bus.Publish(new OrderReadyMessage(message.CorrelationId)
+                {
+                    Size = Data.Size,
+                    Meal = Data.Meal
+                });
                 Console.WriteLine("Order ready: OrderId - {0}", message.CorrelationId);
             }
         }
@@ -56,7 +62,11 @@ namespace McDonalds.Cashier
             Data.FoodPrepped = true;
             if (Data.BurgerCooked)
             {
-                _bus.Publish(new OrderReadyMessage(message.CorrelationId));
+                _bus.Publish(new OrderReadyMessage(message.CorrelationId)
+                {
+                    Size = Data.Size,
+                    Meal = Data.Meal
+                });
                 Console.WriteLine("Order ready: OrderId - {0}", message.CorrelationId);
             }
         }

@@ -3,17 +3,26 @@ using System.Threading;
 using McDonalds.Messages;
 using R.MessageBus.Interfaces;
 
-namespace McDonalds.FoodPrep
+namespace McDonalds.FoodPreparer
 {
     public class PrepFood : IMessageHandler<PrepFoodMessage>
     {
-        public void Execute(PrepFoodMessage command)
+        private readonly IBus _bus;
+
+        public PrepFood(IBus bus)
         {
-            Console.WriteLine("Preping order: BunSize - {0}, OrderId - {1}", command.BunSize, command.CorrelationId);
+            _bus = bus;
+        }
+
+        public void Execute(PrepFoodMessage message)
+        {
+            Console.WriteLine("Preping order: BunSize - {0}, OrderId - {1}", message.BunSize, message.CorrelationId);
 
             Thread.Sleep(2000);
 
-            Console.WriteLine("Preping done for order - {0}", command.CorrelationId);
+            Console.WriteLine("Preping done for order - {0}", message.CorrelationId);
+
+            _bus.Publish(new FoodPrepped(message.CorrelationId));
         }
     }
 }
