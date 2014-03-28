@@ -1,0 +1,38 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDonalds.Customer", "McDonalds.Customer\McDonalds.Customer.csproj", "{241CC0E3-4A83-4143-995E-531A07AAB57E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDonalds.Cashier", "McDonalds.Cashier\McDonalds.Cashier.csproj", "{82809416-CED3-43F9-93CD-EAC3A0599322}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDonalds.FoodPrep", "McDonalds.FoodPrep\McDonalds.FoodPrep.csproj", "{973D415E-DA29-4094-8379-7A7019B9010D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDonalds.Messages", "McDonalds.Messages\McDonalds.Messages.csproj", "{176927B6-BC67-469F-8C96-286EA74260C3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{241CC0E3-4A83-4143-995E-531A07AAB57E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{241CC0E3-4A83-4143-995E-531A07AAB57E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{241CC0E3-4A83-4143-995E-531A07AAB57E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{241CC0E3-4A83-4143-995E-531A07AAB57E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82809416-CED3-43F9-93CD-EAC3A0599322}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82809416-CED3-43F9-93CD-EAC3A0599322}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82809416-CED3-43F9-93CD-EAC3A0599322}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82809416-CED3-43F9-93CD-EAC3A0599322}.Release|Any CPU.Build.0 = Release|Any CPU
+		{973D415E-DA29-4094-8379-7A7019B9010D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{973D415E-DA29-4094-8379-7A7019B9010D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{973D415E-DA29-4094-8379-7A7019B9010D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{973D415E-DA29-4094-8379-7A7019B9010D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{176927B6-BC67-469F-8C96-286EA74260C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{176927B6-BC67-469F-8C96-286EA74260C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{176927B6-BC67-469F-8C96-286EA74260C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{176927B6-BC67-469F-8C96-286EA74260C3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

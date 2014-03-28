@@ -44,7 +44,7 @@ IBus bus = Bus.Initialize(config =>
     config.SetConsumer<Consumer>();
     config.SetPublisher<Publisher>();
     config.SetContainer<Container>();
-    ScanForMesssageHandlers = true;
+    config.ScanForMesssageHandlers = true;
 });
 ```
 
