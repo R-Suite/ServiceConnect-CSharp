@@ -1,7 +1,6 @@
 ﻿using System;
+using McDonalds.Messages;
 using R.MessageBus;
-using R.MessageBus.Client.RabbitMQ;
-using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 
 namespace McDonalds.Customer
@@ -12,16 +11,12 @@ namespace McDonalds.Customer
         {
             IBus bus = Bus.Initialize(config =>
             {
-                config.SetConsumer<Consumer>();
-                config.SetPublisher<Publisher>();
-                config.SetContainer<StructuremapContainer>();
                 config.ScanForMesssageHandlers = true;
             });
 
-            Console.WriteLine("Options:");
-            Console.WriteLine("--------");
-            Console.WriteLine("1. Place new order");
-
+            Console.WriteLine("Options:\n--------");
+            Console.WriteLine("1. To place new order");
+            //Console.WriteLine("<ENTER> To exit");
             var selectedOption = SelectOption();
 
             switch (selectedOption)
@@ -35,14 +30,13 @@ namespace McDonalds.Customer
 
         private static void PlaceNewOrder(IBus bus)
         {
-            bus.
+            bus.Publish(new NewOrderMessage(Guid.NewGuid()) { Name = "Burger Meal", Size = "Large"});
         }
-
 
         private static int SelectOption()
         {
             int selectedOption;
-            if (!Int32.TryParse(Console.ReadKey().ToString(), out selectedOption))
+            if (!Int32.TryParse(Console.ReadLine(), out selectedOption))
             {
                 Console.WriteLine("Error, try again.");
                 SelectOption();

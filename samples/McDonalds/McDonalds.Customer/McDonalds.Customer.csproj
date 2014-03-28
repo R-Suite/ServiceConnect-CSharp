@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>b9e93b0b-0123-40dd-b95f-c9b37931888b</ProjectGuid>
+    <ProjectGuid>{241CC0E3-4A83-4143-995E-531A07AAB57E}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>McDonalds.Customer</RootNamespace>
@@ -32,6 +32,34 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="log4net, Version=1.2.13.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\log4net.2.0.3\lib\net40-full\log4net.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Bson">
+      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Bson.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Driver">
+      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Driver.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus">
+      <HintPath>..\Tools\R.MessageBus.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Client.RabbitMQ">
+      <HintPath>..\Tools\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Container">
+      <HintPath>..\Tools\R.MessageBus.Container.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Interfaces">
+      <HintPath>..\Tools\R.MessageBus.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="StructureMap">
+      <HintPath>..\Tools\StructureMap.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -46,6 +74,13 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\McDonalds.Messages\McDonalds.Messages.csproj">
+      <Project>{176927b6-bc67-469f-8c96-286ea74260c3}</Project>
+      <Name>McDonalds.Messages</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
