@@ -25,6 +25,7 @@ namespace R.MessageBus
             _processManagerFinder = configuration.GetProcessManagerFinder();
 
             _container.Initialize();
+            _container.AddBus(this);
 
             if (configuration.ScanForMesssageHandlers)
             {

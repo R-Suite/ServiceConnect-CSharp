@@ -118,6 +118,11 @@ namespace R.MessageBus.UnitTests
             public void Initialize()
             {
             }
+
+            public void AddBus(IBus bus)
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public class FakeConsumer : IConsumer

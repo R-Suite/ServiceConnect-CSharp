@@ -33,6 +33,30 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="R.MessageBus">
+      <HintPath>..\Tools\R.MessageBus.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Client.RabbitMQ">
+      <HintPath>..\Tools\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Container">
+      <HintPath>..\Tools\R.MessageBus.Container.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Interfaces">
+      <HintPath>..\Tools\R.MessageBus.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Persistance">
+      <HintPath>..\Tools\R.MessageBus.Persistance.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Settings">
+      <HintPath>..\Tools\R.MessageBus.Settings.dll</HintPath>
+    </Reference>
+    <Reference Include="RabbitMQ.Client">
+      <HintPath>..\Tools\RabbitMQ.Client.dll</HintPath>
+    </Reference>
+    <Reference Include="StructureMap">
+      <HintPath>..\Tools\StructureMap.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -42,11 +66,18 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CookBurger.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\McDonalds.Messages\McDonalds.Messages.csproj">
+      <Project>{176927b6-bc67-469f-8c96-286ea74260c3}</Project>
+      <Name>McDonalds.Messages</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

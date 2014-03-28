@@ -42,7 +42,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BurgerCookedMessage.cs" />
+    <Compile Include="CookBurgerMessage.cs" />
+    <Compile Include="FoodPrepped.cs" />
     <Compile Include="NewOrderMessage.cs" />
+    <Compile Include="OrderReadyMessage.cs" />
+    <Compile Include="PrepFoodMessage.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
