@@ -1,7 +1,6 @@
 ﻿using System;
 using McDonalds.Messages;
-using McDonalds.Messages.McDonalds.Messages;
-using R.MessageBus;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
 namespace McDonalds.Cashier

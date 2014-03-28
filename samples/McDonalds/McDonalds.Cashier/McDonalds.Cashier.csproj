@@ -32,6 +32,18 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="log4net">
+      <HintPath>..\Tools\log4net.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Bson">
+      <HintPath>..\Tools\MongoDB.Bson.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Driver">
+      <HintPath>..\Tools\MongoDB.Driver.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\Tools\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="R.MessageBus">
       <HintPath>..\Tools\R.MessageBus.dll</HintPath>
     </Reference>
@@ -40,6 +52,9 @@
     </Reference>
     <Reference Include="R.MessageBus.Container">
       <HintPath>..\Tools\R.MessageBus.Container.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.Core">
+      <HintPath>..\Tools\R.MessageBus.Core.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Interfaces">
       <HintPath>..\Tools\R.MessageBus.Interfaces.dll</HintPath>

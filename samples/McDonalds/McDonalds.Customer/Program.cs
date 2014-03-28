@@ -1,5 +1,5 @@
 ﻿using System;
-using McDonalds.Messages.McDonalds.Messages;
+using McDonalds.Messages;
 using R.MessageBus;
 using R.MessageBus.Interfaces;
 

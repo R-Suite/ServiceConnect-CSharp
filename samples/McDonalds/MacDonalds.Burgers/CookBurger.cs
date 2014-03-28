@@ -11,7 +11,7 @@ namespace MacDonalds.Burgers
         {
             Console.WriteLine("Cooking burger: Burger size - {0},  Order Id - {1}", command.BurgerSize, command.CorrelationId);
 
-            Thread.Sleep(2000);
+            Thread.Sleep(3000);
 
             Console.WriteLine("Burger ready for order - {0}", command.CorrelationId);
         }
