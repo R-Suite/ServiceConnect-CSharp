@@ -21,7 +21,7 @@ namespace R.MessageBus.UnitTests
         {
             // Arrange
             IProcessManagerData data = new TestData {CorrelationId = _correlationId, Name = "TestData"};
-            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
+            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act
             processManagerFinder.InsertData(data);
@@ -36,7 +36,7 @@ namespace R.MessageBus.UnitTests
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerData dataWithDuplicateId = new TestData { CorrelationId = _correlationId, Name = "TestDataWithDuplicateId" };
-            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
+            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             processManagerFinder.InsertData(data);
 
             // Act / Assert
@@ -49,7 +49,7 @@ namespace R.MessageBus.UnitTests
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerData dataUpdated = new TestData { CorrelationId = _correlationId, Name = "TestDataUpdated" };
-            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
+            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             processManagerFinder.InsertData(data);
 
             // Act
@@ -64,7 +64,7 @@ namespace R.MessageBus.UnitTests
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
+            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act / Assert
             Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = data }));
@@ -75,7 +75,7 @@ namespace R.MessageBus.UnitTests
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
+            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             processManagerFinder.InsertData(data);
 
             // Act
@@ -89,7 +89,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldReturnNullWhenDataNotFound()
         {
             // Arrange
-            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder();
+            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act
             var result = processManagerFinder.FindData<IProcessManagerData>(_correlationId);
