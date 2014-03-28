@@ -13,6 +13,11 @@ namespace R.MessageBus.Persistance.InMemory
         private static readonly ObjectCache Cache = MemoryCache.Default;
         readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
 
+        public InMemoryProcessManagerFinder(string connectionString, string database)
+        {
+            
+        }
+
         public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
         {
             string key = id.ToString();

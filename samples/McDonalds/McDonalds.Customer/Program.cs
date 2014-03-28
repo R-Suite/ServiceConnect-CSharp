@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Threading;
 using McDonalds.Messages;
 using R.MessageBus;
 using R.MessageBus.Interfaces;
@@ -9,28 +11,53 @@ namespace McDonalds.Customer
     {
         static void Main(string[] args)
         {
+            Console.WriteLine("*********** Customer ***********");
             IBus bus = Bus.Initialize(config =>
             {
                 config.ScanForMesssageHandlers = true;
             });
+            bus.StartConsuming();
 
-            Console.WriteLine("Options:\n--------");
-            Console.WriteLine("1. To place new order");
-            //Console.WriteLine("<ENTER> To exit");
-            var selectedOption = SelectOption();
-
-            switch (selectedOption)
+            while (true)
             {
-                case 1:
-                    PlaceNewOrder(bus);
-                    break;
+                Console.WriteLine("Options:\n--------");
+                Console.WriteLine("1. To place new order");
+                //Console.WriteLine("<ENTER> To exit");
+                var selectedOption = SelectOption();
+
+                switch (selectedOption)
+                {
+                    case 1:
+                        PlaceNewOrder(bus);
+                        break;
+                }
             }
 
         }
 
+        public static List<string> Meals = new List<string>
+        {
+            "Burger Meal",
+            "Big Mac Meal",
+            "Cheese Burger Meal"
+        };
+
+        public static List<string> Sizes = new List<string>
+        {
+            "XL",
+            "Large",
+            "Medium",
+            "Small"
+        };
+
+        static readonly Random Random = new Random();
+
         private static void PlaceNewOrder(IBus bus)
         {
-            bus.Publish(new NewOrderMessage(Guid.NewGuid()) { Name = "Burger Meal", Size = "Large"});
+            var meal = Meals[Random.Next(0, 2)];
+            var size = Sizes[Random.Next(0, 3)];
+
+            bus.Publish(new NewOrderMessage(Guid.NewGuid()) { Name = meal, Size = size });
         }
 
         private static int SelectOption()

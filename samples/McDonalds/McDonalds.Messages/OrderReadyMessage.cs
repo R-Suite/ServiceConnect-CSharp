@@ -8,5 +8,8 @@ namespace McDonalds.Messages
         public OrderReadyMessage(Guid correlationId) : base(correlationId)
         {
         }
+
+        public string Meal { get; set; }
+        public string Size { get; set; }
     }
 }
