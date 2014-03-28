@@ -84,7 +84,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
 
             _bus.StartConsuming();
 
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof(FakeProcessManager1))).Returns(new FakeProcessManager1());
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(new FakeProcessManager1());
 
             // Act
             _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(new FakeMessage1(Guid.NewGuid())
@@ -120,7 +120,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
 
             var processManager = new FakeProcessManager1();
 
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof(FakeProcessManager1))).Returns(processManager);
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
 
             _bus.StartConsuming();
 
@@ -157,7 +157,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
             });
 
             var processManager = new FakeProcessManager1();
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof(FakeProcessManager1))).Returns(processManager);
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
 
             _bus.StartConsuming();
 
@@ -188,7 +188,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
             });
 
             var processManager = new FakeProcessManager1();
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof(FakeProcessManager1))).Returns(processManager);
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
 
             var data = new FakeProcessManagerData
             {
@@ -204,7 +204,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
             _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(message)));
 
             // Assert
-            _mockContainer.Verify(x => x.GetHandlerInstance(typeof (FakeProcessManager1)), Times.Once);
+            _mockContainer.Verify(x => x.GetInstance(typeof (FakeProcessManager1)), Times.Once);
             _mockProcessManagerFinder.Verify(x => x.FindData<FakeProcessManagerData>(id), Times.Once);
         }
 
@@ -235,7 +235,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
             });
 
             var processManager = new FakeProcessManager1();
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof(FakeProcessManager1))).Returns(processManager);
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns(mockPersistanceData.Object);
 
             _bus.StartConsuming();
@@ -275,7 +275,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
             });
 
             var processManager = new FakeProcessManager1();
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof(FakeProcessManager1))).Returns(processManager);
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns(mockPersistanceData.Object);
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
@@ -319,7 +319,7 @@ namespace R.MessageBus.UnitTests.Bus.ProcessManager
             {
                 Complete = true
             };
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof(FakeProcessManager1))).Returns(processManager);
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns(mockPersistanceData.Object);
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));

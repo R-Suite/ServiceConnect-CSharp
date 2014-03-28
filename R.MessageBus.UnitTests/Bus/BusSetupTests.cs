@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using Moq;
 using R.MessageBus.Interfaces;
 using Xunit;
 
@@ -115,6 +117,22 @@ namespace R.MessageBus.UnitTests.Bus
             Assert.Equal(typeof(FakeProcessManagerFinder), configuration.GetProcessManagerFinder().GetType());
         }
 
+        [Fact]
+        public void SouldInitializeTheContainer()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockContainer = new Mock<IBusContainer>();
+            mockContainer.Setup(x => x.Initialize());
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+
+            // Act
+            new MessageBus.Bus(mockConfiguration.Object);
+
+            // Assert
+            mockContainer.Verify(x => x.Initialize(), Times.Once);
+        }
+        
         public class FakeContainer : IBusContainer
         {
             public IEnumerable<HandlerReference> GetHandlerTypes()
@@ -127,13 +145,25 @@ namespace R.MessageBus.UnitTests.Bus
                 throw new NotImplementedException();
             }
 
-            public object GetHandlerInstance(Type handlerType)
+            public object GetInstance(Type handlerType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public T GetInstance<T>()
             {
                 throw new NotImplementedException();
             }
 
             public void ScanForHandlers()
             {}
+
+            public void Initialize()
+            {
+                Initialized = true;
+            }
+
+            public bool Initialized { get; set; }
         }
 
         public class FakeConsumer : IConsumer

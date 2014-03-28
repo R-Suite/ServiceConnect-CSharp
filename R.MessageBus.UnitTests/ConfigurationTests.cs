@@ -95,7 +95,12 @@ namespace R.MessageBus.UnitTests
                 throw new NotImplementedException();
             }
 
-            public object GetHandlerInstance(Type handlerType)
+            public object GetInstance(Type handlerType)
+            {
+                throw new NotImplementedException();
+            }
+
+            public T GetInstance<T>()
             {
                 throw new NotImplementedException();
             }
@@ -103,6 +108,10 @@ namespace R.MessageBus.UnitTests
             public void ScanForHandlers()
             {
                 throw new NotImplementedException();
+            }
+
+            public void Initialize()
+            {
             }
         }
 
