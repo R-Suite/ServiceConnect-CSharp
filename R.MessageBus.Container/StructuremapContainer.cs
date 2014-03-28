@@ -9,6 +9,14 @@ namespace R.MessageBus.Container
 {
     public class StructuremapContainer : IBusContainer
     {
+        public void Initialize()
+        {
+            ObjectFactory.Configure(x =>
+            {
+                
+            });
+        }
+
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
             IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
@@ -30,9 +38,14 @@ namespace R.MessageBus.Container
             });
         }
 
-        public object GetHandlerInstance(Type handlerType)
+        public object GetInstance(Type handlerType)
         {
             return ObjectFactory.GetInstance(handlerType);
+        }
+
+        public T GetInstance<T>()
+        {
+            return ObjectFactory.GetInstance<T>();
         }
 
         public void ScanForHandlers()

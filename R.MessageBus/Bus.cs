@@ -27,6 +27,8 @@ namespace R.MessageBus
             _container = configuration.GetContainer();
             _processManagerFinder = configuration.GetProcessManagerFinder();
 
+            _container.Initialize();
+
             if (configuration.ScanForMesssageHandlers)
             {
                 _container.ScanForHandlers();
@@ -94,7 +96,7 @@ namespace R.MessageBus
                     try
                     {
                         // Create instance of the project manager
-                        object processManager = _container.GetHandlerInstance(processManagerInstance.HandlerType);
+                        object processManager = _container.GetInstance(processManagerInstance.HandlerType);
                         
                         // Get Data Type
                         Type dataType = processManagerInstance.HandlerType.BaseType.GetGenericArguments()[0];
@@ -129,7 +131,7 @@ namespace R.MessageBus
                         if (handlerReference.HandlerType.BaseType != null && handlerReference.HandlerType.BaseType.Name == typeof(ProcessManager<>).Name)
                         {
                             // Create instance of the project manager
-                            object processManager = _container.GetHandlerInstance(handlerReference.HandlerType);
+                            object processManager = _container.GetInstance(handlerReference.HandlerType);
 
                             // Set Process Manager Finder property
                             PropertyInfo processManagerFinderProp = handlerReference.HandlerType.GetProperty("ProcessManagerFinder");
@@ -170,7 +172,7 @@ namespace R.MessageBus
                         }
                         else
                         {
-                            object handler = _container.GetHandlerInstance(handlerReference.HandlerType);
+                            object handler = _container.GetInstance(handlerReference.HandlerType);
                             messageHandler.GetMethod("Execute", new[] { messageType }).Invoke(handler, new[] { objectMessage });
                         }
                     }

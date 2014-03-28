@@ -98,7 +98,7 @@ namespace R.MessageBus.UnitTests.Bus.Handler
                 message1HandlerReference
             });
             var fakeHandler = new FakeHandler1();
-            _mockContainer.Setup(x => x.GetHandlerInstance(typeof (FakeHandler1))).Returns(fakeHandler);
+            _mockContainer.Setup(x => x.GetInstance(typeof (FakeHandler1))).Returns(fakeHandler);
 
             bus.StartConsuming();
 
@@ -119,7 +119,7 @@ namespace R.MessageBus.UnitTests.Bus.Handler
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
             Assert.Equal(message1.Username, fakeHandler.Command.Username);
-            _mockContainer.Verify(x => x.GetHandlerInstance(typeof (FakeHandler2)), Times.Never);
+            _mockContainer.Verify(x => x.GetInstance(typeof (FakeHandler2)), Times.Never);
         }
     }
 }
