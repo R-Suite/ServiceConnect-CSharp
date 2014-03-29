@@ -48,7 +48,6 @@ namespace R.MessageBus.UnitTests
             Assert.True(configuration.TransportSettings.Queue.Durable);
             Assert.NotNull(configuration.TransportSettings.Exchange);
             Assert.Equal("RMessageBusExchange", configuration.TransportSettings.Exchange.Name);
-            Assert.Equal("direct", configuration.TransportSettings.Exchange.Type);
             Assert.Null(configuration.TransportSettings.Exchange.Arguments);
             Assert.False(configuration.TransportSettings.Exchange.AutoDelete);
             Assert.False(configuration.TransportSettings.Exchange.IsReadOnly);

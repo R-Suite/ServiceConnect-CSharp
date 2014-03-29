@@ -123,11 +123,6 @@
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
           </type>
         </attributeProperty>
-        <attributeProperty name="Type" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Type" isReadOnly="false" defaultValue="&quot;direct&quot;">
-          <type>
-            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
-          </type>
-        </attributeProperty>
         <attributeProperty name="Durable" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Durable" isReadOnly="false" defaultValue="false">
           <type>
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/Boolean" />
