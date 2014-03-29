@@ -125,11 +125,6 @@
 				<xs:documentation>The Name.</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
-		<xs:attribute name="Type" use="optional" type="xs:string">
-			<xs:annotation>
-				<xs:documentation>The Type.</xs:documentation>
-			</xs:annotation>
-		</xs:attribute>
 		<xs:attribute name="Durable" use="optional" type="xs:boolean">
 			<xs:annotation>
 				<xs:documentation>The Durable.</xs:documentation>

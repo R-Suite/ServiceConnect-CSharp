@@ -25,7 +25,6 @@ namespace R.MessageBus
         private const string DefaultDatabaseName = "RMessageBusPersistantStore";
         private const string DefaultConnectionString = "mongodb://localhost/";
         private const string DefaultExchangeName = "RMessageBusExchange";
-        private const string DefaultExchangeType = "direct";
         private const string DefaultHost= "localhost";
 
         #region Private Fields
@@ -223,7 +222,6 @@ namespace R.MessageBus
             transportSettings.Exchange = new Exchange
             {
                 Name = settings.Exchange.Name,
-                Type = settings.Exchange.Type,
                 Arguments = GetExchangeArguments(settings),
                 AutoDelete = settings.Exchange.AutoDelete,
                 Durable = settings.Exchange.Durable,
@@ -255,7 +253,6 @@ namespace R.MessageBus
             transportSettings.Exchange = new Exchange
             {
                 Name = DefaultExchangeName,
-                Type = DefaultExchangeType,
                 Arguments = null,
                 AutoDelete = false,
                 Durable = false,

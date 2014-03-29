@@ -139,25 +139,15 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureRetryQueue(string queueName, string exchangeName)
         {
-            //todo: all exchanges should be "fanout" by default
-            //todo: create "direct" deadLetterExchange, bind to the original queue and as the value of "x-dead-letter-exchange" argument
-            //todo: exchanges will no longer be configurable
-
-            /*
+            // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
+            // dead-letter exchange is of type "direct" and bound to the original queue.
             string retryDeadLetterExchangeName = exchangeName + ".Retries.DeadLetter";
             _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct");
-            _model.QueueBind(queueName, _errorExchange, string.Empty, null);
+            _model.QueueBind(queueName, retryDeadLetterExchangeName, string.Empty, null);
 
             var arguments = new Dictionary<string, object>
             {
                 {"x-dead-letter-exchange", retryDeadLetterExchangeName},
-                {"x-message-ttl", _retryDelay}
-            };
-            */
-
-            var arguments = new Dictionary<string, object>
-            {
-                {"x-dead-letter-exchange", exchangeName},
                 {"x-message-ttl", _retryDelay}
             };
 
@@ -173,16 +163,14 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureExchange()
         {
-            if (!string.IsNullOrEmpty(_transportSettings.Exchange.Name))
-            {
-                var arguments = _transportSettings.Exchange.Arguments;
+            var arguments = _transportSettings.Exchange.Arguments;
 
-                _model.ExchangeDeclare(_transportSettings.Exchange.Name,
-                                       _transportSettings.Exchange.Type,
-                                       _transportSettings.Exchange.Durable,
-                                       _transportSettings.Exchange.AutoDelete,
-                                       arguments);
-            }
+            _model.ExchangeDeclare(_transportSettings.Exchange.Name,
+                                    "fanout",
+                                    _transportSettings.Exchange.Durable,
+                                    _transportSettings.Exchange.AutoDelete,
+                                    arguments);
+
             return _transportSettings.Exchange.Name;
         }
 

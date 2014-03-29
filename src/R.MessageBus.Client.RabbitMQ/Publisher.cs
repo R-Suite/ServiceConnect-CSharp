@@ -67,7 +67,7 @@ namespace R.MessageBus.Client.RabbitMQ
             var arguments = _transportSettings.Exchange.Arguments;
 
             _model.ExchangeDeclare(_transportSettings.Exchange.Name,
-                                    _transportSettings.Exchange.Type,
+                                    "fanout",
                                     _transportSettings.Exchange.Durable,
                                     _transportSettings.Exchange.AutoDelete,
                                     arguments);
