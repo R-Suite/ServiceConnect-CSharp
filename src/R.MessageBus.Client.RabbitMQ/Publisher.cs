@@ -7,12 +7,15 @@ namespace R.MessageBus.Client.RabbitMQ
 {
     public class Publisher : IDisposable, IPublisher
     {
+        private readonly ITransportSettings _transportSettings;
         private readonly IModel _model;
         private readonly IConnection _connection;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
         public Publisher(ITransportSettings transportSettings)
         {
+            _transportSettings = transportSettings;
+
             var connectionFactory = new ConnectionFactory 
             {
                 HostName = transportSettings.Host,
@@ -43,7 +46,7 @@ namespace R.MessageBus.Client.RabbitMQ
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             basicProperties.SetPersistent(true);
             var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
-            _model.BasicPublish(exchangeName, string.Empty, basicProperties, bytes);
+            _model.BasicPublish(exchangeName, _transportSettings.EndPoint, basicProperties, bytes); // (use endpoint as routing key (in retries))
         }
 
         public void Disconnect()
