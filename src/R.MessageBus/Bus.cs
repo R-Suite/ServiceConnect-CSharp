@@ -81,10 +81,19 @@ namespace R.MessageBus
             string messageJson = Encoding.UTF8.GetString(message);
             object objectMessage = _serializer.Deserialize(messageJson);
 
-            ProcessMessageHandlers(objectMessage);
-            ProcessProcessManagerHandlers(objectMessage);
+            bool success = true;
 
-            return true;
+            try
+            {
+                ProcessMessageHandlers(objectMessage);
+                ProcessProcessManagerHandlers(objectMessage);
+            }
+            catch (Exception)
+            {
+                success = false;
+            }
+
+            return success;
         }
 
         private void ProcessProcessManagerHandlers(object objectMessage)
