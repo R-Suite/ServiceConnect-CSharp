@@ -103,7 +103,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (!string.IsNullOrEmpty(_retryExchange))
             {
-                _model.QueueBind(retryQueueName, _retryExchange, messageTypeName, null);
+                _model.QueueBind(retryQueueName, _retryExchange, string.Empty, null);
             }
 
             //ERROR QUEUE
