@@ -62,7 +62,7 @@ namespace R.MessageBus.Client.RabbitMQ
             }
         }
 
-        public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null)
+        public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName)
         {
             _consumerEventHandler = messageReceived;
             
@@ -89,21 +89,21 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
 
             // WORK QUEUE
-            string exchange = ConfigureExchange();
+            string exchange = ConfigureExchange(messageTypeName);
             queueName = ConfigureQueue(queueName);
 
             if (!string.IsNullOrEmpty(exchange))
             {
-                _model.QueueBind(queueName, exchange, routingKey);
+                _model.QueueBind(queueName, exchange, string.Empty);
             }
 
             //RETRY QUEUE
-            _retryExchange = ConfigureRetryExchange();
+            _retryExchange = ConfigureRetryExchange(messageTypeName);
             var retryQueueName = ConfigureRetryQueue(queueName, exchange);
 
             if (!string.IsNullOrEmpty(_retryExchange))
             {
-                _model.QueueBind(retryQueueName, _retryExchange, routingKey, null);
+                _model.QueueBind(retryQueueName, _retryExchange, messageTypeName, null);
             }
 
             //ERROR QUEUE
@@ -124,17 +124,7 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             var arguments = _transportSettings.Queue.Arguments;
 
-            if (string.IsNullOrEmpty(queueName) && string.IsNullOrEmpty(_transportSettings.Queue.Name))
-            {
-                return _model.QueueDeclare().QueueName;
-            }
-
-            return _model.QueueDeclare(!string.IsNullOrEmpty(queueName) ? queueName : _transportSettings.Queue.Name,
-                                        _transportSettings.Queue.Durable,
-                                        _transportSettings.Queue.Exclusive,
-                                        _transportSettings.Queue.AutoDelete,
-                                        arguments);
-            
+            return _model.QueueDeclare(queueName, _transportSettings.Queue.Durable, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete, arguments);
         }
 
         private string ConfigureRetryQueue(string queueName, string exchangeName)
@@ -161,22 +151,16 @@ namespace R.MessageBus.Client.RabbitMQ
             return _model.QueueDeclare("errors", true, false, false, null);
         }
 
-        private string ConfigureExchange()
+        private string ConfigureExchange(string exchangeName)
         {
-            var arguments = _transportSettings.Exchange.Arguments;
+            _model.ExchangeDeclare(exchangeName, "fanout", true);
 
-            _model.ExchangeDeclare(_transportSettings.Exchange.Name,
-                                    "fanout",
-                                    _transportSettings.Exchange.Durable,
-                                    _transportSettings.Exchange.AutoDelete,
-                                    arguments);
-
-            return _transportSettings.Exchange.Name;
+            return exchangeName;
         }
 
-        private string ConfigureRetryExchange()
+        private string ConfigureRetryExchange(string exchangeName)
         {
-            string retryExchangeName = _transportSettings.Exchange.Name + ".Retries";
+            string retryExchangeName = exchangeName + ".Retries";
 
             _model.ExchangeDeclare(retryExchangeName, "direct");
 
