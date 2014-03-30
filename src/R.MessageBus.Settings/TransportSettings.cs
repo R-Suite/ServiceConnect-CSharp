@@ -4,6 +4,7 @@ namespace R.MessageBus.Settings
 {
     public class TransportSettings : ITransportSettings
     {
+        public string EndPoint { get; set; }
         public int RetryDelay { get; set; }
         public int MaxRetries { get; set; }
         public string Host { get; set; }

@@ -5,6 +5,11 @@ namespace R.MessageBus.Interfaces
     public interface ITransportSettings
     {
         /// <summary>
+        /// Endpoint name
+        /// </summary>
+        string EndPoint { get; set; }
+
+        /// <summary>
         /// Delay (in miliseconds) between bus attempts to redeliver message
         /// </summary>
         int RetryDelay { get; set; }

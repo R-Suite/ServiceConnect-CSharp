@@ -62,7 +62,7 @@ namespace R.MessageBus
             foreach (HandlerReference reference in instances)
             {
                 string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
-                string queueName = (null != queue) ? queue + "." + messageTypeName : messageTypeName;
+                string queueName = (queue ?? Configuration.EndPoint) + "." + messageTypeName;
 
                 IConsumer consumer = Configuration.GetConsumer();
                 consumer.StartConsuming(ConsumeMessageEvent, messageTypeName, queueName);

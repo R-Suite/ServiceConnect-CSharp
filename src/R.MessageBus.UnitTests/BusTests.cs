@@ -104,8 +104,8 @@ namespace R.MessageBus.UnitTests
             bus.StartConsuming();
 
             // Assert
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage1", "RMessageBusUnitTestsFakesMessagesFakeMessage1"), Times.Once);
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage2", "RMessageBusUnitTestsFakesMessagesFakeMessage2"), Times.Once);
+            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage1", ".RMessageBusUnitTestsFakesMessagesFakeMessage1"), Times.Once);
+            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage2", ".RMessageBusUnitTestsFakesMessagesFakeMessage2"), Times.Once);
             _mockConsumer.VerifyAll();
         }
 

@@ -18,6 +18,8 @@ namespace McDonalds.Cashier
 
         public void Execute(NewOrderMessage message)
         {
+            throw new Exception("test");
+
             Data.CorrelationId = Guid.NewGuid();
             Data.Meal = message.Name;
             Data.Size = message.Size;

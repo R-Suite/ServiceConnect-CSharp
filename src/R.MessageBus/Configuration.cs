@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using BusConfiguration;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
@@ -29,7 +28,6 @@ namespace R.MessageBus
 
         #region Private Fields
 
-        private string _endPoint;
         private string _configurationPath;
 
         #endregion
@@ -41,6 +39,7 @@ namespace R.MessageBus
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
+        public string EndPoint { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
@@ -73,7 +72,10 @@ namespace R.MessageBus
                 _configurationPath = configFilePath;
             }
 
-            _endPoint = endPoint;
+            if (null != endPoint)
+            {
+                EndPoint = endPoint;
+            }
 
             //todo: candidate for IoC
             var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
@@ -82,8 +84,8 @@ namespace R.MessageBus
 
             if (section == null) throw new ArgumentException("BusSettings section not found in the configuration file.");
 
-            SetTransportSettings(section, _endPoint);
-            SetPersistanceSettings(section, _endPoint);
+            SetTransportSettings(section);
+            SetPersistanceSettings(section);
         }
         
         /// <summary>
@@ -160,11 +162,11 @@ namespace R.MessageBus
 
         #region Private Methods
 
-        private void SetTransportSettings(BusSettings.BusSettings section = null, string endPoint = null)
+        private void SetTransportSettings(BusSettings.BusSettings section = null)
         {
             if (null != section)
             {
-                var endPointSettings = !string.IsNullOrEmpty(endPoint) ? section.EndpointSettings.GetItemByKey(endPoint) : section.EndpointSettings.GetItemAt(0);
+                var endPointSettings = !string.IsNullOrEmpty(EndPoint) ? section.EndpointSettings.GetItemByKey(EndPoint) : section.EndpointSettings.GetItemAt(0);
                 var transportSettings = endPointSettings.TransportSettings;
 
                 if (null != transportSettings)
@@ -179,11 +181,11 @@ namespace R.MessageBus
             TransportSettings = GetTransportSettingsFromDefaults();
         }
 
-        private void SetPersistanceSettings(BusSettings.BusSettings section = null, string endPoint = null)
+        private void SetPersistanceSettings(BusSettings.BusSettings section = null)
         {
             if (null != section)
             {
-                var endPointSettings = !string.IsNullOrEmpty(endPoint) ? section.EndpointSettings.GetItemByKey(endPoint) : section.EndpointSettings.GetItemAt(0);
+                var endPointSettings = !string.IsNullOrEmpty(EndPoint) ? section.EndpointSettings.GetItemByKey(EndPoint) : section.EndpointSettings.GetItemAt(0);
                 var persistanceSettings = endPointSettings.PersistanceSettings;
 
                 if (null != persistanceSettings)
@@ -203,6 +205,7 @@ namespace R.MessageBus
         private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
         {
             ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
+            transportSettings.EndPoint = string.IsNullOrWhiteSpace(EndPoint) ? "Default" : EndPoint;
             transportSettings.Host = settings.Host;
             transportSettings.MaxRetries = settings.Retries.MaxRetries;
             transportSettings.RetryDelay = settings.Retries.RetryDelay;
@@ -234,6 +237,7 @@ namespace R.MessageBus
         private ITransportSettings GetTransportSettingsFromDefaults()
         {
             ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
+            transportSettings.EndPoint = string.IsNullOrWhiteSpace(EndPoint) ? "Default" : EndPoint;
             transportSettings.Host = DefaultHost;
             transportSettings.MaxRetries = 3;
             transportSettings.RetryDelay = 3000;
