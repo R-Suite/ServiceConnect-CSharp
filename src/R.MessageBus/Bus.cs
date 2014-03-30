@@ -61,11 +61,11 @@ namespace R.MessageBus
 
             foreach (HandlerReference reference in instances)
             {
-                string routingKey = reference.MessageType.FullName.Replace(".", string.Empty);
-                string queueName = queue + "." + reference.MessageType.Name;
+                string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
+                string queueName = (null != queue) ? queue + "." + messageTypeName : messageTypeName;
 
                 IConsumer consumer = Configuration.GetConsumer();
-                consumer.StartConsuming(ConsumeMessageEvent, routingKey, queueName);
+                consumer.StartConsuming(ConsumeMessageEvent, messageTypeName, queueName);
                 _consumers.Add(consumer);
             }
         }

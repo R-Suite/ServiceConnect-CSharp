@@ -7,36 +7,32 @@ namespace R.MessageBus.Client.RabbitMQ
 {
     public class Publisher : IDisposable, IPublisher
     {
-        private readonly ITransportSettings _transportSettings;
         private readonly IModel _model;
         private readonly IConnection _connection;
-        private readonly string _exchange;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
         public Publisher(ITransportSettings transportSettings)
         {
-            _transportSettings = transportSettings;
             var connectionFactory = new ConnectionFactory 
             {
-                HostName = _transportSettings.Host,
+                HostName = transportSettings.Host,
                 VirtualHost = "/",
                 Protocol = Protocols.FromEnvironment(),
                 Port = AmqpTcpEndpoint.UseDefaultPort
             };
 
-            if (!string.IsNullOrEmpty(_transportSettings.Username))
+            if (!string.IsNullOrEmpty(transportSettings.Username))
             {
-                connectionFactory.UserName = _transportSettings.Username;
+                connectionFactory.UserName = transportSettings.Username;
             }
 
-            if (!string.IsNullOrEmpty(_transportSettings.Password))
+            if (!string.IsNullOrEmpty(transportSettings.Password))
             {
-                connectionFactory.Password = _transportSettings.Password;
+                connectionFactory.Password = transportSettings.Password;
             }
 
             _connection = connectionFactory.CreateConnection();
             _model = _connection.CreateModel();
-            _exchange = ConfigureExchange();
         }
 
         public void Publish<T>(T message) where T : Message
@@ -46,7 +42,8 @@ namespace R.MessageBus.Client.RabbitMQ
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             basicProperties.SetPersistent(true);
-            _model.BasicPublish(_exchange, typeof(T).FullName.Replace(".", string.Empty), basicProperties, bytes);
+            var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
+            _model.BasicPublish(exchangeName, string.Empty, basicProperties, bytes);
         }
 
         public void Disconnect()
@@ -62,17 +59,11 @@ namespace R.MessageBus.Client.RabbitMQ
                 _model.Abort();
         }
 
-        private string ConfigureExchange()
+        private string ConfigureExchange(string exchangeName)
         {
-            var arguments = _transportSettings.Exchange.Arguments;
+            _model.ExchangeDeclare(exchangeName, "fanout", true);
 
-            _model.ExchangeDeclare(_transportSettings.Exchange.Name,
-                                    "fanout",
-                                    _transportSettings.Exchange.Durable,
-                                    _transportSettings.Exchange.AutoDelete,
-                                    arguments);
-
-            return _transportSettings.Exchange.Name;
+            return exchangeName;
         }
     }
 }

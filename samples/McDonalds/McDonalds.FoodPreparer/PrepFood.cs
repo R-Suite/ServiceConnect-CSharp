@@ -16,6 +16,8 @@ namespace McDonalds.FoodPreparer
 
         public void Execute(PrepFoodMessage message)
         {
+            throw new Exception("test");
+
             Console.WriteLine("Preping order: BunSize - {0}, OrderId - {1}", message.BunSize, message.CorrelationId);
 
             Thread.Sleep(2000);
