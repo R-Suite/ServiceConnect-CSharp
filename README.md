@@ -43,6 +43,8 @@ IBus bus = Bus.Initialize(config =>
 
 ### Point To Point
 
+![Point To Point](../../tree/master/images/PointToPoint.png)
+
 A Point to Point channel ensures that only one receiver consumes any given message.  The channel can have multiple receivers that can consume multiple messages concurrently (Competing Consumers), but only one of them can successfully consume a particular message.  This design makes consuming and processing messages highly scalable because the work can be load balanced across multiple consumers running in multiple applications on multiple computers.
 
 See *Enterprise Integration Patterns (G. Hohpe, B. Woolf, 2009: 103-105, 502-507)* for more details.
