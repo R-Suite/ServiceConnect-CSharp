@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using Moq;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Settings;
 using Xunit;
 
-namespace R.MessageBus.UnitTests.Bus
+namespace R.MessageBus.UnitTests
 {
     public class BusSetupTests
     {
@@ -125,6 +125,8 @@ namespace R.MessageBus.UnitTests.Bus
             var mockContainer = new Mock<IBusContainer>();
             mockContainer.Setup(x => x.Initialize());
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
 
             // Act
             new MessageBus.Bus(mockConfiguration.Object);
@@ -141,6 +143,7 @@ namespace R.MessageBus.UnitTests.Bus
             var mockContainer = new Mock<IBusContainer>();
             mockContainer.Setup(x => x.Initialize());
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);

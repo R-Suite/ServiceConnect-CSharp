@@ -5,11 +5,6 @@ namespace R.MessageBus.Interfaces
     public interface ITransportSettings
     {
         /// <summary>
-        /// Endpoint name
-        /// </summary>
-        string EndPoint { get; set; }
-
-        /// <summary>
         /// Delay (in miliseconds) between bus attempts to redeliver message
         /// </summary>
         int RetryDelay { get; set; }
@@ -44,27 +39,12 @@ namespace R.MessageBus.Interfaces
         /// Message queue settings
         /// </summary>
         Queue Queue { get; set; }
-
-        /// <summary>
-        /// Exchange settings
-        /// </summary>
-        Exchange Exchange { get; set; }
     }
 
     public class Queue
     {
         public string Name { get; set; }
         public string RoutingKey { get; set; }
-        public Dictionary<string, object> Arguments { get; set; }
-        public bool AutoDelete { get; set; }
-        public bool Durable { get; set; }
-        public bool Exclusive { get; set; }
-        public bool IsReadOnly { get; set; }
-    }
-
-    public class Exchange
-    {
-        public string Name { get; set; }
         public Dictionary<string, object> Arguments { get; set; }
         public bool AutoDelete { get; set; }
         public bool Durable { get; set; }

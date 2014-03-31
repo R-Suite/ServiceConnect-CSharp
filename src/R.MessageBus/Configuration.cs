@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.MongoDb;
-using Exchange = R.MessageBus.Interfaces.Exchange;
 using Queue = R.MessageBus.Interfaces.Queue;
 
 namespace R.MessageBus
@@ -23,12 +23,13 @@ namespace R.MessageBus
     {
         private const string DefaultDatabaseName = "RMessageBusPersistantStore";
         private const string DefaultConnectionString = "mongodb://localhost/";
-        private const string DefaultExchangeName = "RMessageBusExchange";
         private const string DefaultHost= "localhost";
 
         #region Private Fields
 
         private string _configurationPath;
+        private string _endPoint;
+        private string _queueName;
 
         #endregion
 
@@ -39,7 +40,6 @@ namespace R.MessageBus
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
-        public string EndPoint { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
@@ -72,10 +72,7 @@ namespace R.MessageBus
                 _configurationPath = configFilePath;
             }
 
-            if (null != endPoint)
-            {
-                EndPoint = endPoint;
-            }
+            _endPoint = endPoint;
 
             //todo: candidate for IoC
             var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
@@ -125,6 +122,22 @@ namespace R.MessageBus
         }
 
         /// <summary>
+        /// Sets QueueName
+        /// </summary>
+        public void SetQueueName(string queueName)
+        {
+            _queueName = queueName;
+        }
+
+        /// <summary>
+        /// Gets QueueName
+        /// </summary>
+        public string GetQueueName()
+        {
+            return _queueName;
+        }
+
+        /// <summary>
         /// Gets instance of IConsumer type
         /// </summary>
         /// <returns></returns>
@@ -166,7 +179,7 @@ namespace R.MessageBus
         {
             if (null != section)
             {
-                var endPointSettings = !string.IsNullOrEmpty(EndPoint) ? section.EndpointSettings.GetItemByKey(EndPoint) : section.EndpointSettings.GetItemAt(0);
+                var endPointSettings = !string.IsNullOrEmpty(_endPoint) ? section.EndpointSettings.GetItemByKey(_endPoint) : section.EndpointSettings.GetItemAt(0);
                 var transportSettings = endPointSettings.TransportSettings;
 
                 if (null != transportSettings)
@@ -185,7 +198,7 @@ namespace R.MessageBus
         {
             if (null != section)
             {
-                var endPointSettings = !string.IsNullOrEmpty(EndPoint) ? section.EndpointSettings.GetItemByKey(EndPoint) : section.EndpointSettings.GetItemAt(0);
+                var endPointSettings = !string.IsNullOrEmpty(_endPoint) ? section.EndpointSettings.GetItemByKey(_endPoint) : section.EndpointSettings.GetItemAt(0);
                 var persistanceSettings = endPointSettings.PersistanceSettings;
 
                 if (null != persistanceSettings)
@@ -205,7 +218,6 @@ namespace R.MessageBus
         private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
         {
             ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
-            transportSettings.EndPoint = string.IsNullOrWhiteSpace(EndPoint) ? "Default" : EndPoint;
             transportSettings.Host = settings.Host;
             transportSettings.MaxRetries = settings.Retries.MaxRetries;
             transportSettings.RetryDelay = settings.Retries.RetryDelay;
@@ -214,21 +226,13 @@ namespace R.MessageBus
             transportSettings.NoAck = settings.NoAck;
             transportSettings.Queue = new Queue
             {
-                Name = settings.Queue.Name,
+                Name = string.IsNullOrEmpty(_queueName) ? settings.Queue.Name : _queueName,
                 RoutingKey = settings.Queue.RoutingKey,
                 Arguments = GetQueueArguments(settings),
                 AutoDelete = settings.Queue.AutoDelete,
                 Durable = settings.Queue.Durable,
                 Exclusive = settings.Queue.Exclusive,
                 IsReadOnly = settings.Queue.IsReadOnly()
-            };
-            transportSettings.Exchange = new Exchange
-            {
-                Name = settings.Exchange.Name,
-                Arguments = GetExchangeArguments(settings),
-                AutoDelete = settings.Exchange.AutoDelete,
-                Durable = settings.Exchange.Durable,
-                IsReadOnly = settings.Exchange.IsReadOnly(),
             };
 
             return transportSettings;
@@ -237,7 +241,6 @@ namespace R.MessageBus
         private ITransportSettings GetTransportSettingsFromDefaults()
         {
             ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
-            transportSettings.EndPoint = string.IsNullOrWhiteSpace(EndPoint) ? "Default" : EndPoint;
             transportSettings.Host = DefaultHost;
             transportSettings.MaxRetries = 3;
             transportSettings.RetryDelay = 3000;
@@ -246,7 +249,7 @@ namespace R.MessageBus
             transportSettings.NoAck = false;
             transportSettings.Queue = new Queue
             {
-                Name = null,
+                Name = _queueName,
                 RoutingKey = null,
                 Arguments = null,
                 AutoDelete = false,
@@ -254,26 +257,8 @@ namespace R.MessageBus
                 Exclusive = false,
                 IsReadOnly = false
             };
-            transportSettings.Exchange = new Exchange
-            {
-                Name = DefaultExchangeName,
-                Arguments = null,
-                AutoDelete = false,
-                Durable = false,
-                IsReadOnly = false,
-            };
 
             return transportSettings;
-        }
-
-        private static Dictionary<string, object> GetExchangeArguments(BusConfiguration.TransportSettings settings)
-        {
-            var exchangeeArguments = new Dictionary<string, object>();
-            for (var i = 0; i < settings.Exchange.Arguments.Count; i++)
-            {
-                exchangeeArguments.Add(settings.Exchange.Arguments[i].Name, settings.Exchange.Arguments[i].Value);
-            }
-            return exchangeeArguments;
         }
 
         private static Dictionary<string, object> GetQueueArguments(BusConfiguration.TransportSettings settings)

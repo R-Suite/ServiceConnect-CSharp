@@ -4,6 +4,7 @@ using System.Text;
 using Moq;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Settings;
 using R.MessageBus.UnitTests.Fakes.Handlers;
 using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
@@ -25,6 +26,7 @@ namespace R.MessageBus.UnitTests
             _mockConsumer = new Mock<IConsumer>();
             _mockConfiguration.Setup(x => x.GetContainer()).Returns(_mockContainer.Object);
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
+            _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings {Queue = new Queue()});
         }
 
         public bool AssignEventHandler(ConsumerEventHandler eventHandler)
@@ -104,8 +106,8 @@ namespace R.MessageBus.UnitTests
             bus.StartConsuming();
 
             // Assert
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage1", ".RMessageBusUnitTestsFakesMessagesFakeMessage1"), Times.Once);
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage2", ".RMessageBusUnitTestsFakesMessagesFakeMessage2"), Times.Once);
+            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage1", "R.MessageBus.UnitTests"), Times.Once);
+            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "RMessageBusUnitTestsFakesMessagesFakeMessage2", "R.MessageBus.UnitTests"), Times.Once);
             _mockConsumer.VerifyAll();
         }
 

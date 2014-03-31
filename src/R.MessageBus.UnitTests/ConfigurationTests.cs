@@ -46,12 +46,6 @@ namespace R.MessageBus.UnitTests
             Assert.False(configuration.TransportSettings.Queue.Exclusive);
             Assert.False(configuration.TransportSettings.Queue.IsReadOnly);
             Assert.True(configuration.TransportSettings.Queue.Durable);
-            Assert.NotNull(configuration.TransportSettings.Exchange);
-            Assert.Equal("RMessageBusExchange", configuration.TransportSettings.Exchange.Name);
-            Assert.Null(configuration.TransportSettings.Exchange.Arguments);
-            Assert.False(configuration.TransportSettings.Exchange.AutoDelete);
-            Assert.False(configuration.TransportSettings.Exchange.IsReadOnly);
-            Assert.False(configuration.TransportSettings.Exchange.Durable);
         }
 
         [Fact]
@@ -80,6 +74,20 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.Equal(typeof(FakeContainer), container.GetType());
+        }
+
+        [Fact]
+        public void ShouldSetupQueueName()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            configuration.SetQueueName("TestQueueName");
+
+            // Act
+            var result = configuration.GetQueueName();
+
+            // Assert
+            Assert.Equal("TestQueueName", result);
         }
 
         public class FakeContainer : IBusContainer

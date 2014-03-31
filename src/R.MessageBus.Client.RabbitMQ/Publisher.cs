@@ -46,7 +46,7 @@ namespace R.MessageBus.Client.RabbitMQ
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             basicProperties.SetPersistent(true);
             var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
-            _model.BasicPublish(exchangeName, _transportSettings.EndPoint, basicProperties, bytes); // (use endpoint as routing key (in retries))
+            _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes); // (use endpoint as routing key (in retries))
         }
 
         public void Disconnect()

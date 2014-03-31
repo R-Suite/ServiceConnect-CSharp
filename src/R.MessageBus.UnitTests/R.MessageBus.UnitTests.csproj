@@ -88,6 +88,10 @@
       <Project>{34e236ad-55df-416b-8798-e3674db84a85}</Project>
       <Name>R.MessageBus.Persistance</Name>
     </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Settings\R.MessageBus.Settings.csproj">
+      <Project>{58A100CE-CC7E-43BF-A054-D28648F092AC}</Project>
+      <Name>R.MessageBus.Settings</Name>
+    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus\R.MessageBus.csproj">
       <Project>{6911293D-3B22-4D8A-9B23-25EC4FAD1742}</Project>
       <Name>R.MessageBus</Name>

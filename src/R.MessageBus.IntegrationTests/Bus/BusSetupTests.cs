@@ -35,9 +35,6 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Assert
             Assert.Equal("TestDatabase", configuration.PersistenceStoreDatabaseName);
-            Assert.Equal("TestExchange2", configuration.TransportSettings.Exchange.Name);
-            Assert.False(configuration.TransportSettings.Exchange.Durable);
-            Assert.True(configuration.TransportSettings.Exchange.AutoDelete);
             Assert.Equal(2, configuration.TransportSettings.MaxRetries);
             Assert.Equal(2000, configuration.TransportSettings.RetryDelay);
             Assert.Equal("TestQueue1", configuration.TransportSettings.Queue.Name);
