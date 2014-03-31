@@ -12,7 +12,6 @@ namespace R.MessageBus.Interfaces
         /// <summary>
         /// Sets up the Bus to start consuming messages on the given queue.
         /// </summary>
-        /// <param name="queue">The name of the queue to consume messages on.</param>
         void StartConsuming();
 
         /// <summary>

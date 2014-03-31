@@ -9,7 +9,6 @@ namespace R.MessageBus.Interfaces
         Type PublisherType { get; set; }
         Type ProcessManagerFinder { get; set; }
         bool ScanForMesssageHandlers { get; set; }
-        string EndPoint { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
         ITransportSettings TransportSettings { get; set; }
@@ -44,6 +43,17 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IProcessManagerFinder</typeparam>
         void SetProcessManagerFinder<T>() where T : class, IProcessManagerFinder;
+
+        /// <summary>
+        /// Sets QueueName
+        /// </summary>
+        void SetQueueName(string queueName);
+
+        /// <summary>
+        /// Gets queue name.
+        /// </summary>
+        /// <returns></returns>
+        string GetQueueName();
 
         /// <summary>
         /// Gets an instance of the consumer.

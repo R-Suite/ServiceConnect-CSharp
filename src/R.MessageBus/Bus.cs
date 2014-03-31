@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Settings;
 
 namespace R.MessageBus
 {
@@ -27,7 +28,17 @@ namespace R.MessageBus
             _container.Initialize();
             _container.AddBus(this);
 
-            if (configuration.ScanForMesssageHandlers)
+            if (null == Configuration.TransportSettings)
+            {
+                Configuration.TransportSettings = new TransportSettings { Queue = new Queue() };
+            }
+
+            if (string.IsNullOrEmpty(Configuration.TransportSettings.Queue.Name))
+            {
+                Configuration.TransportSettings.Queue.Name = Assembly.GetCallingAssembly().GetName().Name;
+            }
+
+            if (Configuration.ScanForMesssageHandlers)
             {
                 _container.ScanForHandlers();
             }
