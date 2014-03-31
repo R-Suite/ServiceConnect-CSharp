@@ -75,7 +75,7 @@ public class PointToPointMessageHandler : IMessageHandler<PointToPointMessage>
 }
 ```
 
-[See PointToPoint sample application for a complete example.](../../tree/master/samples/PointToPoint)
+See [Point To Point](../../tree/master/samples/PointToPoint) and [Competing Consumers](../../tree/master/samples/CompetingConsumers) sample applications for a complete example.
 
 ### Publish/Subscribe
 
