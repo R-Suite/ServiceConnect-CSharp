@@ -36,13 +36,14 @@ namespace R.MessageBus
         #region Public Properties
 
         public Type ConsumerType { get; set; }
-        public Type PublisherType { get; set; }
+        public Type ProducerType { get; set; }
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
+        public IDictionary<string, string> EndPointMappings { get; set; } 
 
         #endregion
 
@@ -53,10 +54,22 @@ namespace R.MessageBus
             SetTransportSettings();
             SetPersistanceSettings();
 
+            EndPointMappings = new Dictionary<string, string>();
+
             ConsumerType = typeof(Consumer);
-            PublisherType = typeof(Publisher);
+            ProducerType = typeof(Producer);
             Container = typeof(StructuremapContainer);
             ProcessManagerFinder = typeof(MongoDbProcessManagerFinder);
+        }
+
+        /// <summary>
+        /// Adds a message endpoint mapping. 
+        /// </summary>
+        /// <param name="messageType">Type of message</param>
+        /// <param name="endPoint">Endpoint to send the message to</param>
+        public void AddEndPointMapping(Type messageType, string endPoint)
+        {
+            EndPointMappings.Add(messageType.FullName, endPoint);
         }
 
         /// <summary>
@@ -116,9 +129,9 @@ namespace R.MessageBus
         /// Sets publisher
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        public void SetPublisher<T>() where T : class, IPublisher
+        public void SetProducer<T>() where T : class, IProducer
         {
-            PublisherType = typeof(T);
+            ProducerType = typeof(T);
         }
 
         /// <summary>
@@ -147,12 +160,12 @@ namespace R.MessageBus
         }
 
         /// <summary>
-        /// Gets instance of IPublisher type
+        /// Gets instance of IProducer type
         /// </summary>
         /// <returns></returns>
-        public IPublisher GetPublisher()
+        public IProducer GetProducer()
         {
-            return (IPublisher)Activator.CreateInstance(PublisherType, TransportSettings);
+            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, EndPointMappings);
         }
 
         /// <summary>
@@ -217,7 +230,7 @@ namespace R.MessageBus
 
         private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
         {
-            ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
+            ITransportSettings transportSettings = new Settings.TransportSettings();
             transportSettings.Host = settings.Host;
             transportSettings.MaxRetries = settings.Retries.MaxRetries;
             transportSettings.RetryDelay = settings.Retries.RetryDelay;
@@ -240,7 +253,7 @@ namespace R.MessageBus
 
         private ITransportSettings GetTransportSettingsFromDefaults()
         {
-            ITransportSettings transportSettings = new R.MessageBus.Settings.TransportSettings();
+            ITransportSettings transportSettings = new Settings.TransportSettings();
             transportSettings.Host = DefaultHost;
             transportSettings.MaxRetries = 3;
             transportSettings.RetryDelay = 3000;

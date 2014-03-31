@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Moq;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Settings;
+using System.Linq;
+using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
 namespace R.MessageBus.UnitTests
@@ -95,13 +97,13 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomPublisher()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config => config.SetPublisher<FakePublisher>());
+            IBus bus = MessageBus.Bus.Initialize(config => config.SetProducer<FakePublisher>());
 
             // Act
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.Equal(typeof(FakePublisher), configuration.PublisherType);
+            Assert.Equal(typeof(FakePublisher), configuration.ProducerType);
         }
 
         [Fact]
@@ -133,6 +135,24 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             mockContainer.Verify(x => x.Initialize(), Times.Once);
+        }
+
+        [Fact]
+        public void ShouldAddMessageMappingsToConfiguration()
+        {
+            // Arrange
+            var bus = MessageBus.Bus.Initialize(conf =>
+            {
+                conf.AddEndPointMapping(typeof(FakeMessage1), "MyEndPoint1");
+                conf.AddEndPointMapping(typeof(FakeMessage2), "MyEndPoint2");
+            });
+
+            // Act
+            IConfiguration configuration = bus.Configuration;
+
+            // Assert
+            Assert.True(configuration.EndPointMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint1"));
+            Assert.True(configuration.EndPointMappings.Any(x => x.Key == typeof(FakeMessage2).FullName && x.Value == "MyEndPoint2"));
         }
 
         [Fact]
@@ -216,13 +236,23 @@ namespace R.MessageBus.UnitTests
             }
         }
 
-        public class FakePublisher : IPublisher
+        public class FakePublisher : IProducer
         {
             public FakePublisher(ITransportSettings transportSettings)
             {
             }
 
             public void Publish<T>(T message) where T : Message
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Send<T>(T message) where T : Message
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Send<T>(string endPoint, T message) where T : Message
             {
                 throw new NotImplementedException();
             }
