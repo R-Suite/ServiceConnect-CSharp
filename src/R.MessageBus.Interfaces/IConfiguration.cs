@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace R.MessageBus.Interfaces
 {
@@ -6,13 +7,21 @@ namespace R.MessageBus.Interfaces
     {
         Type Container { get; set; }
         Type ConsumerType { get; set; }
-        Type PublisherType { get; set; }
+        Type ProducerType { get; set; }
         Type ProcessManagerFinder { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         string EndPoint { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
         ITransportSettings TransportSettings { get; set; }
+        IDictionary<string, string> EndPointMappings { get; set; }
+
+        /// <summary>
+        /// Adds a message endpoint mapping. 
+        /// </summary>
+        /// <param name="messageType">Type of message</param>
+        /// <param name="endPoint">Endpoint to send the message to</param>
+        void AddEndPointMapping(Type messageType, string endPoint);
 
         /// <summary>
         /// Load configuration from file path an initialize Transport Settings
@@ -31,7 +40,7 @@ namespace R.MessageBus.Interfaces
         /// Sets the publisher type.
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IPublisher.</typeparam>
-        void SetPublisher<T>() where T : class, IPublisher;
+        void SetProducer<T>() where T : class, IProducer;
 
         /// <summary>
         /// Sets the container.
@@ -55,7 +64,7 @@ namespace R.MessageBus.Interfaces
         /// Gets an instance of the publisher.
         /// </summary>
         /// <returns></returns>
-        IPublisher GetPublisher();
+        IProducer GetProducer();
 
         /// <summary>
         /// Gets an instance of the container.

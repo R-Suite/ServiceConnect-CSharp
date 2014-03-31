@@ -58,7 +58,7 @@
     <Compile Include="IProcessManagerData.cs" />
     <Compile Include="IProcessManagerFinder.cs" />
     <Compile Include="IProcessManagerProcessor.cs" />
-    <Compile Include="IPublisher.cs" />
+    <Compile Include="IProducer.cs" />
     <Compile Include="IStartProcessManager.cs" />
     <Compile Include="ITransportSettings.cs" />
     <Compile Include="Message.cs" />

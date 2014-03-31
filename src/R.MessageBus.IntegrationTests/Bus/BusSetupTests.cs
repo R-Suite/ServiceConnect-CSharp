@@ -19,7 +19,7 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
-            Assert.Equal(typeof(Publisher), configuration.PublisherType);
+            Assert.Equal(typeof(Producer), configuration.ProducerType);
             Assert.Equal(typeof(StructuremapContainer), configuration.Container);
             Assert.Equal(typeof(MongoDbProcessManagerFinder), configuration.ProcessManagerFinder);
         }

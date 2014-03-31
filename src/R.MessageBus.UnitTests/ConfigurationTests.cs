@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.MongoDb;
+using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
 namespace R.MessageBus.UnitTests
@@ -80,6 +82,19 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.Equal(typeof(FakeContainer), container.GetType());
+        }
+
+        [Fact]
+        public void ShouldAddMappingToEndPointMappings()
+        {
+            // Arrange
+            var configuration = new Configuration();
+
+            // Act
+            configuration.AddEndPointMapping(typeof(FakeMessage1), "MyEndPoint");
+
+            // Assert
+            Assert.True(configuration.EndPointMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint"));
         }
 
         public class FakeContainer : IBusContainer
