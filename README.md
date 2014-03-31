@@ -52,7 +52,9 @@ A Point to Point channel ensures that only one receiver consumes any given messa
 #### Sending Commands
 
 ```c#
-var bus = Bus.Initialize(config => config.AddEndPointMapping(typeof(PointToPointMessage), "PointToPoint"));
+var bus = Bus.Initialize(config => 
+	config.AddEndPointMapping(typeof(PointToPointMessage), "PointToPoint")
+);
 bus.Send(new PointToPointMessage(id));
 ```
 
@@ -73,7 +75,7 @@ public class PointToPointMessageHandler : IMessageHandler<PointToPointMessage>
 }
 ```
 
-[See PointToPoint sample application for a complete example.](/samples/PointToPoint)
+[See PointToPoint sample application for a complete example.](../samples/PointToPoint)
 
 ### Publish/Subscribe
 
