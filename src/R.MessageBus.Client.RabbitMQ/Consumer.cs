@@ -19,7 +19,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private string _errorExchange;
         private readonly int _retryDelay;
         private readonly int _maxRetries;
-        private string _endPoint;
+        private string _queueName;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -27,7 +27,6 @@ namespace R.MessageBus.Client.RabbitMQ
 
             _retryDelay = transportSettings.RetryDelay;
             _maxRetries = transportSettings.MaxRetries;
-            _endPoint = transportSettings.EndPoint;
         }
 
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
@@ -67,6 +66,7 @@ namespace R.MessageBus.Client.RabbitMQ
         public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName)
         {
             _consumerEventHandler = messageReceived;
+            _queueName = queueName;
             
             var connectionFactory = new ConnectionFactory 
             {
@@ -105,7 +105,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (!string.IsNullOrEmpty(_retryExchange))
             {
-                _model.QueueBind(retryQueueName, _retryExchange, _endPoint, null);
+                _model.QueueBind(retryQueueName, _retryExchange, _queueName, null);
             }
 
             //ERROR QUEUE
@@ -135,7 +135,7 @@ namespace R.MessageBus.Client.RabbitMQ
             // dead-letter exchange is of type "direct" and bound to the original queue.
             string retryDeadLetterExchangeName = exchangeName + ".Retries.DeadLetter";
             _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct");
-            _model.QueueBind(queueName, retryDeadLetterExchangeName, _endPoint, null); // only redeliver to the original queue (use endpoint as routing key)
+            _model.QueueBind(queueName, retryDeadLetterExchangeName, _queueName, null); // only redeliver to the original queue (use endpoint as routing key)
 
             var arguments = new Dictionary<string, object>
             {
