@@ -15,7 +15,6 @@ namespace R.MessageBus.Client.RabbitMQ
         private IConnection _connection;
         private IModel _model;
         private ConsumerEventHandler _consumerEventHandler;
-        private string _retryExchange;
         private string _errorExchange;
         private readonly int _retryDelay;
         private readonly int _maxRetries;
@@ -52,7 +51,7 @@ namespace R.MessageBus.Client.RabbitMQ
                     retryCount++;
                     args.BasicProperties.Headers.Add("RetryCount", retryCount);
 
-                    _model.BasicPublish(_retryExchange, _queueName, args.BasicProperties, args.Body);
+                    _model.BasicPublish(string.Empty, _queueName, args.BasicProperties, args.Body);
                 }
                 else
                 {
@@ -100,13 +99,7 @@ namespace R.MessageBus.Client.RabbitMQ
             }
 
             //RETRY QUEUE
-            _retryExchange = ConfigureRetryExchange(messageTypeName);
-            var retryQueueName = ConfigureRetryQueue(exchange);
-
-            if (!string.IsNullOrEmpty(_retryExchange))
-            {
-                _model.QueueBind(retryQueueName, _retryExchange, _queueName, null);
-            }
+            ConfigureRetryQueue();
 
             //ERROR QUEUE
             _errorExchange = ConfigureErrorExchange();
@@ -129,11 +122,12 @@ namespace R.MessageBus.Client.RabbitMQ
             return _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete, arguments);
         }
 
-        private string ConfigureRetryQueue(string exchangeName)
+        private void ConfigureRetryQueue()
         {
             // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
             // dead-letter exchange is of type "direct" and bound to the original queue.
-            string retryDeadLetterExchangeName = exchangeName + ".Retries.DeadLetter";
+            //string retryDeadLetterExchangeName = exchangeName + ".Retries.DeadLetter";
+            string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
             _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct");
             _model.QueueBind(_queueName, retryDeadLetterExchangeName, _queueName, null); // only redeliver to the original queue (use endpoint as routing key)
 
@@ -145,7 +139,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             string retryQueueName = _queueName + ".Retries";
 
-            return _model.QueueDeclare(retryQueueName,true,false,false, arguments);
+            _model.QueueDeclare(retryQueueName, true, false, false, arguments);
         }
 
         private string ConfigureErrorQueue()
@@ -160,9 +154,9 @@ namespace R.MessageBus.Client.RabbitMQ
             return exchangeName;
         }
 
-        private string ConfigureRetryExchange(string exchangeName)
+        private string ConfigureRetryExchange()
         {
-            string retryExchangeName = exchangeName + ".Retries";
+            string retryExchangeName = _queueName + ".Retries";
 
             _model.ExchangeDeclare(retryExchangeName, "direct");
 
