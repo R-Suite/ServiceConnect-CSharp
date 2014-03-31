@@ -72,8 +72,20 @@ namespace R.MessageBus
 
         public void Publish<T>(T message) where T : Message
         {
-            IPublisher publisher = Configuration.GetPublisher();
-            publisher.Publish(message);
+            IProducer producer = Configuration.GetProducer();
+            producer.Publish(message);
+        }
+
+        public void Send<T>(T message) where T : Message
+        {
+            IProducer producer = Configuration.GetProducer();
+            producer.Send(message);
+        }
+
+        public void Send<T>(string endPoint, T message) where T : Message
+        {
+            IProducer producer = Configuration.GetProducer();
+            producer.Send(endPoint, message);
         }
 
         private bool ConsumeMessageEvent(byte[] message)
