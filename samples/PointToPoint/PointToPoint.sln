@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.Messages", "PointToPoint.Messages\PointToPoint.Messages.csproj", "{DDFDEC3A-9546-4D50-83DF-464CBFCBDE82}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.Consumer", "PointToPoint.Consumer\PointToPoint.Consumer.csproj", "{52A29FF9-0F68-401E-AAD6-85408DEDE5B6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.Producer", "PointToPoint.Producer\PointToPoint.Producer.csproj", "{343DC117-1550-4FE1-A867-01F76CBD438C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DDFDEC3A-9546-4D50-83DF-464CBFCBDE82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DDFDEC3A-9546-4D50-83DF-464CBFCBDE82}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DDFDEC3A-9546-4D50-83DF-464CBFCBDE82}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DDFDEC3A-9546-4D50-83DF-464CBFCBDE82}.Release|Any CPU.Build.0 = Release|Any CPU
+		{52A29FF9-0F68-401E-AAD6-85408DEDE5B6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{52A29FF9-0F68-401E-AAD6-85408DEDE5B6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{52A29FF9-0F68-401E-AAD6-85408DEDE5B6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{52A29FF9-0F68-401E-AAD6-85408DEDE5B6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{343DC117-1550-4FE1-A867-01F76CBD438C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{343DC117-1550-4FE1-A867-01F76CBD438C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{343DC117-1550-4FE1-A867-01F76CBD438C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{343DC117-1550-4FE1-A867-01F76CBD438C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
