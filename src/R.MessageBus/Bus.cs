@@ -55,14 +55,14 @@ namespace R.MessageBus
             return new Bus(configuration);
         }
 
-        public void StartConsuming(string queue = null)
+        public void StartConsuming()
         {
-            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes(); 
+            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
 
             foreach (HandlerReference reference in instances)
             {
                 string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
-                string queueName = (queue ?? Configuration.EndPoint) + "." + messageTypeName;
+                string queueName = Configuration.TransportSettings.Queue.Name;
 
                 IConsumer consumer = Configuration.GetConsumer();
                 consumer.StartConsuming(ConsumeMessageEvent, messageTypeName, queueName);

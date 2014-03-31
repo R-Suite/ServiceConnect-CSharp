@@ -60,7 +60,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
-    <None Include="R.MessageBus.nuspec" />
+    <None Include="R.MessageBus.nuspec">
+      <SubType>Designer</SubType>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\R.MessageBus.Container\R.MessageBus.Container.csproj">
