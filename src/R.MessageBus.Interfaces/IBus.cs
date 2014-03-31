@@ -25,5 +25,20 @@ namespace R.MessageBus.Interfaces
         /// <typeparam name="T"></typeparam>
         /// <param name="message"></param>
         void Publish<T>(T message) where T : Message;
+
+        /// <summary>
+        /// Sends a command.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="message"></param>
+        void Send<T>(T message) where T : Message;
+
+        /// <summary>
+        /// Send a command to the specified endpoint.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="endPoint"></param>
+        /// <param name="message"></param>
+        void Send<T>(string endPoint, T message) where T : Message;
     }
 }
