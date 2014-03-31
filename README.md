@@ -43,7 +43,7 @@ IBus bus = Bus.Initialize(config =>
 
 ### Point To Point
 
-![Point To Point](../../tree/master/images/PointToPoint.png)
+![Point To Point](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/PointToPoint.png)
 
 A Point to Point channel ensures that only one receiver consumes any given message.  The channel can have multiple receivers that can consume multiple messages concurrently (Competing Consumers), but only one of them can successfully consume a particular message.  This design makes consuming and processing messages highly scalable because the work can be load balanced across multiple consumers running in multiple applications on multiple computers.
 
