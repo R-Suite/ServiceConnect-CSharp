@@ -65,7 +65,10 @@ namespace R.MessageBus.Client.RabbitMQ
         public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName)
         {
             _consumerEventHandler = messageReceived;
-            _queueName = queueName; // initialize here rather than in cotr as TransportSettings.Queue.Name may by assigned in the bus
+            // Initialize _queueName here rather than in Consumer.ctor from TransportSettings.Queue.Name
+            // TransportSettings.Queue.Name may overriden in the Bus and queueName parameter might have a newer value 
+            // than TransportSettings.Queue.Name would in Consumer.ctor
+            _queueName = queueName; 
             
             var connectionFactory = new ConnectionFactory 
             {
@@ -126,10 +129,9 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
             // dead-letter exchange is of type "direct" and bound to the original queue.
-            //string retryDeadLetterExchangeName = exchangeName + ".Retries.DeadLetter";
             string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
             _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct");
-            _model.QueueBind(_queueName, retryDeadLetterExchangeName, _queueName, null); // only redeliver to the original queue (use endpoint as routing key)
+            _model.QueueBind(_queueName, retryDeadLetterExchangeName, _queueName, null); // only redeliver to the original queue (use _queueName as routing key)
 
             var arguments = new Dictionary<string, object>
             {
@@ -152,15 +154,6 @@ namespace R.MessageBus.Client.RabbitMQ
             _model.ExchangeDeclare(exchangeName, "fanout", true);
 
             return exchangeName;
-        }
-
-        private string ConfigureRetryExchange()
-        {
-            string retryExchangeName = _queueName + ".Retries";
-
-            _model.ExchangeDeclare(retryExchangeName, "direct");
-
-            return retryExchangeName;
         }
 
         private string ConfigureErrorExchange()
