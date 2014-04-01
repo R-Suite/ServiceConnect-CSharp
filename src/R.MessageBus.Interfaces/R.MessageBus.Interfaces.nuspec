@@ -1,14 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<package xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-  <metadata xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+<package>
+  <metadata>
     <id>R.MessageBus.Interfaces</id>
-    <version>0.0.0.1</version>
+    <version>0.0.0.4</version>
     <title>R.MessageBus.Interfaces</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>R MessageBus Interfaces</description>
     <language>en-GB</language>
+    <projectUrl>https://github.com/R-Suite/R.MessageBus</projectUrl>
+    <copyright>Copyright 2014 R.MessageBus. All rights reserved</copyright>
     <tags>MessageBus Interfaces,MessageBus.Interfaces,R.MessageBus,R MessageBus,MessageBus</tags>
   </metadata>
   <files>

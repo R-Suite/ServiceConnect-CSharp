@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus</id>
-    <version>0.0.0.3</version>
+    <version>0.0.0.4</version>
     <title>R.MessageBus</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,9 +10,11 @@
     <description>A simple, easy to use asynchronous messaging framework for .NET.</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/R.MessageBus</projectUrl>
-    <tags>MessageBus,R MessageBus,R.MessageBus,RabbitMQ MessageBus</tags>
+    <copyright>Copyright 2014 R.MessageBus. All rights reserved</copyright>
+    <tags>MessageBus,R MessageBus,R.MessageBus,RabbitMQ MessageBus,RMessageBus</tags>
     <dependencies>
-      <dependency id="R.MessageBus.Client.RabbitMQ" version="[0.0.0, 1.0.0)" />
+      <dependency id="R.MessageBus.Client.RabbitMQ" version="" />
+      <dependency id="R.MessageBus.Interfaces" version="" />
       <dependency id="RabbitMQ.Client" version="3.2.1" />
       <dependency id="log4net" version="2.0.3" />
       <dependency id="structuremap" version="2.6.4.1" />
@@ -21,7 +23,6 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\R.MessageBus.Interfaces.dll" target="lib\net40\R.MessageBus.Interfaces.dll" />
     <file src="bin\Release\R.MessageBus.dll" target="lib\net40\R.MessageBus.dll" />
     <file src="bin\Release\R.MessageBus.Core.dll" target="lib\net40\R.MessageBus.Core.dll" />
     <file src="bin\Release\R.MessageBus.Settings.dll" target="lib\net40\R.MessageBus.Settings.dll" />
