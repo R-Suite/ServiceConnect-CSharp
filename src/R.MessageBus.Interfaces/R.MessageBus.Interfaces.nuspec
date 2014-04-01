@@ -1,11 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
-  <metadata>
+<package xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
     <id>R.MessageBus.Interfaces</id>
-    <version>1.0.0.0</version>
+    <version>0.0.0.1</version>
     <title>R.MessageBus.Interfaces</title>
-    <authors>Jakub Pachansky,Time Watson</authors>
-    <owners>NA</owners>
+    <authors>Jakub Pachansky,Tim Watson</authors>
+    <owners>Jakub Pachansky,Tim Watson</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>R MessageBus Interfaces</description>
     <language>en-GB</language>
