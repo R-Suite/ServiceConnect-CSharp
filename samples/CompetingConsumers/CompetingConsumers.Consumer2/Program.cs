@@ -11,6 +11,7 @@ namespace CompetingConsumers.Consumer2
             var bus = Bus.Initialize(x =>
             {
                 x.ScanForMesssageHandlers = true;
+                x.SetQueueName("CompetingConsumers");
             });
 
             bus.StartConsuming();
