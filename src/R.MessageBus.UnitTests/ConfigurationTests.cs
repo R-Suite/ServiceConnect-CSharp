@@ -100,10 +100,10 @@ namespace R.MessageBus.UnitTests
             var configuration = new Configuration();
 
             // Act
-            configuration.AddEndPointMapping(typeof(FakeMessage1), "MyEndPoint");
+            configuration.AddQueueMapping(typeof(FakeMessage1), "MyEndPoint");
 
             // Assert
-            Assert.True(configuration.EndPointMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint"));
+            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint"));
         }
 
         public class FakeContainer : IBusContainer

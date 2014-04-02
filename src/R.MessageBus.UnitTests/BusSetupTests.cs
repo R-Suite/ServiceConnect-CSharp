@@ -15,7 +15,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCorrectCustomDatabaseNameAndConnectionString()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config =>
+            IBus bus = Bus.Initialize(config =>
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
@@ -35,7 +35,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCorrectDefaultDatabaseNameAndConnectionString()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config =>
+            IBus bus = Bus.Initialize(config =>
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
@@ -53,7 +53,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusToScanForAllHandlers()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config =>
+            IBus bus = Bus.Initialize(config =>
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
@@ -71,7 +71,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomContainer()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config => config.SetContainer<FakeContainer>());
+            IBus bus = Bus.Initialize(config => config.SetContainer<FakeContainer>());
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -84,7 +84,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomConsumer()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config => config.SetConsumer<FakeConsumer>());
+            IBus bus = Bus.Initialize(config => config.SetConsumer<FakeConsumer>());
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -97,7 +97,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomPublisher()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config => config.SetProducer<FakePublisher>());
+            IBus bus = Bus.Initialize(config => config.SetProducer<FakePublisher>());
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -110,7 +110,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomProcessManagerFinder()
         {
             // Arrange
-            IBus bus = MessageBus.Bus.Initialize(config => config.SetProcessManagerFinder<FakeProcessManagerFinder>());
+            IBus bus = Bus.Initialize(config => config.SetProcessManagerFinder<FakeProcessManagerFinder>());
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -131,7 +131,7 @@ namespace R.MessageBus.UnitTests
 
 
             // Act
-            new MessageBus.Bus(mockConfiguration.Object);
+            new Bus(mockConfiguration.Object);
 
             // Assert
             mockContainer.Verify(x => x.Initialize(), Times.Once);
@@ -141,18 +141,18 @@ namespace R.MessageBus.UnitTests
         public void ShouldAddMessageMappingsToConfiguration()
         {
             // Arrange
-            var bus = MessageBus.Bus.Initialize(conf =>
+            var bus = Bus.Initialize(conf =>
             {
-                conf.AddEndPointMapping(typeof(FakeMessage1), "MyEndPoint1");
-                conf.AddEndPointMapping(typeof(FakeMessage2), "MyEndPoint2");
+                conf.AddQueueMapping(typeof(FakeMessage1), "MyEndPoint1");
+                conf.AddQueueMapping(typeof(FakeMessage2), "MyEndPoint2");
             });
 
             // Act
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.True(configuration.EndPointMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint1"));
-            Assert.True(configuration.EndPointMappings.Any(x => x.Key == typeof(FakeMessage2).FullName && x.Value == "MyEndPoint2"));
+            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint1"));
+            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage2).FullName && x.Value == "MyEndPoint2"));
         }
 
         [Fact]
@@ -166,7 +166,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
 
             // Act
-            var bus = new MessageBus.Bus(mockConfiguration.Object);
+            var bus = new Bus(mockConfiguration.Object);
 
             // Assert
             mockContainer.Verify(x => x.AddBus(bus), Times.Once);
