@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
@@ -41,7 +42,7 @@ namespace R.MessageBus.UnitTests
             Assert.Null(configuration.TransportSettings.Password);
             Assert.False(configuration.TransportSettings.NoAck);
             Assert.NotNull(configuration.TransportSettings.Queue);
-            Assert.Null(configuration.TransportSettings.Queue.Name);
+            Assert.Equal(Assembly.GetExecutingAssembly().GetName().Name, configuration.TransportSettings.Queue.Name);
             Assert.Null(configuration.TransportSettings.Queue.RoutingKey);
             Assert.Null(configuration.TransportSettings.Queue.Arguments);
             Assert.False(configuration.TransportSettings.Queue.AutoDelete);

@@ -11,7 +11,7 @@
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/R.MessageBus</projectUrl>
     <copyright>Copyright 2014 R.MessageBus. All rights reserved</copyright>
-    <tags>MessageBus,R MessageBus,R.MessageBus,RabbitMQ MessageBus,RMessageBus</tags>
+    <tags>MessageBus,R MessageBus,R.MessageBus,RabbitMQ MessageBus,RMessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
       <dependency id="R.MessageBus.Client.RabbitMQ" version="" />
       <dependency id="R.MessageBus.Interfaces" version="" />

@@ -5,7 +5,6 @@ using System.Reflection;
 using System.Text;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
-using R.MessageBus.Settings;
 
 namespace R.MessageBus
 {
@@ -41,12 +40,8 @@ namespace R.MessageBus
         /// <returns>The configured instance of the Bus.</returns>
         public static IBus Initialize(Action<IConfiguration> action)
         {
-            var defaultQueueName = Assembly.GetCallingAssembly().GetName().Name;
-
             var configuration = new Configuration();
             action(configuration);
-
-            EnsureQueueName(configuration, defaultQueueName);
 
             return new Bus(configuration);
         }
@@ -57,11 +52,7 @@ namespace R.MessageBus
         /// <returns>The configured instance of the Bus.</returns>
         public static IBus Initialize()
         {
-            var defaultQueueName = Assembly.GetCallingAssembly().GetName().Name;
-
             var configuration = new Configuration();
-
-            EnsureQueueName(configuration, defaultQueueName);
 
             return new Bus(configuration);
         }
@@ -149,19 +140,6 @@ namespace R.MessageBus
             foreach (var consumer in _consumers)
             {
                 consumer.StopConsuming();
-            }
-        }
-
-        private static void EnsureQueueName(Configuration configuration, string defaultQueueName)
-        {
-            if (null == configuration.TransportSettings)
-            {
-                configuration.TransportSettings = new TransportSettings { Queue = new Queue() };
-            }
-
-            if (string.IsNullOrEmpty(configuration.TransportSettings.Queue.Name))
-            {
-                configuration.TransportSettings.Queue.Name = defaultQueueName;
             }
         }
 
