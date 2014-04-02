@@ -5,6 +5,7 @@ using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.MongoDb;
+using R.MessageBus.Settings;
 using Queue = R.MessageBus.Interfaces.Queue;
 
 namespace R.MessageBus
@@ -29,7 +30,6 @@ namespace R.MessageBus
 
         private string _configurationPath;
         private string _endPoint;
-        private string _queueName;
 
         #endregion
 
@@ -49,6 +49,13 @@ namespace R.MessageBus
 
         public Configuration()
         {
+            var defaultQueueName = Assembly.GetCallingAssembly().GetName().Name;
+
+            TransportSettings = new TransportSettings { Queue = new Queue
+            {
+                Name = defaultQueueName
+            }};
+
             _configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
 
             SetTransportSettings();
@@ -139,7 +146,7 @@ namespace R.MessageBus
         /// </summary>
         public void SetQueueName(string queueName)
         {
-            _queueName = queueName;
+            TransportSettings.Queue.Name = queueName;
         }
 
         /// <summary>
@@ -147,7 +154,7 @@ namespace R.MessageBus
         /// </summary>
         public string GetQueueName()
         {
-            return _queueName;
+            return TransportSettings.Queue.Name;
         }
 
         /// <summary>
@@ -230,7 +237,7 @@ namespace R.MessageBus
 
         private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
         {
-            ITransportSettings transportSettings = new Settings.TransportSettings();
+            ITransportSettings transportSettings = new TransportSettings();
             transportSettings.Host = settings.Host;
             transportSettings.MaxRetries = settings.Retries.MaxRetries;
             transportSettings.RetryDelay = settings.Retries.RetryDelay;
@@ -239,7 +246,7 @@ namespace R.MessageBus
             transportSettings.NoAck = settings.NoAck;
             transportSettings.Queue = new Queue
             {
-                Name = string.IsNullOrEmpty(_queueName) ? settings.Queue.Name : _queueName,
+                Name = string.IsNullOrEmpty(TransportSettings.Queue.Name) ? settings.Queue.Name : TransportSettings.Queue.Name,
                 RoutingKey = settings.Queue.RoutingKey,
                 Arguments = GetQueueArguments(settings),
                 AutoDelete = settings.Queue.AutoDelete,
@@ -253,7 +260,7 @@ namespace R.MessageBus
 
         private ITransportSettings GetTransportSettingsFromDefaults()
         {
-            ITransportSettings transportSettings = new Settings.TransportSettings();
+            ITransportSettings transportSettings = new TransportSettings();
             transportSettings.Host = DefaultHost;
             transportSettings.MaxRetries = 3;
             transportSettings.RetryDelay = 3000;
@@ -262,7 +269,7 @@ namespace R.MessageBus
             transportSettings.NoAck = false;
             transportSettings.Queue = new Queue
             {
-                Name = _queueName,
+                Name = TransportSettings.Queue.Name,
                 RoutingKey = null,
                 Arguments = null,
                 AutoDelete = false,

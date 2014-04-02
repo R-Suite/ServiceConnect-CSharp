@@ -171,6 +171,19 @@ namespace R.MessageBus.UnitTests
             // Assert
             mockContainer.Verify(x => x.AddBus(bus), Times.Once);
         }
+
+        [Fact]
+        public void ShouldSetupQueueName()
+        {
+            // Arrange
+            var bus = Bus.Initialize(c => c.SetQueueName("TestQueue"));
+
+            // Act
+            var config = bus.Configuration;
+
+            // Assert
+            Assert.Equal("TestQueue", config.TransportSettings.Queue.Name);
+        }
         
         public class FakeContainer : IBusContainer
         {
