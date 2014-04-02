@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{52A29FF9-0F68-401E-AAD6-85408DEDE5B6}</ProjectGuid>
+    <ProjectGuid>{17FC8160-EBE8-443A-9A58-3CFBF7DE0E0A}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>PointToPoint.Consumer</RootNamespace>
@@ -13,6 +13,7 @@
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -22,6 +23,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -29,48 +31,45 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
-  <PropertyGroup>
-    <StartupObject />
-  </PropertyGroup>
   <ItemGroup>
     <Reference Include="log4net">
-      <HintPath>..\Tools\log4net.dll</HintPath>
+      <HintPath>..\packages\log4net.2.0.3\lib\net40-full\log4net.dll</HintPath>
     </Reference>
     <Reference Include="MongoDB.Bson">
-      <HintPath>..\Tools\MongoDB.Bson.dll</HintPath>
+      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Bson.dll</HintPath>
     </Reference>
     <Reference Include="MongoDB.Driver">
-      <HintPath>..\Tools\MongoDB.Driver.dll</HintPath>
+      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Driver.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\Tools\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus">
-      <HintPath>..\Tools\R.MessageBus.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.4\lib\net40\R.MessageBus.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Client.RabbitMQ">
-      <HintPath>..\Tools\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.0.0.0.4\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Container">
-      <HintPath>..\Tools\R.MessageBus.Container.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.4\lib\net40\R.MessageBus.Container.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Core">
-      <HintPath>..\Tools\R.MessageBus.Core.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.4\lib\net40\R.MessageBus.Core.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\Tools\R.MessageBus.Interfaces.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.Interfaces.0.0.0.4\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Persistance">
-      <HintPath>..\Tools\R.MessageBus.Persistance.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.4\lib\net40\R.MessageBus.Persistance.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Settings">
-      <HintPath>..\Tools\R.MessageBus.Settings.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.4\lib\net40\R.MessageBus.Settings.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client">
-      <HintPath>..\Tools\RabbitMQ.Client.dll</HintPath>
+      <HintPath>..\packages\RabbitMQ.Client.3.2.4\lib\net30\RabbitMQ.Client.dll</HintPath>
     </Reference>
     <Reference Include="StructureMap">
-      <HintPath>..\Tools\StructureMap.dll</HintPath>
+      <HintPath>..\packages\structuremap.2.6.4.1\lib\net40\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -84,6 +83,10 @@
     <Compile Include="PointToPointMessageHandler.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PointToPoint.Messages\PointToPoint.Messages.csproj">

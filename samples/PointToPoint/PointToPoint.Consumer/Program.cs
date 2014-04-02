@@ -11,6 +11,7 @@ namespace PointToPoint.Consumer
             var bus = Bus.Initialize(x =>
             {
                 x.ScanForMesssageHandlers = true;
+                x.SetQueueName("PointToPoint");
             });
 
             bus.StartConsuming();
