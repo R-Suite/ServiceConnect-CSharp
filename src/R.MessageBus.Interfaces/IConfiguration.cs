@@ -13,14 +13,14 @@ namespace R.MessageBus.Interfaces
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
         ITransportSettings TransportSettings { get; set; }
-        IDictionary<string, string> EndPointMappings { get; set; }
+        IDictionary<string, string> QueueMappings { get; set; }
 
         /// <summary>
-        /// Adds a message endpoint mapping. 
+        /// Adds a message queue mapping. 
         /// </summary>
         /// <param name="messageType">Type of message</param>
-        /// <param name="endPoint">Endpoint to send the message to</param>
-        void AddEndPointMapping(Type messageType, string endPoint);
+        /// <param name="queue">Queue to send the message to</param>
+        void AddQueueMapping(Type messageType, string queue);
 
         /// <summary>
         /// Load configuration from file path an initialize Transport Settings
