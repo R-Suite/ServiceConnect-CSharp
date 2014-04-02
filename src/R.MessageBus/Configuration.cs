@@ -30,6 +30,7 @@ namespace R.MessageBus
 
         private string _configurationPath;
         private string _endPoint;
+        private string _queueName;
 
         #endregion
 
@@ -146,6 +147,7 @@ namespace R.MessageBus
         /// </summary>
         public void SetQueueName(string queueName)
         {
+            _queueName = queueName;
             TransportSettings.Queue.Name = queueName;
         }
 
@@ -237,6 +239,27 @@ namespace R.MessageBus
 
         private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
         {
+            /*
+             * QUEUE NAME:
+             * If set via fluent API, use it
+             * else, if set in the config files, use it
+             * else, use default queue name
+            */
+            string queueName;
+
+            if (!string.IsNullOrEmpty(_queueName))
+            {
+                queueName = _queueName;
+            }
+            else if (!string.IsNullOrEmpty(settings.Queue.Name))
+            {
+                queueName = settings.Queue.Name;
+            }
+            else
+            {
+                queueName = TransportSettings.Queue.Name;
+            }
+
             ITransportSettings transportSettings = new TransportSettings();
             transportSettings.Host = settings.Host;
             transportSettings.MaxRetries = settings.Retries.MaxRetries;
@@ -246,7 +269,7 @@ namespace R.MessageBus
             transportSettings.NoAck = settings.NoAck;
             transportSettings.Queue = new Queue
             {
-                Name = string.IsNullOrEmpty(TransportSettings.Queue.Name) ? settings.Queue.Name : TransportSettings.Queue.Name,
+                Name = queueName,
                 RoutingKey = settings.Queue.RoutingKey,
                 Arguments = GetQueueArguments(settings),
                 AutoDelete = settings.Queue.AutoDelete,
