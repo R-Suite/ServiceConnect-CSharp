@@ -13,7 +13,6 @@ namespace R.MessageBus
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
         private readonly IBusContainer _container;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
-        private readonly IProcessManagerFinder _processManagerFinder;
 
         public IConfiguration Configuration { get; set; }
 
@@ -22,7 +21,6 @@ namespace R.MessageBus
             Configuration = configuration;
 
             _container = configuration.GetContainer();
-            _processManagerFinder = configuration.GetProcessManagerFinder();
 
             _container.Initialize();
             _container.AddBus(this);
@@ -112,10 +110,11 @@ namespace R.MessageBus
 
         private void ProcessProcessManagerHandlers(object objectMessage)
         {
+            IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
             var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
             {
                 {"container", _container},
-                {"processManagerFinder", _processManagerFinder}
+                {"processManagerFinder", processManagerFinder}
             });
 
             MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");

@@ -9,15 +9,15 @@ namespace R.MessageBus.Client.RabbitMQ
     public class Producer : IDisposable, IProducer
     {
         private readonly ITransportSettings _transportSettings;
-        private readonly IDictionary<string, string> _endPointMappings;
+        private readonly IDictionary<string, string> _queueMappings;
         private readonly IModel _model;
         private readonly IConnection _connection;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
-        public Producer(ITransportSettings transportSettings, IDictionary<string, string> endPointMappings)
+        public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings)
         {
             _transportSettings = transportSettings;
-            _endPointMappings = endPointMappings;
+            _queueMappings = queueMappings;
 
             var connectionFactory = new ConnectionFactory 
             {
@@ -59,7 +59,7 @@ namespace R.MessageBus.Client.RabbitMQ
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             basicProperties.SetPersistent(true);
-            var endPoint = _endPointMappings[typeof (T).FullName];
+            var endPoint = _queueMappings[typeof(T).FullName];
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
 

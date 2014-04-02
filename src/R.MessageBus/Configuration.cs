@@ -44,7 +44,7 @@ namespace R.MessageBus
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
-        public IDictionary<string, string> EndPointMappings { get; set; } 
+        public IDictionary<string, string> QueueMappings { get; set; } 
 
         #endregion
 
@@ -62,7 +62,7 @@ namespace R.MessageBus
             SetTransportSettings();
             SetPersistanceSettings();
 
-            EndPointMappings = new Dictionary<string, string>();
+            QueueMappings = new Dictionary<string, string>();
 
             ConsumerType = typeof(Consumer);
             ProducerType = typeof(Producer);
@@ -71,13 +71,13 @@ namespace R.MessageBus
         }
 
         /// <summary>
-        /// Adds a message endpoint mapping. 
+        /// Adds a message queue mapping. 
         /// </summary>
         /// <param name="messageType">Type of message</param>
-        /// <param name="endPoint">Endpoint to send the message to</param>
-        public void AddEndPointMapping(Type messageType, string endPoint)
+        /// <param name="queue">Queue to send the message to</param>
+        public void AddQueueMapping(Type messageType, string queue)
         {
-            EndPointMappings.Add(messageType.FullName, endPoint);
+            QueueMappings.Add(messageType.FullName, queue);
         }
 
         /// <summary>
@@ -174,7 +174,7 @@ namespace R.MessageBus
         /// <returns></returns>
         public IProducer GetProducer()
         {
-            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, EndPointMappings);
+            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, QueueMappings);
         }
 
         /// <summary>
