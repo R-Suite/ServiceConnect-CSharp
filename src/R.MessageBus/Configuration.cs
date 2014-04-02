@@ -49,7 +49,7 @@ namespace R.MessageBus
 
         public Configuration()
         {
-            var defaultQueueName = Assembly.GetCallingAssembly().GetName().Name;
+            var defaultQueueName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
             TransportSettings = new TransportSettings { Queue = new Queue
             {

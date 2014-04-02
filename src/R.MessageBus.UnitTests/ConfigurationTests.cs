@@ -42,7 +42,7 @@ namespace R.MessageBus.UnitTests
             Assert.Null(configuration.TransportSettings.Password);
             Assert.False(configuration.TransportSettings.NoAck);
             Assert.NotNull(configuration.TransportSettings.Queue);
-            Assert.Equal(Assembly.GetExecutingAssembly().GetName().Name, configuration.TransportSettings.Queue.Name);
+            Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().ProcessName, configuration.TransportSettings.Queue.Name);
             Assert.Null(configuration.TransportSettings.Queue.RoutingKey);
             Assert.Null(configuration.TransportSettings.Queue.Arguments);
             Assert.False(configuration.TransportSettings.Queue.AutoDelete);
