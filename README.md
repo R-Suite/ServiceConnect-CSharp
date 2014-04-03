@@ -79,7 +79,7 @@ See [Point To Point](../../tree/master/samples/PointToPoint) and [Competing Cons
 
 ### Publish/Subscribe
 
-![Publish-Subscribe](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/Publish-Subscribe.gif)
+![Publish-Subscribe](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/PublishSubscribe.gif)
 
 A Publish-Subscribe channel works like this: It has one input channel that splits into multiple output channels, one for each subscriber.  When an event is published into the channel, the Publish-Subscribe Channel, delivers a copy of the message to each of the output channels.  Each output end of the channel has only one subscriber, which is allowed to consume a message only once.  In this way, each subscriber gets the message only once, and consumed copies disapear from their channels.
 
