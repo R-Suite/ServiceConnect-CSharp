@@ -85,6 +85,25 @@ A Publish-Subscribe channel works like this: It has one input channel that split
 
 See *Enterprise Integration Patterns (G. Hohpe, B. Woolf, 2009: 106-110)* for more details.
 
+#### Publishing Events
+
+```c#
+var bus = Bus.Initialize();
+bus.Publish(new PublishSubscribeMessage(id));
+```
+
+#### Consuming Events
+
+```c#
+public class PublishSubscribeMessageHandler : IMessageHandler<PublishSubscribeMessage>
+{
+    public void Execute(PublishSubscribeMessage message)
+    {
+        Console.WriteLine("Consumer 1 Received Message - {0}", message.CorrelationId);
+    }
+}
+```
+
 See [Publish - Subscribe](../../tree/master/samples/PublishSubscribe) sample application for a complete example.
 
 ### Process Manager

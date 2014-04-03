@@ -9,7 +9,7 @@ namespace PublishSubscribe.Publisher
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize(config => config.AddEndPointMapping(typeof(PublishSubscribeMessage), "PublishSubscribe"));
+            var bus = Bus.Initialize();
 
             while (true)
             {
