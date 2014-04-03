@@ -52,7 +52,7 @@ See *Enterprise Integration Patterns (G. Hohpe, B. Woolf, 2009: 103-105, 502-507
 #### Command Definition
 
 ```c#
- public class PointToPointMessage : Message
+public class PointToPointMessage : Message
 {
     public PointToPointMessage(Guid correlationId) : base(correlationId){}
 }
