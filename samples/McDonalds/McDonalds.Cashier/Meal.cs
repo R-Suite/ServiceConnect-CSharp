@@ -51,6 +51,7 @@ namespace McDonalds.Cashier
                     Size = Data.Size,
                     Meal = Data.Meal
                 });
+                Complete = true;
                 Console.WriteLine("Order ready: OrderId - {0}", message.CorrelationId);
             }
         }
@@ -67,6 +68,7 @@ namespace McDonalds.Cashier
                     Size = Data.Size,
                     Meal = Data.Meal
                 });
+                Complete = true;
                 Console.WriteLine("Order ready: OrderId - {0}", message.CorrelationId);
             }
         }
