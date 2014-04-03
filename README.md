@@ -49,6 +49,15 @@ A Point to Point channel ensures that only one receiver consumes any given messa
 
 See *Enterprise Integration Patterns (G. Hohpe, B. Woolf, 2009: 103-105, 502-507)* for more details.
 
+#### Command Definition
+
+```c#
+ public class PointToPointMessage : Message
+{
+    public PointToPointMessage(Guid correlationId) : base(correlationId){}
+}
+```
+
 #### Sending Commands
 
 ```c#
@@ -85,6 +94,15 @@ A Publish-Subscribe channel works like this: It has one input channel that split
 
 See *Enterprise Integration Patterns (G. Hohpe, B. Woolf, 2009: 106-110)* for more details.
 
+#### Event Definition
+
+```c#
+public class PublishSubscribeMessage : Message
+{
+    public PublishSubscribeMessage(Guid correlationId) : base(correlationId){}
+}
+```
+
 #### Publishing Events
 
 ```c#
@@ -109,6 +127,84 @@ See [Publish - Subscribe](../../tree/master/samples/PublishSubscribe) sample app
 ### Process Manager
 
 ![ProcessManager](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/ProcessManager.gif)
+
+Using a Process Manager results in a so-called hub-and-spoke pattern of message flow. An incoming message initializes the Process Manager.  We call this message the trigger message.  Based on the rules inside the process manager it sends a message to processing steps which then send reply messages back.  When receiving messages the Process Manager determines the next step to be executed.  As a result, all traffic runs through this central hub, hence the term hub-and-spoke.  The downside of this central control element is the danger of turning the Process Manager into a performance bottleneck.
+
+See *Enterprise Integration Patterns (G. Hohpe, B. Woolf, 2009: 312-321)* for more details.
+
+#### Creating the Process Manager
+
+```c#
+public class MealData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+    public bool BurgerCooked { get; set; }
+    public bool FoodPrepped { get; set; }
+    public string Meal { get; set; }
+    public string Size { get; set; }
+}
+```
+
+```c#
+public class MealProcess : ProcessManager<MealData>, IStartProcessManager<NewOrderMessage>,
+                                                     IMessageHandler<BurgerCookedMessage>,
+                                                     IMessageHandler<FoodPrepped>
+{
+    private readonly IBus _bus;
+
+    public Meal(IBus bus)
+    {
+        _bus = bus;
+    }
+
+    public void Execute(NewOrderMessage message)
+    {
+        Data.CorrelationId = Guid.NewGuid();
+        Data.Meal = message.Name;
+        Data.Size = message.Size;
+
+        var prepFoodMessage = new PrepFoodMessage(Data.CorrelationId)
+        {
+            BunSize = message.Size
+        };
+        _bus.Publish(prepFoodMessage);
+
+        var flipBurgerMessage = new CookBurgerMessage(Data.CorrelationId)
+        {
+            BurgerSize = message.Size
+        };
+        _bus.Publish(flipBurgerMessage);
+    }
+
+    public void Execute(BurgerCookedMessage message)
+    {
+        Data.BurgerCooked = true;
+        if (Data.FoodPrepped)
+        {
+            _bus.Publish(new OrderReadyMessage(message.CorrelationId)
+            {
+                Size = Data.Size,
+                Meal = Data.Meal
+            });
+            Complete = true;
+        }
+    }
+
+    public void Execute(FoodPrepped message)
+    {
+        Data.FoodPrepped = true;
+        if (Data.BurgerCooked)
+        {
+            _bus.Publish(new OrderReadyMessage(message.CorrelationId)
+            {
+                Size = Data.Size,
+                Meal = Data.Meal
+            });
+            Complete = true;
+        }
+    }
+}
+```
 
 See [McDonalds - Process Manager](../../tree/master/samples/McDonalds) sample application for a complete example.
 

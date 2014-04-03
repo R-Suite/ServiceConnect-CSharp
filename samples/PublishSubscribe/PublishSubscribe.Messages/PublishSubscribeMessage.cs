@@ -5,8 +5,6 @@ namespace PublishSubscribe.Messages
 {
     public class PublishSubscribeMessage : Message
     {
-        public PublishSubscribeMessage(Guid correlationId) : base(correlationId)
-        {
-        }
+        public PublishSubscribeMessage(Guid correlationId) : base(correlationId){}
     }
 }
