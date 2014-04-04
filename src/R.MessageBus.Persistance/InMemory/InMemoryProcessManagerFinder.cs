@@ -86,7 +86,7 @@ namespace R.MessageBus.Persistance.InMemory
             }
             else
             {
-                error = string.Format("ProcessManagerData with CorrelationId {0} does not exist in the cache.", key);
+                error = string.Format("ProcessManagerData with CorrelationId {0} does not exist in memory.", key);
             }
 
             if (!string.IsNullOrEmpty(error))
