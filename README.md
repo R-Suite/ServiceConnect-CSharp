@@ -210,4 +210,13 @@ See [McDonalds - Process Manager](../../tree/master/samples/McDonalds) sample ap
 
 ### Retries
 
+When your application fails to successfully proccess a message, R.MessageBus implements a generic error handling for all your consumers. Upon catching an exception, the message is held in the "*.Retries" queue for a certain amount of time before being requeued. This process is repeted a number of times until either the message is handled successfully, or the "MaxRetries" limit is reached, at which point the message is moved to the error queue.
+
+By default, "MaxRetries" is set to 3 and "RetryDelay" is set to 3000 milliseconds. The default values can be overridden in your application's configuration file, or by assigning properties on TransportSettings object prior to instantiating consumers.
+
+```c#
+bus.Configuration.TransportSettings.MaxRetries = 5;
+bus.Configuration.TransportSettings.RetryDelay = 50000;
+```
+
 ### Dead Letter Queue
