@@ -5,14 +5,14 @@ using Xunit;
 
 namespace R.MessageBus.UnitTests
 {
+    public class TestData : IProcessManagerData
+    {
+        public Guid CorrelationId { get; set; }
+        public string Name { get; set; }
+    }
+    
     public class InMemoryProcessManagerFinderTests
     {
-        public class TestData : IProcessManagerData
-        {
-            public Guid CorrelationId { get; set; }
-            public int Version { get; set; }
-            public string Name {get; set;}
-        }
 
         readonly Guid _correlationId = Guid.NewGuid();
 
@@ -53,7 +53,7 @@ namespace R.MessageBus.UnitTests
             processManagerFinder.InsertData(data);
 
             // Act
-            processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = dataUpdated });
+            processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = dataUpdated, Version = 1});
 
             // Assert
             Assert.Equal("TestDataUpdated", processManagerFinder.FindData<TestData>(_correlationId).Data.Name);
@@ -68,6 +68,23 @@ namespace R.MessageBus.UnitTests
 
             // Act / Assert
             Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = data }));
+        }
+
+        [Fact]
+        public void ShouldThrowWhenUpdatingTwoInstancesOfSameDataAtTheSameTime()
+        {
+            // Arrange
+            IProcessManagerData data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
+            IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            processManagerFinder.InsertData(data1);
+
+            var foundData1 = processManagerFinder.FindData<TestData>(_correlationId);
+            var foundData2 = processManagerFinder.FindData<TestData>(_correlationId);
+
+            processManagerFinder.UpdateData(foundData1); // first update should be fine
+
+            // Act / Assert
+            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(foundData2)); // second update should fail
         }
 
         [Fact]
