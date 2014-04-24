@@ -19,6 +19,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly int _retryDelay;
         private readonly int _maxRetries;
         private string _queueName;
+        private string _retryQueueName;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -51,7 +52,7 @@ namespace R.MessageBus.Client.RabbitMQ
                     retryCount++;
                     args.BasicProperties.Headers.Add("RetryCount", retryCount);
 
-                    _model.BasicPublish(string.Empty, _queueName, args.BasicProperties, args.Body);
+                    _model.BasicPublish(string.Empty, _retryQueueName, args.BasicProperties, args.Body);
                 }
                 else
                 {
@@ -129,9 +130,10 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
             // dead-letter exchange is of type "direct" and bound to the original queue.
+            _retryQueueName = _queueName + ".Retries";
             string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
-            _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct");
-            _model.QueueBind(_queueName, retryDeadLetterExchangeName, _queueName, null); // only redeliver to the original queue (use _queueName as routing key)
+            _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", true);
+            _model.QueueBind(_queueName, retryDeadLetterExchangeName, _retryQueueName); // only redeliver to the original queue (use _queueName as routing key)
 
             var arguments = new Dictionary<string, object>
             {
@@ -139,9 +141,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 {"x-message-ttl", _retryDelay}
             };
 
-            string retryQueueName = _queueName + ".Retries";
-
-            _model.QueueDeclare(retryQueueName, true, false, false, arguments);
+            _model.QueueDeclare(_retryQueueName, true, false, false, arguments);
         }
 
         private string ConfigureErrorQueue()
