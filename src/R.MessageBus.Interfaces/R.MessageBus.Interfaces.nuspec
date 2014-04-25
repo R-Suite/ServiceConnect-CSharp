@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus.Interfaces</id>
-    <version>0.0.0.4</version>
+    <version>0.0.0.6</version>
     <title>R.MessageBus.Interfaces</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>

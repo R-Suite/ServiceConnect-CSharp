@@ -46,25 +46,25 @@
       <HintPath>..\packages\Newtonsoft.Json.6.0.2\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus">
-      <HintPath>..\packages\R.MessageBus.0.0.0.5\lib\net40\R.MessageBus.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.7\lib\net40\R.MessageBus.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Client.RabbitMQ">
-      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.0.0.0.4\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.0.0.0.6\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Container">
-      <HintPath>..\packages\R.MessageBus.0.0.0.5\lib\net40\R.MessageBus.Container.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.7\lib\net40\R.MessageBus.Container.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Core">
-      <HintPath>..\packages\R.MessageBus.0.0.0.5\lib\net40\R.MessageBus.Core.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.7\lib\net40\R.MessageBus.Core.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\packages\R.MessageBus.Interfaces.0.0.0.4\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.Interfaces.0.0.0.6\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Persistance">
-      <HintPath>..\packages\R.MessageBus.0.0.0.5\lib\net40\R.MessageBus.Persistance.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.0.0.0.7\lib\net40\R.MessageBus.Persistance.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Settings">
-      <HintPath>..\packages\R.MessageBus.0.0.0.5\lib\net40\R.MessageBus.Settings.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.0.0.0.6\lib\net40\R.MessageBus.Settings.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client">
       <HintPath>..\packages\RabbitMQ.Client.3.2.4\lib\net30\RabbitMQ.Client.dll</HintPath>
