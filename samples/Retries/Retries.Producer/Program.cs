@@ -9,7 +9,7 @@ namespace Retries.Producer
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize(config => config.AddEndPointMapping(typeof(RetryMessage), "RetryTest"));
+            var bus = Bus.Initialize(config => config.AddQueueMapping(typeof(RetryMessage), "RetryTest"));
 
             while (true)
             {

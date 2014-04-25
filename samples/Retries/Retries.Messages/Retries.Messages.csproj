@@ -30,8 +30,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\packages\R.MessageBus.Interfaces.0.0.0.4\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
+    <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\R.MessageBus.Interfaces.0.0.0.6\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
