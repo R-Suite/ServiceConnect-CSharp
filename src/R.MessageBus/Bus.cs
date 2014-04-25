@@ -74,18 +74,21 @@ namespace R.MessageBus
         {
             IProducer producer = Configuration.GetProducer();
             producer.Publish(message);
+            producer.Disconnect();
         }
 
         public void Send<T>(T message) where T : Message
         {
             IProducer producer = Configuration.GetProducer();
             producer.Send(message);
+            producer.Disconnect();
         }
 
         public void Send<T>(string endPoint, T message) where T : Message
         {
             IProducer producer = Configuration.GetProducer();
             producer.Send(endPoint, message);
+            producer.Disconnect();
         }
 
         private bool ConsumeMessageEvent(byte[] message)
