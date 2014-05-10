@@ -22,7 +22,7 @@ namespace R.MessageBus.Container
 
         public void AddBus(IBus bus)
         {
-            ObjectFactory.Configure(x => x.For<IBus>().Use(bus));
+            ObjectFactory.Configure(x => x.For<IBus>().Singleton().Use(bus));
         }
 
         public IEnumerable<HandlerReference> GetHandlerTypes()
