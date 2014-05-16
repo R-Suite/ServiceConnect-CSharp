@@ -51,6 +51,7 @@
     <Compile Include="IConfiguration.cs" />
     <Compile Include="IConfigurationManager.cs" />
     <Compile Include="IConsumer.cs" />
+    <Compile Include="IInlineRequestConfiguration.cs" />
     <Compile Include="IMessageHandler.cs" />
     <Compile Include="IJsonMessageSerializer.cs" />
     <Compile Include="IMessageHandlerProcessor.cs" />
