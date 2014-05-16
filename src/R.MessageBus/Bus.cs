@@ -91,6 +91,12 @@ namespace R.MessageBus
             producer.Disconnect();
         }
 
+        public void SendRequest<T>(string endPoint, T message, Action<IInlineRequestConfiguration> configureCallback) where T : Message
+        {
+            var configuration = new InlineRequestConfiguration(message);
+            configureCallback(configuration);
+        }
+
         private bool ConsumeMessageEvent(byte[] message)
         {
             string messageJson = Encoding.UTF8.GetString(message);

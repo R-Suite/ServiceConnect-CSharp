@@ -40,5 +40,14 @@ namespace R.MessageBus.Interfaces
         /// <param name="endPoint"></param>
         /// <param name="message"></param>
         void Send<T>(string endPoint, T message) where T : Message;
+
+        /// <summary>
+        /// Send a command to the specified endpoint and wait for reply.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="endPoint"></param>
+        /// <param name="message"></param>
+        /// <param name="configureCallback"></param>
+        void SendRequest<T>(string endPoint, T message, Action<IInlineRequestConfiguration> configureCallback) where T : Message;
     }
 }
