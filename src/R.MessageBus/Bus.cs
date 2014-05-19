@@ -93,57 +93,47 @@ namespace R.MessageBus
             producer.Disconnect();
         }
 
-        public void SendRequest<T>(string endPoint, T message, Action<IInlineRequestConfiguration> configureCallback) where T : Message
+        public void SendRequest<T>(string endPoint, T message, Action<IRequestConfiguration> configureCallback) where T : Message
         {
-            var correlationId = Guid.NewGuid();
-            var configuration = new InlineRequestConfiguration(Configuration, ConsumeMessageEvent, correlationId);
-            configureCallback(configuration);
+            //var correlationId = Guid.NewGuid();
+            //var configuration = new InlineRequestConfiguration(Configuration, ConsumeMessageEvent, correlationId);
+            //configureCallback(configuration);
 
-            IProducer producer = Configuration.GetProducer();
-            producer.Send(endPoint, message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+            //IProducer producer = Configuration.GetProducer();
+            //producer.Send(endPoint, message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
 
-            producer.Disconnect();
+            //producer.Disconnect();
         }
 
-        public TResponse SendRequest<TRequest, TResponse>(TRequest message) where TRequest : Message where TResponse : Message
+        public TReply SendRequest<TRequest, TReply>(TRequest message) where TRequest : Message where TReply : Message
         {
-            return new Func<Task<TResponse>>(async () =>
+            return SendRequest<TRequest, TReply>(null, message);
+        }
+    
+        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message) where TRequest : Message where TReply : Message
+        {
+            return new Func<Task<TReply>>(async () =>
             {
-                var configuration = new InlineRequestConfiguration();
+                var correlationId = Guid.NewGuid();
+                IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, correlationId);
 
-                TResponse response = default(TResponse);
+                TReply response = default(TReply);
 
-                Task task = configuration.Handle<TResponse>(r =>
+                Task task = configuration.SetHandler<TReply>(r =>
                 {
                     response = r;
                 });
 
-                task.Start();
-
-                Send(message);
-
-                await task;
-
-                return response;
-            })().Result;
-        }
-
-        public TResponse SendRequest<TRequest, TResponse>(string endPoint, TRequest message) where TRequest : Message where TResponse : Message
-        {
-            return new Func<Task<TResponse>>(async () =>
-            {
-                var configuration = new InlineRequestConfiguration();
-
-                TResponse response = default(TResponse);
-
-                Task task = configuration.Handle<TResponse>(r =>
+                IProducer producer = Configuration.GetProducer();
+                if (string.IsNullOrEmpty(endPoint))
                 {
-                    response = r;
-                });
-
-                task.Start();
-
-                Send(endPoint, message);
+                    producer.Send(message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+                }
+                else
+                {
+                    producer.Send(endPoint, message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+                }
+                producer.Disconnect();
 
                 await task;
 
