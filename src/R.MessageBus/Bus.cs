@@ -2,7 +2,9 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.Remoting.Messaging;
 using System.Text;
+using System.Threading.Tasks;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
 
@@ -95,6 +97,52 @@ namespace R.MessageBus
         {
             var configuration = new InlineRequestConfiguration(message);
             configureCallback(configuration);
+        }
+
+        public TResponse SendRequest<TRequest, TResponse>(TRequest message) where TRequest : Message where TResponse : Message
+        {
+            return new Func<Task<TResponse>>(async () =>
+            {
+                var configuration = new InlineRequestConfiguration();
+
+                TResponse response = default(TResponse);
+
+                Task task = configuration.Handle<TResponse>(r =>
+                {
+                    response = r;
+                });
+
+                task.Start();
+
+                Send(message);
+
+                await task;
+
+                return response;
+            })().Result;
+        }
+
+        public TResponse SendRequest<TRequest, TResponse>(string endPoint, TRequest message) where TRequest : Message where TResponse : Message
+        {
+            return new Func<Task<TResponse>>(async () =>
+            {
+                var configuration = new InlineRequestConfiguration();
+
+                TResponse response = default(TResponse);
+
+                Task task = configuration.Handle<TResponse>(r =>
+                {
+                    response = r;
+                });
+
+                task.Start();
+
+                Send(endPoint, message);
+
+                await task;
+
+                return response;
+            })().Result;
         }
 
         private bool ConsumeMessageEvent(byte[] message)
