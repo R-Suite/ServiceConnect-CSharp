@@ -270,6 +270,21 @@ namespace R.MessageBus.UnitTests
                 throw new NotImplementedException();
             }
 
+            public void Publish<T>(T message, Dictionary<string, object> headers = null) where T : Message
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Send<T>(T message, Dictionary<string, object> headers = null) where T : Message
+            {
+                throw new NotImplementedException();
+            }
+
+            public void Send<T>(string endPoint, T message, Dictionary<string, object> headers = null) where T : Message
+            {
+                throw new NotImplementedException();
+            }
+
             public void Disconnect()
             {
                 throw new NotImplementedException();
