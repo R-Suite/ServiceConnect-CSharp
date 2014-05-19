@@ -5,13 +5,13 @@ using R.MessageBus.Interfaces;
 
 namespace R.MessageBus
 {
-    public class InlineRequestConfiguration : IInlineRequestConfiguration
+    public class RequestConfiguration : IRequestConfiguration
     {
         private readonly IConfiguration _configuration;
         private readonly ConsumerEventHandler _messageReceived;
         private readonly Guid _correlationId;
 
-        public InlineRequestConfiguration(IConfiguration configuration, ConsumerEventHandler messageReceived, Guid correlationId)
+        public RequestConfiguration(IConfiguration configuration, ConsumerEventHandler messageReceived, Guid correlationId)
         {
             _configuration = configuration;
             _messageReceived = messageReceived;
