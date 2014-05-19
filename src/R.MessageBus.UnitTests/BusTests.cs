@@ -351,5 +351,121 @@ namespace R.MessageBus.UnitTests
             // Assert
             mockProducer.Verify(x => x.Send(endPoint, message), Times.Once);
         }
+
+        [Fact]
+        public void SendingRequestSynchronouslyShouldSendCommand()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            mockProducer.Setup(x => x.Send(message));
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message);
+
+            // Assert
+            mockProducer.Verify(x => x.Send(message), Times.Once);
+        }
+
+        [Fact]
+        public void SendingRequestSynchronouslyShouldReturnResponse()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            mockProducer.Setup(x => x.Send(message));
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message);
+
+            // Assert
+            mockProducer.Verify(x => x.Send(message), Times.Once);
+        }
+
+        [Fact]
+        public void SendingRequestWithEndpointSynchronouslyShouldSendMessageToTheSpecifiedEndPoint()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            mockProducer.Setup(x => x.Send("TestEndpoint", message));
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message);
+
+            // Assert
+            mockProducer.Verify(x => x.Send(message), Times.Once);
+        }
+
+        [Fact]
+        public void SendingRequestWithEndpointSynchronouslyShouldReturnResponse()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            mockProducer.Setup(x => x.Send("TestEndpoint", message));
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message);
+
+            // Assert
+            mockProducer.Verify(x => x.Send(message), Times.Once);
+        }
     }
 }

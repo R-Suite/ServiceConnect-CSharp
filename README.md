@@ -208,6 +208,16 @@ public class MealProcess : ProcessManager<MealData>, IStartProcessManager<NewOrd
 
 See [McDonalds - Process Manager](../../tree/master/samples/McDonalds) sample application for a complete example.
 
+### Request Response
+
+![Request Response](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/RequestReply.gif)
+
+```c#
+
+```
+
+See [Request Response](../../tree/master/samples/RequestResponse) sample application for a complete example.
+
 ### Retries
 
 When your application fails to successfully proccess a message, R.MessageBus implements a generic error handling for all your consumers. Upon catching an exception, the message is held in the "*.Retries" queue for a certain amount of time before being requeued. This process is repeted a number of times until either the message is handled successfully, or the "MaxRetries" limit is reached, at which point the message is moved to the error queue.
