@@ -95,8 +95,14 @@ namespace R.MessageBus
 
         public void SendRequest<T>(string endPoint, T message, Action<IInlineRequestConfiguration> configureCallback) where T : Message
         {
-            var configuration = new InlineRequestConfiguration(message);
+            var correlationId = Guid.NewGuid();
+            var configuration = new InlineRequestConfiguration(Configuration, ConsumeMessageEvent, correlationId);
             configureCallback(configuration);
+
+            IProducer producer = Configuration.GetProducer();
+            producer.Send(endPoint, message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+
+            producer.Disconnect();
         }
 
         public TResponse SendRequest<TRequest, TResponse>(TRequest message) where TRequest : Message where TResponse : Message
