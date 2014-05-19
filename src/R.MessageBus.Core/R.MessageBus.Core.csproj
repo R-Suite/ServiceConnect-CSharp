@@ -44,6 +44,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="InlineResponseHandler.cs" />
     <Compile Include="MessageHandlerProcessor.cs" />
     <Compile Include="ProcessManager.cs" />
     <Compile Include="ProcessManagerProcessor.cs" />
