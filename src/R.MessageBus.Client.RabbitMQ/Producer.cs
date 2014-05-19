@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.Remoting.Messaging;
 using System.Text;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -41,33 +42,51 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
         }
 
-        public void Publish<T>(T message) where T : Message
+        public void Publish<T>(T message, Dictionary<string, object> headers = null) where T : Message
         {
             var messageJson = _serializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
+
+            if (null != headers)
+            {
+                basicProperties.Headers = headers;
+            }
+
             basicProperties.SetPersistent(true);
             var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
             _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes); // (use endpoint as routing key (in retries))
         }
 
-        public void Send<T>(T message) where T : Message
+        public void Send<T>(T message, Dictionary<string, object> headers = null) where T : Message
         {
             var messageJson = _serializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
+            
+            if (null != headers)
+            {
+                basicProperties.Headers = headers;
+            }
+
             basicProperties.SetPersistent(true);
             var endPoint = _queueMappings[typeof(T).FullName];
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
 
-        public void Send<T>(string endPoint, T message) where T : Message
+        public void Send<T>(string endPoint, T message, Dictionary<string, object> headers = null) where T : Message
         {
             var messageJson = _serializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
+
+            if (null != headers)
+            {
+                basicProperties.Headers = headers;
+            }
+
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             basicProperties.SetPersistent(true);
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
