@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace R.MessageBus.Interfaces
 {
-    public interface IInlineRequestConfiguration
+    public interface IRequestConfiguration
     {
         /// <summary>
         /// Configures a handler to receive the specified type.

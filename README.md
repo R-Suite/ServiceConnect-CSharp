@@ -208,9 +208,9 @@ public class MealProcess : ProcessManager<MealData>, IStartProcessManager<NewOrd
 
 See [McDonalds - Process Manager](../../tree/master/samples/McDonalds) sample application for a complete example.
 
-### Request Response
+### Request Reply
 
-![Request Response](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/RequestReply.gif)
+![Request Reply](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/RequestReply.gif)
 
 ```c#
 

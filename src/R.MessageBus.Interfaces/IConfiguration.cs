@@ -24,7 +24,7 @@ namespace R.MessageBus.Interfaces
 
         /// <summary>
         /// Load configuration from file path an initialize Transport Settings
-        /// </summary>
+        /// </summary>;
         /// <param name="configFilePath"></param>
         /// <param name="endPoint"></param>
         void LoadSettings(string configFilePath = null, string endPoint = null);
@@ -87,5 +87,13 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         IProcessManagerFinder GetProcessManagerFinder();
+
+        /// <summary>
+        /// Gets a instance of the RequestConfiguration class.  Used to configure Request Reply messaging.
+        /// </summary>
+        /// <param name="consumeMessageEvent">The message event handler to call when receiving a reply.</param>
+        /// <param name="correlationId">Used for correlating the Request and Reply messages.</param>
+        /// <returns>An instance of the RequestConfiguration class.</returns>
+        IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid correlationId);
     }
 }
