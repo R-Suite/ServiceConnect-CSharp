@@ -153,7 +153,7 @@ namespace R.MessageBus.UnitTests
             public FakeConsumer(ITransportSettings transportSettings)
             {}
 
-            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null)
+            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null)
             {
                 throw new NotImplementedException();
             }

@@ -233,7 +233,7 @@ namespace R.MessageBus.UnitTests
             {
             }
 
-            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null)
+            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null)
             {
                 throw new NotImplementedException();
             }
@@ -270,17 +270,17 @@ namespace R.MessageBus.UnitTests
                 throw new NotImplementedException();
             }
 
-            public void Publish<T>(T message, Dictionary<string, object> headers = null) where T : Message
+            public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
             {
                 throw new NotImplementedException();
             }
 
-            public void Send<T>(T message, Dictionary<string, object> headers = null) where T : Message
+            public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
             {
                 throw new NotImplementedException();
             }
 
-            public void Send<T>(string endPoint, T message, Dictionary<string, object> headers = null) where T : Message
+            public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
             {
                 throw new NotImplementedException();
             }
