@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Remoting.Messaging;
 using System.Text;
 using R.MessageBus.Interfaces;
@@ -42,7 +43,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
         }
 
-        public void Publish<T>(T message, Dictionary<string, object> headers = null) where T : Message
+        public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
             var messageJson = _serializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(messageJson);
@@ -51,7 +52,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (null != headers)
             {
-                basicProperties.Headers = headers;
+                basicProperties.Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value); ;
             }
 
             basicProperties.SetPersistent(true);
@@ -59,7 +60,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes); // (use endpoint as routing key (in retries))
         }
 
-        public void Send<T>(T message, Dictionary<string, object> headers = null) where T : Message
+        public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
             var messageJson = _serializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(messageJson);
@@ -68,7 +69,7 @@ namespace R.MessageBus.Client.RabbitMQ
             
             if (null != headers)
             {
-                basicProperties.Headers = headers;
+                basicProperties.Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value); ;
             }
 
             basicProperties.SetPersistent(true);
@@ -76,19 +77,24 @@ namespace R.MessageBus.Client.RabbitMQ
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
 
-        public void Send<T>(string endPoint, T message, Dictionary<string, object> headers = null) where T : Message
+        public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
         {
             var messageJson = _serializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
+            basicProperties.SetPersistent(true);
+            basicProperties.ReplyTo = _transportSettings.Queue.Name;
+
+            //TimeSpan t = DateTime.UtcNow - new DateTime(1970, 1, 1);
+            //var secondsSinceEpoch = (long)t.TotalSeconds;
+            //basicProperties.Timestamp = new AmqpTimestamp(secondsSinceEpoch);
 
             if (null != headers)
             {
-                basicProperties.Headers = headers;
+                basicProperties.Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value);
             }
 
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
-            basicProperties.SetPersistent(true);
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
 

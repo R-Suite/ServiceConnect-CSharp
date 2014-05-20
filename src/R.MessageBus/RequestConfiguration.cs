@@ -35,7 +35,7 @@ namespace R.MessageBus
 
             //todo: create consumer and start consuming
             IConsumer consumer = _configuration.GetConsumer();
-            consumer.StartConsuming(_messageReceived, _correlationId.ToString(), _correlationId.ToString()); // will need to take additional parameter to override queue durability
+            consumer.StartConsuming(_messageReceived, _correlationId.ToString(), _correlationId.ToString(), exclusive: true);
 
             return task;
         }

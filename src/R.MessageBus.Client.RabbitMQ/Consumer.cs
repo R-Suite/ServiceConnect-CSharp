@@ -20,6 +20,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly int _maxRetries;
         private string _queueName;
         private string _retryQueueName;
+        private bool _exclusive;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -27,6 +28,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             _retryDelay = transportSettings.RetryDelay;
             _maxRetries = transportSettings.MaxRetries;
+            _exclusive = transportSettings.Queue.Exclusive;
         }
 
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
@@ -63,13 +65,16 @@ namespace R.MessageBus.Client.RabbitMQ
             }
         }
 
-        public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName)
+        public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null)
         {
             _consumerEventHandler = messageReceived;
             // Initialize _queueName here rather than in Consumer.ctor from TransportSettings.Queue.Name
             // TransportSettings.Queue.Name may overriden in the Bus and queueName parameter might have a newer value 
             // than TransportSettings.Queue.Name would in Consumer.ctor
-            _queueName = queueName; 
+            _queueName = queueName;
+
+            if (exclusive.HasValue)
+                _exclusive = exclusive.Value;
             
             var connectionFactory = new ConnectionFactory 
             {
@@ -123,7 +128,7 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             var arguments = _transportSettings.Queue.Arguments;
 
-            return _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete, arguments);
+            return _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _exclusive, _transportSettings.Queue.AutoDelete, arguments);
         }
 
         private void ConfigureRetryQueue()
@@ -131,8 +136,9 @@ namespace R.MessageBus.Client.RabbitMQ
             // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
             // dead-letter exchange is of type "direct" and bound to the original queue.
             _retryQueueName = _queueName + ".Retries";
+            var autoDelete = _exclusive;
             string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
-            _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", true);
+            _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", true, autoDelete, null);
             _model.QueueBind(_queueName, retryDeadLetterExchangeName, _retryQueueName); // only redeliver to the original queue (use _queueName as routing key)
 
             var arguments = new Dictionary<string, object>
@@ -141,7 +147,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 {"x-message-ttl", _retryDelay}
             };
 
-            _model.QueueDeclare(_retryQueueName, true, false, false, arguments);
+            _model.QueueDeclare(_retryQueueName, _transportSettings.Queue.Durable, _exclusive, false, arguments);
         }
 
         private string ConfigureErrorQueue()
@@ -151,7 +157,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureExchange(string exchangeName)
         {
-            _model.ExchangeDeclare(exchangeName, "fanout", true);
+            var autoDelete = _exclusive;
+            _model.ExchangeDeclare(exchangeName, "fanout", true, autoDelete, null);
 
             return exchangeName;
         }
