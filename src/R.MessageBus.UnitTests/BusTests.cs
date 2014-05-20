@@ -524,14 +524,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, object>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => {});
 
             // Assert
-            mockProducer.Verify(x => x.Send(message, It.IsAny<Dictionary<string, object>>()), Times.Once);
+            mockProducer.Verify(x => x.Send(message, It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -558,7 +558,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, object>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -589,14 +589,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", message, It.IsAny<Dictionary<string, object>>()));
+            mockProducer.Setup(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, x => { });
 
             // Assert
-            mockProducer.Verify(x => x.Send("test", message, It.IsAny<Dictionary<string, object>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -623,7 +623,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, object>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);

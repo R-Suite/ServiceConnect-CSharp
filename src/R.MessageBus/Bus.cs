@@ -107,11 +107,11 @@ namespace R.MessageBus
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+                producer.Send(message, new Dictionary<string, string> { { "CorrelationId", correlationId.ToString() } });
             }
             else
             {
-                producer.Send(endPoint, message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+                producer.Send(endPoint, message, new Dictionary<string, string> { { "CorrelationId", correlationId.ToString() } });
             }
             producer.Disconnect();
         }
