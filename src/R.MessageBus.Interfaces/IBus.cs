@@ -40,16 +40,7 @@ namespace R.MessageBus.Interfaces
         /// <param name="endPoint"></param>
         /// <param name="message"></param>
         void Send<T>(string endPoint, T message) where T : Message;
-
-        /// <summary>
-        /// Send a command to the specified endpoint and wait for reply.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="endPoint"></param>
-        /// <param name="message"></param>
-        /// <param name="configureCallback"></param>
-        void SendRequest<T>(string endPoint, T message, Action<IRequestConfiguration> configureCallback) where T : Message;
-        
+       
         /// <summary>
         /// Sends a command and waits for a reply.  The method behaves like a regular blocking RPC method.
         /// </summary>
@@ -68,5 +59,26 @@ namespace R.MessageBus.Interfaces
         /// <param name="message">The message to send.</param>
         /// <returns>Returns the response object.</returns>
         TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message) where TRequest : Message where TReply : Message;
+
+        /// <summary>
+        /// Sends a commands to the specified endpoint.  The callback is called when receving the reply message.
+        /// </summary>
+        /// <typeparam name="TRequest">The type of the request object.  Must be a message.</typeparam>
+        /// <typeparam name="TReply">The type of the reply object. Must be a message.</typeparam>
+        /// <param name="endPoint">The endpoint the message will be sent to.</param>
+        /// <param name="message">The message to send.</param>
+        /// <param name="callback">The callback that will receive the response message.</param>
+        /// <returns>Returns the response object.</returns>
+        void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message;
+
+        /// <summary>
+        /// Senda a command. The callback is called when receving the reply message. 
+        /// </summary>
+        /// <typeparam name="TRequest">The type of the request object.  Must be a message.</typeparam>
+        /// <typeparam name="TReply">The type of the reply object. Must be a message.</typeparam>
+        /// <param name="message">The message to send.</param>
+        /// <param name="callback">The callback that will receive the response message.</param>
+        /// <returns>Returns the response object.</returns>
+        void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message;
     }
 }

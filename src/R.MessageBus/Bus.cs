@@ -2,7 +2,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Runtime.Remoting.Messaging;
 using System.Text;
 using System.Threading.Tasks;
 using R.MessageBus.Client.RabbitMQ;
@@ -92,17 +91,29 @@ namespace R.MessageBus
             producer.Send(endPoint, message);
             producer.Disconnect();
         }
-
-        public void SendRequest<T>(string endPoint, T message, Action<IRequestConfiguration> configureCallback) where T : Message
+        
+        public void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message
         {
-            //var correlationId = Guid.NewGuid();
-            //var configuration = new InlineRequestConfiguration(Configuration, ConsumeMessageEvent, correlationId);
-            //configureCallback(configuration);
+            SendRequest(null, message, callback);
+        }
 
-            //IProducer producer = Configuration.GetProducer();
-            //producer.Send(endPoint, message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message
+        {
+            var correlationId = Guid.NewGuid();
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, correlationId);
 
-            //producer.Disconnect();
+            configuration.SetHandler(callback);
+
+            IProducer producer = Configuration.GetProducer();
+            if (string.IsNullOrEmpty(endPoint))
+            {
+                producer.Send(message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+            }
+            else
+            {
+                producer.Send(endPoint, message, new Dictionary<string, object> { { "CorrelationId", correlationId } });
+            }
+            producer.Disconnect();
         }
 
         public TReply SendRequest<TRequest, TReply>(TRequest message) where TRequest : Message where TReply : Message
