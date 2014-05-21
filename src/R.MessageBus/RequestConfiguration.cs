@@ -33,9 +33,8 @@ namespace R.MessageBus
             var inlineResposeHandler = new InlineResponseHandler<TResponse>();
             inlineResposeHandler.SetAction(action);
 
-            //todo: create consumer and start consuming
             IConsumer consumer = _configuration.GetConsumer();
-            consumer.StartConsuming(_messageReceived, _correlationId.ToString(), _correlationId.ToString(), exclusive: true);
+            consumer.StartConsuming(_messageReceived, _correlationId.ToString(), _correlationId.ToString(), true);
 
             return task;
         }

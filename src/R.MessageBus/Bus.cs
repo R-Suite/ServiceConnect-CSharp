@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
@@ -61,7 +62,7 @@ namespace R.MessageBus
         {
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
 
-            foreach (HandlerReference reference in instances)
+            foreach (HandlerReference reference in instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName)))
             {
                 string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
                 string queueName = Configuration.TransportSettings.Queue.Name;
