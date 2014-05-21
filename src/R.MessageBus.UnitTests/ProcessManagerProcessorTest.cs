@@ -61,7 +61,7 @@ namespace R.MessageBus.UnitTests
             processManagerProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, null);
+            }, new ConsumeContext());
 
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(typeof (IMessageHandler<FakeMessage1>)), Times.Once);
@@ -107,7 +107,7 @@ namespace R.MessageBus.UnitTests
             processManagerProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, null);
+            }, new ConsumeContext());
 
             // Assert
             // Data.User is set by the ProcessManagers Execute method
@@ -152,7 +152,7 @@ namespace R.MessageBus.UnitTests
             processManagerProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, null);
+            }, new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.InsertData(It.Is<FakeProcessManagerData>(y => y.User == "Tim Watson")), Times.Once);
@@ -188,7 +188,7 @@ namespace R.MessageBus.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, null);
+            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
 
             // Assert
             _mockContainer.Verify(x => x.GetInstance(typeof (FakeProcessManager1)), Times.Once);
@@ -228,7 +228,7 @@ namespace R.MessageBus.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, null);
+            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
 
             // Assert
             Assert.Equal("Tim Watson", processManager.Data.User); // Can only be this if Data was set on process manager
@@ -270,7 +270,7 @@ namespace R.MessageBus.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, null);
+            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.UpdateData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.Email == "abc@123.com" && y.Data.User == "Tim Watson")), Times.Once);
@@ -314,7 +314,7 @@ namespace R.MessageBus.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, null);
+            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.DeleteData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.Email == "abc@123.com" && y.Data.User == "Tim Watson")), Times.Once);
