@@ -20,13 +20,13 @@ namespace R.MessageBus.Core
             _container = container;
         }
 
-        public void ProcessMessage<T>(T message) where T : Message
+        public void ProcessMessage<T>(T message, IConsumeContext context) where T : Message
         {
-            StartProcessManagers(message);
-            LoadExistingProcessManagers(message);
+            StartProcessManagers(message, context);
+            LoadExistingProcessManagers(message, context);
         }
 
-        private void StartProcessManagers<T>(T message) where T : Message
+        private void StartProcessManagers<T>(T message, IConsumeContext context) where T : Message
         {
             List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<T>)).ToList();
 
@@ -44,14 +44,18 @@ namespace R.MessageBus.Core
                     var data = (IProcessManagerData)Activator.CreateInstance(dataType);
 
                     // Set data on process manager
-                    PropertyInfo prop = processManagerInstance.HandlerType.GetProperty("Data");
-                    prop.SetValue(processManager, data, null);
+                    PropertyInfo dataProp = processManagerInstance.HandlerType.GetProperty("Data");
+                    dataProp.SetValue(processManager, data, null);
+
+                    // Set context property value
+                    PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context", dataType);
+                    contextProp.SetValue(processManager, context, null);
 
                     // Execute process manager execute method
                     processManagerInstance.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new object[] { message });
 
                     // Get data after execute has finished
-                    data = (IProcessManagerData)prop.GetValue(processManager);
+                    data = (IProcessManagerData)dataProp.GetValue(processManager);
 
                     // Persist data
                     _processManagerFinder.InsertData(data);
@@ -64,7 +68,7 @@ namespace R.MessageBus.Core
             }
         }
 
-        private void LoadExistingProcessManagers<T>(T message) where T : Message
+        private void LoadExistingProcessManagers<T>(T message, IConsumeContext context) where T : Message
         {
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
                                                                         .Where(h => h.HandlerType.BaseType != null &&
@@ -96,6 +100,10 @@ namespace R.MessageBus.Core
                     // Set data property value
                     PropertyInfo prop = handlerReference.HandlerType.GetProperty("Data", dataType);
                     prop.SetValue(processManager, data, null);
+
+                    // Set context property value
+                    PropertyInfo contextProp = handlerReference.HandlerType.GetProperty("Context", dataType);
+                    contextProp.SetValue(processManager, context, null);
 
                     // Execute handler
                     handlerReference.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new object[] {message});

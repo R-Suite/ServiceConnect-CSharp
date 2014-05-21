@@ -5,6 +5,8 @@ namespace R.MessageBus.UnitTests.Fakes.Handlers
 {
     public class FakeHandler1 : IMessageHandler<FakeMessage1>
     {
+        public IConsumeContext Context { get; set; }
+
         public void Execute(FakeMessage1 command)
         {
             Command = command;

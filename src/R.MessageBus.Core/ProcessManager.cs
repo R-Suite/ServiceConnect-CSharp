@@ -7,6 +7,8 @@ namespace R.MessageBus.Core
     /// </summary>
     public abstract class ProcessManager<T> where T : class, IProcessManagerData
     {
+        public IConsumeContext Context { get; set; }
+
         /// <summary>
         /// The ProcessManager's strongly typed data.
         /// </summary>
