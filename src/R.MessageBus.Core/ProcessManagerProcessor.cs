@@ -48,7 +48,7 @@ namespace R.MessageBus.Core
                     dataProp.SetValue(processManager, data, null);
 
                     // Set context property value
-                    PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context", dataType);
+                    PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context", typeof(IConsumeContext));
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute process manager execute method
@@ -102,7 +102,7 @@ namespace R.MessageBus.Core
                     prop.SetValue(processManager, data, null);
 
                     // Set context property value
-                    PropertyInfo contextProp = handlerReference.HandlerType.GetProperty("Context", dataType);
+                    PropertyInfo contextProp = handlerReference.HandlerType.GetProperty("Context", typeof(IConsumeContext));
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute handler
