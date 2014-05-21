@@ -18,7 +18,7 @@ namespace R.MessageBus.Core
             _container = container;
         }
 
-        public void ProcessMessage<T>(T message) where T : Message
+        public void ProcessMessage<T>(T message, IConsumeContext context) where T : Message
         {
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
                                                                         .Where(h => h.HandlerType.BaseType == null || 
@@ -26,15 +26,16 @@ namespace R.MessageBus.Core
 
             foreach (HandlerReference handlerReference in handlerReferences)
             {
-                ExecuteHandler(message, handlerReference.HandlerType);
+                ExecuteHandler(message, handlerReference.HandlerType, context);
             }
         }
 
-        private void ExecuteHandler<T>(T message, Type handlerType) where T : Message
+        private void ExecuteHandler<T>(T message, Type handlerType, IConsumeContext context) where T : Message
         {
             try
             {
                 var handler = (IMessageHandler<T>)_container.GetInstance(handlerType);
+                handler.Context = context;
                 handler.Execute(message);
             }
             catch (Exception ex)
