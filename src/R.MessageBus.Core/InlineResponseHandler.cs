@@ -7,6 +7,8 @@ namespace R.MessageBus.Core
     {
         private Action<TResponse> _action;
 
+        public IConsumeContext Context { get; set; }
+
         public void Execute(TResponse message)
         {
             _action(message);

@@ -2,6 +2,6 @@
 {
     public interface IProcessManagerProcessor
     {
-        void ProcessMessage<T>(T message) where T : Message;
+        void ProcessMessage<T>(T message, IConsumeContext context) where T : Message;
     }
 }

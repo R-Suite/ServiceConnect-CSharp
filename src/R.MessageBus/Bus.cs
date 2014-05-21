@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using R.MessageBus.Client.RabbitMQ;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus
@@ -152,17 +153,23 @@ namespace R.MessageBus
             })().Result;
         }
 
-        private bool ConsumeMessageEvent(byte[] message)
+        private bool ConsumeMessageEvent(byte[] message, IDictionary<string, object> headers)
         {
             string messageJson = Encoding.UTF8.GetString(message);
             object objectMessage = _serializer.Deserialize(messageJson);
 
             bool success = true;
 
+            var context = new ConsumeContext
+            {
+                Bus = this,
+                Headers = headers
+            };
+
             try
             {
-                ProcessMessageHandlers(objectMessage);
-                ProcessProcessManagerHandlers(objectMessage);
+                ProcessMessageHandlers(objectMessage, context);
+                ProcessProcessManagerHandlers(objectMessage, context);
             }
             catch (Exception)
             {
@@ -172,7 +179,7 @@ namespace R.MessageBus
             return success;
         }
 
-        private void ProcessProcessManagerHandlers(object objectMessage)
+        private void ProcessProcessManagerHandlers(object objectMessage, IConsumeContext context)
         {
             IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
             var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
@@ -183,10 +190,10 @@ namespace R.MessageBus
 
             MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(objectMessage.GetType());
-            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new[] {objectMessage});
+            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new[] {objectMessage, context});
         }
 
-        private void ProcessMessageHandlers(object objectMessage)
+        private void ProcessMessageHandlers(object objectMessage, IConsumeContext context)
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
             {
@@ -195,7 +202,7 @@ namespace R.MessageBus
 
             MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(objectMessage.GetType());
-            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new[] {objectMessage});
+            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new[] {objectMessage, context});
         }
 
         public void StopConsuming()
