@@ -28,7 +28,7 @@ namespace R.MessageBus.UnitTests
             messageProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            });
+            }, null);
 
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(It.Is<Type>(y => y == typeof(IMessageHandler<FakeMessage1>))), Times.Once());
@@ -60,14 +60,14 @@ namespace R.MessageBus.UnitTests
             {
                 Username = "Tim Watson"
             };
-            messageProcessor.ProcessMessage(message1);
+            messageProcessor.ProcessMessage(message1, null);
 
             var message2 = new FakeMessage2(Guid.NewGuid())
             {
                 DisplayName = "Tim Watson"
             };
 
-            messageProcessor.ProcessMessage(message2);
+            messageProcessor.ProcessMessage(message2, null);
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);

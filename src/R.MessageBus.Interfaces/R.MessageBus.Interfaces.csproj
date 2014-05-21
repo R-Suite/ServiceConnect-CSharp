@@ -50,6 +50,7 @@
     <Compile Include="IBusContainer.cs" />
     <Compile Include="IConfiguration.cs" />
     <Compile Include="IConfigurationManager.cs" />
+    <Compile Include="IConsumeContext.cs" />
     <Compile Include="IConsumer.cs" />
     <Compile Include="IRequestConfiguration.cs" />
     <Compile Include="IMessageHandler.cs" />
