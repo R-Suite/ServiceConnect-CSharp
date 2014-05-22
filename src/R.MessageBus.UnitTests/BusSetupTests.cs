@@ -256,7 +256,7 @@ namespace R.MessageBus.UnitTests
 
         public class FakePublisher : IProducer
         {
-            public FakePublisher(ITransportSettings transportSettings)
+            public FakePublisher(ITransportSettings transportSettings, IDictionary<string, string> queueMappings)
             {
             }
 
