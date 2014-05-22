@@ -146,6 +146,11 @@ namespace R.MessageBus.UnitTests
             {
                 throw new NotImplementedException();
             }
+
+            public void AddHandler<T>(Type handlerType, T handler)
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public class FakeConsumer : IConsumer

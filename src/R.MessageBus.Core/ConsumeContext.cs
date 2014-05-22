@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
@@ -19,7 +20,7 @@ namespace R.MessageBus.Core
         {
             if (Headers.ContainsKey("SourceAddress"))
             {
-                _bus.Send(Headers["SourceAddress"].ToString(), message);
+                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["SourceAddress"]), message);
             }
             else
             {

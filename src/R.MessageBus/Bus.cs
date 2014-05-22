@@ -16,6 +16,8 @@ namespace R.MessageBus
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
         private readonly IBusContainer _container;
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
+        private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
+        private readonly object _requestLock = new object();
 
         public IConfiguration Configuration { get; set; }
 
@@ -104,16 +106,21 @@ namespace R.MessageBus
             var correlationId = Guid.NewGuid();
             IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, correlationId);
 
-            configuration.SetHandler(callback);
+            configuration.SetHandler(r => callback((TReply)r));
+
+            lock (_requestLock)
+            {
+                _requestConfigurations[correlationId.ToString()] = configuration;
+            }
 
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(message, new Dictionary<string, string> { { "CorrelationId", correlationId.ToString() } });
+                producer.Send(message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
             }
             else
             {
-                producer.Send(endPoint, message, new Dictionary<string, string> { { "CorrelationId", correlationId.ToString() } });
+                producer.Send(endPoint, message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
             }
             producer.Disconnect();
         }
@@ -132,19 +139,24 @@ namespace R.MessageBus
 
                 TReply response = default(TReply);
 
-                Task task = configuration.SetHandler<TReply>(r =>
+                Task task = configuration.SetHandler(r =>
                 {
-                    response = r;
+                    response = (TReply)r;
                 });
+
+                lock (_requestLock)
+                {
+                    _requestConfigurations[correlationId.ToString()] = configuration;
+                }
 
                 IProducer producer = Configuration.GetProducer();
                 if (string.IsNullOrEmpty(endPoint))
                 {
-                    producer.Send(message, new Dictionary<string, string> { { "CorrelationId", correlationId.ToString() } });
+                    producer.Send(message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
                 }
                 else
                 {
-                    producer.Send(endPoint, message, new Dictionary<string, string> { { "CorrelationId", correlationId.ToString() } });
+                    producer.Send(endPoint, message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
                 }
                 producer.Disconnect();
 
@@ -171,6 +183,7 @@ namespace R.MessageBus
             {
                 ProcessMessageHandlers(objectMessage, context);
                 ProcessProcessManagerHandlers(objectMessage, context);
+                ProcessRequestReplyConfigurations(objectMessage, context);
             }
             catch (Exception)
             {
@@ -178,6 +191,22 @@ namespace R.MessageBus
             }
 
             return success;
+        }
+
+        private void ProcessRequestReplyConfigurations(object objectMessage, ConsumeContext context)
+        {
+            lock (_requestLock)
+            {
+                string correlationId = Encoding.ASCII.GetString((byte[]) context.Headers["SourceAddress"]);
+                if (!_requestConfigurations.ContainsKey(correlationId))
+                {
+                    return;
+                }
+                IRequestConfiguration requestConfigration = _requestConfigurations[correlationId];
+                requestConfigration.ProcessMessage(objectMessage);
+                var item = _requestConfigurations.First(kvp => kvp.Key == correlationId);
+                _requestConfigurations.Remove(item.Key);
+            }
         }
 
         private void ProcessProcessManagerHandlers(object objectMessage, IConsumeContext context)
