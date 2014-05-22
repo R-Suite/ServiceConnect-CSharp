@@ -27,7 +27,5 @@ namespace R.MessageBus.Core
                 throw new ArgumentException("SourceAddress not found in message headers.");
             }
         }
-
-
     }
 }
