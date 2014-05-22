@@ -50,10 +50,7 @@ namespace R.MessageBus.Client.RabbitMQ
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
-            if (null != headers)
-            {
-                basicProperties.Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value); ;
-            }
+            basicProperties.Headers = GetHeaders(headers, _transportSettings.Queue.Name);
 
             basicProperties.SetPersistent(true);
             var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
@@ -66,14 +63,12 @@ namespace R.MessageBus.Client.RabbitMQ
             var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
-            
-            if (null != headers)
-            {
-                basicProperties.Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value); ;
-            }
 
             basicProperties.SetPersistent(true);
             var endPoint = _queueMappings[typeof(T).FullName];
+
+            basicProperties.Headers = GetHeaders(headers, endPoint);
+
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
 
@@ -83,19 +78,30 @@ namespace R.MessageBus.Client.RabbitMQ
             var bytes = Encoding.UTF8.GetBytes(messageJson);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.SetPersistent(true);
-            basicProperties.ReplyTo = _transportSettings.Queue.Name;
+
+            basicProperties.Headers = GetHeaders(headers, endPoint);
 
             //TimeSpan t = DateTime.UtcNow - new DateTime(1970, 1, 1);
             //var secondsSinceEpoch = (long)t.TotalSeconds;
             //basicProperties.Timestamp = new AmqpTimestamp(secondsSinceEpoch);
 
-            if (null != headers)
-            {
-                basicProperties.Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value);
-            }
-
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
+        }
+
+        private Dictionary<string, object> GetHeaders(Dictionary<string, string> headers, string queueName)
+        {
+            if (headers == null)
+            {
+                headers = new Dictionary<string, string>();
+            }
+
+            if (!headers.ContainsKey("SourceAddress"))
+            {
+                headers["SourceAddress"] = queueName;
+            }
+
+            return headers.ToDictionary(x => x.Key, x => (object) x.Value);
         }
 
         public void Disconnect()
