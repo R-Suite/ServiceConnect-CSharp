@@ -18,6 +18,7 @@ namespace R.MessageBus
         private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
         private readonly object _requestLock = new object();
+        private static IProducer _producer;
 
         public IConfiguration Configuration { get; set; }
 
@@ -26,6 +27,7 @@ namespace R.MessageBus
             Configuration = configuration;
 
             _container = configuration.GetContainer();
+            _producer = Configuration.GetProducer();
 
             _container.Initialize();
             _container.AddBus(this);
@@ -77,23 +79,17 @@ namespace R.MessageBus
 
         public void Publish<T>(T message) where T : Message
         {
-            IProducer producer = Configuration.GetProducer();
-            producer.Publish(message);
-            producer.Disconnect();
+            _producer.Publish(message);
         }
 
         public void Send<T>(T message) where T : Message
         {
-            IProducer producer = Configuration.GetProducer();
-            producer.Send(message);
-            producer.Disconnect();
+            _producer.Send(message);
         }
 
         public void Send<T>(string endPoint, T message) where T : Message
         {
-            IProducer producer = Configuration.GetProducer();
-            producer.Send(endPoint, message);
-            producer.Disconnect();
+            _producer.Send(endPoint, message);
         }
         
         public void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message
@@ -149,16 +145,14 @@ namespace R.MessageBus
                     _requestConfigurations[correlationId.ToString()] = configuration;
                 }
 
-                IProducer producer = Configuration.GetProducer();
                 if (string.IsNullOrEmpty(endPoint))
                 {
-                    producer.Send(message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
+                    _producer.Send(message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
                 }
                 else
                 {
-                    producer.Send(endPoint, message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
+                    _producer.Send(endPoint, message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
                 }
-                producer.Disconnect();
 
                 await task;
 
@@ -246,6 +240,7 @@ namespace R.MessageBus
         public void Dispose()
         {
             StopConsuming();
+            _producer.Dispose();
         }
     }
 }
