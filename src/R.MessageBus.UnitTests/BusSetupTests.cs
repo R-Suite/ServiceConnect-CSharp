@@ -224,6 +224,11 @@ namespace R.MessageBus.UnitTests
             {
             }
 
+            public void AddHandler<T>(Type handlerType, T handler)
+            {
+                throw new NotImplementedException();
+            }
+
             public bool Initialized { get; set; }
         }
 

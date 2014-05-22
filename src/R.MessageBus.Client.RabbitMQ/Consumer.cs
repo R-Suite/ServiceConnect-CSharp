@@ -34,7 +34,6 @@ namespace R.MessageBus.Client.RabbitMQ
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
         {
             var headers = args.BasicProperties.Headers;
-            headers["SourceAddress"] = args.BasicProperties.ReplyTo;
 
             var success = _consumerEventHandler(args.Body, headers);
             _model.BasicAck(args.DeliveryTag, false);
