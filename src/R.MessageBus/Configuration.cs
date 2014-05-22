@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.MongoDb;
 using R.MessageBus.Settings;
