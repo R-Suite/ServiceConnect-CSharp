@@ -12,5 +12,7 @@ namespace Retries.Consumer
 
             throw new NotImplementedException();
         }
+
+        public IConsumeContext Context { get; set; }
     }
 }

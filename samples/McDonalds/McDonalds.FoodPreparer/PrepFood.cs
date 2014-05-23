@@ -24,5 +24,7 @@ namespace McDonalds.FoodPreparer
 
             _bus.Publish(new FoodPrepped(message.CorrelationId));
         }
+
+        public IConsumeContext Context { get; set; }
     }
 }

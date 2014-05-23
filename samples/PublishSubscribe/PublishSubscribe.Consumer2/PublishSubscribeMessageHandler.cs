@@ -10,5 +10,7 @@ namespace PublishSubscribe.Consumer2
         {
             Console.WriteLine("Consumer 2 Received Message - {0}", message.CorrelationId);
         }
+
+        public IConsumeContext Context { get; set; }
     }
 }
