@@ -88,7 +88,7 @@ namespace R.MessageBus.Persistance.MongoDb
 
             MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
 
-            collection.Remove(Query.EQ("CorrelationId", persistanceData.Data.CorrelationId));
+            collection.Remove(Query.EQ("Data.CorrelationId", persistanceData.Data.CorrelationId));
         }
 
         private static string GetCollectionName<T>(T data) where T : class, IProcessManagerData
