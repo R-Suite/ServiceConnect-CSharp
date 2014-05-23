@@ -95,5 +95,11 @@ namespace R.MessageBus.Interfaces
         /// <param name="correlationId">Used for correlating the Request and Reply messages.</param>
         /// <returns>An instance of the RequestConfiguration class.</returns>
         IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid correlationId);
+
+        /// <summary>
+        /// Gets an instance of the serializer
+        /// </summary>
+        /// <returns></returns>
+        IMessageSerializer GetSerializer();
     }
 }

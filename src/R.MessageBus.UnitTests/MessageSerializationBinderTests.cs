@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using R.MessageBus.Client.RabbitMQ;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using Xunit;
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using R.MessageBus.Client.RabbitMQ;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using Xunit;
 
@@ -15,7 +16,7 @@ namespace R.MessageBus.UnitTests
 
     public class JsonMessageSerializerTests
     {
-        private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
+        private readonly IMessageSerializer _serializer = new JsonMessageSerializer();
 
         [Fact]
         public void ShouldSerializeMessage()
