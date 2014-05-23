@@ -10,5 +10,7 @@ namespace CompetingConsumers.Consumer1
         {
             Console.WriteLine("Consumer 1 Received Message - {0}", command.CorrelationId);
         }
+
+        public IConsumeContext Context { get; set; }
     }
 }

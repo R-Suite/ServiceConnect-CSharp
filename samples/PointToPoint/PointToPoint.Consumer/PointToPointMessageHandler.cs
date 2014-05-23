@@ -10,5 +10,7 @@ namespace PointToPoint.Consumer
         {
             Console.WriteLine("Received message - {0}", command.CorrelationId);
         }
+
+        public IConsumeContext Context { get; set; }
     }
 }
