@@ -41,6 +41,7 @@ namespace R.MessageBus
         public Type ProducerType { get; set; }
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
+        public Type SerializerType { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
@@ -69,6 +70,7 @@ namespace R.MessageBus
             ProducerType = typeof(Producer);
             Container = typeof(StructuremapContainer);
             ProcessManagerFinder = typeof(MongoDbProcessManagerFinder);
+            SerializerType = typeof (JsonMessageSerializer);
         }
 
         /// <summary>
@@ -96,7 +98,6 @@ namespace R.MessageBus
 
             _endPoint = endPoint;
 
-            //todo: candidate for IoC
             var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
 
             var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
@@ -114,6 +115,15 @@ namespace R.MessageBus
         public void SetContainer<T>() where T : class, IBusContainer
         {
             Container = typeof(T);
+        }
+
+        /// <summary>
+        /// Sets the serializer type.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        public void SetSerializer<T>() where T : class, IMessageSerializer
+        {
+            SerializerType = typeof(T);
         }
 
         /// <summary>
@@ -175,7 +185,7 @@ namespace R.MessageBus
         /// <returns></returns>
         public IProducer GetProducer()
         {
-            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, QueueMappings);
+            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, QueueMappings, GetSerializer());
         }
 
         /// <summary>
@@ -200,6 +210,11 @@ namespace R.MessageBus
         {
             var configuration = new RequestConfiguration(this, consumeMessageEvent, correlationId);
             return configuration;
+        }
+
+        public IMessageSerializer GetSerializer()
+        {
+            return (IMessageSerializer)Activator.CreateInstance(SerializerType);
         }
 
         #region Private Methods
