@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.Remoting.Messaging;
 using System.Text;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -12,14 +11,15 @@ namespace R.MessageBus.Client.RabbitMQ
     {
         private readonly ITransportSettings _transportSettings;
         private readonly IDictionary<string, string> _queueMappings;
+        private readonly IMessageSerializer _messageSerializer;
         private readonly IModel _model;
         private readonly IConnection _connection;
-        private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
 
-        public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings)
+        public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings, IMessageSerializer messageSerializer)
         {
             _transportSettings = transportSettings;
             _queueMappings = queueMappings;
+            _messageSerializer = messageSerializer;
 
             var connectionFactory = new ConnectionFactory 
             {
@@ -45,8 +45,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
-            var messageJson = _serializer.Serialize(message);
-            var bytes = Encoding.UTF8.GetBytes(messageJson);
+            var serializedMessage = _messageSerializer.Serialize(message);
+            var bytes = Encoding.UTF8.GetBytes(serializedMessage);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
@@ -59,8 +59,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
-            var messageJson = _serializer.Serialize(message);
-            var bytes = Encoding.UTF8.GetBytes(messageJson);
+            var serializedMessage = _messageSerializer.Serialize(message);
+            var bytes = Encoding.UTF8.GetBytes(serializedMessage);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
@@ -74,8 +74,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
         {
-            var messageJson = _serializer.Serialize(message);
-            var bytes = Encoding.UTF8.GetBytes(messageJson);
+            var serializedMessage = _messageSerializer.Serialize(message);
+            var bytes = Encoding.UTF8.GetBytes(serializedMessage);
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.SetPersistent(true);
 

@@ -1,9 +1,8 @@
 ﻿namespace R.MessageBus.Interfaces
 {
-    public interface IJsonMessageSerializer
+    public interface IMessageSerializer
     {
         object Deserialize(string message);
-
         string Serialize(object message);
     }
 }

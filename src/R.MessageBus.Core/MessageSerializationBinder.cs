@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
 
-namespace R.MessageBus.Client.RabbitMQ
+namespace R.MessageBus.Core
 {
     public class MessageSerializationBinder : SerializationBinder
     {

@@ -45,9 +45,6 @@
     <Reference Include="log4net">
       <HintPath>..\packages\log4net.2.0.3\lib\net40-full\log4net.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
-    </Reference>
     <Reference Include="RabbitMQ.Client">
       <HintPath>..\packages\RabbitMQ.Client.3.2.1\lib\net30\RabbitMQ.Client.dll</HintPath>
     </Reference>
@@ -56,10 +53,7 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ConfigurationManagerWrapper.cs" />
     <Compile Include="Consumer.cs" />
-    <Compile Include="JsonMessageSerializer.cs" />
-    <Compile Include="MessageSerializationBinder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Producer.cs" />
   </ItemGroup>
