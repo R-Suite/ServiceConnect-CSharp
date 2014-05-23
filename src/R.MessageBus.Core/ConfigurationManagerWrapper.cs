@@ -1,7 +1,7 @@
 ﻿using System.Configuration;
 using R.MessageBus.Interfaces;
 
-namespace R.MessageBus.Client.RabbitMQ
+namespace R.MessageBus.Core
 {
     public class ConfigurationManagerWrapper : IConfigurationManager
     {

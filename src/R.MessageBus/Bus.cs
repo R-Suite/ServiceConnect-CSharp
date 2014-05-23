@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
-using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
@@ -15,7 +14,7 @@ namespace R.MessageBus
     {
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
         private readonly IBusContainer _container;
-        private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
+        private readonly IMessageSerializer _serializer;
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
         private readonly object _requestLock = new object();
         private static IProducer _producer;
@@ -28,6 +27,7 @@ namespace R.MessageBus
 
             _container = configuration.GetContainer();
             _producer = Configuration.GetProducer();
+            _serializer = Configuration.GetSerializer();
 
             _container.Initialize();
             _container.AddBus(this);

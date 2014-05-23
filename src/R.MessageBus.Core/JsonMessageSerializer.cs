@@ -1,13 +1,12 @@
 ﻿using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 
-
-namespace R.MessageBus.Client.RabbitMQ
+namespace R.MessageBus.Core
 {
     /// <summary>
     /// Json message serializer.
     /// </summary>
-    public class JsonMessageSerializer : IJsonMessageSerializer
+    public class JsonMessageSerializer : IMessageSerializer
     {
         public object Deserialize(string messageJson)
         {

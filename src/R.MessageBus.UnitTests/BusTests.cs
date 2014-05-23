@@ -15,7 +15,7 @@ namespace R.MessageBus.UnitTests
 {
     public class BusTests
     {
-        private readonly IJsonMessageSerializer _serializer = new JsonMessageSerializer();
+        private readonly IMessageSerializer _serializer = new JsonMessageSerializer();
         private readonly Mock<IConfiguration> _mockConfiguration;
         private readonly Mock<IBusContainer> _mockContainer;
         private readonly Mock<IConsumer> _mockConsumer;
@@ -118,6 +118,7 @@ namespace R.MessageBus.UnitTests
         public void ConsumeMessageEventShouldProcessMessagesOnMessageHandler()
         {
             // Arrange
+            _mockConfiguration.Setup(x => x.GetSerializer()).Returns(new JsonMessageSerializer());
             var bus = new MessageBus.Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
@@ -161,6 +162,7 @@ namespace R.MessageBus.UnitTests
         public void ConsumeMessageEventShouldProcessMessagesOnProcessManagers()
         {
             // Arrange
+            _mockConfiguration.Setup(x => x.GetSerializer()).Returns(new JsonMessageSerializer());
             var mockProcessManagerFinder = new Mock<IProcessManagerFinder>();
             _mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProcessManagerFinder.Object);
 
@@ -209,6 +211,7 @@ namespace R.MessageBus.UnitTests
         public void ConsumeMessageEventShouldProcessResponseMessage()
         {
             // Arrange
+            _mockConfiguration.Setup(x => x.GetSerializer()).Returns(new JsonMessageSerializer());
             var bus = new MessageBus.Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
