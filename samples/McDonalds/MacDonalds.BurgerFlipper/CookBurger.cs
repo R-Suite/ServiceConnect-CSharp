@@ -24,5 +24,7 @@ namespace McDonalds.BurgerFlipper
 
             _bus.Publish(new BurgerCookedMessage(message.CorrelationId));
         }
+
+        public IConsumeContext Context { get; set; }
     }
 }

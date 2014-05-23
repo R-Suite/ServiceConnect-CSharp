@@ -10,5 +10,7 @@ namespace McDonalds.Customer
         {
             Console.WriteLine("Meal ready: Meal - {0}, Size - {1} OrderId - {2}", message.Meal, message.Size, message.CorrelationId);
         }
+
+        public IConsumeContext Context { get; set; }
     }
 }
