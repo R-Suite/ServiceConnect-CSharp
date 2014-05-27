@@ -213,14 +213,48 @@ See [McDonalds - Process Manager](../../tree/master/samples/McDonalds) sample ap
 ![Request Reply](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/RequestReply.gif)
 
 ```c#
+public class RequestMessage : Message
+{
+    public RequestMessage(Guid correlationId) : base(correlationId)  { }
+}
+    
+public class ResponseMessage : Message
+{
+    public ResponseMessage(Guid correlationId) : base(correlationId) { }
+}
+```
 
+#### Synchronous Block
+
+```c#
+ResponseMessage result = bus.SendRequest<RequestMessage, ResponseMessage>("Responder", new RequestMessage(Guid.NewGuid()));
+```
+
+#### Asynchronous Callback
+
+```c#
+bus.SendRequest<RequestMessage, ResponseMessage>("Responder", new RequestMessage(Guid.NewGuid()), r => Console.WriteLine("Sent async message reply - {0}", r.CorrelationId));
+```
+
+#### Replier
+
+```c#
+public class RequestMessageHandler : IMessageHandler<RequestMessage>
+{
+    public IConsumeContext Context { get; set; }
+
+    public void Execute(RequestMessage message)
+    {
+        Context.Reply(new ResponseMessage(message.CorrelationId));
+    }
+}
 ```
 
 See [Request Response](../../tree/master/samples/RequestResponse) sample application for a complete example.
 
 ### Retries
 
-When your application fails to successfully proccess a message, R.MessageBus implements a generic error handling for all your consumers. Upon catching an exception, the message is held in the "*.Retries" queue for a certain amount of time before being requeued. This process is repeted a number of times until either the message is handled successfully, or the "MaxRetries" limit is reached, at which point the message is moved to the error queue.
+When your application fails to successfully proccess a message, R.MessageBus implements a generic error handling for all your consumers. Upon catching an exception, the message is held in the "*.Retries" queue for a certain amount of time before being requeued. This process is repeated a number of times until either the message is handled successfully, or the "MaxRetries" limit is reached, at which point the message is moved to the error queue.
 
 By default, "MaxRetries" is set to 3 and "RetryDelay" is set to 3000 milliseconds. The default values can be overridden in your application's configuration file, or by assigning properties on TransportSettings object prior to instantiating consumers.
 
