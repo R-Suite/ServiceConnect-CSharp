@@ -2,7 +2,7 @@
 <package xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
     <id>R.MessageBus.Client.RabbitMQ</id>
-    <version>0.0.0.8</version>
+    <version>0.0.0.11</version>
     <title>R.MessageBus.Client.RabbitMQ</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -13,7 +13,7 @@
     <copyright>Copyright 2014 R.MessageBus. All rights reserved</copyright>
     <tags>R.MessageBus,RMessageBus,R,MessageBus,MessageBus Client,Client.RabbitMQ,R RabbitMQ,R RabbitMQ Client,RabbitMQ, MessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <dependency id="RabbitMQ.Client" version="3.2.1" />
+      <dependency id="RabbitMQ.Client" version="[3.2.4]" />
       <dependency id="R.MessageBus.Interfaces" version="" />
     </dependencies>
   </metadata>
