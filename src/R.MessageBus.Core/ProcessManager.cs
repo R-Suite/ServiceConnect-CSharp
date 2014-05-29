@@ -34,7 +34,7 @@ namespace R.MessageBus.Core
         /// </summary>
         /// <param name="message"></param>
         /// <returns></returns>
-        public IPersistanceData<T> FindProcessManagerData(Message message)
+        public virtual IPersistanceData<T> FindProcessManagerData(Message message)
         {
             return ProcessManagerFinder.FindData<T>(message.CorrelationId);
         }
