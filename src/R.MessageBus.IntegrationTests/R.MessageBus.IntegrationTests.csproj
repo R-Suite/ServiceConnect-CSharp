@@ -59,6 +59,7 @@
     <Compile Include="Bus\BusSetupTests.cs" />
     <Compile Include="MongoDbProcessManagerFinderTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SqlServerProcessManagerFinderTest.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
