@@ -54,6 +54,8 @@
     <Compile Include="MongoDb\MongoDbData.cs" />
     <Compile Include="MongoDb\MongoDbProcessManagerFinder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SqlServer\SqlServerData.cs" />
+    <Compile Include="SqlServer\SqlServerProcessManagerFinder.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
