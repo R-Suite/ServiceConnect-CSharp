@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using log4net;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -12,6 +13,7 @@ namespace R.MessageBus.Client.RabbitMQ
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ITransportSettings _transportSettings;
+        private readonly IMessageSerializer _messageSerializer;
         private IConnection _connection;
         private IModel _model;
         private ConsumerEventHandler _consumerEventHandler;
@@ -22,9 +24,10 @@ namespace R.MessageBus.Client.RabbitMQ
         private string _retryQueueName;
         private bool _exclusive;
 
-        public Consumer(ITransportSettings transportSettings)
+        public Consumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
         {
             _transportSettings = transportSettings;
+            _messageSerializer = messageSerializer;
 
             _retryDelay = transportSettings.RetryDelay;
             _maxRetries = transportSettings.MaxRetries;
@@ -35,15 +38,17 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             var headers = args.BasicProperties.Headers;
 
-            var success = _consumerEventHandler(args.Body, headers);
+            ConsumeEventResult result = _consumerEventHandler(args.Body, headers);
             _model.BasicAck(args.DeliveryTag, false);
 
-            if (!success)
+            if (!result.Success)
             {
                 int retryCount = 0;
 
                 if (null == args.BasicProperties.Headers)
+                {
                     args.BasicProperties.Headers = new Dictionary<string, object>();
+                }
 
                 if (args.BasicProperties.Headers.ContainsKey("RetryCount"))
                 {
@@ -60,8 +65,19 @@ namespace R.MessageBus.Client.RabbitMQ
                 }
                 else
                 {
-                    Logger.ErrorFormat("Max number of retries exceeded. MessageId : {0}", args.BasicProperties.MessageId);
+                    if (result.Exception != null)
+                    {
+                        args.BasicProperties.Headers["Exception"] = _messageSerializer.Serialize(new
+                        {
+                            TimeStamp = DateTime.Now, 
+                            ExceptionType = result.Exception.GetType().FullName,
+                            result.Exception.Message, 
+                            result.Exception.StackTrace,
+                            result.Exception.Source
+                        });
+                    }
 
+                    Logger.ErrorFormat("Max number of retries exceeded. MessageId : {0}", args.BasicProperties.MessageId);
                     _model.BasicPublish(_errorExchange, string.Empty, args.BasicProperties, args.Body);
                 }
             }

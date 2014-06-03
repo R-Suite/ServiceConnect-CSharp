@@ -10,6 +10,7 @@ namespace R.MessageBus.Settings
         public string Username { get; set; }
         public string Password { get; set; }
         public bool NoAck { get; set; }
-        public R.MessageBus.Interfaces.Queue Queue { get; set; }
+        public Queue Queue { get; set; }
+        public string MachineName { get; set; }
     }
 }
