@@ -176,7 +176,7 @@ namespace R.MessageBus
         /// <returns></returns>
         public IConsumer GetConsumer()
         {
-            return (IConsumer)Activator.CreateInstance(ConsumerType, TransportSettings);
+            return (IConsumer)Activator.CreateInstance(ConsumerType, TransportSettings, GetSerializer());
         }
 
         /// <summary>
@@ -322,6 +322,7 @@ namespace R.MessageBus
                 Exclusive = false,
                 IsReadOnly = false
             };
+            transportSettings.MachineName = Environment.MachineName;
 
             return transportSettings;
         }
