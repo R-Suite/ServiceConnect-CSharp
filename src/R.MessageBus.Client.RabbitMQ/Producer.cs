@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using R.MessageBus.Interfaces;
@@ -50,7 +51,7 @@ namespace R.MessageBus.Client.RabbitMQ
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
-            basicProperties.Headers = GetHeaders(headers, _transportSettings.Queue.Name);
+            basicProperties.Headers = GetHeaders(headers, _transportSettings.Queue.Name, "Publish");
 
             basicProperties.SetPersistent(true);
             var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
@@ -67,7 +68,7 @@ namespace R.MessageBus.Client.RabbitMQ
             basicProperties.SetPersistent(true);
             var endPoint = _queueMappings[typeof(T).FullName];
 
-            basicProperties.Headers = GetHeaders(headers, endPoint);
+            basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
 
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
@@ -79,27 +80,28 @@ namespace R.MessageBus.Client.RabbitMQ
             IBasicProperties basicProperties = _model.CreateBasicProperties();
             basicProperties.SetPersistent(true);
 
-            basicProperties.Headers = GetHeaders(headers, endPoint);
-
-            //TimeSpan t = DateTime.UtcNow - new DateTime(1970, 1, 1);
-            //var secondsSinceEpoch = (long)t.TotalSeconds;
-            //basicProperties.Timestamp = new AmqpTimestamp(secondsSinceEpoch);
+            basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
 
             basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
 
-        private Dictionary<string, object> GetHeaders(Dictionary<string, string> headers, string queueName)
+        private Dictionary<string, object> GetHeaders(Dictionary<string, string> headers, string queueName, string messageType)
         {
             if (headers == null)
             {
                 headers = new Dictionary<string, string>();
             }
-
-            if (!headers.ContainsKey("SourceAddress"))
+            
+            if (!headers.ContainsKey("DestinationAddress"))
             {
-                headers["SourceAddress"] = queueName;
+                headers["DestinationAddress"] = queueName;
             }
+
+            headers["SourceAddress"] = _transportSettings.Queue.Name;
+            headers["TimeSent"] = DateTime.Now.ToString(CultureInfo.InvariantCulture);
+            headers["SourceMachine"] = _transportSettings.MachineName;
+            headers["MessageType"] = messageType;
 
             return headers.ToDictionary(x => x.Key, x => (object) x.Value);
         }

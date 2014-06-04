@@ -112,11 +112,11 @@ namespace R.MessageBus
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
+                producer.Send(message, new Dictionary<string, string> { { "DestinationAddress", correlationId.ToString() } });
             }
             else
             {
-                producer.Send(endPoint, message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
+                producer.Send(endPoint, message, new Dictionary<string, string> { { "DestinationAddress", correlationId.ToString() } });
             }
             producer.Disconnect();
         }
@@ -147,11 +147,11 @@ namespace R.MessageBus
 
                 if (string.IsNullOrEmpty(endPoint))
                 {
-                    _producer.Send(message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
+                    _producer.Send(message, new Dictionary<string, string> { { "DestinationAddress", correlationId.ToString() } });
                 }
                 else
                 {
-                    _producer.Send(endPoint, message, new Dictionary<string, string> { { "SourceAddress", correlationId.ToString() } });
+                    _producer.Send(endPoint, message, new Dictionary<string, string> { { "DestinationAddress", correlationId.ToString() } });
                 }
 
                 await task;
@@ -160,17 +160,20 @@ namespace R.MessageBus
             })().Result;
         }
 
-        private bool ConsumeMessageEvent(byte[] message, IDictionary<string, object> headers)
+        private ConsumeEventResult ConsumeMessageEvent(byte[] message, IDictionary<string, object> headers)
         {
             string messageJson = Encoding.UTF8.GetString(message);
             object objectMessage = _serializer.Deserialize(messageJson);
-
-            bool success = true;
 
             var context = new ConsumeContext
             {
                 Bus = this,
                 Headers = headers
+            };
+
+            var result = new ConsumeEventResult
+            {
+                Success = true
             };
 
             try
@@ -179,19 +182,20 @@ namespace R.MessageBus
                 ProcessProcessManagerHandlers(objectMessage, context);
                 ProcessRequestReplyConfigurations(objectMessage, context);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                success = false;
+                result.Success = false;
+                result.Exception = ex;
             }
 
-            return success;
+            return result;
         }
 
         private void ProcessRequestReplyConfigurations(object objectMessage, ConsumeContext context)
         {
             lock (_requestLock)
             {
-                string correlationId = Encoding.ASCII.GetString((byte[]) context.Headers["SourceAddress"]);
+                string correlationId = Encoding.ASCII.GetString((byte[])context.Headers["DestinationAddress"]);
                 if (!_requestConfigurations.ContainsKey(correlationId))
                 {
                     return;

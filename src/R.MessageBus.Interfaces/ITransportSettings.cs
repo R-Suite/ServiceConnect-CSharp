@@ -39,6 +39,8 @@ namespace R.MessageBus.Interfaces
         /// Message queue settings
         /// </summary>
         Queue Queue { get; set; }
+
+        string MachineName { get; set; }
     }
 
     public class Queue
