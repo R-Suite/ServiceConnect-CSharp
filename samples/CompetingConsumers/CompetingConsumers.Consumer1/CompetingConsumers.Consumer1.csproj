@@ -41,29 +41,35 @@
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\packages\Newtonsoft.Json.6.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus">
-      <HintPath>..\packages\R.MessageBus.1.0.1.14\lib\net40\R.MessageBus.dll</HintPath>
+    <Reference Include="R.MessageBus, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\R.MessageBus.1.0.1.15\lib\net40\R.MessageBus.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Client.RabbitMQ">
-      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.1.0.1.12\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+    <Reference Include="R.MessageBus.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.1.0.1.13\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Container">
-      <HintPath>..\packages\R.MessageBus.1.0.1.14\lib\net40\R.MessageBus.Container.dll</HintPath>
+    <Reference Include="R.MessageBus.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\R.MessageBus.1.0.1.15\lib\net40\R.MessageBus.Container.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Core">
-      <HintPath>..\packages\R.MessageBus.1.0.1.14\lib\net40\R.MessageBus.Core.dll</HintPath>
+    <Reference Include="R.MessageBus.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\R.MessageBus.1.0.1.15\lib\net40\R.MessageBus.Core.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\packages\R.MessageBus.Interfaces.1.0.1.12\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
+    <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\R.MessageBus.Interfaces.1.0.1.13\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.InMemory">
-      <HintPath>..\packages\R.MessageBus.1.0.1.14\lib\net40\R.MessageBus.Persistance.InMemory.dll</HintPath>
+    <Reference Include="R.MessageBus.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\R.MessageBus.1.0.1.15\lib\net40\R.MessageBus.Persistance.InMemory.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.SqlServer">
-      <HintPath>..\packages\R.MessageBus.1.0.1.14\lib\net40\R.MessageBus.Persistance.SqlServer.dll</HintPath>
+    <Reference Include="R.MessageBus.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\R.MessageBus.1.0.1.15\lib\net40\R.MessageBus.Persistance.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Settings">
-      <HintPath>..\packages\R.MessageBus.1.0.1.14\lib\net40\R.MessageBus.Settings.dll</HintPath>
+    <Reference Include="R.MessageBus.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.1.0.1.13\lib\net40\R.MessageBus.Settings.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client">
       <HintPath>..\packages\RabbitMQ.Client.3.2.4\lib\net30\RabbitMQ.Client.dll</HintPath>
