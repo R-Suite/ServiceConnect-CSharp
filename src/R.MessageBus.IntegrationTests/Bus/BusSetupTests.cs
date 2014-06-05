@@ -1,7 +1,7 @@
 ﻿using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
-using R.MessageBus.Persistance.MongoDb;
+using R.MessageBus.Persistance.SqlServer;
 using Xunit;
 
 namespace R.MessageBus.IntegrationTests.Bus
@@ -21,7 +21,7 @@ namespace R.MessageBus.IntegrationTests.Bus
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
             Assert.Equal(typeof(Producer), configuration.ProducerType);
             Assert.Equal(typeof(StructuremapContainer), configuration.Container);
-            Assert.Equal(typeof(MongoDbProcessManagerFinder), configuration.ProcessManagerFinder);
+            Assert.Equal(typeof(SqlServerProcessManagerFinder), configuration.ProcessManagerFinder);
         }
 
         [Fact]

@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package>
+  <metadata>
+    <id>R.MessageBus.Persistance.MongoDb</id>
+    <version>1.0.1.12</version>
+    <title>R.MessageBus.Persistance.MongoDb</title>
+    <authors>Jakub Pachansky,Tim Watson</authors>
+    <owners>Jakub Pachansky,Tim Watson</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>MonoDb implementation of IProcessManagerFinder.</description>
+    <language>en-GB</language>
+    <projectUrl>https://github.com/R-Suite/R.MessageBus</projectUrl>
+    <copyright>Copyright 2014 R.MessageBus. All rights reserved</copyright>
+    <tags>R.MessageBus,RMessageBus,R,MessageBus,MessageBus Persistance,Persistance.MongoDb,R MongoDb,R MongoDb Persistance,MongoDb, MessageBus,Messaging,Message,Bus,Service</tags>
+    <dependencies>
+      <dependency id="R.MessageBus.Interfaces" version="" />
+      <dependency id="mongocsharpdriver" version="1.9.1" />
+      <dependency id="Newtonsoft.Json" version="6.0.1" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\R.MessageBus.Persistance.MongoDb.dll" target="lib\net40\R.MessageBus.Persistance.MongoDb.dll" />
+  </files>
+</package>

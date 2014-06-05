@@ -84,9 +84,13 @@
       <Project>{3bb7d53a-080f-492c-86a4-4f33fcd7ff7f}</Project>
       <Name>R.MessageBus.Interfaces</Name>
     </ProjectReference>
-    <ProjectReference Include="..\R.MessageBus.Persistance\R.MessageBus.Persistance.csproj">
-      <Project>{34e236ad-55df-416b-8798-e3674db84a85}</Project>
-      <Name>R.MessageBus.Persistance</Name>
+    <ProjectReference Include="..\R.MessageBus.Persistance.InMemory\R.MessageBus.Persistance.InMemory.csproj">
+      <Project>{6801518D-B5E1-4555-8AB9-073F028467B4}</Project>
+      <Name>R.MessageBus.Persistance.InMemory</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Persistance.SqlServer\R.MessageBus.Persistance.SqlServer.csproj">
+      <Project>{48272709-228F-4C56-AA52-0C0D1F8B818A}</Project>
+      <Name>R.MessageBus.Persistance.SqlServer</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Settings\R.MessageBus.Settings.csproj">
       <Project>{58A100CE-CC7E-43BF-A054-D28648F092AC}</Project>
