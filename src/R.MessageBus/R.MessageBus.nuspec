@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus</id>
-    <version>1.0.0.12</version>
+    <version>1.0.1.13</version>
     <title>R.MessageBus</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -27,6 +27,7 @@
     <file src="bin\Release\R.MessageBus.Core.dll" target="lib\net40\R.MessageBus.Core.dll" />
     <file src="bin\Release\R.MessageBus.Settings.dll" target="lib\net40\R.MessageBus.Settings.dll" />
     <file src="bin\Release\R.MessageBus.Container.dll" target="lib\net40\R.MessageBus.Container.dll" />
-    <file src="bin\Release\R.MessageBus.Persistance.dll" target="lib\net40\R.MessageBus.Persistance.dll" />
+    <file src="bin\Release\R.MessageBus.Persistance.SqlServer.dll" target="lib\net40\R.MessageBus.Persistance.SqlServer.dll" />
+    <file src="bin\Release\R.MessageBus.Persistance.InMemory.dll" target="lib\net40\R.MessageBus.Persistance.InMemory.dll" />
   </files>
 </package>

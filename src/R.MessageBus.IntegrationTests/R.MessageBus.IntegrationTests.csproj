@@ -47,13 +47,12 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="MongoDB.Bson, Version=1.8.3.9, Culture=neutral, PublicKeyToken=f686731cfb9cc103, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Bson.dll</HintPath>
+    <Reference Include="MongoDB.Bson">
+      <HintPath>..\packages\mongocsharpdriver.1.9.1\lib\net35\MongoDB.Bson.dll</HintPath>
     </Reference>
-    <Reference Include="MongoDB.Driver, Version=1.8.3.9, Culture=neutral, PublicKeyToken=f686731cfb9cc103, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\mongocsharpdriver.1.8.3\lib\net35\MongoDB.Driver.dll</HintPath>
+    <Reference Include="MongoDB.Driver">
+      <HintPath>..\packages\mongocsharpdriver.1.9.1\lib\net35\MongoDB.Driver.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Moq">
       <HintPath>..\packages\Moq.4.2.1402.2112\lib\net40\Moq.dll</HintPath>
@@ -103,9 +102,13 @@
       <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
       <Name>R.MessageBus.Interfaces</Name>
     </ProjectReference>
-    <ProjectReference Include="..\R.MessageBus.Persistance\R.MessageBus.Persistance.csproj">
-      <Project>{34E236AD-55DF-416B-8798-E3674DB84A85}</Project>
-      <Name>R.MessageBus.Persistance</Name>
+    <ProjectReference Include="..\R.MessageBus.Persistance.MongoDb\R.MessageBus.Persistance.MongoDb.csproj">
+      <Project>{567327E9-63AA-4729-A4D0-90B627226C68}</Project>
+      <Name>R.MessageBus.Persistance.MongoDb</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Persistance.SqlServer\R.MessageBus.Persistance.SqlServer.csproj">
+      <Project>{48272709-228F-4C56-AA52-0C0D1F8B818A}</Project>
+      <Name>R.MessageBus.Persistance.SqlServer</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus\R.MessageBus.csproj">
       <Project>{6911293d-3b22-4d8a-9b23-25ec4fad1742}</Project>
