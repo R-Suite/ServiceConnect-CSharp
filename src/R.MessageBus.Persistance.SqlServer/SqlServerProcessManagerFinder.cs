@@ -19,7 +19,8 @@ namespace R.MessageBus.Persistance.SqlServer
         /// Default constructor
         /// </summary>
         /// <param name="connectionString"></param>
-        public SqlServerProcessManagerFinder(string connectionString)
+        /// <param name="databaseName"></param>
+        public SqlServerProcessManagerFinder(string connectionString, string databaseName)
         {
             _connectionString = connectionString;
         }
@@ -29,8 +30,9 @@ namespace R.MessageBus.Persistance.SqlServer
         /// Used primarily for testing.
         /// </summary>
         /// <param name="connectionString"></param>
+        /// <param name="databaseName"></param>
         /// <param name="commandTimeout"></param>
-        public SqlServerProcessManagerFinder(string connectionString, int commandTimeout)
+        public SqlServerProcessManagerFinder(string connectionString, string databaseName, int commandTimeout)
         {
             _connectionString = connectionString;
             _commandTimeout = commandTimeout;

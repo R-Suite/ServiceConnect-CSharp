@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus</id>
-    <version>1.0.1.13</version>
+    <version>1.0.1.15</version>
     <title>R.MessageBus</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -15,10 +15,8 @@
     <dependencies>
       <dependency id="R.MessageBus.Client.RabbitMQ" version="" />
       <dependency id="R.MessageBus.Interfaces" version="" />
-      <dependency id="RabbitMQ.Client" version="3.2.1" />
       <dependency id="log4net" version="2.0.3" />
       <dependency id="structuremap" version="2.6.4.1" />
-      <dependency id="mongocsharpdriver" version="1.8.3" />
       <dependency id="Newtonsoft.Json" version="6.0.1" />
     </dependencies>
   </metadata>
