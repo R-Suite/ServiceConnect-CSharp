@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading;
 using McDonalds.Messages;
 using R.MessageBus;
 using R.MessageBus.Interfaces;
