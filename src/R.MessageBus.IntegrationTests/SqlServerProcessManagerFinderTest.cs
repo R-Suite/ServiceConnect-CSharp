@@ -52,7 +52,7 @@ namespace R.MessageBus.IntegrationTests
             // Arrange
             var correlationId = Guid.NewGuid();
             IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestData" };
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
             processManagerFinder.InsertData(data);
@@ -72,7 +72,7 @@ namespace R.MessageBus.IntegrationTests
             SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = "FakeJsonData" } });
 
             IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestData" };
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
             processManagerFinder.InsertData(data);
@@ -92,7 +92,7 @@ namespace R.MessageBus.IntegrationTests
             var correlationId = Guid.NewGuid();
             var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData\"}";
             SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson } });
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
             var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
@@ -109,7 +109,7 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             var correlationId = Guid.NewGuid();
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
             var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
@@ -124,7 +124,7 @@ namespace R.MessageBus.IntegrationTests
             // Arrange
             var correlationId = Guid.NewGuid();
             SetupTestDbData(null);
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
             var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
@@ -144,7 +144,7 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerData updatedData = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
             var sqlServerData = new SqlServerData<IProcessManagerData> { Data = updatedData, Id = correlationId };
 
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
             // FindData() and UpdateData() methods are part of the same transaction.
@@ -165,7 +165,7 @@ namespace R.MessageBus.IntegrationTests
         public void ShouldThrowWhenUpdatingDataWithoutOpenTransaction()
         {
             // Arrange
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act / Assert
             Assert.Throws<Exception>(() => processManagerFinder.UpdateData(new SqlServerData<IProcessManagerData>()));
@@ -179,8 +179,8 @@ namespace R.MessageBus.IntegrationTests
             var testDataJson1 = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData1\"}";
             SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson1 } });
 
-            IProcessManagerFinder processManagerFinder1 = new SqlServerProcessManagerFinder(_connectionString, 1);
-            IProcessManagerFinder processManagerFinder2 = new SqlServerProcessManagerFinder(_connectionString, 1);
+            IProcessManagerFinder processManagerFinder1 = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
+            IProcessManagerFinder processManagerFinder2 = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
 
             var result = processManagerFinder1.FindData<TestSqlServerData>(correlationId);
 
@@ -199,7 +199,7 @@ namespace R.MessageBus.IntegrationTests
             var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData\"}";
             SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson } });
 
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
             var sqlServerDataToBeDeleted = new SqlServerData<IProcessManagerData> { Data = data, Id = correlationId };
@@ -220,7 +220,7 @@ namespace R.MessageBus.IntegrationTests
         public void ShouldThrowWhenDeletingDataWithoutOpenTransaction()
         {
             // Arrange
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act / Assert
             Assert.Throws<Exception>(() => processManagerFinder.DeleteData(new SqlServerData<IProcessManagerData>()));
