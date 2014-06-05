@@ -13,6 +13,14 @@ namespace R.MessageBus.Persistance.InMemory
         readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
         private readonly object _memoryCacheLock = new object();
 
+        /// <summary>
+        /// Constructor (parameters not used but needed)
+        /// </summary>
+        /// <param name="connectionString"></param>
+        /// <param name="databaseName"></param>
+        public InMemoryProcessManagerFinder(string connectionString, string databaseName)
+        { }
+
         public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
         {
             string key = id.ToString();
