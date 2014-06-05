@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Configuration;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
 using R.MessageBus.Interfaces;
