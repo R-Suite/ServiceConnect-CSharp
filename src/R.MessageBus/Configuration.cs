@@ -5,7 +5,7 @@ using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
-using R.MessageBus.Persistance.MongoDb;
+using R.MessageBus.Persistance.SqlServer;
 using R.MessageBus.Settings;
 using Queue = R.MessageBus.Interfaces.Queue;
 
@@ -69,7 +69,7 @@ namespace R.MessageBus
             ConsumerType = typeof(Consumer);
             ProducerType = typeof(Producer);
             Container = typeof(StructuremapContainer);
-            ProcessManagerFinder = typeof(MongoDbProcessManagerFinder);
+            ProcessManagerFinder = typeof(SqlServerProcessManagerFinder);
             SerializerType = typeof (JsonMessageSerializer);
         }
 
