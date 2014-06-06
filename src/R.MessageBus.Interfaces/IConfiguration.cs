@@ -59,10 +59,37 @@ namespace R.MessageBus.Interfaces
         void SetQueueName(string queueName);
 
         /// <summary>
+        /// Sets ErrorQueueName
+        /// </summary>
+        void SetErrorQueueName(string errorQueueName);
+
+        /// <summary>
+        /// Sets AuditingEnabled
+        /// </summary>
+        void SetAuditingEnabled(bool auditingEnabled);
+
+        /// <summary>
+        /// Sets AuditQueueName
+        /// </summary>
+        void SetAuditQueueName(string auditQueueName);
+
+        /// <summary>
         /// Gets queue name.
         /// </summary>
         /// <returns></returns>
         string GetQueueName();
+
+        /// <summary>
+        /// Gets error queue name.
+        /// </summary>
+        /// <returns></returns>
+        string GetErrorQueueName();
+
+        /// <summary>
+        /// Gets audit queue name.
+        /// </summary>
+        /// <returns></returns>
+        string GetAuditQueueName();
 
         /// <summary>
         /// Gets an instance of the consumer.

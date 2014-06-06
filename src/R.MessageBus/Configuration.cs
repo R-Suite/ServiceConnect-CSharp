@@ -32,6 +32,9 @@ namespace R.MessageBus
         private string _configurationPath;
         private string _endPoint;
         private string _queueName;
+        private string _errorQueueName;
+        private string _auditQueueName;
+        private bool? _auditingEnabled;
 
         #endregion
 
@@ -163,11 +166,59 @@ namespace R.MessageBus
         }
 
         /// <summary>
+        /// Sets ErrorQueueName
+        /// </summary>
+        /// <param name="errorQueueName"></param>
+        public void SetErrorQueueName(string errorQueueName)
+        {
+            _errorQueueName = errorQueueName;
+            TransportSettings.ErrorQueueName = errorQueueName;
+        }
+
+        /// <summary>
+        /// Sets AuditingEnabled
+        /// </summary>
+        /// <param name="auditingEnabled"></param>
+        public void SetAuditingEnabled(bool auditingEnabled)
+        {
+            _auditingEnabled = auditingEnabled;
+            TransportSettings.AuditingEnabled = auditingEnabled;
+        }
+
+        /// <summary>
+        /// Sets AuditQueueName
+        /// </summary>
+        /// <param name="auditQueueName"></param>
+        public void SetAuditQueueName(string auditQueueName)
+        {
+            _auditQueueName = auditQueueName;
+            TransportSettings.AuditQueueName = auditQueueName;
+        }
+
+        /// <summary>
         /// Gets QueueName
         /// </summary>
         public string GetQueueName()
         {
             return TransportSettings.Queue.Name;
+        }
+
+        /// <summary>
+        /// Gets ErrorQueueName
+        /// </summary>
+        /// <returns></returns>
+        public string GetErrorQueueName()
+        {
+            return TransportSettings.ErrorQueueName;
+        }
+
+        /// <summary>
+        /// Gets AuditQueueName
+        /// </summary>
+        /// <returns></returns>
+        public string GetAuditQueueName()
+        {
+            return TransportSettings.AuditQueueName;
         }
 
         /// <summary>
@@ -288,7 +339,6 @@ namespace R.MessageBus
             transportSettings.RetryDelay = settings.Retries.RetryDelay;
             transportSettings.Username = settings.Username;
             transportSettings.Password = settings.Password;
-            transportSettings.NoAck = settings.NoAck;
             transportSettings.Queue = new Queue
             {
                 Name = queueName,
@@ -299,6 +349,9 @@ namespace R.MessageBus
                 Exclusive = settings.Queue.Exclusive,
                 IsReadOnly = settings.Queue.IsReadOnly()
             };
+            transportSettings.ErrorQueueName = (!string.IsNullOrEmpty(_errorQueueName)) ? _errorQueueName : settings.ErrorQueueName;
+            transportSettings.AuditingEnabled = (_auditingEnabled.HasValue) ? _auditingEnabled.Value : settings.AuditingEnabled;
+            transportSettings.AuditQueueName = (!string.IsNullOrEmpty(_auditQueueName)) ? _auditQueueName : settings.AuditQueueName;
 
             return transportSettings;
         }
@@ -311,7 +364,6 @@ namespace R.MessageBus
             transportSettings.RetryDelay = 3000;
             transportSettings.Username = null;
             transportSettings.Password = null;
-            transportSettings.NoAck = false;
             transportSettings.Queue = new Queue
             {
                 Name = TransportSettings.Queue.Name,
@@ -323,6 +375,9 @@ namespace R.MessageBus
                 IsReadOnly = false
             };
             transportSettings.MachineName = Environment.MachineName;
+            transportSettings.ErrorQueueName = "errors";
+            transportSettings.AuditingEnabled = false;
+            transportSettings.AuditQueueName = "audit";
 
             return transportSettings;
         }

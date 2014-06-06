@@ -9,8 +9,10 @@ namespace R.MessageBus.Settings
         public string Host { get; set; }
         public string Username { get; set; }
         public string Password { get; set; }
-        public bool NoAck { get; set; }
         public Queue Queue { get; set; }
         public string MachineName { get; set; }
+        public string ErrorQueueName { get; set; }
+        public bool AuditingEnabled { get; set; }
+        public string AuditQueueName { get; set; }
     }
 }

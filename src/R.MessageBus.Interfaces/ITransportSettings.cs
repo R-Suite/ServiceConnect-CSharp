@@ -30,17 +30,26 @@ namespace R.MessageBus.Interfaces
         string Password { get; set; }
 
         /// <summary>
-        /// When set to true, messages are considered automatically acknowledged as soon as they have been delivered.
-        /// When set to false, messages must be acknowledged manually with basic.ack
-        /// </summary>
-        bool NoAck { get; set; }
-
-        /// <summary>
         /// Message queue settings
         /// </summary>
         Queue Queue { get; set; }
 
         string MachineName { get; set; }
+
+        /// <summary>
+        /// Custom Error Queue Name
+        /// </summary>
+        string ErrorQueueName { get; set; }
+
+        /// <summary>
+        /// Auditing enabled
+        /// </summary>
+        bool AuditingEnabled { get; set; }
+
+        /// <summary>
+        /// Custom Audit Queue Name
+        /// </summary>
+        string AuditQueueName { get; set; }
     }
 
     public class Queue

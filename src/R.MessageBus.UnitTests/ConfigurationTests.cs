@@ -39,7 +39,6 @@ namespace R.MessageBus.UnitTests
             Assert.Equal(3000, configuration.TransportSettings.RetryDelay);
             Assert.Null(configuration.TransportSettings.Username);
             Assert.Null(configuration.TransportSettings.Password);
-            Assert.False(configuration.TransportSettings.NoAck);
             Assert.NotNull(configuration.TransportSettings.Queue);
             Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().ProcessName, configuration.TransportSettings.Queue.Name);
             Assert.Null(configuration.TransportSettings.Queue.RoutingKey);
@@ -48,6 +47,9 @@ namespace R.MessageBus.UnitTests
             Assert.False(configuration.TransportSettings.Queue.Exclusive);
             Assert.False(configuration.TransportSettings.Queue.IsReadOnly);
             Assert.True(configuration.TransportSettings.Queue.Durable);
+            Assert.False(configuration.TransportSettings.AuditingEnabled);
+            Assert.Equal("errors", configuration.TransportSettings.ErrorQueueName);
+            Assert.Equal("audit", configuration.TransportSettings.AuditQueueName);
         }
 
         [Fact]
@@ -90,6 +92,48 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.Equal("TestQueueName", result);
+        }
+
+        [Fact]
+        public void ShouldSetupErrorQueueName()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            configuration.SetErrorQueueName("TestErrorQueueName");
+
+            // Act
+            var result = configuration.GetErrorQueueName();
+
+            // Assert
+            Assert.Equal("TestErrorQueueName", result);
+        }
+
+        [Fact]
+        public void ShouldSetupAuditQueueName()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            configuration.SetAuditQueueName("TestAuditQueueName");
+
+            // Act
+            var result = configuration.GetAuditQueueName();
+
+            // Assert
+            Assert.Equal("TestAuditQueueName", result);
+        }
+
+        [Fact]
+        public void ShouldSetupAuditingEnabled()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            configuration.SetAuditingEnabled(true);
+
+            // Act
+            var result = configuration.TransportSettings.AuditingEnabled;
+
+            // Assert
+            Assert.True(result);
         }
 
         [Fact]
