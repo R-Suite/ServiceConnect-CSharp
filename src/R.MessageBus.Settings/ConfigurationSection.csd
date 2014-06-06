@@ -27,17 +27,27 @@
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
           </type>
         </attributeProperty>
-        <attributeProperty name="NoAck" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="NoAck" isReadOnly="false" defaultValue="false">
-          <type>
-            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/Boolean" />
-          </type>
-        </attributeProperty>
         <attributeProperty name="Username" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Username" isReadOnly="false">
           <type>
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
           </type>
         </attributeProperty>
         <attributeProperty name="Password" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="Password" isReadOnly="false">
+          <type>
+            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
+          </type>
+        </attributeProperty>
+        <attributeProperty name="AuditingEnabled" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="AuditingEnabled" isReadOnly="false" defaultValue="false">
+          <type>
+            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/Boolean" />
+          </type>
+        </attributeProperty>
+        <attributeProperty name="ErrorQueueName" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="ErrorQueueNamee" isReadOnly="false" defaultValue="&quot;errors&quot;">
+          <type>
+            <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
+          </type>
+        </attributeProperty>
+        <attributeProperty name="AuditQueueName" isRequired="false" isKey="false" isDefaultCollection="false" xmlName="AuditQueueName" isReadOnly="false" defaultValue="&quot;audit&quot;">
           <type>
             <externalTypeMoniker name="/d0ed9acb-0435-4532-afdd-b5115bc4d562/String" />
           </type>

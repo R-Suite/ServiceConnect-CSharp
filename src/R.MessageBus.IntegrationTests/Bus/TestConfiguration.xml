@@ -18,7 +18,7 @@
       
       <Enpoint name="TestEndPoint2">
           
-        <TransportSettings Host="localhost">
+        <TransportSettings Host="localhost" AuditingEnabled="true" AuditQueueName="TestAuditQueue" ErrorQueueNamee="TestErrorQueue">
           <Exchange Name="TestExchange2" Durable="false" AutoDelete="true" />
           <Retries MaxRetries="2" RetryDelay="2000" />
           <Queue Name="TestQueue1" RoutingKey="TestQueueRoutingKey1" AutoDelete="true" Exclusive="true" Durable="true">

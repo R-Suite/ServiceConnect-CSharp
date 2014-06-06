@@ -41,11 +41,6 @@
 				<xs:documentation>The Host.</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
-		<xs:attribute name="NoAck" use="optional" type="xs:boolean">
-			<xs:annotation>
-				<xs:documentation>The NoAck.</xs:documentation>
-			</xs:annotation>
-		</xs:attribute>
 		<xs:attribute name="Username" use="optional" type="xs:string">
 			<xs:annotation>
 				<xs:documentation>The Username.</xs:documentation>
@@ -54,6 +49,21 @@
 		<xs:attribute name="Password" use="optional" type="xs:string">
 			<xs:annotation>
 				<xs:documentation>The Password.</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="AuditingEnabled" use="optional" type="xs:boolean">
+			<xs:annotation>
+				<xs:documentation>The AuditingEnabled.</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="ErrorQueueNamee" use="optional" type="xs:string">
+			<xs:annotation>
+				<xs:documentation>The ErrorQueueName.</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="AuditQueueName" use="optional" type="xs:string">
+			<xs:annotation>
+				<xs:documentation>The AuditQueueName.</xs:documentation>
 			</xs:annotation>
 		</xs:attribute>
 	</xs:complexType>
