@@ -184,6 +184,46 @@ namespace R.MessageBus.UnitTests
             // Assert
             Assert.Equal("TestQueue", config.TransportSettings.Queue.Name);
         }
+
+        [Fact]
+        public void ShouldSetupErrorQueueName()
+        {
+            // Arrange
+            var bus = Bus.Initialize(c => c.SetErrorQueueName("TestErrorQueue"));
+
+            // Act
+            var config = bus.Configuration;
+
+            // Assert
+            Assert.Equal("TestErrorQueue", config.TransportSettings.ErrorQueueName);
+        }
+
+        [Fact]
+        public void ShouldSetupAuditQueueName()
+        {
+            // Arrange
+            var bus = Bus.Initialize(c => c.SetAuditQueueName("TestAuditQueue"));
+
+            // Act
+            var config = bus.Configuration;
+
+            // Assert
+            Assert.Equal("TestAuditQueue", config.TransportSettings.AuditQueueName);
+        }
+
+        [Fact]
+        public void ShouldSetupAuditingEnabled()
+        {
+            // Arrange
+            var bus = Bus.Initialize(c => c.SetAuditingEnabled(true));
+
+            // Act
+            var config = bus.Configuration;
+
+            // Assert
+            Assert.True(config.TransportSettings.AuditingEnabled);
+        }
+
         
         public class FakeContainer : IBusContainer
         {

@@ -139,7 +139,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             var consumer = new EventingBasicConsumer();
             consumer.Received += Event;
-            _model.BasicConsume(queueName, _transportSettings.NoAck, consumer);
+            _model.BasicConsume(queueName, false, consumer); // noack must be always false
         }
 
         private string ConfigureQueue()
