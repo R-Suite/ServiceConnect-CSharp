@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using log4net;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -18,6 +19,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private IModel _model;
         private ConsumerEventHandler _consumerEventHandler;
         private string _errorExchange;
+        private string _auditExchange;
         private readonly int _retryDelay;
         private readonly int _maxRetries;
         private string _queueName;
@@ -37,6 +39,9 @@ namespace R.MessageBus.Client.RabbitMQ
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
         {
             var headers = args.BasicProperties.Headers;
+
+            SetHeader(args, "TimeReceived", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            SetHeader(args, "DestinationMachine", Environment.MachineName);
 
             ConsumeEventResult result = _consumerEventHandler(args.Body, headers);
             _model.BasicAck(args.DeliveryTag, false);
@@ -81,7 +86,17 @@ namespace R.MessageBus.Client.RabbitMQ
                     _model.BasicPublish(_errorExchange, string.Empty, args.BasicProperties, args.Body);
                 }
             }
+            else
+            {
+                if (_transportSettings.AuditingEnabled)
+                {
+                    SetHeader(args, "TimeProcessed", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+
+                    _model.BasicPublish(_auditExchange, string.Empty, args.BasicProperties, args.Body);
+                }
+            }
         }
+
 
         public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null)
         {
@@ -125,10 +140,10 @@ namespace R.MessageBus.Client.RabbitMQ
                 _model.QueueBind(queueName, exchange, string.Empty);
             }
 
-            //RETRY QUEUE
+            // RETRY QUEUE
             ConfigureRetryQueue();
 
-            //ERROR QUEUE
+            // ERROR QUEUE
             _errorExchange = ConfigureErrorExchange();
             var errorQueue = ConfigureErrorQueue();
 
@@ -137,9 +152,30 @@ namespace R.MessageBus.Client.RabbitMQ
                 _model.QueueBind(errorQueue, _errorExchange, string.Empty, null);
             }
 
+            // AUDIT QUEUE
+            if (_transportSettings.AuditingEnabled)
+            {
+                _auditExchange = ConfigureAuditExchange();
+                var auditQueue = ConfigureAuditQueue();
+
+                if (!string.IsNullOrEmpty(_auditExchange))
+                {
+                    _model.QueueBind(auditQueue, _auditExchange, string.Empty, null);
+                }
+            }
+
             var consumer = new EventingBasicConsumer();
             consumer.Received += Event;
             _model.BasicConsume(queueName, false, consumer); // noack must be always false
+        }
+        
+        private static void SetHeader<T>(BasicDeliverEventArgs args, string key, T value)
+        {
+            if (args.BasicProperties.Headers.ContainsKey(key))
+            {
+                args.BasicProperties.Headers.Remove(key);
+            }
+            args.BasicProperties.Headers.Add(key, value);
         }
 
         private string ConfigureQueue()
@@ -170,7 +206,12 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureErrorQueue()
         {
-            return _model.QueueDeclare("errors", true, false, false, null);
+            return _model.QueueDeclare(_transportSettings.ErrorQueueName, true, false, false, null);
+        }
+
+        private string ConfigureAuditQueue()
+        {
+            return _model.QueueDeclare(_transportSettings.AuditQueueName, true, false, false, null);
         }
 
         private string ConfigureExchange(string exchangeName)
@@ -186,6 +227,13 @@ namespace R.MessageBus.Client.RabbitMQ
             _model.ExchangeDeclare("errors", "direct");
 
             return "errors";
+        }
+
+        private string ConfigureAuditExchange()
+        {
+            _model.ExchangeDeclare("audits", "direct");
+
+            return "audits";
         }
 
         public void StopConsuming()
