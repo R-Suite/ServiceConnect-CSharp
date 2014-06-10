@@ -36,6 +36,11 @@ namespace R.MessageBus.Client.RabbitMQ
             _exclusive = transportSettings.Queue.Exclusive;
         }
 
+        /// <summary>
+        /// Event fired on HandleBasicDeliver
+        /// </summary>
+        /// <param name="consumer"></param>
+        /// <param name="args"></param>
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
         {
             var headers = args.BasicProperties.Headers;
@@ -46,25 +51,21 @@ namespace R.MessageBus.Client.RabbitMQ
             ConsumeEventResult result = _consumerEventHandler(args.Body, headers);
             _model.BasicAck(args.DeliveryTag, false);
 
+            SetHeader(args, "TimeProcessed", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+
             if (!result.Success)
             {
                 int retryCount = 0;
 
-                if (null == args.BasicProperties.Headers)
-                {
-                    args.BasicProperties.Headers = new Dictionary<string, object>();
-                }
-
                 if (args.BasicProperties.Headers.ContainsKey("RetryCount"))
                 {
                     retryCount = (int)args.BasicProperties.Headers["RetryCount"];
-                    args.BasicProperties.Headers.Remove("RetryCount");
                 }
 
                 if (retryCount < _maxRetries)
                 {
                     retryCount++;
-                    args.BasicProperties.Headers.Add("RetryCount", retryCount);
+                    SetHeader(args, "RetryCount", retryCount);
 
                     _model.BasicPublish(string.Empty, _retryQueueName, args.BasicProperties, args.Body);
                 }
@@ -72,17 +73,17 @@ namespace R.MessageBus.Client.RabbitMQ
                 {
                     if (result.Exception != null)
                     {
-                        args.BasicProperties.Headers["Exception"] = _messageSerializer.Serialize(new
+                        SetHeader(args, "Exception", _messageSerializer.Serialize(new
                         {
                             TimeStamp = DateTime.Now, 
                             ExceptionType = result.Exception.GetType().FullName,
                             result.Exception.Message, 
                             result.Exception.StackTrace,
                             result.Exception.Source
-                        });
+                        }));
                     }
 
-                    Logger.ErrorFormat("Max number of retries exceeded. MessageId : {0}", args.BasicProperties.MessageId);
+                    Logger.ErrorFormat("Max number of retries exceeded. MessageId: {0}", args.BasicProperties.MessageId);
                     _model.BasicPublish(_errorExchange, string.Empty, args.BasicProperties, args.Body);
                 }
             }
@@ -90,13 +91,10 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 if (_transportSettings.AuditingEnabled)
                 {
-                    SetHeader(args, "TimeProcessed", DateTime.Now.ToString(CultureInfo.InvariantCulture));
-
                     _model.BasicPublish(_auditExchange, string.Empty, args.BasicProperties, args.Body);
                 }
             }
         }
-
 
         public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null)
         {
@@ -171,11 +169,14 @@ namespace R.MessageBus.Client.RabbitMQ
         
         private static void SetHeader<T>(BasicDeliverEventArgs args, string key, T value)
         {
-            if (args.BasicProperties.Headers.ContainsKey(key))
+            if (Equals(value, default(T)))
             {
                 args.BasicProperties.Headers.Remove(key);
             }
-            args.BasicProperties.Headers.Add(key, value);
+            else
+            {
+                args.BasicProperties.Headers[key] = value;
+            }
         }
 
         private string ConfigureQueue()
