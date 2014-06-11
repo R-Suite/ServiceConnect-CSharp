@@ -45,13 +45,13 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             var headers = args.BasicProperties.Headers;
 
-            SetHeader(args, "TimeReceived", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            SetHeader(args, "TimeReceived", DateTime.Now.ToString("O"));
             SetHeader(args, "DestinationMachine", Environment.MachineName);
 
             ConsumeEventResult result = _consumerEventHandler(args.Body, headers);
             _model.BasicAck(args.DeliveryTag, false);
 
-            SetHeader(args, "TimeProcessed", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            SetHeader(args, "TimeProcessed", DateTime.Now.ToString("O"));
 
             if (!result.Success)
             {
