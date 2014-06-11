@@ -49,7 +49,8 @@ namespace R.MessageBus
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
-        public IDictionary<string, string> QueueMappings { get; set; } 
+        public IDictionary<string, string> QueueMappings { get; set; }
+        public Action<Exception> ExceptionHandler { get; set; }
 
         #endregion
 
@@ -84,6 +85,11 @@ namespace R.MessageBus
         public void AddQueueMapping(Type messageType, string queue)
         {
             QueueMappings.Add(messageType.FullName, queue);
+        }
+
+        public void SetExceptionHandler(Action<Exception> exceptionHandler)
+        {
+            ExceptionHandler = exceptionHandler;
         }
 
         /// <summary>

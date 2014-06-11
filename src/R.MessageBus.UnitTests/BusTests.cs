@@ -715,5 +715,53 @@ namespace R.MessageBus.UnitTests
             mockRequestConfiguration.Verify(x => x.SetHandler(It.IsAny<Action<object>>()), Times.Once());
             Assert.True(actionCalled);
         }
+
+        [Fact]
+        public void CustomExceptionHandlerShouldBeCalledIfConsumeMessageEventThrows()
+        {
+            // Arrange
+            _mockConfiguration.Setup(x => x.GetSerializer()).Returns(new JsonMessageSerializer());
+            bool actionCalled = false;
+            Action<Exception> action = exception => { actionCalled = true; };
+            _mockConfiguration.Setup(x => x.ExceptionHandler).Returns(action);
+
+            var bus = new Bus(_mockConfiguration.Object);
+
+            var handlerReferences = new List<HandlerReference>
+            {
+                new HandlerReference
+                {
+                    HandlerType = typeof (FakeHandler1),
+                    MessageType = typeof (FakeMessage1)
+                },
+                new HandlerReference
+                {
+                    HandlerType = typeof (FakeHandler2),
+                    MessageType = typeof (FakeMessage2)
+                }
+            };
+
+            var headers = new Dictionary<string, object>();
+
+            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
+
+            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), It.IsAny<string>(), null));
+
+            var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
+            _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
+            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers))).Throws(new Exception());
+
+            bus.StartConsuming();
+
+            // Act
+            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            })), headers);
+
+            // Assert
+            Assert.True(actionCalled);
+        }
+
     }
 }
