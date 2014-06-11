@@ -14,6 +14,7 @@ namespace R.MessageBus.Interfaces
         string PersistenceStoreDatabaseName { get; set; }
         ITransportSettings TransportSettings { get; set; }
         IDictionary<string, string> QueueMappings { get; set; }
+        Action<Exception> ExceptionHandler { get; set; }
 
         /// <summary>
         /// Adds a message queue mapping. 
@@ -72,6 +73,12 @@ namespace R.MessageBus.Interfaces
         /// Sets AuditQueueName
         /// </summary>
         void SetAuditQueueName(string auditQueueName);
+
+        /// <summary>
+        /// Set Exception handler. Exception handler is called when an exception is thrown while processing a message.
+        /// </summary>
+        /// <param name="exceptionHandler"></param>
+        void SetExceptionHandler(Action<Exception> exceptionHandler);
 
         /// <summary>
         /// Gets queue name.

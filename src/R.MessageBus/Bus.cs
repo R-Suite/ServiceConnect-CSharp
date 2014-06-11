@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using log4net.Util;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
@@ -162,18 +163,36 @@ namespace R.MessageBus
 
         private ConsumeEventResult ConsumeMessageEvent(byte[] message, IDictionary<string, object> headers)
         {
-            string messageJson = Encoding.UTF8.GetString(message);
-            object objectMessage = _serializer.Deserialize(messageJson);
+            var result = new ConsumeEventResult
+            {
+                Success = true
+            };
+
+            object objectMessage = null;
+            try
+            {
+                string messageJson = Encoding.UTF8.GetString(message);
+                objectMessage = _serializer.Deserialize(messageJson);
+            }
+            catch (Exception ex)
+            {
+                if (Configuration.ExceptionHandler != null)
+                {
+                    Configuration.ExceptionHandler(ex);
+                }
+                result.Success = false;
+                result.Exception = ex;
+            }
+
+            if (result.Success == false)
+            {
+                return result;
+            }
 
             var context = new ConsumeContext
             {
                 Bus = this,
                 Headers = headers
-            };
-
-            var result = new ConsumeEventResult
-            {
-                Success = true
             };
 
             try
@@ -184,6 +203,10 @@ namespace R.MessageBus
             }
             catch (Exception ex)
             {
+                if (Configuration.ExceptionHandler != null)
+                {
+                    Configuration.ExceptionHandler(ex);
+                }
                 result.Success = false;
                 result.Exception = ex;
             }
