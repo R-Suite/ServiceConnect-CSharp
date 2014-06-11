@@ -100,7 +100,7 @@ namespace R.MessageBus.Client.RabbitMQ
             }
 
             headers["SourceAddress"] = _transportSettings.Queue.Name;
-            headers["TimeSent"] = DateTime.Now.ToString("O");
+            headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
             headers["MessageType"] = messageType;
 
