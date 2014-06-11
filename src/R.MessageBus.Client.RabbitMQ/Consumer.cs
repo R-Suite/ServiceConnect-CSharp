@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using log4net;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -73,13 +74,24 @@ namespace R.MessageBus.Client.RabbitMQ
                 {
                     if (result.Exception != null)
                     {
+                        string jsonException = string.Empty;
+                        try
+                        {
+                            jsonException = _messageSerializer.Serialize(result.Exception);
+                        }
+                        catch(Exception ex)
+                        {
+                            Logger.Warn("Error serializing exception", ex);
+                        }
+
                         SetHeader(args, "Exception", _messageSerializer.Serialize(new
                         {
                             TimeStamp = DateTime.Now, 
                             ExceptionType = result.Exception.GetType().FullName,
-                            result.Exception.Message, 
+                            Message = GetErrorMessage(result.Exception),
                             result.Exception.StackTrace,
-                            result.Exception.Source
+                            result.Exception.Source,
+                            Exception = jsonException
                         }));
                     }
 
@@ -166,6 +178,19 @@ namespace R.MessageBus.Client.RabbitMQ
             consumer.Received += Event;
             _model.BasicConsume(queueName, false, consumer); // noack must be always false
         }
+
+        private string GetErrorMessage(Exception exception)
+        {
+            var sbMessage = new StringBuilder();
+            var ie = exception.InnerException;
+            while (ie != null)
+            {
+                sbMessage.Append(ie.Message + Environment.NewLine);
+                ie = ie.InnerException;
+            }
+
+            return sbMessage.ToString();
+        }
         
         private static void SetHeader<T>(BasicDeliverEventArgs args, string key, T value)
         {
@@ -225,16 +250,16 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureErrorExchange()
         {
-            _model.ExchangeDeclare("errors", "direct");
+            _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct");
 
-            return "errors";
+            return _transportSettings.ErrorQueueName;
         }
 
         private string ConfigureAuditExchange()
         {
-            _model.ExchangeDeclare("audits", "direct");
+            _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct");
 
-            return "audits";
+            return _transportSettings.AuditQueueName;
         }
 
         public void StopConsuming()
