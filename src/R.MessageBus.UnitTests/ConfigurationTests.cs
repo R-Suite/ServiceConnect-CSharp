@@ -149,6 +149,20 @@ namespace R.MessageBus.UnitTests
             Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint"));
         }
 
+        [Fact]
+        public void ShouldSetExceptionHandler()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            Action<Exception> action = exception => { };
+
+            // Act
+            configuration.SetExceptionHandler(action);
+
+            // Assert
+            Assert.Equal(action, configuration.ExceptionHandler);
+        }
+
         public class FakeContainer : IBusContainer
         {
             public IEnumerable<HandlerReference> GetHandlerTypes()

@@ -86,6 +86,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
         }
 
+                
         private Dictionary<string, object> GetHeaders(Dictionary<string, string> headers, string queueName, string messageType)
         {
             if (headers == null)
