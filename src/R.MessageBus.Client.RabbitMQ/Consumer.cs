@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using log4net;
@@ -182,6 +181,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private string GetErrorMessage(Exception exception)
         {
             var sbMessage = new StringBuilder();
+            sbMessage.Append(exception.Message + Environment.NewLine);
             var ie = exception.InnerException;
             while (ie != null)
             {
