@@ -8,6 +8,13 @@ A simple, easy to use asynchronous messaging framework for .NET.
 * Retries
 * Dead Letter Queue
 
+
+## Project Maturity
+R.MessageBus is used by a number of high-profile financial applications in production environments. However,  it is still in early stages of development and hasn’t been officially released.  It may not yet be suitable for the most demanding and conservative projects.
+
+Public API is relatively stable and no major changes are planned in the next version.
+
+
 ## Getting Started
 
 ### Configuration
