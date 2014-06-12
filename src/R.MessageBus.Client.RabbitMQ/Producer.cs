@@ -15,6 +15,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly IMessageSerializer _messageSerializer;
         private readonly IModel _model;
         private readonly IConnection _connection;
+        private readonly Object _lock = new Object(); 
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings, IMessageSerializer messageSerializer)
         {
@@ -48,42 +49,54 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             var serializedMessage = _messageSerializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
-            IBasicProperties basicProperties = _model.CreateBasicProperties();
-            basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
-            basicProperties.Headers = GetHeaders(headers, _transportSettings.Queue.Name, "Publish");
+            lock (_lock)
+            {
+                IBasicProperties basicProperties = _model.CreateBasicProperties();
+                basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
-            basicProperties.SetPersistent(true);
-            var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
-            _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes); // (use endpoint as routing key (in retries))
+                basicProperties.Headers = GetHeaders(headers, _transportSettings.Queue.Name, "Publish");
+
+                basicProperties.SetPersistent(true);
+                var exchangeName = ConfigureExchange(typeof (T).FullName.Replace(".", string.Empty));
+                _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes);
+            }
         }
 
         public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
             var serializedMessage = _messageSerializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
-            IBasicProperties basicProperties = _model.CreateBasicProperties();
-            basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
-            basicProperties.SetPersistent(true);
-            var endPoint = _queueMappings[typeof(T).FullName];
+            lock (_lock)
+            {
+                IBasicProperties basicProperties = _model.CreateBasicProperties();
+                basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
-            basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
+                basicProperties.SetPersistent(true);
+                var endPoint = _queueMappings[typeof (T).FullName];
 
-            _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
+                basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
+
+                _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
+            }
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
         {
             var serializedMessage = _messageSerializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
-            IBasicProperties basicProperties = _model.CreateBasicProperties();
-            basicProperties.SetPersistent(true);
 
-            basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
+            lock (_lock)
+            {
+                IBasicProperties basicProperties = _model.CreateBasicProperties();
+                basicProperties.SetPersistent(true);
 
-            basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
-            _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
+                basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
+
+                basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
+                _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
+            }
         }
 
                 
