@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using log4net;
@@ -46,13 +45,13 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             var headers = args.BasicProperties.Headers;
 
-            SetHeader(args, "TimeReceived", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
             SetHeader(args, "DestinationMachine", Environment.MachineName);
 
             ConsumeEventResult result = _consumerEventHandler(args.Body, headers);
             _model.BasicAck(args.DeliveryTag, false);
 
-            SetHeader(args, "TimeProcessed", DateTime.Now.ToString(CultureInfo.InvariantCulture));
+            SetHeader(args, "TimeProcessed", DateTime.UtcNow.ToString("O"));
 
             if (!result.Success)
             {
@@ -182,6 +181,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private string GetErrorMessage(Exception exception)
         {
             var sbMessage = new StringBuilder();
+            sbMessage.Append(exception.Message + Environment.NewLine);
             var ie = exception.InnerException;
             while (ie != null)
             {
