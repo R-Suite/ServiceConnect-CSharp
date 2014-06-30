@@ -89,6 +89,12 @@ namespace R.MessageBus.Core
                     object persistanceData = handlerReference.HandlerType.GetMethod("FindProcessManagerData")
                                                                             .Invoke(processManager, new object[] { message });
 
+                    if (null == persistanceData)
+                    {
+                        Logger.Warn(string.Format("ProcessManagerData not found for {0}. message.CorrelationId = {1}", handlerReference.HandlerType, message.CorrelationId));
+                        continue;
+                    }
+
                     // Get data type
                     Type dataType = handlerReference.HandlerType.BaseType.GetGenericArguments()[0];
 
