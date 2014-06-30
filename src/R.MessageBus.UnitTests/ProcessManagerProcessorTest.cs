@@ -405,5 +405,39 @@ namespace R.MessageBus.UnitTests
             // Assert
             _mockProcessManagerFinder.Verify(x => x.DeleteData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.Email == "abc@123.com" && y.Data.User == "Tim Watson")), Times.Once);
         }
+
+        [Fact]
+        public void ShouldNotExecuteHandlerIfProcessManagerDataIsNotFound()
+        {
+            // Arrange
+            var id = Guid.NewGuid();
+            var message = new FakeMessage2(id)
+            {
+                Email = "abc@123.com"
+            };
+
+            _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage2>))).Returns(new List<HandlerReference>
+            {
+                new HandlerReference
+                {
+                    HandlerType = typeof(FakeProcessManager1),
+                    MessageType = typeof(FakeMessage2)
+                }
+            });
+
+            var processManager = new FakeProcessManager1();
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
+            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns((IPersistanceData<FakeProcessManagerData>) null);
+
+            _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
+
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+
+            // Act
+            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
+
+            // Assert
+            _mockProcessManagerFinder.Verify(x => x.UpdateData(It.IsAny<IPersistanceData<FakeProcessManagerData>>()), Times.Never);
+        }
     }
 }
