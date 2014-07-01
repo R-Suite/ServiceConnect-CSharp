@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Data;
 using System.Data.SqlClient;
+using Newtonsoft.Json;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Persistance.SqlServer
@@ -75,7 +77,13 @@ namespace R.MessageBus.Persistance.SqlServer
                     {
                         reader.Read();
 
-                        var data = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(reader["DataJson"].ToString());
+                        var settings = new JsonSerializerSettings
+                        {
+                            TypeNameHandling = TypeNameHandling.Objects
+                        };
+
+                        var data = JsonConvert.DeserializeObject<T>(reader["DataJson"].ToString(), settings);
+                        //var data = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(reader["DataJson"].ToString());
 
                         result = new SqlServerData<T> { Id = (Guid)reader["Id"], Data = data };
                     }
@@ -117,7 +125,8 @@ namespace R.MessageBus.Persistance.SqlServer
                     Id = data.CorrelationId
                 };
 
-                var sqlServerDataJson = Newtonsoft.Json.JsonConvert.SerializeObject(sqlServerData);
+                var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
+                var dataJson = JsonConvert.SerializeObject(sqlServerData.Data, Formatting.Indented, settings);
 
                 // Insert if doesn't exist, else update (only the first one is allowed)
                 string upsertSql = string.Format(@"begin tran
@@ -137,7 +146,7 @@ namespace R.MessageBus.Persistance.SqlServer
                 {
                     command.Connection = sqlConnection;
                     command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = data.CorrelationId;
-                    command.Parameters.Add("@DataJson", SqlDbType.Text).Value = sqlServerDataJson;
+                    command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
                     command.ExecuteNonQuery();
                 }
             }
@@ -160,7 +169,8 @@ namespace R.MessageBus.Persistance.SqlServer
 
             var sqlServerData = (SqlServerData<T>)data;
 
-            var sqlServerDataJson = Newtonsoft.Json.JsonConvert.SerializeObject(sqlServerData);
+            var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
+            var dataJson = JsonConvert.SerializeObject(sqlServerData.Data, Formatting.Indented, settings);
 
             string sql = string.Format(@"UPDATE {0} SET DataJson = @DataJson WHERE Id = @Id", tableName);
 
@@ -170,7 +180,7 @@ namespace R.MessageBus.Persistance.SqlServer
                 command.Connection = _connection;
                 command.Transaction = _dbTransaction;
                 command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
-                command.Parameters.Add("@DataJson", SqlDbType.Text).Value = sqlServerDataJson;
+                command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
                 command.ExecuteNonQuery();
                 _dbTransaction.Commit();
             }
