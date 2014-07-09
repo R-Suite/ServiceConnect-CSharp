@@ -60,7 +60,7 @@ namespace R.MessageBus.Persistance.SqlServer
 
             _connection = new SqlConnection(_connectionString); // will be closed by UpdateData or Delete method
             _connection.Open();
-            _dbTransaction = _connection.BeginTransaction(IsolationLevel.ReadCommitted);    // will be commited by UpdateData or Delete methods          
+            _dbTransaction = _connection.BeginTransaction(IsolationLevel.ReadCommitted);    // will be commited by UpdateData or Delete methods      
 
             try
             {
@@ -69,7 +69,7 @@ namespace R.MessageBus.Persistance.SqlServer
                     command.Connection = _connection;
                     command.CommandTimeout = _commandTimeout;
                     command.Transaction = _dbTransaction;
-                    command.CommandText = string.Format(@"SELECT * FROM {0} WITH (UPDLOCK) WHERE Id = @Id", tableName);
+                    command.CommandText = string.Format(@"SELECT * FROM {0} WITH (UPDLOCK, ROWLOCK) WHERE Id = @Id", tableName);
                     command.Parameters.Add(new SqlParameter { ParameterName = "@Id", Value = id });
                     var reader = command.ExecuteReader(CommandBehavior.SingleResult);
 
@@ -83,7 +83,6 @@ namespace R.MessageBus.Persistance.SqlServer
                         };
 
                         var data = JsonConvert.DeserializeObject<T>(reader["DataJson"].ToString(), settings);
-                        //var data = Newtonsoft.Json.JsonConvert.DeserializeObject<T>(reader["DataJson"].ToString());
 
                         result = new SqlServerData<T> { Id = (Guid)reader["Id"], Data = data };
                     }
@@ -117,37 +116,55 @@ namespace R.MessageBus.Persistance.SqlServer
         {
             string tableName = GetTableName(data);
 
+            var sqlServerData = new SqlServerData<IProcessManagerData>
+            {
+                Data = data,
+                Id = data.CorrelationId
+            };
+
+            var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
+            var dataJson = JsonConvert.SerializeObject(sqlServerData.Data, Formatting.Indented, settings);
+
             using (var sqlConnection = new SqlConnection(_connectionString))
             {
-                var sqlServerData = new SqlServerData<IProcessManagerData>
-                {
-                    Data = data,
-                    Id = data.CorrelationId
-                };
-
-                var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
-                var dataJson = JsonConvert.SerializeObject(sqlServerData.Data, Formatting.Indented, settings);
-
-                // Insert if doesn't exist, else update (only the first one is allowed)
-                string upsertSql = string.Format(@"begin tran
-                                       UPDATE {0} with (serializable)
-                                       SET DataJson = @DataJson
-                                       WHERE Id = @Id
-                                       if @@ROWCOUNT = 0
-                                       begin
-                                          INSERT {0} (Id, DataJson)
-                                          VALUES (@Id,@DataJson)
-                                       end
-                                    commit tran", tableName);
-
                 sqlConnection.Open();
 
-                using (var command = new SqlCommand(upsertSql))
+                using (var dbTransaction = sqlConnection.BeginTransaction(IsolationLevel.ReadCommitted))
                 {
+                    // Insert if doesn't exist, else update (only the first one is allowed)
+                    string upsertSql = string.Format(@"if exists (select * from {0} with (updlock,serializable) WHERE Id = @Id)
+                                                    begin
+                                                        UPDATE {0}
+		                                                SET DataJson = @DataJson 
+		                                                WHERE Id = @Id
+                                                    end
+                                                else
+                                                    begin
+                                                        INSERT {0} (Id, DataJson)
+                                                        VALUES (@Id,@DataJson)
+                                                    end", tableName);
+
+
+                    var command = new SqlCommand(upsertSql);
+                    command.Transaction = dbTransaction;
                     command.Connection = sqlConnection;
                     command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = data.CorrelationId;
                     command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
-                    command.ExecuteNonQuery();
+
+                    try
+                    {
+                        command.ExecuteNonQuery();
+                        dbTransaction.Commit();
+                    }
+                    catch
+                    {
+                        dbTransaction.Rollback();
+                        throw;
+                    }
+                    finally
+                    {
+                        sqlConnection.Close();
+                    }
                 }
             }
         }
@@ -178,6 +195,7 @@ namespace R.MessageBus.Persistance.SqlServer
             {
                 var command = new SqlCommand(sql);
                 command.Connection = _connection;
+                command.CommandTimeout = _commandTimeout;
                 command.Transaction = _dbTransaction;
                 command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
                 command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
@@ -275,6 +293,7 @@ namespace R.MessageBus.Persistance.SqlServer
                         string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, DataJson text NULL);", tableName);
                     command.ExecuteNonQuery();
                 }
+                connection.Close();
             }
 
             return tableName;
