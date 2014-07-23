@@ -14,8 +14,6 @@ namespace R.MessageBus.Persistance.SqlServer
     {
         private readonly string _connectionString;
         private readonly int _commandTimeout = 30;
-        private SqlConnection _connection;
-        private SqlTransaction _dbTransaction;
 
         /// <summary>
         /// Default constructor
@@ -58,19 +56,17 @@ namespace R.MessageBus.Persistance.SqlServer
             if (!GetTableNameExists(tableName))
                 return null;
 
-            _connection = new SqlConnection(_connectionString); // will be closed by UpdateData or Delete method
-            _connection.Open();
-            _dbTransaction = _connection.BeginTransaction(IsolationLevel.ReadCommitted);    // will be commited by UpdateData or Delete methods      
+            var connection = new SqlConnection(_connectionString);
+            connection.Open();
 
             try
             {
                 using (var command = new SqlCommand())
                 {
-                    command.Connection = _connection;
+                    command.Connection = connection;
                     command.CommandTimeout = _commandTimeout;
-                    command.Transaction = _dbTransaction;
-                    command.CommandText = string.Format(@"SELECT * FROM {0} WITH (UPDLOCK, ROWLOCK) WHERE Id = @Id", tableName);
-                    command.Parameters.Add(new SqlParameter { ParameterName = "@Id", Value = id });
+                    command.CommandText = string.Format(@"SELECT * FROM {0} WHERE Id = @Id", tableName);
+                    command.Parameters.Add(new SqlParameter {ParameterName = "@Id", Value = id});
                     var reader = command.ExecuteReader(CommandBehavior.SingleResult);
 
                     if (reader.HasRows)
@@ -84,23 +80,20 @@ namespace R.MessageBus.Persistance.SqlServer
 
                         var data = JsonConvert.DeserializeObject<T>(reader["DataJson"].ToString(), settings);
 
-                        result = new SqlServerData<T> { Id = (Guid)reader["Id"], Data = data };
+                        result = new SqlServerData<T>
+                        {
+                            Id = (Guid) reader["Id"],
+                            Data = data,
+                            Version = (int) reader["Version"]
+                        };
                     }
 
                     reader.Close();
                 }
             }
-            catch
+            finally
             {
-                _dbTransaction.Rollback();
-                _connection.Close();
-                throw;
-            }
-
-            if (null == result)
-            {
-                _dbTransaction.Rollback();
-                _connection.Close();
+                connection.Close();
             }
 
             return result;
@@ -119,6 +112,7 @@ namespace R.MessageBus.Persistance.SqlServer
             var sqlServerData = new SqlServerData<IProcessManagerData>
             {
                 Data = data,
+                Version = 1,
                 Id = data.CorrelationId
             };
 
@@ -135,13 +129,13 @@ namespace R.MessageBus.Persistance.SqlServer
                     string upsertSql = string.Format(@"if exists (select * from {0} with (updlock,serializable) WHERE Id = @Id)
                                                     begin
                                                         UPDATE {0}
-		                                                SET DataJson = @DataJson 
+		                                                SET DataJson = @DataJson, Version = @Version 
 		                                                WHERE Id = @Id
                                                     end
                                                 else
                                                     begin
-                                                        INSERT {0} (Id, DataJson)
-                                                        VALUES (@Id,@DataJson)
+                                                        INSERT {0} (Id, Version, DataJson)
+                                                        VALUES (@Id,@Version,@DataJson)
                                                     end", tableName);
 
 
@@ -149,6 +143,7 @@ namespace R.MessageBus.Persistance.SqlServer
                     command.Transaction = dbTransaction;
                     command.Connection = sqlConnection;
                     command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = data.CorrelationId;
+                    command.Parameters.Add("@Version", SqlDbType.Int).Value = sqlServerData.Version;
                     command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
 
                     try
@@ -176,41 +171,39 @@ namespace R.MessageBus.Persistance.SqlServer
         /// <param name="data"></param>
         public void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
         {
-            if (null == _connection || _connection.State != ConnectionState.Open)
-                throw new Exception("No open database connection found.");
-
-            if (null == _dbTransaction)
-                throw new Exception("No available database transaction found.");
-
             string tableName = GetTableName(data.Data);
 
             var sqlServerData = (SqlServerData<T>)data;
+            int currentVersion = sqlServerData.Version;
 
             var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
             var dataJson = JsonConvert.SerializeObject(sqlServerData.Data, Formatting.Indented, settings);
 
-            string sql = string.Format(@"UPDATE {0} SET DataJson = @DataJson WHERE Id = @Id", tableName);
+            string sql = string.Format(@"UPDATE {0} SET DataJson = @DataJson, Version = @NewVersion WHERE Id = @Id AND Version = @CurrentVersion", tableName);
+
+            var connection = new SqlConnection(_connectionString);
+            connection.Open();
+
+            int result;
 
             try
             {
                 var command = new SqlCommand(sql);
-                command.Connection = _connection;
+                command.Connection = connection;
                 command.CommandTimeout = _commandTimeout;
-                command.Transaction = _dbTransaction;
                 command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
                 command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
-                command.ExecuteNonQuery();
-                _dbTransaction.Commit();
-            }
-            catch
-            {
-                _dbTransaction.Rollback();
-                throw;
+                command.Parameters.Add("@CurrentVersion", SqlDbType.Int).Value = currentVersion;
+                command.Parameters.Add("@NewVersion", SqlDbType.Int).Value = ++currentVersion;
+                result = command.ExecuteNonQuery();
             }
             finally
             {
-                _connection.Close();
+                connection.Close();
             }
+
+            if (result == 0)
+                throw new ArgumentException(string.Format("Possible Concurrency Error. ProcessManagerData with CorrelationId {0} and Version {1} could not be updated.", sqlServerData.Data.CorrelationId, sqlServerData.Version));
         }
 
         /// <summary>
@@ -221,35 +214,25 @@ namespace R.MessageBus.Persistance.SqlServer
         /// <param name="data"></param>
         public void DeleteData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
         {
-            if (null == _connection || _connection.State != ConnectionState.Open)
-                throw new Exception("No open database connection found.");
-
-            if (null == _dbTransaction)
-                throw new Exception("No available database transaction found.");
-
             string tableName = GetTableName(data.Data);
 
             var sqlServerData = (SqlServerData<T>)data;
 
             string sql = string.Format(@"DELETE FROM {0} WHERE Id = @Id", tableName);
 
+            var connection = new SqlConnection(_connectionString);
+            connection.Open();
+
             try
             {
                 var command = new SqlCommand(sql);
-                command.Connection = _connection;
-                command.Transaction = _dbTransaction;
+                command.Connection = connection;
                 command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
                 command.ExecuteNonQuery();
-                _dbTransaction.Commit();
-            }
-            catch
-            {
-                _dbTransaction.Rollback();
-                throw;
             }
             finally
             {
-                _connection.Close();
+                connection.Close();
             }
         }
 
@@ -290,7 +273,7 @@ namespace R.MessageBus.Persistance.SqlServer
                 {
                     command.Connection = connection;
                     command.CommandText = string.Format("IF NOT EXISTS( SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{0}') ", tableName) +
-                        string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, DataJson text NULL);", tableName);
+                        string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, Version int NOT NULL, DataJson text NULL);", tableName);
                     command.ExecuteNonQuery();
                 }
                 connection.Close();

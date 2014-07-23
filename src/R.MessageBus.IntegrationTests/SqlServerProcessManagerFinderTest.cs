@@ -14,6 +14,7 @@ namespace R.MessageBus.IntegrationTests
     {
         public string Id { get; set; }
         public string DataJson { get; set; }
+        public int Version { get; set; }
     }
 
     public class TestSqlServerData : IProcessManagerData
@@ -147,9 +148,6 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
-            // FindData() and UpdateData() methods are part of the same transaction.
-            // FindData() opens new connection and transaction.
-            // UPDLOCK is placed onf the relevant row to prevent reads until the transaction is commited in UpdateData
             processManagerFinder.FindData<TestSqlServerData>(correlationId);
             processManagerFinder.UpdateData(sqlServerData);
 
@@ -162,33 +160,22 @@ namespace R.MessageBus.IntegrationTests
         }
 
         [Fact]
-        public void ShouldThrowWhenUpdatingDataWithoutOpenTransaction()
-        {
-            // Arrange
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
-
-            // Act / Assert
-            Assert.Throws<Exception>(() => processManagerFinder.UpdateData(new SqlServerData<IProcessManagerData>()));
-        }
-
-        [Fact]
-        public void ShouldThrowWhenTwoInstancesOfProcessManagerFinderTryToReadDataAtTheSameTime()
+        public void ShouldThrowWhenUpdatingTwoInstancesOfSameDataAtTheSameTime()
         {
             // Arrange
             var correlationId = Guid.NewGuid();
             var testDataJson1 = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData1\"}";
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson1 } });
+            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson1, Version = 1} });
 
-            IProcessManagerFinder processManagerFinder1 = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
-            IProcessManagerFinder processManagerFinder2 = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
+            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
 
-            var result = processManagerFinder1.FindData<TestSqlServerData>(correlationId);
+            var foundData1 = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            var foundData2 = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+
+            processManagerFinder.UpdateData(foundData1); // first update should be fine
 
             // Act / Assert
-            Assert.Throws<SqlException>(() => processManagerFinder2.FindData<TestSqlServerData>(correlationId)); // first transaction not yet commited
-
-            // Teardown - complete transaction
-            processManagerFinder1.UpdateData(result); 
+            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(foundData2)); // second update should fail
         }
 
         [Fact]
@@ -197,33 +184,20 @@ namespace R.MessageBus.IntegrationTests
             // Arrange
             var correlationId = Guid.NewGuid();
             var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData\"}";
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson } });
+            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson, Version = 1} });
 
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
-            var sqlServerDataToBeDeleted = new SqlServerData<IProcessManagerData> { Data = data, Id = correlationId };
+            var sqlServerDataToBeDeleted = new SqlServerData<IProcessManagerData> { Data = data, Id = correlationId, Version = 1};
 
             // Act
-            // FindData() and DeleteData() methods are part of the same transaction.
-            // FindData() opens new connection and transaction.
-            // UPDLOCK is placed onf the relevant row to prevent reads until the transaction is commited in DeleteData
             processManagerFinder.FindData<TestSqlServerData>(correlationId);
             processManagerFinder.DeleteData(sqlServerDataToBeDeleted);
 
             // Assert
             var results = GetTestDbData(correlationId);
             Assert.Equal(0, results.Count);
-        }
-
-        [Fact]
-        public void ShouldThrowWhenDeletingDataWithoutOpenTransaction()
-        {
-            // Arrange
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
-
-            // Act / Assert
-            Assert.Throws<Exception>(() => processManagerFinder.DeleteData(new SqlServerData<IProcessManagerData>()));
         }
 
         private void SetupTestDbData(IEnumerable<TestDbRow> testData)
@@ -238,7 +212,7 @@ namespace R.MessageBus.IntegrationTests
                     command.Connection = connection;
                     command.CommandText =
                         "IF NOT EXISTS( SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'TestSqlServerData') " +
-                        "CREATE TABLE TestSqlServerData(Id uniqueidentifier NOT NULL, DataJson text NULL);";
+                        "CREATE TABLE TestSqlServerData(Id uniqueidentifier NOT NULL, DataJson text NULL, Version int NOT NULL);";
                     command.ExecuteNonQuery();
                 }
 
@@ -249,9 +223,10 @@ namespace R.MessageBus.IntegrationTests
                         using (var command = new SqlCommand())
                         {
                             command.Connection = connection;
-                            command.CommandText = @"INSERT TestSqlServerData (Id, DataJson) VALUES (@Id,@DataJson)";
+                            command.CommandText = @"INSERT TestSqlServerData (Id, DataJson, Version) VALUES (@Id,@DataJson,@Version)";
                             command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = new Guid(testDbRow.Id);
                             command.Parameters.Add("@DataJson", SqlDbType.Text).Value = testDbRow.DataJson;
+                            command.Parameters.Add("@Version", SqlDbType.Int).Value = testDbRow.Version;
                             command.ExecuteNonQuery();
                         }
                     }
