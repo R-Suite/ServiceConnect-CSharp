@@ -67,10 +67,11 @@ namespace R.MessageBus
         {
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
 
+            string queueName = Configuration.TransportSettings.Queue.Name;
+
             foreach (HandlerReference reference in instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName)))
             {
                 string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
-                string queueName = Configuration.TransportSettings.Queue.Name;
 
                 IConsumer consumer = Configuration.GetConsumer();
                 consumer.StartConsuming(ConsumeMessageEvent, messageTypeName, queueName);
