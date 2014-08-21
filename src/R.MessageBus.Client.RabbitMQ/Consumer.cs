@@ -207,8 +207,15 @@ namespace R.MessageBus.Client.RabbitMQ
         private string ConfigureQueue()
         {
             var arguments = _transportSettings.Queue.Arguments;
-
-            return _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _exclusive, _transportSettings.Queue.AutoDelete, arguments);
+            try
+            {
+                _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _exclusive, _transportSettings.Queue.AutoDelete, arguments);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring queue - {0}", ex.Message));
+            }
+            return _queueName;
         }
 
         private void ConfigureRetryQueue()
@@ -218,8 +225,24 @@ namespace R.MessageBus.Client.RabbitMQ
             _retryQueueName = _queueName + ".Retries";
             var autoDelete = _exclusive;
             string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
-            _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", true, autoDelete, null);
-            _model.QueueBind(_queueName, retryDeadLetterExchangeName, _retryQueueName); // only redeliver to the original queue (use _queueName as routing key)
+
+            try
+            {
+                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", true, autoDelete, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring dead letter exchange - {0}", ex.Message));
+            }
+
+            try
+            {
+                _model.QueueBind(_queueName, retryDeadLetterExchangeName, _retryQueueName); // only redeliver to the original queue (use _queueName as routing key)
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error binding dead letter queue - {0}", ex.Message));
+            }
 
             var arguments = new Dictionary<string, object>
             {
@@ -227,37 +250,80 @@ namespace R.MessageBus.Client.RabbitMQ
                 {"x-message-ttl", _retryDelay}
             };
 
-            _model.QueueDeclare(_retryQueueName, _transportSettings.Queue.Durable, _exclusive, false, arguments);
+            try
+            {
+                _model.QueueDeclare(_retryQueueName, _transportSettings.Queue.Durable, _exclusive, false, arguments);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring queue {0}", ex.Message));
+            }
         }
 
         private string ConfigureErrorQueue()
         {
-            return _model.QueueDeclare(_transportSettings.ErrorQueueName, true, false, false, null);
+            try
+            {
+                _model.QueueDeclare(_transportSettings.ErrorQueueName, true, false, false, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring error queue {0}", ex.Message));
+            }
+            return _transportSettings.ErrorQueueName;
         }
 
         private string ConfigureAuditQueue()
         {
-            return _model.QueueDeclare(_transportSettings.AuditQueueName, true, false, false, null);
+            try
+            {
+                _model.QueueDeclare(_transportSettings.AuditQueueName, true, false, false, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring audit queue {0}", ex.Message));
+            }
+            return _transportSettings.AuditQueueName;
         }
 
         private string ConfigureExchange(string exchangeName)
         {
-            var autoDelete = _exclusive;
-            _model.ExchangeDeclare(exchangeName, "fanout", true, autoDelete, null);
+            try
+            {
+                _model.ExchangeDeclare(exchangeName, "fanout", true, _exclusive, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring exchange {0}", ex.Message));
+            }
 
             return exchangeName;
         }
 
         private string ConfigureErrorExchange()
         {
-            _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct");
+            try
+            {
+                _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring error exchange {0}", ex.Message));
+            }
 
             return _transportSettings.ErrorQueueName;
         }
 
         private string ConfigureAuditExchange()
         {
-            _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct");
+            try
+            {
+                _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring audit exchange {0}", ex.Message));
+            }
 
             return _transportSettings.AuditQueueName;
         }
