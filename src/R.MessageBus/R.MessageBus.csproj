@@ -55,7 +55,6 @@
   <ItemGroup>
     <Compile Include="Bus.cs" />
     <Compile Include="Configuration.cs" />
-    <Compile Include="ConfigurationManagerWrapper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
