@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using log4net;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
 
@@ -15,7 +17,8 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly IMessageSerializer _messageSerializer;
         private readonly IModel _model;
         private readonly IConnection _connection;
-        private readonly Object _lock = new Object(); 
+        private readonly Object _lock = new Object();
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings, IMessageSerializer messageSerializer)
         {
@@ -135,7 +138,14 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureExchange(string exchangeName)
         {
-            _model.ExchangeDeclare(exchangeName, "fanout", true);
+            try
+            {
+                _model.ExchangeDeclare(exchangeName, "fanout", true);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring exchange - {0}", ex.Message));
+            }
 
             return exchangeName;
         }
