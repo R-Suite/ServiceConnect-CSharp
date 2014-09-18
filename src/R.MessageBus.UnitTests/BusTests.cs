@@ -149,10 +149,10 @@ namespace R.MessageBus.UnitTests
             bus.StartConsuming();
 
             // Act
-            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(new FakeMessage1(Guid.NewGuid())
+            _fakeEventHandler(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            })), headers);
+            }, headers);
 
             // Assert
             mockMessageHandlerProcessor.Verify(x => x.ProcessMessage(It.Is<FakeMessage1>(y => y.Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);
@@ -197,10 +197,10 @@ namespace R.MessageBus.UnitTests
             bus.StartConsuming();
 
             // Act
-            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(new FakeMessage1(Guid.NewGuid())
+            _fakeEventHandler(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            })), headers);
+            }, headers);
 
             // Assert
             mockProcessManagerProcessor.Verify(x => x.ProcessMessage(It.Is<FakeMessage1>(y => y.Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once); 
@@ -263,9 +263,9 @@ namespace R.MessageBus.UnitTests
             headers["SourceAddress"] = Encoding.ASCII.GetBytes(_correlationId.ToString());
 
             // Act
-            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(new FakeMessage2(id)
+            _fakeEventHandler(new FakeMessage2(id)
             {
-            })), headers);
+            }, headers);
 
             // Assert
             mockMessageHandlerProcessor.Verify(x => x.ProcessMessage(It.Is<FakeMessage2>(y => y.CorrelationId == id), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);

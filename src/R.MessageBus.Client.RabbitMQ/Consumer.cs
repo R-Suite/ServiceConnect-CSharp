@@ -48,7 +48,9 @@ namespace R.MessageBus.Client.RabbitMQ
             SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
             SetHeader(args, "DestinationMachine", Environment.MachineName);
 
-            ConsumeEventResult result = _consumerEventHandler(args.Body, headers);
+            object deserializedMessage = DeserializeMessage(args.Body, headers);
+
+            ConsumeEventResult result = _consumerEventHandler(deserializedMessage, headers);
             _model.BasicAck(args.DeliveryTag, false);
 
             SetHeader(args, "TimeProcessed", DateTime.UtcNow.ToString("O"));
@@ -105,6 +107,20 @@ namespace R.MessageBus.Client.RabbitMQ
                     _model.BasicPublish(_auditExchange, string.Empty, args.BasicProperties, args.Body);
                 }
             }
+        }
+
+        private object DeserializeMessage(byte[] body, IDictionary<string, object> headers)
+        {
+            string message = Encoding.UTF8.GetString(body);
+
+            if (!headers.ContainsKey("FullTypeName"))
+            {
+                throw new Exception(string.Format("Error processing message, Message headers must contain FullTypeName."));
+            }
+
+            var typeName = headers["FullTypeName"].ToString();
+
+            return _messageSerializer.Deserialize(typeName, message);
         }
 
         public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null)
