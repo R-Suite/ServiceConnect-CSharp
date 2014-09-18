@@ -15,10 +15,11 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly ITransportSettings _transportSettings;
         private readonly IDictionary<string, string> _queueMappings;
         private readonly IMessageSerializer _messageSerializer;
-        private readonly IModel _model;
-        private readonly IConnection _connection;
+        private IModel _model;
+        private IConnection _connection;
         private readonly Object _lock = new Object();
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        private readonly ConnectionFactory _connectionFactory;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings, IMessageSerializer messageSerializer)
         {
@@ -26,7 +27,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _queueMappings = queueMappings;
             _messageSerializer = messageSerializer;
 
-            var connectionFactory = new ConnectionFactory
+            _connectionFactory = new ConnectionFactory
             {
                 HostName = transportSettings.Host,
                 VirtualHost = "/",
@@ -36,15 +37,20 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (!string.IsNullOrEmpty(transportSettings.Username))
             {
-                connectionFactory.UserName = transportSettings.Username;
+                _connectionFactory.UserName = transportSettings.Username;
             }
 
             if (!string.IsNullOrEmpty(transportSettings.Password))
             {
-                connectionFactory.Password = transportSettings.Password;
+                _connectionFactory.Password = transportSettings.Password;
             }
 
-            _connection = connectionFactory.CreateConnection();
+            CreateConnection();
+        }
+
+        private void CreateConnection()
+        {
+            _connection = _connectionFactory.CreateConnection();
             _model = _connection.CreateModel();
         }
 
@@ -61,8 +67,11 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.Headers = GetHeaders(typeof(T), headers, _transportSettings.Queue.Name, "Publish");
 
                 basicProperties.SetPersistent(true);
-                var exchangeName = ConfigureExchange(typeof (T).FullName.Replace(".", string.Empty));
-                _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes);
+                var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
+
+                Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes),
+                         ex => CreateConnection(),
+                         new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
@@ -77,11 +86,13 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
                 basicProperties.SetPersistent(true);
-                var endPoint = _queueMappings[typeof (T).FullName];
+                var endPoint = _queueMappings[typeof(T).FullName];
 
                 basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
 
-                _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
+                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
+                         ex => CreateConnection(),
+                         new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
@@ -98,18 +109,21 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
 
                 basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
-                _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
+
+                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
+                         ex => CreateConnection(),
+                         new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
-                
+
         private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
         {
             if (headers == null)
             {
                 headers = new Dictionary<string, string>();
             }
-            
+
             if (!headers.ContainsKey("DestinationAddress"))
             {
                 headers["DestinationAddress"] = queueName;
@@ -119,10 +133,10 @@ namespace R.MessageBus.Client.RabbitMQ
             headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
             headers["MessageType"] = messageType;
-            headers["FullTypeName"] = type.FullName;
+            headers["FullTypeName"] = type.AssemblyQualifiedName;
             headers["TypeName"] = type.Name;
 
-            return headers.ToDictionary(x => x.Key, x => (object) x.Value);
+            return headers.ToDictionary(x => x.Key, x => (object)x.Value);
         }
 
         public void Disconnect()
