@@ -2,7 +2,6 @@
 using System.Data;
 using System.Data.SqlClient;
 using Newtonsoft.Json;
-using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Persistance.SqlServer
@@ -139,9 +138,7 @@ namespace R.MessageBus.Persistance.SqlServer
                                                     end", tableName);
 
 
-                    var command = new SqlCommand(upsertSql);
-                    command.Transaction = dbTransaction;
-                    command.Connection = sqlConnection;
+                    var command = new SqlCommand(upsertSql) {Transaction = dbTransaction, Connection = sqlConnection};
                     command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = data.CorrelationId;
                     command.Parameters.Add("@Version", SqlDbType.Int).Value = sqlServerData.Version;
                     command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
@@ -188,9 +185,7 @@ namespace R.MessageBus.Persistance.SqlServer
 
             try
             {
-                var command = new SqlCommand(sql);
-                command.Connection = connection;
-                command.CommandTimeout = _commandTimeout;
+                var command = new SqlCommand(sql) {Connection = connection, CommandTimeout = _commandTimeout};
                 command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
                 command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
                 command.Parameters.Add("@CurrentVersion", SqlDbType.Int).Value = currentVersion;
@@ -225,8 +220,7 @@ namespace R.MessageBus.Persistance.SqlServer
 
             try
             {
-                var command = new SqlCommand(sql);
-                command.Connection = connection;
+                var command = new SqlCommand(sql) {Connection = connection};
                 command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
                 command.ExecuteNonQuery();
             }
