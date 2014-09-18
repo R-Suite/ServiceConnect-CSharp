@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using System;
+using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
@@ -8,26 +9,14 @@ namespace R.MessageBus.Core
     /// </summary>
     public class JsonMessageSerializer : IMessageSerializer
     {
-        public object Deserialize(string messageJson)
+        public object Deserialize(string typeName, string messageJson)
         {
-            var settings = new JsonSerializerSettings
-            {
-                Binder = new MessageSerializationBinder(),
-                TypeNameHandling = TypeNameHandling.Objects
-            };
-
-            return JsonConvert.DeserializeObject(messageJson, settings);
+            return JsonConvert.DeserializeObject(messageJson, Type.GetType(typeName));
         }
 
-        public string Serialize(object message)
+        public string Serialize<T>(T message)
         {
-            var settings = new JsonSerializerSettings
-            {
-                Binder = new MessageSerializationBinder(),
-                TypeNameHandling = TypeNameHandling.Objects
-            };
-
-            return JsonConvert.SerializeObject(message, Formatting.Indented, settings);
+            return JsonConvert.SerializeObject(message);
         }
     }
 }

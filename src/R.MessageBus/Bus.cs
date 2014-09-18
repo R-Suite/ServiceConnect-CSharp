@@ -5,7 +5,6 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
-using log4net.Util;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
@@ -15,7 +14,6 @@ namespace R.MessageBus
     {
         private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
         private readonly IBusContainer _container;
-        private readonly IMessageSerializer _serializer;
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
         private readonly object _requestLock = new object();
         private static IProducer _producer;
@@ -27,13 +25,12 @@ namespace R.MessageBus
             Configuration = configuration;
 
             _container = configuration.GetContainer();
-            _producer = Configuration.GetProducer();
-            _serializer = Configuration.GetSerializer();
+            _producer = configuration.GetProducer();
 
             _container.Initialize();
             _container.AddBus(this);
 
-            if (Configuration.ScanForMesssageHandlers)
+            if (configuration.ScanForMesssageHandlers)
             {
                 _container.ScanForHandlers();
             }
@@ -162,28 +159,12 @@ namespace R.MessageBus
             })().Result;
         }
 
-        private ConsumeEventResult ConsumeMessageEvent(byte[] message, IDictionary<string, object> headers)
+        private ConsumeEventResult ConsumeMessageEvent(object message, IDictionary<string, object> headers)
         {
             var result = new ConsumeEventResult
             {
                 Success = true
             };
-
-            object objectMessage = null;
-            try
-            {
-                string messageJson = Encoding.UTF8.GetString(message);
-                objectMessage = _serializer.Deserialize(messageJson);
-            }
-            catch (Exception ex)
-            {
-                if (Configuration.ExceptionHandler != null)
-                {
-                    Configuration.ExceptionHandler(ex);
-                }
-                result.Success = false;
-                result.Exception = ex;
-            }
 
             if (result.Success == false)
             {
@@ -198,9 +179,9 @@ namespace R.MessageBus
 
             try
             {
-                ProcessMessageHandlers(objectMessage, context);
-                ProcessProcessManagerHandlers(objectMessage, context);
-                ProcessRequestReplyConfigurations(objectMessage, context);
+                ProcessMessageHandlers(message, context);
+                ProcessProcessManagerHandlers(message, context);
+                ProcessRequestReplyConfigurations(message, context);
             }
             catch (Exception ex)
             {
