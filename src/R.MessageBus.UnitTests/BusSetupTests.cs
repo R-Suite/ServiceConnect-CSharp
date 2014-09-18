@@ -19,6 +19,7 @@ namespace R.MessageBus.UnitTests
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
+                config.SetProducer<FakePublisher>();
                 config.PersistenceStoreDatabaseName = "TestDatabaseName";
                 config.PersistenceStoreConnectionString = "TestConnectionString";
             });
@@ -39,6 +40,7 @@ namespace R.MessageBus.UnitTests
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
+                config.SetProducer<FakePublisher>();
             });
 
             // Act
@@ -57,6 +59,7 @@ namespace R.MessageBus.UnitTests
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
+                config.SetProducer<FakePublisher>();
                 config.ScanForMesssageHandlers = true;
             });
 
@@ -71,7 +74,11 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomContainer()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config => config.SetContainer<FakeContainer>());
+            IBus bus = Bus.Initialize(config =>
+            {
+                config.SetContainer<FakeContainer>();
+                config.SetProducer<FakePublisher>();
+            });
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -84,7 +91,11 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomConsumer()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config => config.SetConsumer<FakeConsumer>());
+            IBus bus = Bus.Initialize(config =>
+            {
+                config.SetConsumer<FakeConsumer>();
+                config.SetProducer<FakePublisher>();
+            });
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -97,7 +108,11 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomPublisher()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config => config.SetProducer<FakePublisher>());
+            IBus bus = Bus.Initialize(config =>
+            {
+                config.SetProducer<FakePublisher>();
+                config.SetContainer<FakeContainer>();
+            });
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -110,7 +125,12 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupBusWithCustomProcessManagerFinder()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config => config.SetProcessManagerFinder<FakeProcessManagerFinder>());
+            IBus bus = Bus.Initialize(config =>
+            {
+                config.SetProcessManagerFinder<FakeProcessManagerFinder>();
+                config.SetContainer<FakeContainer>();
+                config.SetProducer<FakePublisher>(); 
+            });
 
             // Act
             IConfiguration configuration = bus.Configuration;
@@ -129,7 +149,6 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
 
-
             // Act
             new Bus(mockConfiguration.Object);
 
@@ -145,6 +164,8 @@ namespace R.MessageBus.UnitTests
             {
                 conf.AddQueueMapping(typeof(FakeMessage1), "MyEndPoint1");
                 conf.AddQueueMapping(typeof(FakeMessage2), "MyEndPoint2");
+                conf.SetContainer<FakeContainer>();
+                conf.SetProducer<FakePublisher>(); 
             });
 
             // Act
@@ -176,7 +197,12 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupQueueName()
         {
             // Arrange
-            var bus = Bus.Initialize(c => c.SetQueueName("TestQueue"));
+            var bus = Bus.Initialize(c =>
+            {
+                c.SetQueueName("TestQueue");
+                c.SetContainer<FakeContainer>();
+                c.SetProducer<FakePublisher>();
+            });
 
             // Act
             var config = bus.Configuration;
@@ -189,7 +215,12 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupErrorQueueName()
         {
             // Arrange
-            var bus = Bus.Initialize(c => c.SetErrorQueueName("TestErrorQueue"));
+            var bus = Bus.Initialize(c =>
+            {
+                c.SetErrorQueueName("TestErrorQueue");
+                c.SetContainer<FakeContainer>();
+                c.SetProducer<FakePublisher>();
+            });
 
             // Act
             var config = bus.Configuration;
@@ -202,7 +233,12 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupAuditQueueName()
         {
             // Arrange
-            var bus = Bus.Initialize(c => c.SetAuditQueueName("TestAuditQueue"));
+            var bus = Bus.Initialize(c =>
+            {
+                c.SetAuditQueueName("TestAuditQueue");
+                c.SetContainer<FakeContainer>();
+                c.SetProducer<FakePublisher>(); 
+            });
 
             // Act
             var config = bus.Configuration;
@@ -215,7 +251,12 @@ namespace R.MessageBus.UnitTests
         public void ShouldSetupAuditingEnabled()
         {
             // Arrange
-            var bus = Bus.Initialize(c => c.SetAuditingEnabled(true));
+            var bus = Bus.Initialize(c =>
+            {
+                c.SetAuditingEnabled(true);
+                c.SetContainer<FakeContainer>();
+                c.SetProducer<FakePublisher>();
+            });
 
             // Act
             var config = bus.Configuration;
@@ -366,5 +407,6 @@ namespace R.MessageBus.UnitTests
                 throw new NotImplementedException();
             }
         }
+
     }
 }

@@ -58,7 +58,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
-                basicProperties.Headers = GetHeaders(headers, _transportSettings.Queue.Name, "Publish");
+                basicProperties.Headers = GetHeaders(typeof(T), headers, _transportSettings.Queue.Name, "Publish");
 
                 basicProperties.SetPersistent(true);
                 var exchangeName = ConfigureExchange(typeof (T).FullName.Replace(".", string.Empty));
@@ -79,7 +79,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.SetPersistent(true);
                 var endPoint = _queueMappings[typeof (T).FullName];
 
-                basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
+                basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
 
                 _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
             }
@@ -95,7 +95,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.SetPersistent(true);
 
-                basicProperties.Headers = GetHeaders(headers, endPoint, "Send");
+                basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
 
                 basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
                 _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes);
@@ -103,7 +103,7 @@ namespace R.MessageBus.Client.RabbitMQ
         }
 
                 
-        private Dictionary<string, object> GetHeaders(Dictionary<string, string> headers, string queueName, string messageType)
+        private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
         {
             if (headers == null)
             {
@@ -119,6 +119,8 @@ namespace R.MessageBus.Client.RabbitMQ
             headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
             headers["MessageType"] = messageType;
+            headers["FullTypeName"] = type.FullName;
+            headers["TypeName"] = type.Name;
 
             return headers.ToDictionary(x => x.Key, x => (object) x.Value);
         }

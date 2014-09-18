@@ -28,7 +28,7 @@ namespace R.MessageBus.UnitTests
             var result = _serializer.Serialize(testMessage);
 
             // Assert
-            const string expectedResult = "{\r\n  \"$type\": \"R.MessageBus.UnitTests.TestMessage, R.MessageBus.UnitTests\",\r\n  \"Name\": \"TestName\",\r\n  \"CorrelationId\": \"b203e3e4-0c93-4657-a992-6fc75a074a8c\"\r\n}";
+            const string expectedResult = "{\"Name\":\"TestName\",\"CorrelationId\":\"b203e3e4-0c93-4657-a992-6fc75a074a8c\"}";
             Assert.Equal(expectedResult, result);
         }
 
@@ -37,10 +37,10 @@ namespace R.MessageBus.UnitTests
         public void ShouldDeserializeMessage()
         {
             // Arrange
-            const string message = "{\r\n  \"$type\": \"R.MessageBus.UnitTests.TestMessage, R.MessageBus.UnitTests\",\r\n  \"Name\": \"TestName\",\r\n  \"CorrelationId\": \"b203e3e4-0c93-4657-a992-6fc75a074a8c\"\r\n}";
+            const string message = "{\"Name\":\"TestName\",\"CorrelationId\":\"b203e3e4-0c93-4657-a992-6fc75a074a8c\"}";
 
             // Act
-            var result = _serializer.Deserialize(message);
+            var result = _serializer.Deserialize("R.MessageBus.UnitTests.TestMessage, R.MessageBus.UnitTests", message);
 
             // Assert
             var expectedResult = new TestMessage(new Guid("b203e3e4-0c93-4657-a992-6fc75a074a8c")) { Name = "TestName" };

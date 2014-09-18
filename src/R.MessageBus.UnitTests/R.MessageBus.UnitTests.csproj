@@ -61,7 +61,6 @@
     <Compile Include="InMemoryProcessManagerFinderTests.cs" />
     <Compile Include="ProcessManagerProcessorTest.cs" />
     <Compile Include="JsonMessageSerializerTests.cs" />
-    <Compile Include="MessageSerializationBinderTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
