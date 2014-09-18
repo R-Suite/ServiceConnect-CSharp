@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 using log4net;
 using R.MessageBus.Interfaces;
@@ -25,6 +24,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private string _queueName;
         private string _retryQueueName;
         private bool _exclusive;
+        private string _messageTypeName;
 
         public Consumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
         {
@@ -80,14 +80,14 @@ namespace R.MessageBus.Client.RabbitMQ
                         {
                             jsonException = _messageSerializer.Serialize(result.Exception);
                         }
-                        catch(Exception ex)
+                        catch (Exception ex)
                         {
                             Logger.Warn("Error serializing exception", ex);
                         }
 
                         SetHeader(args, "Exception", _messageSerializer.Serialize(new
                         {
-                            TimeStamp = DateTime.Now, 
+                            TimeStamp = DateTime.Now,
                             ExceptionType = result.Exception.GetType().FullName,
                             Message = GetErrorMessage(result.Exception),
                             result.Exception.StackTrace,
@@ -118,7 +118,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 throw new Exception(string.Format("Error processing message, Message headers must contain FullTypeName."));
             }
 
-            var typeName = headers["FullTypeName"].ToString();
+            var typeName = Encoding.UTF8.GetString((byte[])headers["FullTypeName"]);
 
             return _messageSerializer.Deserialize(typeName, message);
         }
@@ -126,20 +126,26 @@ namespace R.MessageBus.Client.RabbitMQ
         public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null)
         {
             _consumerEventHandler = messageReceived;
-            // Initialize _queueName here rather than in Consumer.ctor from TransportSettings.Queue.Name
-            // TransportSettings.Queue.Name may overriden in the Bus and queueName parameter might have a newer value 
-            // than TransportSettings.Queue.Name would in Consumer.ctor
             _queueName = queueName;
+            _messageTypeName = messageTypeName;
 
             if (exclusive.HasValue)
                 _exclusive = exclusive.Value;
-            
-            var connectionFactory = new ConnectionFactory 
+
+            CreateConsumer();
+        }
+
+        private void CreateConsumer()
+        {
+            Logger.Info(string.Format("Connecting to queue - {0}", _queueName));
+
+            var connectionFactory = new ConnectionFactory
             {
                 HostName = _transportSettings.Host,
                 VirtualHost = "/",
                 Protocol = Protocols.FromEnvironment(),
-                Port = AmqpTcpEndpoint.UseDefaultPort
+                Port = AmqpTcpEndpoint.UseDefaultPort,
+                RequestedHeartbeat = 30
             };
 
             if (!string.IsNullOrEmpty(_transportSettings.Username))
@@ -157,8 +163,8 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
 
             // WORK QUEUE
-            string exchange = ConfigureExchange(messageTypeName);
-            queueName = ConfigureQueue();
+            string exchange = ConfigureExchange(_messageTypeName);
+            var queueName = ConfigureQueue();
 
             if (!string.IsNullOrEmpty(exchange))
             {
@@ -191,7 +197,13 @@ namespace R.MessageBus.Client.RabbitMQ
 
             var consumer = new EventingBasicConsumer();
             consumer.Received += Event;
-            _model.BasicConsume(queueName, false, consumer); // noack must be always false
+            consumer.Shutdown += ConsumerShutdown;
+            _model.BasicConsume(queueName, false, consumer);
+        }
+
+        private void ConsumerShutdown(object sender, ShutdownEventArgs e)
+        {
+            Retry.Do(CreateConsumer, ex => Logger.Error("Error connecting to queue - {0}", ex), new TimeSpan(0, 0, 0, 10));
         }
 
         private string GetErrorMessage(Exception exception)
@@ -207,7 +219,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             return sbMessage.ToString();
         }
-        
+
         private static void SetHeader<T>(BasicDeliverEventArgs args, string key, T value)
         {
             if (Equals(value, default(T)))
