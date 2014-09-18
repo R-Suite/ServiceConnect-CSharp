@@ -166,11 +166,6 @@ namespace R.MessageBus
                 Success = true
             };
 
-            if (result.Success == false)
-            {
-                return result;
-            }
-
             var context = new ConsumeContext
             {
                 Bus = this,
@@ -232,7 +227,6 @@ namespace R.MessageBus
             {
                 {"container", _container}
             });
-
             MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(objectMessage.GetType());
             genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new[] {objectMessage, context});
