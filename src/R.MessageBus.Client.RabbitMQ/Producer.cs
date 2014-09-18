@@ -26,7 +26,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _queueMappings = queueMappings;
             _messageSerializer = messageSerializer;
 
-            var connectionFactory = new ConnectionFactory 
+            var connectionFactory = new ConnectionFactory
             {
                 HostName = transportSettings.Host,
                 VirtualHost = "/",
