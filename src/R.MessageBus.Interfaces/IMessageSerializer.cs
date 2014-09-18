@@ -2,7 +2,7 @@
 {
     public interface IMessageSerializer
     {
-        object Deserialize(string message);
-        string Serialize(object message);
+        object Deserialize(string typeName, string messageJson);
+        string Serialize<T>(T message);
     }
 }
