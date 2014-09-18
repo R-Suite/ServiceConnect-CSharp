@@ -49,10 +49,6 @@
     <Compile Include="SqlServerProcessManagerFinder.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
-      <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
-      <Name>R.MessageBus.Core</Name>
-    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
       <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
       <Name>R.MessageBus.Interfaces</Name>

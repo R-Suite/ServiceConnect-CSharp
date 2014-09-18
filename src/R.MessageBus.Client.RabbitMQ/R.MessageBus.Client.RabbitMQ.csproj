@@ -63,10 +63,6 @@
       <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
       <Name>R.MessageBus.Interfaces</Name>
     </ProjectReference>
-    <ProjectReference Include="..\R.MessageBus.Settings\R.MessageBus.Settings.csproj">
-      <Project>{58a100ce-cc7e-43bf-a054-d28648f092ac}</Project>
-      <Name>R.MessageBus.Settings</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config">
