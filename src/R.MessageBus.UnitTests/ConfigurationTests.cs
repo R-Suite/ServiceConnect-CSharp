@@ -95,6 +95,20 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
+        public void ShouldSetHost()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            configuration.SetHost("Host");
+
+            // Act
+            var result = configuration.TransportSettings.Host;
+
+            // Assert
+            Assert.Equal("Host", result);
+        }
+
+        [Fact]
         public void ShouldSetupErrorQueueName()
         {
             // Arrange

@@ -24,6 +24,12 @@ namespace R.MessageBus.Interfaces
         void AddQueueMapping(Type messageType, string queue);
 
         /// <summary>
+        /// Sets the client host server
+        /// </summary>
+        /// <param name="host">Server connection string</param>
+        void SetHost(string host);
+
+        /// <summary>
         /// Load configuration from file path an initialize Transport Settings
         /// </summary>;
         /// <param name="configFilePath"></param>

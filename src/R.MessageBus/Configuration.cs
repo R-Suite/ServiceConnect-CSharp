@@ -93,6 +93,15 @@ namespace R.MessageBus
         }
 
         /// <summary>
+        /// Sets the client host server
+        /// </summary>
+        /// <param name="host">Server connection string</param>
+        public void SetHost(string host)
+        {
+            TransportSettings.Host = host;
+        }
+
+        /// <summary>
         /// Load settings from configFilePath. 
         /// Use default App.config when configFilePath is not specified. 
         /// </summary>
