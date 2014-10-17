@@ -96,7 +96,9 @@ namespace R.MessageBus
             SendRequest(null, message, callback);
         }
 
-        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message
+        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback)
+            where TRequest : Message
+            where TReply : Message
         {
             var correlationId = Guid.NewGuid();
             var messageId = Guid.NewGuid();
@@ -131,12 +133,16 @@ namespace R.MessageBus
             producer.Disconnect();
         }
 
-        public TReply SendRequest<TRequest, TReply>(TRequest message) where TRequest : Message where TReply : Message
+        public TReply SendRequest<TRequest, TReply>(TRequest message, int timeout)
+            where TRequest : Message
+            where TReply : Message
         {
-            return SendRequest<TRequest, TReply>(null, message);
+            return SendRequest<TRequest, TReply>(null, message, timeout);
         }
-    
-        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message) where TRequest : Message where TReply : Message
+
+        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, int timeout)
+            where TRequest : Message
+            where TReply : Message
         {
             return new Func<Task<TReply>>(async () =>
             {
@@ -175,7 +181,12 @@ namespace R.MessageBus
                         });
                 }
 
-                await task;
+                await Task.WhenAny(task, Task.Delay(timeout));
+
+                if (!task.IsCompleted)
+                {
+                    throw new TimeoutException();
+                }
 
                 return response;
             })().Result;
