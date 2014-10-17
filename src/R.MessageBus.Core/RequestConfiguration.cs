@@ -10,16 +10,23 @@ namespace R.MessageBus.Core
         private readonly ConsumerEventHandler _consumerEventHandler;
         private readonly Guid _correlationId;
         private readonly IMessageSerializer _messageSerializer;
+        private readonly Guid _requestMessageId;
         private Task _task;
         private IConsumer _consumer;
         private Action<object> _action;
 
-        public RequestConfiguration(IConfiguration configuration, ConsumerEventHandler consumerEventHandler,  Guid correlationId, IMessageSerializer messageSerializer)
+        public Guid RequestMessageId
+        {
+            get { return _requestMessageId; }
+        }
+
+        public RequestConfiguration(IConfiguration configuration, ConsumerEventHandler consumerEventHandler,  Guid correlationId, Guid requestMessageId, IMessageSerializer messageSerializer)
         {
             _configuration = configuration;
             _consumerEventHandler = consumerEventHandler;
             _correlationId = correlationId;
             _messageSerializer = messageSerializer;
+            _requestMessageId = requestMessageId;
         }
 
         public Task SetHandler(Action<object> handler)
@@ -27,7 +34,7 @@ namespace R.MessageBus.Core
             _consumer = _configuration.GetConsumer();
             _task = new Task(() => _consumer.Dispose());
             _action = handler;
-            _consumer.StartConsuming(_consumerEventHandler, _correlationId.ToString(), _correlationId.ToString(), true);
+            _consumer.StartConsuming(_consumerEventHandler, _correlationId.ToString(), _correlationId.ToString(), true, true);
 
             return _task;
         }
