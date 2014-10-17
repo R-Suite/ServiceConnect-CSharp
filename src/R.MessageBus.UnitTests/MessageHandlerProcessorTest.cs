@@ -22,13 +22,14 @@ namespace R.MessageBus.UnitTests
         public void ProcessMessageShouldGetTheCorrectHandlerTypesFromContainer()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, serializer);
 
             // Act
-            messageProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
+            messageProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, null);
+            }), null);
 
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(It.Is<Type>(y => y == typeof(IMessageHandler<FakeMessage1>))), Times.Once());
@@ -38,7 +39,8 @@ namespace R.MessageBus.UnitTests
         public void ShouldExecuteTheCorrectHandlers()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, serializer);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -60,14 +62,14 @@ namespace R.MessageBus.UnitTests
             {
                 Username = "Tim Watson"
             };
-            messageProcessor.ProcessMessage(message1, null);
+            messageProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(message1), null);
 
             var message2 = new FakeMessage2(Guid.NewGuid())
             {
                 DisplayName = "Tim Watson"
             };
 
-            messageProcessor.ProcessMessage(message2, null);
+            messageProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message2), null);
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);

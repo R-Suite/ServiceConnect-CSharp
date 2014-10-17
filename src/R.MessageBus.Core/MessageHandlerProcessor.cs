@@ -12,21 +12,27 @@ namespace R.MessageBus.Core
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly IBusContainer _container;
+        private readonly IMessageSerializer _messageSerializer;
 
-        public MessageHandlerProcessor(IBusContainer container)
+        public MessageHandlerProcessor(IBusContainer container, IMessageSerializer messageSerializer)
         {
             _container = container;
+            _messageSerializer = messageSerializer;
         }
 
-        public void ProcessMessage<T>(T message, IConsumeContext context) where T : Message
+        public void ProcessMessage<T>(string message, IConsumeContext context) where T : Message
         {
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
                                                                         .Where(h => h.HandlerType.BaseType == null || 
                                                                                     h.HandlerType.BaseType.Name != typeof(ProcessManager<>).Name);
 
+            MethodInfo executeHandler = GetType().GetMethod("ExecuteHandler", BindingFlags.NonPublic | BindingFlags.Instance);
+            MethodInfo genericexecuteHandler = executeHandler.MakeGenericMethod(typeof(T));
+
             foreach (HandlerReference handlerReference in handlerReferences)
             {
-                ExecuteHandler(message, handlerReference.HandlerType, context);
+                object messageObject = _messageSerializer.Deserialize(typeof (T).AssemblyQualifiedName, message);
+                genericexecuteHandler.Invoke(this, new[] { messageObject, handlerReference.HandlerType, context });
             }
         }
 

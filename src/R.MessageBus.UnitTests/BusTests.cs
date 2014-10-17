@@ -141,21 +141,24 @@ namespace R.MessageBus.UnitTests
             _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), It.IsAny<string>(), null));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
             var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
-            mockProcessManagerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
             bus.StartConsuming();
 
-            // Act
-            _fakeEventHandler(new FakeMessage1(Guid.NewGuid())
+            var serialize = new JsonMessageSerializer();
+            var message = serialize.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, headers);
+            });
+
+            // Act
+            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
             // Assert
-            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage(It.Is<FakeMessage1>(y => y.Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);
+            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(y => ((FakeMessage1)serialize.Deserialize(typeof(FakeMessage1).AssemblyQualifiedName, y)).Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);
         }
 
         [Fact]
@@ -189,21 +192,23 @@ namespace R.MessageBus.UnitTests
             var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object &&
                                                                                                                      y["processManagerFinder"] == mockProcessManagerFinder.Object))).Returns(mockProcessManagerProcessor.Object);
-            mockProcessManagerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
             bus.StartConsuming();
-
-            // Act
-            _fakeEventHandler(new FakeMessage1(Guid.NewGuid())
+            var serialize = new JsonMessageSerializer();
+            var message = serialize.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, headers);
+            });
+
+            // Act
+            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
             // Assert
-            mockProcessManagerProcessor.Verify(x => x.ProcessMessage(It.Is<FakeMessage1>(y => y.Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once); 
+            mockProcessManagerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(y => ((FakeMessage1)serialize.Deserialize(typeof(FakeMessage1).AssemblyQualifiedName, y)).Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once); 
         }
 
 
@@ -234,10 +239,10 @@ namespace R.MessageBus.UnitTests
             _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), It.IsAny<string>(), null));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage2>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
             var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
-            mockProcessManagerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage2>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
             var mockProducer = new Mock<IProducer>();
@@ -262,13 +267,18 @@ namespace R.MessageBus.UnitTests
 
             headers["SourceAddress"] = Encoding.ASCII.GetBytes(_correlationId.ToString());
 
-            // Act
-            _fakeEventHandler(new FakeMessage2(id)
+            var serialize = new JsonMessageSerializer();
+
+            var message2 = serialize.Serialize(new FakeMessage2(id)
             {
-            }, headers);
+            });
+
+
+            // Act
+            _fakeEventHandler(message2, typeof(FakeMessage2).AssemblyQualifiedName, headers);
 
             // Assert
-            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage(It.Is<FakeMessage2>(y => y.CorrelationId == id), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);
+            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage2>(It.Is<string>(y => ((FakeMessage2)serialize.Deserialize(typeof(FakeMessage2).AssemblyQualifiedName, y)).CorrelationId == id), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);
         }
 
         private bool SetCorrelationId(Guid id)
@@ -749,15 +759,15 @@ namespace R.MessageBus.UnitTests
 
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), It.Is<IConsumeContext>(y => y.Headers == headers))).Throws(new Exception());
+            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers))).Throws(new Exception());
 
             bus.StartConsuming();
 
             // Act
-            _fakeEventHandler(Encoding.UTF8.GetBytes(_serializer.Serialize(new FakeMessage1(Guid.NewGuid())
+            _fakeEventHandler(_serializer.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            })), headers);
+            }), typeof(FakeMessage2).FullName, headers);
 
             // Assert
             Assert.True(actionCalled);

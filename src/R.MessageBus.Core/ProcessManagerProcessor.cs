@@ -13,20 +13,22 @@ namespace R.MessageBus.Core
 
         private readonly IProcessManagerFinder _processManagerFinder;
         private readonly IBusContainer _container;
+        private readonly IMessageSerializer _messageSerializer;
 
-        public ProcessManagerProcessor(IProcessManagerFinder processManagerFinder, IBusContainer container)
+        public ProcessManagerProcessor(IProcessManagerFinder processManagerFinder, IBusContainer container, IMessageSerializer messageSerializer)
         {
             _processManagerFinder = processManagerFinder;
             _container = container;
+            _messageSerializer = messageSerializer;
         }
 
-        public void ProcessMessage<T>(T message, IConsumeContext context) where T : Message
+        public void ProcessMessage<T>(string message, IConsumeContext context) where T : Message
         {
-            StartProcessManagers(message, context);
-            LoadExistingProcessManagers(message, context);
+            StartProcessManagers<T>(message, context);
+            LoadExistingProcessManagers<T>(message, context);
         }
 
-        private void StartProcessManagers<T>(T message, IConsumeContext context) where T : Message
+        private void StartProcessManagers<T>(string message, IConsumeContext context) where T : Message
         {
             List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<T>)).ToList();
 
@@ -52,7 +54,8 @@ namespace R.MessageBus.Core
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute process manager execute method
-                    processManagerInstance.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new object[] { message });
+                    var messageObject = _messageSerializer.Deserialize(typeof(T).AssemblyQualifiedName, message);
+                    processManagerInstance.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new[] { messageObject });
 
                     // Get data after execute has finished
                     data = (IProcessManagerData)dataProp.GetValue(processManager);
@@ -68,7 +71,7 @@ namespace R.MessageBus.Core
             }
         }
 
-        private void LoadExistingProcessManagers<T>(T message, IConsumeContext context) where T : Message
+        private void LoadExistingProcessManagers<T>(string message, IConsumeContext context) where T : Message
         {
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
                                                                         .Where(h => h.HandlerType.BaseType != null &&
@@ -78,6 +81,8 @@ namespace R.MessageBus.Core
             {
                 try
                 {
+                    var messageObject = (Message)_messageSerializer.Deserialize(typeof(T).AssemblyQualifiedName, message);
+
                     // Create instance of the project manager
                     object processManager = _container.GetInstance(handlerReference.HandlerType);
 
@@ -87,11 +92,11 @@ namespace R.MessageBus.Core
 
                     // Execute FindProcessManagerData
                     object persistanceData = handlerReference.HandlerType.GetMethod("FindProcessManagerData")
-                                                                            .Invoke(processManager, new object[] { message });
+                                                                            .Invoke(processManager, new[] { messageObject });
 
                     if (null == persistanceData)
                     {
-                        Logger.Warn(string.Format("ProcessManagerData not found for {0}. message.CorrelationId = {1}", handlerReference.HandlerType, message.CorrelationId));
+                        Logger.Warn(string.Format("ProcessManagerData not found for {0}. message.CorrelationId = {1}", handlerReference.HandlerType, messageObject.CorrelationId));
                         continue;
                     }
 
@@ -112,7 +117,7 @@ namespace R.MessageBus.Core
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute handler
-                    handlerReference.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new object[] {message});
+                    handlerReference.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new object[] { messageObject });
 
                     // Get Complete property value
                     PropertyInfo completeProperty = handlerReference.HandlerType.GetProperty("Complete");

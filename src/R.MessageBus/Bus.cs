@@ -159,7 +159,7 @@ namespace R.MessageBus
             })().Result;
         }
 
-        private ConsumeEventResult ConsumeMessageEvent(object message, IDictionary<string, object> headers)
+        private ConsumeEventResult ConsumeMessageEvent(string message, string type, IDictionary<string, object> headers)
         {
             var result = new ConsumeEventResult
             {
@@ -172,11 +172,13 @@ namespace R.MessageBus
                 Headers = headers
             };
 
+            Type typeObject = Type.GetType(type);
+
             try
             {
-                ProcessMessageHandlers(message, context);
-                ProcessProcessManagerHandlers(message, context);
-                ProcessRequestReplyConfigurations(message, context);
+                ProcessMessageHandlers(message, typeObject, context);
+                ProcessProcessManagerHandlers(message, typeObject, context);
+                ProcessRequestReplyConfigurations(message, type, context);
             }
             catch (Exception ex)
             {
@@ -191,7 +193,7 @@ namespace R.MessageBus
             return result;
         }
 
-        private void ProcessRequestReplyConfigurations(object objectMessage, ConsumeContext context)
+        private void ProcessRequestReplyConfigurations(string message, string type, ConsumeContext context)
         {
             lock (_requestLock)
             {
@@ -201,35 +203,37 @@ namespace R.MessageBus
                     return;
                 }
                 IRequestConfiguration requestConfigration = _requestConfigurations[correlationId];
-                requestConfigration.ProcessMessage(objectMessage);
+                requestConfigration.ProcessMessage(message, type);
                 var item = _requestConfigurations.First(kvp => kvp.Key == correlationId);
                 _requestConfigurations.Remove(item.Key);
             }
         }
 
-        private void ProcessProcessManagerHandlers(object objectMessage, IConsumeContext context)
+        private void ProcessProcessManagerHandlers(string objectMessage, Type type, IConsumeContext context)
         {
             IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
             var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
             {
                 {"container", _container},
-                {"processManagerFinder", processManagerFinder}
+                {"processManagerFinder", processManagerFinder},
+                {"messageSerializer", Configuration.GetSerializer() }
             });
 
             MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
-            MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(objectMessage.GetType());
-            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new[] {objectMessage, context});
+            MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(type);
+            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {objectMessage, context});
         }
 
-        private void ProcessMessageHandlers(object objectMessage, IConsumeContext context)
+        private void ProcessMessageHandlers(string objectMessage, Type type, IConsumeContext context)
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
             {
-                {"container", _container}
+                {"container", _container},
+                {"messageSerializer", Configuration.GetSerializer() }
             });
             MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
-            MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(objectMessage.GetType());
-            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new[] {objectMessage, context});
+            MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(type);
+            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new object[] { objectMessage, context });
         }
 
         public void StopConsuming()
