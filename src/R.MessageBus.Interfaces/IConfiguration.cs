@@ -133,8 +133,9 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <param name="consumeMessageEvent">The message event handler to call when receiving a reply.</param>
         /// <param name="correlationId">Used for correlating the Request and Reply messages.</param>
+        /// <param name="requestMessageCorrelationId">Used to ensure the request is not proccessed as a reply</param>
         /// <returns>An instance of the RequestConfiguration class.</returns>
-        IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid correlationId);
+        IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid correlationId, Guid requestMessageCorrelationId);
 
         /// <summary>
         /// Gets an instance of the serializer
