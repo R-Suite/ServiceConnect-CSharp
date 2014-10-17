@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using log4net;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -24,7 +26,9 @@ namespace R.MessageBus.Client.RabbitMQ
         private string _queueName;
         private string _retryQueueName;
         private bool _exclusive;
+        private bool _autoDelete;
         private string _messageTypeName;
+        private bool _connectionClosed;
 
         public Consumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
         {
@@ -34,6 +38,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _retryDelay = transportSettings.RetryDelay;
             _maxRetries = transportSettings.MaxRetries;
             _exclusive = transportSettings.Queue.Exclusive;
+            _autoDelete = transportSettings.Queue.AutoDelete;
         }
 
         /// <summary>
@@ -123,7 +128,7 @@ namespace R.MessageBus.Client.RabbitMQ
             return _messageSerializer.Deserialize(typeName, message);
         }
 
-        public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null)
+        public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null, bool? autoDelete = null)
         {
             _consumerEventHandler = messageReceived;
             _queueName = queueName;
@@ -131,6 +136,9 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (exclusive.HasValue)
                 _exclusive = exclusive.Value;
+
+            if (autoDelete.HasValue)
+                _autoDelete = autoDelete.Value;
 
             CreateConsumer();
         }
@@ -203,6 +211,11 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private void ConsumerShutdown(object sender, ShutdownEventArgs e)
         {
+            if (_connectionClosed)
+            {
+                return;
+            }
+
             Retry.Do(CreateConsumer, ex => Logger.Error("Error connecting to queue - {0}", ex), new TimeSpan(0, 0, 0, 10));
         }
 
@@ -237,7 +250,7 @@ namespace R.MessageBus.Client.RabbitMQ
             var arguments = _transportSettings.Queue.Arguments;
             try
             {
-                _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _exclusive, _transportSettings.Queue.AutoDelete, arguments);
+                _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _exclusive, _autoDelete, arguments);
             }
             catch (Exception ex)
             {
@@ -363,8 +376,11 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Dispose()
         {
-            if (_connection != null)
-                _connection.Close();
+           if (_connection != null)
+           {
+               _connectionClosed = true;
+                _connection.Close(500);
+            }
             if (_model != null)
                 _model.Abort();
         }
