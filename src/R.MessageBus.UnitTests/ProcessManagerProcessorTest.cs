@@ -52,13 +52,14 @@ namespace R.MessageBus.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
+            processManagerProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, new ConsumeContext());
+            }), new ConsumeContext());
 
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(typeof (IMessageHandler<FakeMessage1>)), Times.Once);
@@ -98,13 +99,14 @@ namespace R.MessageBus.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
+            processManagerProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, new ConsumeContext());
+            }), new ConsumeContext());
 
             // Assert
             // Data.User is set by the ProcessManagers Execute method
@@ -144,15 +146,16 @@ namespace R.MessageBus.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             var context = new ConsumeContext();
 
             // Act
-            processManagerProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
+            processManagerProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, context);
+            }), context);
 
             // Assert
             // Data.User is set by the ProcessManagers Execute method
@@ -191,13 +194,14 @@ namespace R.MessageBus.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(new FakeMessage1(Guid.NewGuid())
+            processManagerProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }, new ConsumeContext());
+            }), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.InsertData(It.Is<FakeProcessManagerData>(y => y.User == "Tim Watson")), Times.Once);
@@ -230,10 +234,11 @@ namespace R.MessageBus.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
+            processManagerProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message), new ConsumeContext());
 
             // Assert
             _mockContainer.Verify(x => x.GetInstance(typeof (FakeProcessManager1)), Times.Once);
@@ -270,10 +275,11 @@ namespace R.MessageBus.UnitTests
             _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
+            processManagerProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message), new ConsumeContext());
 
             // Assert
             Assert.Equal("Tim Watson", processManager.Data.User); // Can only be this if Data was set on process manager
@@ -310,12 +316,13 @@ namespace R.MessageBus.UnitTests
             _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             var context = new ConsumeContext();
 
             // Act
-            processManagerProcessor.ProcessMessage(message, context);
+            processManagerProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message), context);
 
             // Assert
             Assert.Equal(context, processManager.Context); 
@@ -353,10 +360,11 @@ namespace R.MessageBus.UnitTests
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
+            processManagerProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.UpdateData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.Email == "abc@123.com" && y.Data.User == "Tim Watson")), Times.Once);
@@ -397,10 +405,11 @@ namespace R.MessageBus.UnitTests
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
+            processManagerProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.DeleteData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.Email == "abc@123.com" && y.Data.User == "Tim Watson")), Times.Once);
@@ -431,10 +440,11 @@ namespace R.MessageBus.UnitTests
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var serializer = new JsonMessageSerializer();
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, serializer);
 
             // Act
-            processManagerProcessor.ProcessMessage(message, new ConsumeContext());
+            processManagerProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.UpdateData(It.IsAny<IPersistanceData<FakeProcessManagerData>>()), Times.Never);
