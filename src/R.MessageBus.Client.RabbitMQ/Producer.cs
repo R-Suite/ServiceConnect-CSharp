@@ -61,9 +61,9 @@ namespace R.MessageBus.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
-                basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
                 basicProperties.Headers = GetHeaders(typeof(T), headers, _transportSettings.Queue.Name, "Publish");
+                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 basicProperties.SetPersistent(true);
                 var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
@@ -82,12 +82,12 @@ namespace R.MessageBus.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
-                basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
 
                 basicProperties.SetPersistent(true);
                 var endPoint = _queueMappings[typeof(T).FullName];
 
                 basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
+                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
                          ex => CreateConnection(),
@@ -106,8 +106,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.SetPersistent(true);
 
                 basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
-
-                basicProperties.MessageId = Guid.NewGuid().ToString(); // keep track of retries
+                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
                          ex => CreateConnection(),
@@ -126,6 +125,11 @@ namespace R.MessageBus.Client.RabbitMQ
             if (!headers.ContainsKey("DestinationAddress"))
             {
                 headers["DestinationAddress"] = queueName;
+            }
+
+            if (!headers.ContainsKey("MessageId"))
+            {
+                headers["MessageId"] = Guid.NewGuid().ToString();
             }
 
             headers["SourceAddress"] = _transportSettings.Queue.Name;
