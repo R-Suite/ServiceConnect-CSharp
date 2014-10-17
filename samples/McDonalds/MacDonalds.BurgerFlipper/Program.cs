@@ -11,7 +11,6 @@ namespace McDonalds.BurgerFlipper
             var bus = Bus.Initialize(x =>
             {
                 x.ScanForMesssageHandlers = true;
-                x.SetHost("lonappdev04");
             });
 
             bus.StartConsuming();

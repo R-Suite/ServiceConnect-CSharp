@@ -10,7 +10,10 @@ namespace RequestResponse.Requestor
         {
             Console.WriteLine("*********** Requestor ***********");
 
-            var bus = Bus.Initialize(config => config.SetQueueName("Requestor"));
+            var bus = Bus.Initialize(config =>
+            {
+                config.SetQueueName("Requestor");
+            });
 
             while (true)
             {

@@ -241,7 +241,7 @@ ResponseMessage result = bus.SendRequest<RequestMessage, ResponseMessage>("Respo
 
 ```c#
 var message = new RequestMessage(Guid.NewGuid());
-bus.SendRequest<RequestMessage, ResponseMessage>("Responder", message), r => Console.WriteLine("Received reply - {0}", r.CorrelationId));
+bus.SendRequest<RequestMessage, ResponseMessage>("Responder", message, r => Console.WriteLine("Received reply - {0}", r.CorrelationId));
 ```
 
 #### Replier
