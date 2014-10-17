@@ -319,7 +319,7 @@ namespace R.MessageBus.UnitTests
             {
             }
 
-            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null)
+            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null, bool? autoDelete = null)
             {
                 throw new NotImplementedException();
             }
