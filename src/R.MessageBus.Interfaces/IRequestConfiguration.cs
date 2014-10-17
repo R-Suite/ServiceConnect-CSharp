@@ -11,6 +11,6 @@ namespace R.MessageBus.Interfaces
         /// <param name="handler">The handler to call with the response message</param>
         Task SetHandler(Action<object> handler);
 
-        void ProcessMessage(object message);
+        void ProcessMessage(string message, string type);
     }
 }
