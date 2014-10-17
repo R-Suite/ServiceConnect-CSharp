@@ -14,6 +14,7 @@ namespace McDonalds.Customer
             IBus bus = Bus.Initialize(config =>
             {
                 config.ScanForMesssageHandlers = true;
+                config.SetHost("lonappdev04");
             });
             bus.StartConsuming();
 
