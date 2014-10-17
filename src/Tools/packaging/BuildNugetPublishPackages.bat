@@ -1,10 +1,10 @@
-SET OUTDIR=C:\GitHub\R.MessageBus\src\
+SET OUTDIR=C:\GIT\RSuite\R.MessageBus\src\
 
 @ECHO === === === === === === === ===
 
 @ECHO ===NUGET Publishing ....
 
-del *.nupkg
+::del *.nupkg
 
 :: comment
 
@@ -14,9 +14,9 @@ NuGet pack "%OUTDIR%R.MessageBus.Client.RabbitMQ\R.MessageBus.Client.RabbitMQ.nu
 ::NuGet pack "%OUTDIR%R.MessageBus.Persistance.MongoDb\R.MessageBus.Persistance.MongoDb.nuspec"
 
 
-::nuget push R.MessageBus.1.0.1.18.nupkg
-::nuget push R.MessageBus.Interfaces.1.0.1.14.nupkg
-nuget push R.MessageBus.Client.RabbitMQ.1.0.1.17.nupkg
+::nuget push R.MessageBus.1.0.2.nupkg
+::nuget push R.MessageBus.Interfaces.1.0.2.nupkg
+nuget push R.MessageBus.Client.RabbitMQ.1.0.2.nupkg
 ::nuget push R.MessageBus.Persistance.MongoDb.1.0.1.13.nupkg
            
 @ECHO === === === === === === === ===
