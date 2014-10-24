@@ -29,11 +29,16 @@ namespace R.MessageBus.Client.RabbitMQ
         private bool _autoDelete;
         private string _messageTypeName;
         private bool _connectionClosed;
+        private readonly string[] _hosts;
+        private int _activeHost;
 
         public Consumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
         {
             _transportSettings = transportSettings;
             _messageSerializer = messageSerializer;
+
+            _hosts = transportSettings.Host.Split(',');
+            _activeHost = 0;
 
             _retryDelay = transportSettings.RetryDelay;
             _maxRetries = transportSettings.MaxRetries;
@@ -142,8 +147,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             var connectionFactory = new ConnectionFactory
             {
-                HostName = _transportSettings.Host,
-                VirtualHost = "/",
+                HostName = _hosts[_activeHost],
                 Protocol = Protocols.FromEnvironment(),
                 Port = AmqpTcpEndpoint.UseDefaultPort,
                 RequestedHeartbeat = 30
@@ -207,6 +211,18 @@ namespace R.MessageBus.Client.RabbitMQ
             if (_connectionClosed)
             {
                 return;
+            }
+
+            if (_hosts.Length > 1)
+            {
+                if (_activeHost < _hosts.Length - 1)
+                {
+                    _activeHost++;
+                }
+                else
+                {
+                    _activeHost = 0;
+                }
             }
 
             Retry.Do(CreateConsumer, ex => Logger.Error("Error connecting to queue - {0}", ex), new TimeSpan(0, 0, 0, 10));

@@ -13,6 +13,7 @@ namespace RequestResponse.Requestor
             var bus = Bus.Initialize(config =>
             {
                 config.SetQueueName("Requestor");
+                config.SetHost("lonappdev04");
             });
 
             while (true)
