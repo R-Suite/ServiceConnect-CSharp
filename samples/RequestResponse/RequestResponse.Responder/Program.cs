@@ -13,6 +13,7 @@ namespace RequestResponse.Responder
             {
                 x.ScanForMesssageHandlers = true;
                 x.SetQueueName("Responder");
+                x.SetHost("lonappdev04");
             });
 
             bus.StartConsuming();

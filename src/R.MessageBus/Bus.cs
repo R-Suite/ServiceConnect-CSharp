@@ -144,8 +144,6 @@ namespace R.MessageBus
             where TRequest : Message
             where TReply : Message
         {
-            return new Func<Task<TReply>>(async () =>
-            {
                 var correlationId = Guid.NewGuid();
                 var messageId = Guid.NewGuid();
                 IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, correlationId, messageId);
@@ -181,7 +179,7 @@ namespace R.MessageBus
                         });
                 }
 
-                await Task.WhenAny(task, Task.Delay(timeout));
+                Task.WaitAll(new[]{ task }, timeout);
 
                 if (!task.IsCompleted)
                 {
@@ -189,7 +187,6 @@ namespace R.MessageBus
                 }
 
                 return response;
-            })().Result;
         }
 
         private ConsumeEventResult ConsumeMessageEvent(string message, string type, IDictionary<string, object> headers)
