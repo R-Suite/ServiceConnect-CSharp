@@ -19,6 +19,8 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly Object _lock = new Object();
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ConnectionFactory _connectionFactory;
+        private string[] _hosts;
+        private int _activeHost;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings, IMessageSerializer messageSerializer)
         {
@@ -26,9 +28,12 @@ namespace R.MessageBus.Client.RabbitMQ
             _queueMappings = queueMappings;
             _messageSerializer = messageSerializer;
 
+            _hosts = transportSettings.Host.Split(',');
+            _activeHost = 0;
+
             _connectionFactory = new ConnectionFactory
             {
-                HostName = transportSettings.Host,
+                HostName = _hosts[_activeHost],
                 VirtualHost = "/",
                 Protocol = Protocols.FromEnvironment(),
                 Port = AmqpTcpEndpoint.UseDefaultPort
@@ -69,9 +74,25 @@ namespace R.MessageBus.Client.RabbitMQ
                 var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
 
                 Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes),
-                         ex => CreateConnection(),
+                         ex => RetryConnection(),
                          new TimeSpan(0, 0, 0, 6), 10);
             }
+        }
+
+        private void RetryConnection()
+        {
+            if (_hosts.Length > 1)
+            {
+                if (_activeHost < _hosts.Length - 1)
+                {
+                    _activeHost++;
+                }
+                else
+                {
+                    _activeHost = 0;
+                }
+            }
+            CreateConnection();
         }
 
         public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
@@ -90,7 +111,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
-                         ex => CreateConnection(),
+                         ex => RetryConnection(),
                          new TimeSpan(0, 0, 0, 6), 10);
             }
         }
@@ -109,7 +130,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
-                         ex => CreateConnection(),
+                         ex => RetryConnection(),
                          new TimeSpan(0, 0, 0, 6), 10);
             }
         }
