@@ -34,6 +34,16 @@ namespace R.MessageBus.Core
                 object messageObject = _messageSerializer.Deserialize(typeof (T).AssemblyQualifiedName, message);
                 genericexecuteHandler.Invoke(this, new[] { messageObject, handlerReference.HandlerType, context });
             }
+
+            // This is used when processing Sent (rather than Published) messages
+            // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
+            Type baseType = typeof(T).BaseType;
+            if (baseType != null && baseType.Name != typeof (Message).Name)
+            {
+                MethodInfo processMessage = GetType().GetMethod("ProcessMessage", BindingFlags.Public | BindingFlags.Instance);
+                MethodInfo genericProcessMessage = processMessage.MakeGenericMethod(baseType);
+                genericProcessMessage.Invoke(this, new object[] { message, context });
+            }
         }
 
         private void ExecuteHandler<T>(T message, Type handlerType, IConsumeContext context) where T : Message
