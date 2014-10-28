@@ -77,6 +77,15 @@ namespace R.MessageBus.Client.RabbitMQ
                          ex => RetryConnection(),
                          new TimeSpan(0, 0, 0, 6), 10);
             }
+
+            // Get message BaseType and call Publish recursively
+            Type baseType = typeof(T).BaseType;
+            if (baseType != null && baseType.Name != typeof(Message).Name)
+            {
+                MethodInfo publish = GetType().GetMethod("Publish", BindingFlags.Public | BindingFlags.Instance);
+                MethodInfo genericPublish = publish.MakeGenericMethod(baseType);
+                genericPublish.Invoke(this, new object[] { message, headers });
+            }
         }
 
         private void RetryConnection()
