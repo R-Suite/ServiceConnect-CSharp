@@ -50,6 +50,11 @@ namespace R.MessageBus.Interfaces
         /// Custom Audit Queue Name
         /// </summary>
         string AuditQueueName { get; set; }
+
+        /// <summary>
+        /// Disable sending errors to error queue
+        /// </summary>
+        bool DisableErrors { get; set; }
     }
 
     public class Queue

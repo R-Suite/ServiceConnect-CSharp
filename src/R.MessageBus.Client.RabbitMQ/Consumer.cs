@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using log4net;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -31,6 +29,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private bool _connectionClosed;
         private readonly string[] _hosts;
         private int _activeHost;
+        private bool _errorsDisabled;
 
         public Consumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
         {
@@ -44,6 +43,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _maxRetries = transportSettings.MaxRetries;
             _exclusive = transportSettings.Queue.Exclusive;
             _autoDelete = transportSettings.Queue.AutoDelete;
+            _errorsDisabled = transportSettings.DisableErrors;
         }
 
         /// <summary>
@@ -117,7 +117,7 @@ namespace R.MessageBus.Client.RabbitMQ
                     _model.BasicPublish(_errorExchange, string.Empty, args.BasicProperties, args.Body);
                 }
             }
-            else
+            else if (!_errorsDisabled)
             {
                 if (_transportSettings.AuditingEnabled)
                 {
