@@ -5,10 +5,12 @@ namespace R.MessageBus.Interfaces
 {
     public interface IConfiguration
     {
-        Type Container { get; set; }
         Type ConsumerType { get; set; }
         Type ProducerType { get; set; }
+        Type DisableErrors { get; set; }
+        Type Container { get; set; }
         Type ProcessManagerFinder { get; set; }
+        Type SerializerType { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
@@ -24,6 +26,12 @@ namespace R.MessageBus.Interfaces
         void AddQueueMapping(Type messageType, string queue);
 
         /// <summary>
+        /// Set Exception handler. Exception handler is called when an exception is thrown while processing a message.
+        /// </summary>
+        /// <param name="exceptionHandler"></param>
+        void SetExceptionHandler(Action<Exception> exceptionHandler);
+
+        /// <summary>
         /// Sets the client host server
         /// </summary>
         /// <param name="host">Server connection string</param>
@@ -37,6 +45,24 @@ namespace R.MessageBus.Interfaces
         void LoadSettings(string configFilePath = null, string endPoint = null);
 
         /// <summary>
+        /// Sets the container.
+        /// </summary>
+        /// <typeparam name="T">The type must be a class that implements IBusContainer.</typeparam>
+        void SetContainer<T>() where T : class, IBusContainer;
+
+        /// <summary>
+        /// Sets the message serializer type.
+        /// </summary>
+        /// <typeparam name="T">Type must implement IMessageSerializer</typeparam>
+        void SetSerializer<T>() where T : class, IMessageSerializer;
+
+        /// <summary>
+        /// Sets the process manager finder
+        /// </summary>
+        /// <typeparam name="T">The type must be a class that implements IProcessManagerFinder</typeparam>
+        void SetProcessManagerFinder<T>() where T : class, IProcessManagerFinder;
+
+        /// <summary>
         /// Sets the consumer type.
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IConsumer.</typeparam>
@@ -47,18 +73,6 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IPublisher.</typeparam>
         void SetProducer<T>() where T : class, IProducer;
-
-        /// <summary>
-        /// Sets the container.
-        /// </summary>
-        /// <typeparam name="T">The type must be a class that implements IBusContainer.</typeparam>
-        void SetContainer<T>() where T : class, IBusContainer;
-
-        /// <summary>
-        /// Sets the process manager finder
-        /// </summary>
-        /// <typeparam name="T">The type must be a class that implements IProcessManagerFinder</typeparam>
-        void SetProcessManagerFinder<T>() where T : class, IProcessManagerFinder;
 
         /// <summary>
         /// Sets QueueName
@@ -79,13 +93,7 @@ namespace R.MessageBus.Interfaces
         /// Sets AuditQueueName
         /// </summary>
         void SetAuditQueueName(string auditQueueName);
-
-        /// <summary>
-        /// Set Exception handler. Exception handler is called when an exception is thrown while processing a message.
-        /// </summary>
-        /// <param name="exceptionHandler"></param>
-        void SetExceptionHandler(Action<Exception> exceptionHandler);
-
+        
         /// <summary>
         /// Gets queue name.
         /// </summary>
