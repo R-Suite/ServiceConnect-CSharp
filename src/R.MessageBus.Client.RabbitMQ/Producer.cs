@@ -60,6 +60,16 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
+            DoPublish(message, headers);
+        }
+
+        private void PublishBaseType<T, TB>(T message, Dictionary<string, string> headers = null) where T : Message where TB : Message
+        {
+            DoPublish(message, headers, typeof(TB));
+        }
+
+        private void DoPublish<T>(T message, Dictionary<string, string> headers, Type baseType = null) where T : Message
+        {
             var serializedMessage = _messageSerializer.Serialize(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
 
@@ -67,15 +77,26 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
-                basicProperties.Headers = GetHeaders(typeof(T), headers, _transportSettings.Queue.Name, "Publish");
+                basicProperties.Headers = GetHeaders(typeof (T), headers, _transportSettings.Queue.Name, "Publish");
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 basicProperties.SetPersistent(true);
-                var exchangeName = ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
+                var exchangeName = (null != baseType)
+                    ? ConfigureExchange(baseType.FullName.Replace(".", string.Empty))
+                    : ConfigureExchange(typeof (T).FullName.Replace(".", string.Empty));
 
                 Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes),
-                         ex => RetryConnection(),
-                         new TimeSpan(0, 0, 0, 6), 10);
+                    ex => RetryConnection(),
+                    new TimeSpan(0, 0, 0, 6), 10);
+            }
+
+            // Get message BaseType and call Publish recursively
+            Type newBaseType = (null != baseType) ? baseType.BaseType : typeof(T).BaseType;
+            if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
+            {
+                MethodInfo publish = GetType().GetMethod("PublishBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo genericPublish = publish.MakeGenericMethod(typeof(T), newBaseType);
+                genericPublish.Invoke(this, new object[] {message, headers});
             }
         }
 
