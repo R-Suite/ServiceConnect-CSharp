@@ -28,7 +28,6 @@ namespace R.MessageBus
             _producer = configuration.GetProducer();
 
             _container.Initialize();
-            _container.AddBus(this);
 
             if (configuration.ScanForMesssageHandlers)
             {
