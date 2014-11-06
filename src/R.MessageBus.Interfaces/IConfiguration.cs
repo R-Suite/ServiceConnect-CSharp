@@ -7,7 +7,6 @@ namespace R.MessageBus.Interfaces
     {
         Type ConsumerType { get; set; }
         Type ProducerType { get; set; }
-        Type DisableErrors { get; set; }
         Type Container { get; set; }
         Type ProcessManagerFinder { get; set; }
         Type SerializerType { get; set; }
@@ -150,5 +149,11 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         IMessageSerializer GetSerializer();
+
+        /// <summary>
+        /// Disables publishing errors to error queue
+        /// </summary>
+        /// <returns></returns>
+        void SetDisableErrors(bool disable);
     }
 }
