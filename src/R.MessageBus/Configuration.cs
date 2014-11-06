@@ -42,6 +42,7 @@ namespace R.MessageBus
 
         public Type ConsumerType { get; set; }
         public Type ProducerType { get; set; }
+        public Type DisableErrors { get; set; }
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public Type SerializerType { get; set; }
