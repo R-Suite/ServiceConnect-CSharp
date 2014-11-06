@@ -29,7 +29,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private bool _connectionClosed;
         private readonly string[] _hosts;
         private int _activeHost;
-        private bool _errorsDisabled;
+        private readonly bool _errorsDisabled;
 
         public Consumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
         {

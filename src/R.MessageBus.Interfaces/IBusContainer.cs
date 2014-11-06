@@ -12,7 +12,6 @@ namespace R.MessageBus.Interfaces
         T GetInstance<T>();
         void ScanForHandlers();
         void Initialize();
-        void AddBus(IBus bus);
         void AddHandler<T>(Type handlerType, T handler);
     }
 }
