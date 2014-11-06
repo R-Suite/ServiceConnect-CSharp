@@ -42,7 +42,7 @@
     </Reference>
     <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.Interfaces.1.0.1.13\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
+      <HintPath>..\packages\R.MessageBus.Interfaces.1.1.1-beta\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="StructureMap, Version=2.6.4.0, Culture=neutral, PublicKeyToken=e60ad81abae3c223, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
