@@ -20,11 +20,6 @@ namespace R.MessageBus.Container
             });
         }
 
-        public void AddBus(IBus bus)
-        {
-            ObjectFactory.Configure(x => x.For<IBus>().Singleton().Use(bus));
-        }
-
         public void AddHandler<T>(Type handlerType, T handler)
         {
             ObjectFactory.Configure(x => x.For(handlerType).Singleton().Use(handler));
