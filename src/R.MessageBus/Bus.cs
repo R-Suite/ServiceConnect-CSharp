@@ -29,6 +29,11 @@ namespace R.MessageBus
 
             _container.Initialize();
 
+            if (configuration.AddBusToContainer)
+            {
+                _container.AddBus(this);
+            }
+
             if (configuration.ScanForMesssageHandlers)
             {
                 _container.ScanForHandlers();
