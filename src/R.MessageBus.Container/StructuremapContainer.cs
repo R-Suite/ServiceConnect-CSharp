@@ -25,6 +25,11 @@ namespace R.MessageBus.Container
             ObjectFactory.Configure(x => x.For(handlerType).Singleton().Use(handler));
         }
 
+        public void AddBus(IBus bus)
+        {
+            ObjectFactory.Configure(x => x.For<IBus>().Singleton().Use(bus));
+        }
+
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
             IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||

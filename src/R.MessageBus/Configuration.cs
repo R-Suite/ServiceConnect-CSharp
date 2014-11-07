@@ -50,11 +50,13 @@ namespace R.MessageBus
         public ITransportSettings TransportSettings { get; set; }
         public IDictionary<string, string> QueueMappings { get; set; }
         public Action<Exception> ExceptionHandler { get; set; }
+        public bool AddBusToContainer { get; set; }
 
         #endregion
 
         public Configuration()
         {
+            AddBusToContainer = true;
             var defaultQueueName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
             TransportSettings = new TransportSettings { Queue = new Queue
