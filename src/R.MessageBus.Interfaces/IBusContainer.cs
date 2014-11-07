@@ -13,5 +13,6 @@ namespace R.MessageBus.Interfaces
         void ScanForHandlers();
         void Initialize();
         void AddHandler<T>(Type handlerType, T handler);
+        void AddBus(IBus bus);
     }
 }
