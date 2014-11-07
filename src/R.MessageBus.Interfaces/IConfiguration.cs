@@ -15,6 +15,7 @@ namespace R.MessageBus.Interfaces
         ITransportSettings TransportSettings { get; set; }
         IDictionary<string, string> QueueMappings { get; set; }
         Action<Exception> ExceptionHandler { get; set; }
+        bool AddBusToContainer { get; set; }
 
         /// <summary>
         /// Adds a message queue mapping. 
