@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Moq;
+using Newtonsoft.Json;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.UnitTests.Fakes.Handlers;
@@ -22,11 +23,10 @@ namespace R.MessageBus.UnitTests
         public void ProcessMessageShouldGetTheCorrectHandlerTypesFromContainer()
         {
             // Arrange
-            var serializer = new JsonMessageSerializer();
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, serializer);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
 
             // Act
-            messageProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(new FakeMessage1(Guid.NewGuid())
+            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
             }), null);
@@ -39,8 +39,7 @@ namespace R.MessageBus.UnitTests
         public void ShouldExecuteTheCorrectHandlers()
         {
             // Arrange
-            var serializer = new JsonMessageSerializer();
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, serializer);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -62,14 +61,14 @@ namespace R.MessageBus.UnitTests
             {
                 Username = "Tim Watson"
             };
-            messageProcessor.ProcessMessage<FakeMessage1>(serializer.Serialize(message1), null);
+            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1), null);
 
             var message2 = new FakeMessage2(Guid.NewGuid())
             {
                 DisplayName = "Tim Watson"
             };
 
-            messageProcessor.ProcessMessage<FakeMessage2>(serializer.Serialize(message2), null);
+            messageProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message2), null);
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);

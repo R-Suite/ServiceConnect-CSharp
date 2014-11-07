@@ -9,7 +9,6 @@ namespace R.MessageBus.Interfaces
         Type ProducerType { get; set; }
         Type Container { get; set; }
         Type ProcessManagerFinder { get; set; }
-        Type SerializerType { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
@@ -48,12 +47,6 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IBusContainer.</typeparam>
         void SetContainer<T>() where T : class, IBusContainer;
-
-        /// <summary>
-        /// Sets the message serializer type.
-        /// </summary>
-        /// <typeparam name="T">Type must implement IMessageSerializer</typeparam>
-        void SetSerializer<T>() where T : class, IMessageSerializer;
 
         /// <summary>
         /// Sets the process manager finder
@@ -143,12 +136,6 @@ namespace R.MessageBus.Interfaces
         /// <param name="requestMessageCorrelationId">Used to ensure the request is not proccessed as a reply</param>
         /// <returns>An instance of the RequestConfiguration class.</returns>
         IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid correlationId, Guid requestMessageCorrelationId);
-
-        /// <summary>
-        /// Gets an instance of the serializer
-        /// </summary>
-        /// <returns></returns>
-        IMessageSerializer GetSerializer();
 
         /// <summary>
         /// Disables publishing errors to error queue

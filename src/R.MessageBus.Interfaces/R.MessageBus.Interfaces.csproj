@@ -55,7 +55,6 @@
     <Compile Include="IConsumer.cs" />
     <Compile Include="IRequestConfiguration.cs" />
     <Compile Include="IMessageHandler.cs" />
-    <Compile Include="IMessageSerializer.cs" />
     <Compile Include="IMessageHandlerProcessor.cs" />
     <Compile Include="IPersistanceData.cs" />
     <Compile Include="IProcessManagerData.cs" />
