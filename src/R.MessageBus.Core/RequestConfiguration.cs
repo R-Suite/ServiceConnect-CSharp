@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
@@ -9,7 +10,6 @@ namespace R.MessageBus.Core
         private readonly IConfiguration _configuration;
         private readonly ConsumerEventHandler _consumerEventHandler;
         private readonly Guid _correlationId;
-        private readonly IMessageSerializer _messageSerializer;
         private readonly Guid _requestMessageId;
         private Task _task;
         private IConsumer _consumer;
@@ -20,12 +20,11 @@ namespace R.MessageBus.Core
             get { return _requestMessageId; }
         }
 
-        public RequestConfiguration(IConfiguration configuration, ConsumerEventHandler consumerEventHandler,  Guid correlationId, Guid requestMessageId, IMessageSerializer messageSerializer)
+        public RequestConfiguration(IConfiguration configuration, ConsumerEventHandler consumerEventHandler,  Guid correlationId, Guid requestMessageId)
         {
             _configuration = configuration;
             _consumerEventHandler = consumerEventHandler;
             _correlationId = correlationId;
-            _messageSerializer = messageSerializer;
             _requestMessageId = requestMessageId;
         }
 
@@ -41,7 +40,7 @@ namespace R.MessageBus.Core
 
         public void ProcessMessage(string message, string type)
         {
-            var messageObject = _messageSerializer.Deserialize(type, message);
+            var messageObject = JsonConvert.DeserializeObject(message, Type.GetType(type));
             _action(messageObject);
             _task.Start();
         }

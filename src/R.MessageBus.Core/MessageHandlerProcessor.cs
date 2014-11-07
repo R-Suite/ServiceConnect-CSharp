@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using log4net;
+using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
@@ -12,12 +13,10 @@ namespace R.MessageBus.Core
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly IBusContainer _container;
-        private readonly IMessageSerializer _messageSerializer;
 
-        public MessageHandlerProcessor(IBusContainer container, IMessageSerializer messageSerializer)
+        public MessageHandlerProcessor(IBusContainer container)
         {
             _container = container;
-            _messageSerializer = messageSerializer;
         }
 
         public void ProcessMessage<T>(string message, IConsumeContext context) where T : Message
@@ -46,7 +45,7 @@ namespace R.MessageBus.Core
 
             foreach (HandlerReference handlerReference in handlerReferences)
             {
-                object messageObject = _messageSerializer.Deserialize(typeof (T).AssemblyQualifiedName, message);
+                object messageObject = JsonConvert.DeserializeObject(message, typeof (T));
                 genericexecuteHandler.Invoke(this, new[] {messageObject, handlerReference.HandlerType, context});
             }
 

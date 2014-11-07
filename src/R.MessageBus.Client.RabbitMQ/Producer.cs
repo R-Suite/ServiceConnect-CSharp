@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using log4net;
+using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
 
@@ -13,20 +14,18 @@ namespace R.MessageBus.Client.RabbitMQ
     {
         private readonly ITransportSettings _transportSettings;
         private readonly IDictionary<string, string> _queueMappings;
-        private readonly IMessageSerializer _messageSerializer;
         private IModel _model;
         private IConnection _connection;
         private readonly Object _lock = new Object();
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ConnectionFactory _connectionFactory;
-        private string[] _hosts;
+        private readonly string[] _hosts;
         private int _activeHost;
 
-        public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings, IMessageSerializer messageSerializer)
+        public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings)
         {
             _transportSettings = transportSettings;
             _queueMappings = queueMappings;
-            _messageSerializer = messageSerializer;
 
             _hosts = transportSettings.Host.Split(',');
             _activeHost = 0;
@@ -70,7 +69,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private void DoPublish<T>(T message, Dictionary<string, string> headers, Type baseType = null) where T : Message
         {
-            var serializedMessage = _messageSerializer.Serialize(message);
+            var serializedMessage = JsonConvert.SerializeObject(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
 
             lock (_lock)
@@ -118,7 +117,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
-            var serializedMessage = _messageSerializer.Serialize(message);
+            var serializedMessage = JsonConvert.SerializeObject(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
 
             lock (_lock)
@@ -139,7 +138,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
         {
-            var serializedMessage = _messageSerializer.Serialize(message);
+            var serializedMessage = JsonConvert.SerializeObject(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
 
             lock (_lock)
@@ -155,7 +154,6 @@ namespace R.MessageBus.Client.RabbitMQ
                          new TimeSpan(0, 0, 0, 6), 10);
             }
         }
-
 
         private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
         {

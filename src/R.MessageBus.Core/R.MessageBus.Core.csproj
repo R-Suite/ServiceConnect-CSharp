@@ -50,7 +50,6 @@
   <ItemGroup>
     <Compile Include="ConfigurationManagerWrapper.cs" />
     <Compile Include="ConsumeContext.cs" />
-    <Compile Include="JsonMessageSerializer.cs" />
     <Compile Include="MessageHandlerProcessor.cs" />
     <Compile Include="ProcessManager.cs" />
     <Compile Include="ProcessManagerProcessor.cs" />
