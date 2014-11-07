@@ -250,8 +250,7 @@ namespace R.MessageBus
             var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
             {
                 {"container", _container},
-                {"processManagerFinder", processManagerFinder},
-                {"messageSerializer", Configuration.GetSerializer() }
+                {"processManagerFinder", processManagerFinder}
             });
 
             MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
@@ -263,8 +262,7 @@ namespace R.MessageBus
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
             {
-                {"container", _container},
-                {"messageSerializer", Configuration.GetSerializer() }
+                {"container", _container}
             });
             MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(type);

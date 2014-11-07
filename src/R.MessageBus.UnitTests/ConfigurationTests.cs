@@ -226,7 +226,7 @@ namespace R.MessageBus.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public FakeConsumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
+            public FakeConsumer(ITransportSettings transportSettings)
             {}
 
             public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null, bool? autoDelete = null)

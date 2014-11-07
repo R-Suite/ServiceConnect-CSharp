@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using log4net;
+using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
@@ -13,13 +14,11 @@ namespace R.MessageBus.Core
 
         private readonly IProcessManagerFinder _processManagerFinder;
         private readonly IBusContainer _container;
-        private readonly IMessageSerializer _messageSerializer;
 
-        public ProcessManagerProcessor(IProcessManagerFinder processManagerFinder, IBusContainer container, IMessageSerializer messageSerializer)
+        public ProcessManagerProcessor(IProcessManagerFinder processManagerFinder, IBusContainer container)
         {
             _processManagerFinder = processManagerFinder;
             _container = container;
-            _messageSerializer = messageSerializer;
         }
 
         public void ProcessMessage<T>(string message, IConsumeContext context) where T : Message
@@ -54,7 +53,7 @@ namespace R.MessageBus.Core
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute process manager execute method
-                    var messageObject = _messageSerializer.Deserialize(typeof(T).AssemblyQualifiedName, message);
+                    var messageObject = JsonConvert.DeserializeObject(message, typeof(T)); 
                     processManagerInstance.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new[] { messageObject });
 
                     // Get data after execute has finished
@@ -81,7 +80,7 @@ namespace R.MessageBus.Core
             {
                 try
                 {
-                    var messageObject = (Message)_messageSerializer.Deserialize(typeof(T).AssemblyQualifiedName, message);
+                    var messageObject = (Message)JsonConvert.DeserializeObject(message, typeof(T)); 
 
                     // Create instance of the project manager
                     object processManager = _container.GetInstance(handlerReference.HandlerType);

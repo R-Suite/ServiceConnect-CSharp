@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using log4net;
+using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -13,7 +14,6 @@ namespace R.MessageBus.Client.RabbitMQ
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ITransportSettings _transportSettings;
-        private readonly IMessageSerializer _messageSerializer;
         private IConnection _connection;
         private IModel _model;
         private ConsumerEventHandler _consumerEventHandler;
@@ -31,10 +31,9 @@ namespace R.MessageBus.Client.RabbitMQ
         private int _activeHost;
         private readonly bool _errorsDisabled;
 
-        public Consumer(ITransportSettings transportSettings, IMessageSerializer messageSerializer)
+        public Consumer(ITransportSettings transportSettings)
         {
             _transportSettings = transportSettings;
-            _messageSerializer = messageSerializer;
 
             _hosts = transportSettings.Host.Split(',');
             _activeHost = 0;
@@ -95,14 +94,14 @@ namespace R.MessageBus.Client.RabbitMQ
                         string jsonException = string.Empty;
                         try
                         {
-                            jsonException = _messageSerializer.Serialize(result.Exception);
+                            jsonException = JsonConvert.SerializeObject(result.Exception);
                         }
                         catch (Exception ex)
                         {
                             Logger.Warn("Error serializing exception", ex);
                         }
 
-                        SetHeader(args, "Exception", _messageSerializer.Serialize(new
+                        SetHeader(args, "Exception", JsonConvert.SerializeObject(new
                         {
                             TimeStamp = DateTime.Now,
                             ExceptionType = result.Exception.GetType().FullName,

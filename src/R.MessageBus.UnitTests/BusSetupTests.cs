@@ -177,23 +177,6 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
-        public void SouldInjectItselfIntoTheContainer()
-        {
-            // Arrange
-            var mockConfiguration = new Mock<IConfiguration>();
-            var mockContainer = new Mock<IBusContainer>();
-            mockContainer.Setup(x => x.Initialize());
-            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
-            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
-
-            // Act
-            var bus = new Bus(mockConfiguration.Object);
-
-            // Assert
-            mockContainer.Verify(x => x.AddBus(bus), Times.Once);
-        }
-
-        [Fact]
         public void ShouldSetupQueueName()
         {
             // Arrange
@@ -337,7 +320,7 @@ namespace R.MessageBus.UnitTests
 
         public class FakePublisher : IProducer
         {
-            public FakePublisher(ITransportSettings transportSettings, IDictionary<string, string> queueMappings, IMessageSerializer messageSerializer)
+            public FakePublisher(ITransportSettings transportSettings, IDictionary<string, string> queueMappings)
             {
             }
 
