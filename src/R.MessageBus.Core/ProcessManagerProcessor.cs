@@ -27,9 +27,23 @@ namespace R.MessageBus.Core
             LoadExistingProcessManagers<T>(message, context);
         }
 
-        private void StartProcessManagers<T>(string message, IConsumeContext context) where T : Message
+        private void StartProcessManagersBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
+        {
+            List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<TB>)).ToList();
+
+            InitStartProcessManagerHandlers<T>(message, context, processManagerInstances, typeof(TB));
+        }
+
+        private void StartProcessManagers<T>(string message, IConsumeContext context, Type baseType = null) where T : Message
         {
             List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<T>)).ToList();
+
+            InitStartProcessManagerHandlers<T>(message, context, processManagerInstances, baseType);
+        }
+
+        private void InitStartProcessManagerHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> processManagerInstances, Type baseType = null) where T : Message
+        {
+            Type msgType = baseType ?? typeof(T);
 
             foreach (HandlerReference processManagerInstance in processManagerInstances)
             {
@@ -42,45 +56,75 @@ namespace R.MessageBus.Core
                     Type dataType = processManagerInstance.HandlerType.BaseType.GetGenericArguments()[0];
 
                     // Create new instance 
-                    var data = (IProcessManagerData)Activator.CreateInstance(dataType);
+                    var data = (IProcessManagerData) Activator.CreateInstance(dataType);
 
                     // Set data on process manager
                     PropertyInfo dataProp = processManagerInstance.HandlerType.GetProperty("Data");
                     dataProp.SetValue(processManager, data, null);
 
                     // Set context property value
-                    PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context", typeof(IConsumeContext));
+                    PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context",
+                        typeof (IConsumeContext));
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute process manager execute method
-                    var messageObject = JsonConvert.DeserializeObject(message, typeof(T)); 
-                    processManagerInstance.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new[] { messageObject });
+                    var messageObject = JsonConvert.DeserializeObject(message, typeof (T));
+                    processManagerInstance.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new[] { messageObject });
 
                     // Get data after execute has finished
-                    data = (IProcessManagerData)dataProp.GetValue(processManager);
+                    data = (IProcessManagerData) dataProp.GetValue(processManager);
 
                     // Persist data
                     _processManagerFinder.InsertData(data);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error(string.Format("Error executing process manager start handler. {0}", processManagerInstance.HandlerType.FullName), ex);
+                    Logger.Error(
+                        string.Format("Error executing process manager start handler. {0}",
+                            processManagerInstance.HandlerType.FullName), ex);
                     throw;
                 }
             }
+
+            // This is used when processing Sent (rather than Published) messages
+            // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
+            Type newBaseType = msgType.BaseType;
+            if (newBaseType != null && newBaseType.Name != typeof(object).Name)
+            {
+                MethodInfo startProcessManagers = GetType().GetMethod("StartProcessManagersBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo genericStartProcessManagers = startProcessManagers.MakeGenericMethod(typeof (T), newBaseType);
+                genericStartProcessManagers.Invoke(this, new object[] {message, context});
+            }
         }
 
-        private void LoadExistingProcessManagers<T>(string message, IConsumeContext context) where T : Message
+
+        private void LoadExistingProcessManagersBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
+        {
+            IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<TB>))
+                                                                        .Where(h => h.HandlerType.BaseType != null &&
+                                                                                    h.HandlerType.BaseType.Name == typeof(ProcessManager<>).Name);
+
+            InitLoadExistingProcessManagerHandlers<T>(message, context, handlerReferences, typeof(TB));
+        }
+
+        private void LoadExistingProcessManagers<T>(string message, IConsumeContext context, Type baseType = null) where T : Message
         {
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
                                                                         .Where(h => h.HandlerType.BaseType != null &&
                                                                                     h.HandlerType.BaseType.Name == typeof(ProcessManager<>).Name);
 
+            InitLoadExistingProcessManagerHandlers<T>(message, context, handlerReferences, baseType);
+        }
+
+        private void InitLoadExistingProcessManagerHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> handlerReferences, Type baseType = null) where T : Message
+        {
+            Type msgType = baseType ?? typeof(T);
+
             foreach (HandlerReference handlerReference in handlerReferences)
             {
                 try
                 {
-                    var messageObject = (Message)JsonConvert.DeserializeObject(message, typeof(T)); 
+                    var messageObject = (Message) JsonConvert.DeserializeObject(message, typeof (T));
 
                     // Create instance of the project manager
                     object processManager = _container.GetInstance(handlerReference.HandlerType);
@@ -90,8 +134,7 @@ namespace R.MessageBus.Core
                     processManagerFinderProp.SetValue(processManager, _processManagerFinder, null);
 
                     // Execute FindProcessManagerData
-                    object persistanceData = handlerReference.HandlerType.GetMethod("FindProcessManagerData")
-                                                                            .Invoke(processManager, new[] { messageObject });
+                    object persistanceData = handlerReference.HandlerType.GetMethod("FindProcessManagerData").Invoke(processManager, new[] {messageObject});
 
                     if (null == persistanceData)
                     {
@@ -112,11 +155,11 @@ namespace R.MessageBus.Core
                     prop.SetValue(processManager, data, null);
 
                     // Set context property value
-                    PropertyInfo contextProp = handlerReference.HandlerType.GetProperty("Context", typeof(IConsumeContext));
+                    PropertyInfo contextProp = handlerReference.HandlerType.GetProperty("Context", typeof (IConsumeContext));
                     contextProp.SetValue(processManager, context, null);
 
-                    // Execute handler
-                    handlerReference.HandlerType.GetMethod("Execute", new[] { typeof(T) }).Invoke(processManager, new object[] { messageObject });
+                    // ***Execute handler***
+                    handlerReference.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new object[] { messageObject });
 
                     // Get Complete property value
                     PropertyInfo completeProperty = handlerReference.HandlerType.GetProperty("Complete");
@@ -141,10 +184,21 @@ namespace R.MessageBus.Core
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error(string.Format("Error executing process manager handler. {0}", handlerReference.HandlerType.FullName),
+                    Logger.Error(
+                        string.Format("Error executing process manager handler. {0}", handlerReference.HandlerType.FullName),
                         ex);
                     throw;
                 }
+            }
+
+            // This is used when processing Sent (rather than Published) messages
+            // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
+            Type newBaseType = msgType.BaseType;
+            if (newBaseType != null && newBaseType.Name != typeof (object).Name)
+            {
+                MethodInfo loadExistingProcessManagers = GetType().GetMethod("LoadExistingProcessManagersBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
+                MethodInfo genericLoadExistingProcessManagers = loadExistingProcessManagers.MakeGenericMethod(typeof (T),newBaseType);
+                genericLoadExistingProcessManagers.Invoke(this, new object[] {message, context});
             }
         }
     }
