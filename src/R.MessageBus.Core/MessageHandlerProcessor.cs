@@ -52,7 +52,7 @@ namespace R.MessageBus.Core
             // This is used when processing Sent (rather than Published) messages
             // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
             Type newBaseType = (null != baseType) ? baseType.BaseType : typeof(T).BaseType;
-            if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
+            if (newBaseType != null && newBaseType.Name != typeof(object).Name)
             {
                 MethodInfo processMessage = GetType().GetMethod("ProcessMessageBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
                 MethodInfo genericProcessMessage = processMessage.MakeGenericMethod(typeof(T), newBaseType);
