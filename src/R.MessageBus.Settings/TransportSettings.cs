@@ -15,5 +15,6 @@ namespace R.MessageBus.Settings
         public bool AuditingEnabled { get; set; }
         public string AuditQueueName { get; set; }
         public bool DisableErrors { get; set; }
+        public string HeartbeatQueueName { get; set; }
     }
 }

@@ -10,7 +10,9 @@ namespace McDonalds.FoodPreparer
             Console.WriteLine("*********** Food Preparer ***********");
             var bus = Bus.Initialize(x =>
             {
+                x.SetHost("lonappdev04");
                 x.ScanForMesssageHandlers = true;
+                x.SetAuditingEnabled(true);
             });
 
             bus.StartConsuming();
