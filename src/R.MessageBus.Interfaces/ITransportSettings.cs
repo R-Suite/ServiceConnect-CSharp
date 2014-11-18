@@ -55,6 +55,11 @@ namespace R.MessageBus.Interfaces
         /// Disable sending errors to error queue
         /// </summary>
         bool DisableErrors { get; set; }
+
+        /// <summary>
+        /// Custom Heartbeat Queue Name
+        /// </summary>
+        string HeartbeatQueueName { get; set; }
     }
 
     public class Queue

@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
@@ -17,6 +19,7 @@ namespace R.MessageBus
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
         private readonly object _requestLock = new object();
         private static IProducer _producer;
+        private Timer _timer;
 
         public IConfiguration Configuration { get; set; }
 
@@ -38,6 +41,37 @@ namespace R.MessageBus
             {
                 _container.ScanForHandlers();
             }
+
+            if (configuration.TransportSettings.AuditingEnabled)
+            {
+                StartHeartbeatTimer();
+            }
+        }
+
+        private void StartHeartbeatTimer()
+        {
+            var state = new HeartbeatTimerState
+            {
+                CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName),
+                RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName)
+            };
+
+            var timerDelegate = new TimerCallback(CheckStatus);
+            _timer = new Timer(timerDelegate, state, new TimeSpan(0, 0, 0), new TimeSpan(0, 0, 30));
+        }
+
+        private void CheckStatus(object state)
+        {
+            var heartbeatState = (HeartbeatTimerState) state;
+
+            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, new HeartbeatMessage(Guid.NewGuid())
+            {
+                Timestamp = DateTime.UtcNow,
+                Location = Configuration.TransportSettings.MachineName,
+                Name = Configuration.TransportSettings.Queue.Name,
+                LatestCpu = heartbeatState.CpuCounter.NextValue(),
+                LatestMemory = heartbeatState.RamCounter.NextValue()
+            });
         }
 
         /// <summary>
@@ -286,6 +320,11 @@ namespace R.MessageBus
         {
             StopConsuming();
             _producer.Dispose();
+
+            if (Configuration.TransportSettings.AuditingEnabled)
+            {
+                _timer.Dispose();
+            }
         }
     }
 }

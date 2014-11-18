@@ -12,7 +12,9 @@ namespace McDonalds.Cashier
             var bus = Bus.Initialize(x =>
             {
                 x.ScanForMesssageHandlers = true;
+                x.SetHost("lonappdev04");
                 x.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
+                x.SetAuditingEnabled(true);
             });
 
             bus.StartConsuming();
