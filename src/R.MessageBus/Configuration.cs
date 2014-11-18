@@ -272,9 +272,9 @@ namespace R.MessageBus
             return (IProcessManagerFinder)Activator.CreateInstance(ProcessManagerFinder, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
         }
 
-        public IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid correlationId, Guid requestMessageId)
+        public IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid requestMessageId, string messageType)
         {
-            var configuration = new RequestConfiguration(this, consumeMessageEvent, correlationId, requestMessageId);
+            var configuration = new RequestConfiguration(this, consumeMessageEvent, requestMessageId, messageType);
             return configuration;
         }
 
