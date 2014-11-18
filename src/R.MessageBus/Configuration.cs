@@ -202,6 +202,15 @@ namespace R.MessageBus
         }
 
         /// <summary>
+        /// Sets Heartbeat queue name
+        /// </summary>
+        /// <param name="heartbeatQueueName"></param>
+        public void SetHeartbeatQueueName(string heartbeatQueueName)
+        {
+            TransportSettings.HeartbeatQueueName = heartbeatQueueName;
+        }
+
+        /// <summary>
         /// Gets QueueName
         /// </summary>
         public string GetQueueName()
@@ -384,6 +393,7 @@ namespace R.MessageBus
             transportSettings.ErrorQueueName = "errors";
             transportSettings.AuditingEnabled = false;
             transportSettings.AuditQueueName = "audit";
+            transportSettings.HeartbeatQueueName = "heartbeat";
 
             return transportSettings;
         }

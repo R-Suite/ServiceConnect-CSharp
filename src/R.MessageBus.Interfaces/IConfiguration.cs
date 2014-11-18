@@ -86,6 +86,11 @@ namespace R.MessageBus.Interfaces
         /// Sets AuditQueueName
         /// </summary>
         void SetAuditQueueName(string auditQueueName);
+
+        /// <summary>
+        /// Sets HeartbeatQueueName
+        /// </summary>
+        void SetHeartbeatQueueName(string heartbeatQueueName);
         
         /// <summary>
         /// Gets queue name.
