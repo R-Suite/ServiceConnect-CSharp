@@ -127,6 +127,8 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.SetPersistent(true);
                 var endPoint = _queueMappings[typeof(T).FullName];
 
+                ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
+
                 basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
@@ -148,6 +150,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
                 basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
+
+                ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
                          ex => RetryConnection(),
@@ -178,6 +182,8 @@ namespace R.MessageBus.Client.RabbitMQ
             headers["MessageType"] = messageType;
             headers["FullTypeName"] = type.AssemblyQualifiedName;
             headers["TypeName"] = type.Name;
+            headers["ConsumerType"] = "RabbitMQ";
+            headers["TypeName"] = "C#";
 
             return headers.ToDictionary(x => x.Key, x => (object)x.Value);
         }
@@ -207,6 +213,20 @@ namespace R.MessageBus.Client.RabbitMQ
             }
 
             return exchangeName;
+        }
+
+        private string ConfigureQueue(string queueName, bool exclusive, bool autoDelete)
+        {
+            var arguments = _transportSettings.Queue.Arguments;
+            try
+            {
+                _model.QueueDeclare(queueName, _transportSettings.Queue.Durable, exclusive, autoDelete, arguments);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn(string.Format("Error declaring queue - {0}", ex.Message));
+            }
+            return queueName;
         }
     }
 }
