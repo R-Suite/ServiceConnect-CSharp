@@ -138,10 +138,10 @@ namespace R.MessageBus.Interfaces
         /// Gets a instance of the RequestConfiguration class.  Used to configure Request Reply messaging.
         /// </summary>
         /// <param name="consumeMessageEvent">The message event handler to call when receiving a reply.</param>
-        /// <param name="correlationId">Used for correlating the Request and Reply messages.</param>
         /// <param name="requestMessageCorrelationId">Used to ensure the request is not proccessed as a reply</param>
+        /// <param name="messageType">Type of response message</param>
         /// <returns>An instance of the RequestConfiguration class.</returns>
-        IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid correlationId, Guid requestMessageCorrelationId);
+        IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid requestMessageCorrelationId, string messageType);
 
         /// <summary>
         /// Disables publishing errors to error queue

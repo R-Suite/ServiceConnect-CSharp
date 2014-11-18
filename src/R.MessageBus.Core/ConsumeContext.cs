@@ -18,13 +18,13 @@ namespace R.MessageBus.Core
 
         public void Reply<TReply>(TReply message)  where TReply : Message
         {
-            if (Headers.ContainsKey("DestinationAddress"))
+            if (Headers.ContainsKey("SourceAddress"))
             {
-                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["DestinationAddress"]), message);
+                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["SourceAddress"]), message, new Dictionary<string, string>{ { "MessageId", Encoding.ASCII.GetString((byte[])Headers["MessageId"])} });
             }
             else
             {
-                throw new ArgumentException("DestinationAddress not found in message headers.");
+                throw new ArgumentException("SourceAddress not found in message headers.");
             }
         }
     }

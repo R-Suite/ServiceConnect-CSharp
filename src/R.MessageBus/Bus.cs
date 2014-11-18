@@ -114,117 +114,103 @@ namespace R.MessageBus
             }
         }
 
-        public void Publish<T>(T message) where T : Message
+        public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
-            _producer.Publish(message);
+            _producer.Publish(message, headers);
         }
 
-        public void Send<T>(T message) where T : Message
+        public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
-            _producer.Send(message);
+            _producer.Send(message, headers);
         }
 
-        public void Send<T>(string endPoint, T message) where T : Message
+        public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
         {
-            _producer.Send(endPoint, message);
+            _producer.Send(endPoint, message, headers);
         }
         
-        public void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message
+        public void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
         {
-            SendRequest(null, message, callback);
+            SendRequest(null, message, callback, headers);
         }
 
-        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback)
-            where TRequest : Message
-            where TReply : Message
+        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
         {
-            var correlationId = Guid.NewGuid();
             var messageId = Guid.NewGuid();
-            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, correlationId, messageId);
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
 
             configuration.SetHandler(r => callback((TReply)r));
 
             lock (_requestLock)
             {
-                _requestConfigurations[correlationId.ToString()] = configuration;
+                _requestConfigurations[messageId.ToString()] = configuration;
             }
+
+            if (headers == null)
+            {
+                headers = new Dictionary<string, string>();
+            }
+
+            headers["MessageId"] = messageId.ToString();
 
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(message,
-                    new Dictionary<string, string>
-                    {
-                        {"DestinationAddress", correlationId.ToString()},
-                        {"MessageId", messageId.ToString()}
-                    });
+                producer.Send(message, headers);
             }
             else
             {
-                producer.Send(endPoint, message,
-                    new Dictionary<string, string>
-                    {
-                        {"DestinationAddress", correlationId.ToString()},
-                        {"MessageId", messageId.ToString()}
-                    });
+                producer.Send(endPoint, message, headers);
             }
             producer.Disconnect();
         }
 
-        public TReply SendRequest<TRequest, TReply>(TRequest message, int timeout)
-            where TRequest : Message
-            where TReply : Message
+        public TReply SendRequest<TRequest, TReply>(TRequest message, int timeout, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
         {
-            return SendRequest<TRequest, TReply>(null, message, timeout);
+            return SendRequest<TRequest, TReply>(null, message, timeout, headers);
         }
 
-        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, int timeout)
-            where TRequest : Message
-            where TReply : Message
+        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, int timeout, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
         {
-                var correlationId = Guid.NewGuid();
-                var messageId = Guid.NewGuid();
-                IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, correlationId, messageId);
+            var messageId = Guid.NewGuid();
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
 
-                TReply response = default(TReply);
+            TReply response = default(TReply);
 
-                Task task = configuration.SetHandler(r =>
-                {
-                    response = (TReply)r;
-                });
+            Task task = configuration.SetHandler(r =>
+            {
+                response = (TReply)r;
+            });
 
-                lock (_requestLock)
-                {
-                    _requestConfigurations[correlationId.ToString()] = configuration;
-                }
+            lock (_requestLock)
+            {
+                _requestConfigurations[messageId.ToString()] = configuration;
+            }
 
-                if (string.IsNullOrEmpty(endPoint))
-                {
-                    _producer.Send(message,
-                        new Dictionary<string, string>
-                        {
-                            {"DestinationAddress", correlationId.ToString()},
-                            {"MessageId", messageId.ToString()}
-                        });
-                }
-                else
-                {
-                    _producer.Send(endPoint, message,
-                        new Dictionary<string, string>
-                        {
-                            {"DestinationAddress", correlationId.ToString()},
-                            {"MessageId", messageId.ToString()}
-                        });
-                }
+            if (headers == null)
+            {
+                headers = new Dictionary<string, string>();
+            }
 
-                Task.WaitAll(new[]{ task }, timeout);
+            headers["MessageId"] = messageId.ToString();
 
-                if (!task.IsCompleted)
-                {
-                    throw new TimeoutException();
-                }
+            if (string.IsNullOrEmpty(endPoint))
+            {
+                _producer.Send(message, headers);
+            }
+            else
+            {
+                _producer.Send(endPoint, message, headers);
+            }
 
-                return response;
+            Task.WaitAll(new[]{ task }, timeout);
+
+            if (!task.IsCompleted)
+            {
+                throw new TimeoutException();
+            }
+
+            return response;
         }
 
         private ConsumeEventResult ConsumeMessageEvent(string message, string type, IDictionary<string, object> headers)
@@ -265,20 +251,15 @@ namespace R.MessageBus
         {
             lock (_requestLock)
             {
-                string correlationId = Encoding.ASCII.GetString((byte[])context.Headers["DestinationAddress"]);
                 string messageId = Encoding.ASCII.GetString((byte[])context.Headers["MessageId"]);
-                if (!_requestConfigurations.ContainsKey(correlationId))
+                if (!_requestConfigurations.ContainsKey(messageId))
                 {
                     return;
                 }
-                IRequestConfiguration requestConfigration = _requestConfigurations[correlationId];
-                // Do not process its own request
-                if (requestConfigration.RequestMessageId == new Guid(messageId))
-                {
-                    return;
-                }
+                IRequestConfiguration requestConfigration = _requestConfigurations[messageId];
+                
                 requestConfigration.ProcessMessage(message, type);
-                var item = _requestConfigurations.First(kvp => kvp.Key == correlationId);
+                var item = _requestConfigurations.First(kvp => kvp.Key == messageId);
                 _requestConfigurations.Remove(item.Key);
             }
         }
