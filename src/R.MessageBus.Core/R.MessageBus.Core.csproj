@@ -50,6 +50,8 @@
   <ItemGroup>
     <Compile Include="ConfigurationManagerWrapper.cs" />
     <Compile Include="ConsumeContext.cs" />
+    <Compile Include="HeartbeatMessage.cs" />
+    <Compile Include="HeartbeatTimerState.cs" />
     <Compile Include="MessageHandlerProcessor.cs" />
     <Compile Include="ProcessManager.cs" />
     <Compile Include="ProcessManagerProcessor.cs" />

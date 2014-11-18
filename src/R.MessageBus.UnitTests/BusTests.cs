@@ -42,7 +42,7 @@ namespace R.MessageBus.UnitTests
         public void StartConsumingShouldGetAllHandlerTypesFromContainer()
         {
             // Arrange
-            var bus = new MessageBus.Bus(_mockConfiguration.Object);
+            var bus = new Bus(_mockConfiguration.Object);
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(new List<HandlerReference>());
 
             // Act
@@ -57,7 +57,7 @@ namespace R.MessageBus.UnitTests
         public void StartConsumingShouldCreateAConsumerForEachHandler()
         {
             // Arrange
-            var bus = new MessageBus.Bus(_mockConfiguration.Object);
+            var bus = new Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
             {
@@ -87,7 +87,7 @@ namespace R.MessageBus.UnitTests
         public void StartConsumingShouldStartConsumingAllMessagesFromTheContainer()
         {
             // Arrange
-            var bus = new MessageBus.Bus(_mockConfiguration.Object);
+            var bus = new Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
             {
@@ -118,7 +118,7 @@ namespace R.MessageBus.UnitTests
         public void ConsumeMessageEventShouldProcessMessagesOnMessageHandler()
         {
             // Arrange
-            var bus = new MessageBus.Bus(_mockConfiguration.Object);
+            var bus = new Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
             {
@@ -212,7 +212,7 @@ namespace R.MessageBus.UnitTests
         public void ConsumeMessageEventShouldProcessResponseMessage()
         {
             // Arrange
-            var bus = new MessageBus.Bus(_mockConfiguration.Object);
+            var bus = new Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
             {
@@ -295,7 +295,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
 
             // Act
-            var bus = new MessageBus.Bus(mockConfiguration.Object);
+            var bus = new Bus(mockConfiguration.Object);
             bus.Publish(new FakeMessage1(Guid.NewGuid()));
 
             // Assert

@@ -231,6 +231,24 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
+        public void ShouldSetupHeartbeatQueueName()
+        {
+            // Arrange
+            var bus = Bus.Initialize(c =>
+            {
+                c.SetHeartbeatQueueName("TestHeartbeatQueue");
+                c.SetContainer<FakeContainer>();
+                c.SetProducer<FakePublisher>();
+            });
+
+            // Act
+            var config = bus.Configuration;
+
+            // Assert
+            Assert.Equal("TestHeartbeatQueue", config.TransportSettings.HeartbeatQueueName);
+        }
+
+        [Fact]
         public void ShouldSetupAuditingEnabled()
         {
             // Arrange
@@ -247,7 +265,6 @@ namespace R.MessageBus.UnitTests
             // Assert
             Assert.True(config.TransportSettings.AuditingEnabled);
         }
-
         
         public class FakeContainer : IBusContainer
         {
