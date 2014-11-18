@@ -384,9 +384,9 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Dispose()
         {
-           if (_connection != null)
-           {
-               _connectionClosed = true;
+            if (_connection != null)
+            {
+                _connectionClosed = true;
                 _connection.Close(500);
             }
             if (_model != null)

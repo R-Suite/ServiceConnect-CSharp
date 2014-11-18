@@ -9,8 +9,8 @@ namespace R.MessageBus.Core
     {
         private readonly IConfiguration _configuration;
         private readonly ConsumerEventHandler _consumerEventHandler;
-        private readonly Guid _correlationId;
         private readonly Guid _requestMessageId;
+        private readonly string _messageType;
         private Task _task;
         private IConsumer _consumer;
         private Action<object> _action;
@@ -20,12 +20,12 @@ namespace R.MessageBus.Core
             get { return _requestMessageId; }
         }
 
-        public RequestConfiguration(IConfiguration configuration, ConsumerEventHandler consumerEventHandler,  Guid correlationId, Guid requestMessageId)
+        public RequestConfiguration(IConfiguration configuration, ConsumerEventHandler consumerEventHandler,  Guid requestMessageId, string messageType)
         {
             _configuration = configuration;
             _consumerEventHandler = consumerEventHandler;
-            _correlationId = correlationId;
             _requestMessageId = requestMessageId;
+            _messageType = messageType;
         }
 
         public Task SetHandler(Action<object> handler)
@@ -33,7 +33,7 @@ namespace R.MessageBus.Core
             _consumer = _configuration.GetConsumer();
             _task = new Task(() => _consumer.Dispose());
             _action = handler;
-            _consumer.StartConsuming(_consumerEventHandler, _correlationId.ToString(), _correlationId.ToString(), true, true);
+            _consumer.StartConsuming(_consumerEventHandler, _messageType, _configuration.TransportSettings.Queue.Name, _configuration.TransportSettings.Queue.Exclusive, _configuration.TransportSettings.Queue.AutoDelete);
 
             return _task;
         }
