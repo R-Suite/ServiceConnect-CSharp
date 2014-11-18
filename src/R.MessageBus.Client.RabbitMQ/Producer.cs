@@ -183,7 +183,7 @@ namespace R.MessageBus.Client.RabbitMQ
             headers["FullTypeName"] = type.AssemblyQualifiedName;
             headers["TypeName"] = type.Name;
             headers["ConsumerType"] = "RabbitMQ";
-            headers["TypeName"] = "C#";
+            headers["Language"] = "C#";
 
             return headers.ToDictionary(x => x.Key, x => (object)x.Value);
         }
