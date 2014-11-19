@@ -9,7 +9,10 @@ namespace PublishSubscribe.Publisher
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize();
+            var bus = Bus.Initialize(x =>
+            {
+                x.SetHost("lonappdev04");
+            });
 
             while (true)
             {
