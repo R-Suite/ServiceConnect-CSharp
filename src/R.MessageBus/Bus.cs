@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -14,12 +13,12 @@ namespace R.MessageBus
 {
     public class Bus : IBus
     {
-        private readonly ConcurrentBag<IConsumer> _consumers = new ConcurrentBag<IConsumer>();
         private readonly IBusContainer _container;
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
         private readonly object _requestLock = new object();
         private static IProducer _producer;
         private Timer _timer;
+        private IConsumer _consumer;
 
         public IConfiguration Configuration { get; set; }
 
@@ -104,13 +103,13 @@ namespace R.MessageBus
 
             string queueName = Configuration.TransportSettings.Queue.Name;
 
+            _consumer = Configuration.GetConsumer();
+            _consumer.StartConsuming(ConsumeMessageEvent, queueName);
+
             foreach (HandlerReference reference in instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName)))
             {
                 string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
-
-                IConsumer consumer = Configuration.GetConsumer();
-                consumer.StartConsuming(ConsumeMessageEvent, messageTypeName, queueName);
-                _consumers.Add(consumer);
+                _consumer.ConsumeMessageType(messageTypeName);
             }
         }
 
@@ -151,7 +150,7 @@ namespace R.MessageBus
                 headers = new Dictionary<string, string>();
             }
 
-            headers["MessageId"] = messageId.ToString();
+            headers["RequestMessageId"] = messageId.ToString();
 
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
@@ -192,7 +191,7 @@ namespace R.MessageBus
                 headers = new Dictionary<string, string>();
             }
 
-            headers["MessageId"] = messageId.ToString();
+            headers["RequestMessageId"] = messageId.ToString();
 
             if (string.IsNullOrEmpty(endPoint))
             {
@@ -251,7 +250,12 @@ namespace R.MessageBus
         {
             lock (_requestLock)
             {
-                string messageId = Encoding.ASCII.GetString((byte[])context.Headers["MessageId"]);
+                if (!context.Headers.ContainsKey("ResponseMessageId"))
+                {
+                    return;
+                }
+                
+                string messageId = Encoding.ASCII.GetString((byte[])context.Headers["ResponseMessageId"]);
                 if (!_requestConfigurations.ContainsKey(messageId))
                 {
                     return;
@@ -291,10 +295,7 @@ namespace R.MessageBus
 
         public void StopConsuming()
         {
-            foreach (var consumer in _consumers)
-            {
-                consumer.StopConsuming();
-            }
+            _consumer.StopConsuming();
         }
 
         public void Dispose()

@@ -234,6 +234,11 @@ namespace R.MessageBus.UnitTests
                 throw new NotImplementedException();
             }
 
+            public void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null,
+                bool? autoDelete = null)
+            {
+            }
+
             public void StopConsuming()
             {
                 throw new NotImplementedException();
@@ -242,6 +247,10 @@ namespace R.MessageBus.UnitTests
             public void Dispose()
             {
                 throw new NotImplementedException();
+            }
+
+            public void ConsumeMessageType(string messageTypeName)
+            {
             }
         }
     }
