@@ -274,7 +274,7 @@ namespace R.MessageBus
 
         public IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid requestMessageId, string messageType)
         {
-            var configuration = new RequestConfiguration(this, consumeMessageEvent, requestMessageId, messageType);
+            var configuration = new RequestConfiguration(requestMessageId);
             return configuration;
         }
 

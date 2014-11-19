@@ -20,7 +20,7 @@ namespace R.MessageBus.Core
         {
             if (Headers.ContainsKey("SourceAddress"))
             {
-                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["SourceAddress"]), message, new Dictionary<string, string>{ { "MessageId", Encoding.ASCII.GetString((byte[])Headers["MessageId"])} });
+                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["SourceAddress"]), message, new Dictionary<string, string>{ { "ResponseMessageId", Encoding.ASCII.GetString((byte[])Headers["RequestMessageId"])} });
             }
             else
             {

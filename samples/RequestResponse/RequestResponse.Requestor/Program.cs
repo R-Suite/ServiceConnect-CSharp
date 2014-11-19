@@ -12,9 +12,11 @@ namespace RequestResponse.Requestor
 
             var bus = Bus.Initialize(config =>
             {
+                config.ScanForMesssageHandlers = true;
                 config.SetQueueName("Requestor");
                 config.SetHost("lonappdev04");
             });
+            bus.StartConsuming();
 
             while (true)
             {
@@ -23,7 +25,7 @@ namespace RequestResponse.Requestor
 
                 var id = Guid.NewGuid();
                 Console.WriteLine("Sending synchronous message - {0}", id);
-                var result = bus.SendRequest<RequestMessage, ResponseMessage>("Responder", new RequestMessage(id));
+                var result = bus.SendRequest<RequestMessage, ResponseMessage>("Responder", new RequestMessage(id), 300000);
                 Console.WriteLine("Sent synchronous message reply - {0}", result.CorrelationId);
                 Console.WriteLine();
 
@@ -31,6 +33,12 @@ namespace RequestResponse.Requestor
                 Console.WriteLine("Sending async message - {0}", id);
                 bus.SendRequest<RequestMessage, ResponseMessage>("Responder", new RequestMessage(id), r => Console.WriteLine("Sent async message reply - {0}", r.CorrelationId));
                 Console.WriteLine();
+
+                //bus.Send("Requestor", new RequestMessage(Guid.NewGuid()));
+                //bus.Send("Requestor", new ResponseMessage(Guid.NewGuid()));
+
+                //Console.ReadLine();
+
             }
         }
     }
