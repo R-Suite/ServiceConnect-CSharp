@@ -69,7 +69,9 @@ namespace R.MessageBus
                 Location = Configuration.TransportSettings.MachineName,
                 Name = Configuration.TransportSettings.Queue.Name,
                 LatestCpu = heartbeatState.CpuCounter.NextValue(),
-                LatestMemory = heartbeatState.RamCounter.NextValue()
+                LatestMemory = heartbeatState.RamCounter.NextValue(),
+                Language = "C#",
+                ConsumerType = _consumer.Type
             });
         }
 

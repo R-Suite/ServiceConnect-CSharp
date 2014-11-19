@@ -6,5 +6,6 @@ namespace R.MessageBus.Interfaces
         void StopConsuming();
         void Dispose();
         void ConsumeMessageType(string messageTypeName);
+        string Type { get; }
     }
 }
