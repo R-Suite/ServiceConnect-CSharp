@@ -342,6 +342,8 @@ namespace R.MessageBus.UnitTests
             public void ConsumeMessageType(string messageTypeName)
             {
             }
+
+            public string Type { get; private set; }
         }
 
         public class FakePublisher : IProducer

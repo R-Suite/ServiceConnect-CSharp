@@ -14,5 +14,7 @@ namespace R.MessageBus.Core
         public string Location { get; set; }
         public double LatestCpu { get; set; }
         public double LatestMemory { get; set; }
+        public string ConsumerType { get; set; }
+        public string Language { get; set; }
     }
 }
