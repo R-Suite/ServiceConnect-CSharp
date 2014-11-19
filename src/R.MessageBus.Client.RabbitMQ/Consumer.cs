@@ -207,6 +207,14 @@ namespace R.MessageBus.Client.RabbitMQ
             }
         }
 
+        public string Type
+        {
+            get
+            {
+                return "RabbitMQ";
+            }
+        }
+
         private void ConsumerShutdown(object sender, ShutdownEventArgs e)
         {
             if (_connectionClosed)
