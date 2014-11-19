@@ -25,7 +25,6 @@ namespace R.MessageBus.Client.RabbitMQ
         private string _retryQueueName;
         private bool _exclusive;
         private bool _autoDelete;
-        private string _messageTypeName;
         private bool _connectionClosed;
         private readonly string[] _hosts;
         private int _activeHost;
@@ -125,11 +124,10 @@ namespace R.MessageBus.Client.RabbitMQ
             }
         }
 
-        public void StartConsuming(ConsumerEventHandler messageReceived, string messageTypeName, string queueName, bool? exclusive = null, bool? autoDelete = null)
+        public void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null)
         {
             _consumerEventHandler = messageReceived;
             _queueName = queueName;
-            _messageTypeName = messageTypeName;
 
             if (exclusive.HasValue)
                 _exclusive = exclusive.Value;
@@ -167,13 +165,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
 
             // WORK QUEUE
-            string exchange = ConfigureExchange(_messageTypeName);
             var queueName = ConfigureQueue();
-
-            if (!string.IsNullOrEmpty(exchange))
-            {
-                _model.QueueBind(queueName, exchange, string.Empty);
-            }
 
             // RETRY QUEUE
             ConfigureRetryQueue();
@@ -203,6 +195,16 @@ namespace R.MessageBus.Client.RabbitMQ
             consumer.Received += Event;
             consumer.Shutdown += ConsumerShutdown;
             _model.BasicConsume(queueName, false, consumer);
+        }
+
+        public void ConsumeMessageType(string messageTypeName)
+        {
+            string exchange = ConfigureExchange(messageTypeName);
+
+            if (!string.IsNullOrEmpty(exchange))
+            {
+                _model.QueueBind(_queueName, exchange, string.Empty);
+            }
         }
 
         private void ConsumerShutdown(object sender, ShutdownEventArgs e)
@@ -392,5 +394,6 @@ namespace R.MessageBus.Client.RabbitMQ
             if (_model != null)
                 _model.Abort();
         }
+
     }
 }
