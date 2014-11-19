@@ -27,7 +27,8 @@ namespace R.MessageBus.Interfaces
         /// <typeparam name="T"></typeparam>
         /// <param name="message"></param>
         /// <param name="headers">Custom headers</param>
-        void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message;
+        void Publish<T>(T message, Dictionary<string, string> headers) where T : Message;
+        void Publish<T>(T message) where T : Message;
 
         /// <summary>
         /// Sends a command.
@@ -35,7 +36,8 @@ namespace R.MessageBus.Interfaces
         /// <typeparam name="T"></typeparam>
         /// <param name="message"></param>
         /// <param name="headers">Custom headers</param>
-        void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message;
+        void Send<T>(T message, Dictionary<string, string> headers) where T : Message;
+        void Send<T>(T message) where T : Message;
 
         /// <summary>
         /// Send a command to the specified endpoint.
@@ -44,7 +46,8 @@ namespace R.MessageBus.Interfaces
         /// <param name="endPoint"></param>
         /// <param name="message"></param>
         /// <param name="headers">Custom headers</param>
-        void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message;
+        void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message;
+        void Send<T>(string endPoint, T message) where T : Message;
 
         /// <summary>
         /// Sends a command and waits for a reply.  The method behaves like a regular blocking RPC method.
@@ -55,7 +58,8 @@ namespace R.MessageBus.Interfaces
         /// <param name="timeout"></param>
         /// <param name="headers">Custom headers</param>
         /// <returns>Returns the response object.</returns>
-        TReply SendRequest<TRequest, TReply>(TRequest message, int timeout = 3000, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message;
+        TReply SendRequest<TRequest, TReply>(TRequest message, Dictionary<string, string> headers, int timeout = 3000) where TRequest : Message where TReply : Message;
+        TReply SendRequest<TRequest, TReply>(TRequest message, int timeout = 3000) where TRequest : Message where TReply : Message;
 
         /// <summary>
         /// Sends a command to the specified endpoint and waits for a reply.  The method behaves like a regular blocking RPC method.
@@ -67,7 +71,8 @@ namespace R.MessageBus.Interfaces
         /// <param name="timeout"></param>
         /// <param name="headers">Custom headers</param>
         /// <returns>Returns the response object.</returns>
-        TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, int timeout = 3000, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message;
+        TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, Dictionary<string, string> headers, int timeout = 3000) where TRequest : Message where TReply : Message;
+        TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, int timeout = 3000) where TRequest : Message where TReply : Message;
 
         /// <summary>
         /// Sends a commands to the specified endpoint.  The callback is called when receving the reply message.
@@ -79,7 +84,8 @@ namespace R.MessageBus.Interfaces
         /// <param name="callback">The callback that will receive the response message.</param>
         /// <param name="headers">Custom headers</param>
         /// <returns>Returns the response object.</returns>
-        void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message;
+        void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers) where TRequest : Message where TReply : Message;
+        void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message;
 
         /// <summary>
         /// Senda a command. The callback is called when receving the reply message. 
@@ -90,6 +96,7 @@ namespace R.MessageBus.Interfaces
         /// <param name="callback">The callback that will receive the response message.</param>
         /// <param name="headers">Custom headers</param>
         /// <returns>Returns the response object.</returns>
-        void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message;
+        void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback, Dictionary<string, string> headers ) where TRequest : Message where TReply : Message;
+        void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message;
     }
 }
