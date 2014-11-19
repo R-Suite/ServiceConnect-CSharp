@@ -28,8 +28,8 @@ namespace PolymorphicMessages.Producer
                 bus.Send(new BaseType(id2));
 
                 Console.WriteLine("Sent messages");
-                Console.WriteLine("Based: {0}", id1);
-                Console.WriteLine("Derived: {0}", id2);
+                Console.WriteLine("Derived: {0}", id1);
+                Console.WriteLine("Based: {0}", id2);
                 Console.WriteLine("");
 
 
@@ -44,8 +44,8 @@ namespace PolymorphicMessages.Producer
                 bus.Publish(new BaseType(id4));
 
                 Console.WriteLine("Published messages");
-                Console.WriteLine("Based: {0}", id3);
-                Console.WriteLine("Derived: {0}", id4);
+                Console.WriteLine("Derived: {0}", id3);
+                Console.WriteLine("Based: {0}", id4);
                 Console.WriteLine("");
 
                 Console.WriteLine("");
