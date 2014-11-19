@@ -115,27 +115,52 @@ namespace R.MessageBus
             }
         }
 
-        public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
+        public void Publish<T>(T message) where T : Message
+        {
+            Publish(message, null);
+        }
+
+        public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
         {
             _producer.Publish(message, headers);
         }
 
-        public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
+        public void Send<T>(T message) where T : Message
+        {
+            Send(message, null);
+        }
+
+        public void Send<T>(T message, Dictionary<string, string> headers) where T : Message
         {
             _producer.Send(message, headers);
         }
 
-        public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
+        public void Send<T>(string endPoint, T message) where T : Message
+        {
+            Send(endPoint, message, null);
+        }
+
+        public void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message
         {
             _producer.Send(endPoint, message, headers);
         }
-        
-        public void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
+
+        public void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message
+        {
+            SendRequest(message, callback, null);
+        }
+
+        public void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback, Dictionary<string, string> headers) where TRequest : Message where TReply : Message
         {
             SendRequest(null, message, callback, headers);
         }
 
-        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
+        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message
+        {
+            SendRequest(endPoint, message, callback, null);
+        }
+
+        public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers) where TRequest : Message where TReply : Message
         {
             var messageId = Guid.NewGuid();
             IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
@@ -166,12 +191,22 @@ namespace R.MessageBus
             producer.Disconnect();
         }
 
-        public TReply SendRequest<TRequest, TReply>(TRequest message, int timeout, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
+        public TReply SendRequest<TRequest, TReply>(TRequest message, int timeout) where TRequest : Message where TReply : Message
         {
-            return SendRequest<TRequest, TReply>(null, message, timeout, headers);
+            return SendRequest<TRequest, TReply>(message, null, timeout);
         }
 
-        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, int timeout, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
+        public TReply SendRequest<TRequest, TReply>(TRequest message, Dictionary<string, string> headers, int timeout) where TRequest : Message where TReply : Message
+        {
+            return SendRequest<TRequest, TReply>(null, message, headers, timeout);
+        }
+
+        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, int timeout) where TRequest : Message where TReply : Message
+        {
+            return SendRequest<TRequest, TReply>(endPoint, message, null, timeout);
+        }
+
+        public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, Dictionary<string, string> headers, int timeout) where TRequest : Message where TReply : Message
         {
             var messageId = Guid.NewGuid();
             IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
