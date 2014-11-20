@@ -55,6 +55,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
             SetHeader(args, "DestinationMachine", Environment.MachineName);
+            SetHeader(args, "DestinationAddress", _transportSettings.Queue.Name);
 
             string message = Encoding.UTF8.GetString(args.Body);
 
