@@ -11,7 +11,7 @@ namespace PublishSubscribe.Publisher
             Console.WriteLine("*********** Producer ***********");
             var bus = Bus.Initialize(x =>
             {
-                x.SetHost("lonappdev04");
+                //x.SetHost("lonappdev04");
             });
 
             while (true)
@@ -20,7 +20,7 @@ namespace PublishSubscribe.Publisher
                 Console.ReadLine();
 
                 var id = Guid.NewGuid();
-                bus.Publish(new PublishSubscribeMessage(id));
+                bus.Send("Consumer1", new PublishSubscribeMessage(id));
 
                 Console.WriteLine("Published message - {0}", id);
                 Console.WriteLine("");
