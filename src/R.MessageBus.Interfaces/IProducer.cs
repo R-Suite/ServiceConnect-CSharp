@@ -9,5 +9,6 @@ namespace R.MessageBus.Interfaces
         void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message;
         void Disconnect();
         void Dispose();
+        string Type { get;}
     }
 }
