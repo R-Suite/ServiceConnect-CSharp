@@ -71,7 +71,7 @@ namespace R.MessageBus
                 LatestCpu = heartbeatState.CpuCounter.NextValue(),
                 LatestMemory = heartbeatState.RamCounter.NextValue(),
                 Language = "C#",
-                ConsumerType = _consumer.Type
+                ConsumerType = _producer.Type
             });
         }
 
