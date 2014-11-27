@@ -201,6 +201,14 @@ namespace R.MessageBus.Client.RabbitMQ
                 _model.Abort();
         }
 
+        public string Type
+        {
+            get
+            {
+                return "RabbitMQ";
+            }
+        }
+
         private string ConfigureExchange(string exchangeName)
         {
             try
