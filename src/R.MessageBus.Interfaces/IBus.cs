@@ -88,7 +88,7 @@ namespace R.MessageBus.Interfaces
         void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message;
 
         /// <summary>
-        /// Senda a command. The callback is called when receving the reply message. 
+        /// Sends a command. The callback is called when receving the reply message. 
         /// </summary>
         /// <typeparam name="TRequest">The type of the request object.  Must be a message.</typeparam>
         /// <typeparam name="TReply">The type of the reply object. Must be a message.</typeparam>
@@ -98,5 +98,14 @@ namespace R.MessageBus.Interfaces
         /// <returns>Returns the response object.</returns>
         void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback, Dictionary<string, string> headers ) where TRequest : Message where TReply : Message;
         void SendRequest<TRequest, TReply>(TRequest message, Action<TReply> callback) where TRequest : Message where TReply : Message;
+
+        /// <summary>
+        /// Implementation of Routing Slip pattern. 
+        /// (Sequentially) sends the <see cref="message"/> to all the endpoints specified in <see cref="destinations"/>
+        /// </summary>
+        /// <typeparam name="T">The type of the message</typeparam>
+        /// <param name="message">The message to send.</param>
+        /// <param name="destinations">Endpoints that the message is routed to</param>
+        void Route<T>(T message, IList<string> destinations) where T : Message;
     }
 }
