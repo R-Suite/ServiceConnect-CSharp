@@ -260,6 +260,45 @@ public class RequestMessageHandler : IMessageHandler<RequestMessage>
 
 See [Request Response](../../tree/master/samples/RequestResponse) sample application for a complete example.
 
+
+### Routing Slip
+
+![Request Reply](https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/images/RoutingTableSimple.gif)
+
+Attach a Routing Slip to each message, specifying the sequence of processing steps. Wrap each component with a special message router that reads the Routing Slip and routes the message to the next component in the list.
+
+```c#
+public class RoutingSlipMessage : Message
+{
+    public RoutingSlipMessage(Guid correlationId) : base(correlationId)  { }
+}
+```
+
+#### Routing messages
+
+```c#
+bus.Route(new RoutingSlipMessage(id), new List<string> { "RoutingSlip.Endpoint1", "RoutingSlip.Endpoint2" });
+```
+
+#### Consuming messages
+
+Consuming messages with Routing Slip is no different from consuming standard events or commands.
+
+```c#
+public class RoutingSlipMessageHandler : IMessageHandler<RoutingSlipMessage>
+{
+    public void Execute(RoutingSlipMessage message)
+    {
+        Console.WriteLine("Endpoint1 received message - {0}", message.CorrelationId);
+    }
+
+    public IConsumeContext Context { get; set; }
+}
+```
+
+See [Routing Slip](../../tree/master/samples/RoutingSlip) sample application for a complete example.
+
+
 ### Retries
 
 When your application fails to successfully proccess a message, R.MessageBus implements a generic error handling for all your consumers. Upon catching an exception, the message is held in the "*.Retries" queue for a certain amount of time before being requeued. This process is repeated a number of times until either the message is handled successfully, or the "MaxRetries" limit is reached, at which point the message is moved to the error queue.
