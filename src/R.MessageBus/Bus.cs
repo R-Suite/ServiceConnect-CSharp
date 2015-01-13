@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
@@ -19,6 +20,7 @@ namespace R.MessageBus
         private static IProducer _producer;
         private Timer _timer;
         private IConsumer _consumer;
+        private const string RoutingSlip = "RoutingSlip";
 
         public IConfiguration Configuration { get; set; }
 
@@ -249,6 +251,17 @@ namespace R.MessageBus
             return response;
         }
 
+        public void Route<T>(T message, IList<string> destinations) where T : Message
+        {
+            string nextDestination = destinations.First();
+
+            destinations.RemoveAt(0);
+
+            var destionationsJson = JsonConvert.SerializeObject(destinations);
+
+            _producer.Send(nextDestination, message, new Dictionary<string, string> { { RoutingSlip, destionationsJson } });
+        }
+
         private ConsumeEventResult ConsumeMessageEvent(string message, string type, IDictionary<string, object> headers)
         {
             var result = new ConsumeEventResult
@@ -269,6 +282,22 @@ namespace R.MessageBus
                 ProcessMessageHandlers(message, typeObject, context);
                 ProcessProcessManagerHandlers(message, typeObject, context);
                 ProcessRequestReplyConfigurations(message, type, context);
+
+                // RoutingSlip
+                if (headers.ContainsKey(RoutingSlip))
+                {
+                    var routingSlip = Encoding.UTF8.GetString((byte[])headers[RoutingSlip]);
+                    var destinations = JsonConvert.DeserializeObject<IList<string>>(routingSlip);
+
+                    if (null != destinations && destinations.Count > 0)
+                    {
+                        object messageObject = JsonConvert.DeserializeObject(message, typeObject);
+
+                        MethodInfo routeMethod = typeof (Bus).GetMethod("Route");
+                        MethodInfo genericRouteMethod = routeMethod.MakeGenericMethod(typeObject);
+                        genericRouteMethod.Invoke(this, new object[] {messageObject, destinations});
+                    }
+                }
             }
             catch (Exception ex)
             {
