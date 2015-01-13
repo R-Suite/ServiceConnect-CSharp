@@ -4,8 +4,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Moq;
 using Newtonsoft.Json;
-using R.MessageBus.Client.RabbitMQ;
-using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Settings;
 using R.MessageBus.UnitTests.Fakes.Handlers;
@@ -768,5 +766,38 @@ namespace R.MessageBus.UnitTests
             Assert.True(actionCalled);
         }
 
+        [Fact]
+        public void RouteShouldSendCommandWithRoutingSlipHeader()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Jakub Pachansky"
+            };
+
+            const string endPoint1 = "MyEndPoint1";
+            const string endPoint2 = "MyEndPoint2";
+
+            mockProducer.Setup(x => x.Send(endPoint1, message, It.IsAny<Dictionary<string, string>>()));
+
+            // Act
+            var bus = new MessageBus.Bus(mockConfiguration.Object);
+            bus.Route(message, new List<string> { endPoint1, endPoint2 });
+
+            // Assert
+            mockProducer.Verify(x => x.Send(endPoint1, message, It.Is<Dictionary<string, string>>(i => i.Count == 1)), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, message, It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingSlip"))), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, message, It.Is<Dictionary<string, string>>(i => i.ContainsValue("[\"MyEndPoint2\"]"))), Times.Once);
+        }
     }
 }
