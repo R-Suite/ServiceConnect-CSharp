@@ -1,6 +1,10 @@
 ﻿using System;
+using System.Linq;
+using System.Linq.Expressions;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
+using MongoDB.Driver.Wrappers;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Persistance.MongoDb
@@ -31,6 +35,35 @@ namespace R.MessageBus.Persistance.MongoDb
 
             MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
             IMongoQuery query = Query<MongoDbData<T>>.Where(i => i.Data.CorrelationId == id);
+            return collection.FindOneAs<MongoDbData<T>>(query);
+        }
+
+        public IPersistanceData<T> FindData<T>(ProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+        {
+            var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
+                          mapper.Mappings.First(m => m.MessageType == typeof(Message));
+
+            var collectionName = typeof(T).Name;
+            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
+
+            object msgPropValue = mapping.MessageProp.Invoke(message);
+            if (null == msgPropValue)
+            {
+                throw new ArgumentException("Message property value used to locate Process Manager cannot be null");
+            }
+
+            //Left
+            ParameterExpression pe = Expression.Parameter(typeof(MongoDbData<T>), "t");
+            Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetProperty("Data"));
+            left = Expression.Property(left, typeof(T).GetProperty(mapping.ProcessManagerPropName));
+
+            //Right
+            Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
+
+            Expression expression = Expression.Equal(left, right);
+            var lambda = Expression.Lambda<Func<MongoDbData<T>, bool>>(expression, pe);
+            IMongoQuery query = Query<MongoDbData<T>>.Where(lambda);
+            
             return collection.FindOneAs<MongoDbData<T>>(query);
         }
 
