@@ -34,6 +34,7 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.NotNull(configuration.TransportSettings);
+            Assert.NotNull(configuration.TransportSettings.ClientSettings);
             Assert.Equal("localhost", configuration.TransportSettings.Host);
             Assert.Equal(3, configuration.TransportSettings.MaxRetries);
             Assert.Equal(3000, configuration.TransportSettings.RetryDelay);
