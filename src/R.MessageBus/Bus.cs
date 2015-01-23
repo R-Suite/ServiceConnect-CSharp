@@ -295,7 +295,7 @@ namespace R.MessageBus
 
                         MethodInfo routeMethod = typeof (Bus).GetMethod("Route");
                         MethodInfo genericRouteMethod = routeMethod.MakeGenericMethod(typeObject);
-                        genericRouteMethod.Invoke(this, new object[] {messageObject, destinations});
+                        genericRouteMethod.Invoke(this, new[] {messageObject, destinations});
                     }
                 }
             }
