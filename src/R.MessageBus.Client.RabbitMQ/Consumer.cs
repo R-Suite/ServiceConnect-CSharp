@@ -45,7 +45,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _autoDelete = transportSettings.Queue.AutoDelete;
             _errorsDisabled = transportSettings.DisableErrors;
             _heartbeatEnabled = !transportSettings.ClientSettings.ContainsKey("HeartbeatEnabled") || (bool)transportSettings.ClientSettings["HeartbeatEnabled"];
-            _heartbeatTime = !transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
+            _heartbeatTime = transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
         }
 
         /// <summary>
