@@ -1,4 +1,5 @@
-﻿using R.MessageBus.Interfaces;
+﻿using System.Collections.Generic;
+using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Settings
 {
@@ -16,5 +17,6 @@ namespace R.MessageBus.Settings
         public string AuditQueueName { get; set; }
         public bool DisableErrors { get; set; }
         public string HeartbeatQueueName { get; set; }
+        public IDictionary<string, object> ClientSettings { get; set; }
     }
 }
