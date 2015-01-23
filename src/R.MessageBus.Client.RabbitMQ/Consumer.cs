@@ -29,6 +29,8 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly string[] _hosts;
         private int _activeHost;
         private readonly bool _errorsDisabled;
+        private readonly bool _heartbeatEnabled;
+        private readonly ushort _heartbeatTime;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -42,6 +44,8 @@ namespace R.MessageBus.Client.RabbitMQ
             _exclusive = transportSettings.Queue.Exclusive;
             _autoDelete = transportSettings.Queue.AutoDelete;
             _errorsDisabled = transportSettings.DisableErrors;
+            _heartbeatEnabled = !transportSettings.ClientSettings.ContainsKey("HeartbeatEnabled") || (bool)transportSettings.ClientSettings["HeartbeatEnabled"];
+            _heartbeatTime = !transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
         }
 
         /// <summary>
@@ -147,9 +151,13 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 HostName = _hosts[_activeHost],
                 Protocol = Protocols.FromEnvironment(),
-                Port = AmqpTcpEndpoint.UseDefaultPort,
-                RequestedHeartbeat = 30
+                Port = AmqpTcpEndpoint.UseDefaultPort
             };
+
+            if (_heartbeatEnabled)
+            {
+                connectionFactory.RequestedHeartbeat = _heartbeatTime;
+            }
 
             if (!string.IsNullOrEmpty(_transportSettings.Username))
             {

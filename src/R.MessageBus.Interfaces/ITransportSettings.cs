@@ -60,6 +60,11 @@ namespace R.MessageBus.Interfaces
         /// Custom Heartbeat Queue Name
         /// </summary>
         string HeartbeatQueueName { get; set; }
+
+        /// <summary>
+        /// Contains settings specific to client
+        /// </summary>
+        IDictionary<string, object> ClientSettings { get; set; }
     }
 
     public class Queue

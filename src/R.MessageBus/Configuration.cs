@@ -59,10 +59,14 @@ namespace R.MessageBus
             AddBusToContainer = true;
             var defaultQueueName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
-            TransportSettings = new TransportSettings { Queue = new Queue
-            {
-                Name = defaultQueueName
-            }};
+            TransportSettings = new TransportSettings 
+            { 
+                Queue = new Queue
+                {
+                    Name = defaultQueueName
+                },
+                ClientSettings = new Dictionary<string, object>()
+            };
 
             _configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
 
@@ -367,6 +371,7 @@ namespace R.MessageBus
             transportSettings.ErrorQueueName = (!string.IsNullOrEmpty(_errorQueueName)) ? _errorQueueName : settings.ErrorQueueName;
             transportSettings.AuditingEnabled = (_auditingEnabled.HasValue) ? _auditingEnabled.Value : settings.AuditingEnabled;
             transportSettings.AuditQueueName = (!string.IsNullOrEmpty(_auditQueueName)) ? _auditQueueName : settings.AuditQueueName;
+            transportSettings.ClientSettings = new Dictionary<string, object>();
 
             return transportSettings;
         }
@@ -394,6 +399,7 @@ namespace R.MessageBus
             transportSettings.AuditingEnabled = false;
             transportSettings.AuditQueueName = "audit";
             transportSettings.HeartbeatQueueName = "heartbeat";
+            transportSettings.ClientSettings = new Dictionary<string, object>();
 
             return transportSettings;
         }
