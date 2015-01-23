@@ -10,7 +10,7 @@ using ConsumerEventHandler = R.MessageBus.Interfaces.ConsumerEventHandler;
 
 namespace R.MessageBus.Client.RabbitMQ
 {
-    public class Consumer : IDisposable, IConsumer
+    public class Consumer :  IConsumer
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ITransportSettings _transportSettings;

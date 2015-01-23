@@ -10,7 +10,7 @@ using RabbitMQ.Client;
 
 namespace R.MessageBus.Client.RabbitMQ
 {
-    public class Producer : IDisposable, IProducer
+    public class Producer : IProducer
     {
         private readonly ITransportSettings _transportSettings;
         private readonly IDictionary<string, string> _queueMappings;
