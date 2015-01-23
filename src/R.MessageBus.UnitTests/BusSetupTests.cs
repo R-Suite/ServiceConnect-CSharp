@@ -405,6 +405,11 @@ namespace R.MessageBus.UnitTests
                 throw new NotImplementedException();
             }
 
+            public IPersistanceData<T> FindData<T>(ProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+            {
+                throw new NotImplementedException();
+            }
+
             public void InsertData(IProcessManagerData data)
             {
                 throw new NotImplementedException();

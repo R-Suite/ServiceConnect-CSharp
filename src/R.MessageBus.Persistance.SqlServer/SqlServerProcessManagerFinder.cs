@@ -98,6 +98,11 @@ namespace R.MessageBus.Persistance.SqlServer
             return result;
         }
 
+        public IPersistanceData<T> FindData<T>(ProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+        {
+            throw new NotImplementedException();
+        }
+
         /// <summary>
         /// Create new instance of ProcessManager
         /// When multiple threads try to create new ProcessManager instance, only the first one is allowed. 

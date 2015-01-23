@@ -37,6 +37,11 @@ namespace R.MessageBus.Persistance.InMemory
             return retval;
         }
 
+        public IPersistanceData<T> FindData<T>(ProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+        {
+            throw new NotImplementedException();
+        }
+
         public void InsertData(IProcessManagerData data)
         {
             var memoryData = new MemoryData<IProcessManagerData>
