@@ -49,18 +49,32 @@ namespace R.MessageBus.Persistance.MongoDb
             object msgPropValue = mapping.MessageProp.Invoke(message);
             if (null == msgPropValue)
             {
-                throw new ArgumentException("Message property value used to locate Process Manager cannot be null");
+                throw new ArgumentException("Message property expression evaluates to null");
             }
 
             //Left
             ParameterExpression pe = Expression.Parameter(typeof(MongoDbData<T>), "t");
             Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetProperty("Data"));
-            left = Expression.Property(left, typeof(T).GetProperty(mapping.ProcessManagerPropName));
+            foreach (var subProperty in mapping.PropertiesHierarchy.Reverse())
+            {
+                left = Expression.Property(left, left.Type, subProperty.Key);
+            }
+            //left = Expression.Property(left, typeof(T).GetProperty(mapping.ProcessManagerPropName));
 
             //Right
             Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
 
-            Expression expression = Expression.Equal(left, right);
+            Expression expression = null;
+
+            try
+            {
+                expression = Expression.Equal(left, right);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new Exception("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
+            }
+
             var lambda = Expression.Lambda<Func<MongoDbData<T>, bool>>(expression, pe);
             IMongoQuery query = Query<MongoDbData<T>>.Where(lambda);
             

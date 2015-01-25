@@ -17,7 +17,7 @@ namespace ProcessManager.Process1
         {
             Console.WriteLine("In ProcessManager.Process1.Process1RequestMessageHandler.Execute() - {0}", message.CorrelationId);
 
-            _bus.Send("ProcessManager.Host", new Process1ResponseMessage(Guid.NewGuid()) { Name = "Name1", Age = 1});
+            _bus.Send("ProcessManager.Host", new Process1ResponseMessage(Guid.NewGuid()) { Name = "Name1", Age = 1, Widget = new Widget {Size = 1}});
         }
 
         public IConsumeContext Context { get; set; }
