@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Runtime.InteropServices;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
@@ -63,7 +64,7 @@ namespace R.MessageBus.Persistance.MongoDb
             //Right
             Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
 
-            Expression expression = null;
+            Expression expression;
 
             try
             {
