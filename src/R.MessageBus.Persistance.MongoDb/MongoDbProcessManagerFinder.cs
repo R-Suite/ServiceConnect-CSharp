@@ -55,11 +55,10 @@ namespace R.MessageBus.Persistance.MongoDb
             //Left
             ParameterExpression pe = Expression.Parameter(typeof(MongoDbData<T>), "t");
             Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetProperty("Data"));
-            foreach (var subProperty in mapping.PropertiesHierarchy.Reverse())
+            foreach (var prop in mapping.PropertiesHierarchy.Reverse())
             {
-                left = Expression.Property(left, left.Type, subProperty.Key);
+                left = Expression.Property(left, left.Type, prop.Key);
             }
-            //left = Expression.Property(left, typeof(T).GetProperty(mapping.ProcessManagerPropName));
 
             //Right
             Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
