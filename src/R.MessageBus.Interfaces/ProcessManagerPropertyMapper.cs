@@ -8,36 +8,65 @@ namespace R.MessageBus.Interfaces
     public class ProcessManagerToMessageMap
     {
         public Func<object, object> MessageProp;
-        public string ProcessManagerPropName;
         public Type MessageType;
+        public Dictionary<string, Type> PropertiesHierarchy;
     }
 
+    /// <summary>
+    /// Creates mapping between ProcessManager property and Message property.
+    /// </summary>
     public class ProcessManagerPropertyMapper
     {
-        public List<ProcessManagerToMessageMap> Mappings = new List<ProcessManagerToMessageMap>();
+        public readonly List<ProcessManagerToMessageMap> Mappings = new List<ProcessManagerToMessageMap>();
 
         public void ConfigureMapping<TProcessManagerData, TMessage>(Expression<Func<TProcessManagerData, object>> processManagerProperty, Expression<Func<TMessage, object>> messageExpression) where TProcessManagerData : IProcessManagerData
         {
-            var processManagerPropertyInfo = GetMemberInfo(processManagerProperty) as PropertyInfo;
+
+            MemberExpression me = GetMemberInfo(processManagerProperty);
+            MemberInfo mi = me.Member;
+            var processManagerPropertyInfo = mi as PropertyInfo;
             if (null == processManagerPropertyInfo) throw new ArgumentException("Member is not a property");
+
+            var propertiesHierarchy = new Dictionary<String, Type>();
+
+            while (true)
+            {
+                var pi = mi as PropertyInfo;
+                propertiesHierarchy.Add(mi.Name, pi.PropertyType);
+
+                if (mi.ReflectedType == typeof (TProcessManagerData))
+                {
+                    break;
+                }
+                me = (me.Expression as MemberExpression);
+                mi = me.Member;
+            }
 
             Func<TMessage, object> compiledMessageExpression = messageExpression.Compile();
             var messageFunc = new Func<object, object>(o => compiledMessageExpression((TMessage)o));
+            //string processManagerPropName = processManagerPropertyInfo.Name;
 
             Mappings.Add(new ProcessManagerToMessageMap
             {
                 MessageProp = messageFunc,
-                ProcessManagerPropName = processManagerPropertyInfo.Name,
-                MessageType = typeof(TMessage)
+                MessageType = typeof(TMessage),
+                PropertiesHierarchy = propertiesHierarchy
             });
         }
 
-        static MemberInfo GetMemberInfo(Expression member)
+        /// <summary>
+        /// http://stackoverflow.com/questions/671968/retrieving-property-name-from-lambda-expression
+        /// </summary>
+        /// <param name="propertyExpression"></param>
+        /// <returns></returns>
+        static MemberExpression GetMemberInfo(Expression propertyExpression)
         {
-            if (member == null) throw new ArgumentNullException("member");
+            if (propertyExpression == null) 
+                throw new ArgumentNullException("propertyExpression");
 
-            var lambda = member as LambdaExpression;
-            if (lambda == null) throw new ArgumentException("Not a lambda expression", "member");
+            var lambda = propertyExpression as LambdaExpression;
+            if (lambda == null) 
+                throw new ArgumentException("Not a lambda expression", "propertyExpression");
 
             MemberExpression memberExpr = null;
 
@@ -50,9 +79,10 @@ namespace R.MessageBus.Interfaces
                 memberExpr = lambda.Body as MemberExpression;
             }
 
-            if (memberExpr == null) throw new ArgumentException("Not a member access", "member");
+            if (memberExpr == null) 
+                throw new ArgumentException("Expression is not a member access", "propertyExpression");
 
-            return memberExpr.Member;
+            return memberExpr;
         }
     }
 }
