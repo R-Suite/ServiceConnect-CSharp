@@ -38,19 +38,18 @@ namespace R.MessageBus.Core
         /// <returns></returns>
         public IPersistanceData<T> FindProcessManagerData(Message message)
         {
-            if (_mapper == null)
-            {
-                _mapper = new ProcessManagerPropertyMapper();
-            }
+            // FindProcessManagerData is always called on new instance of ProcessManager<T>
+            _mapper = new ProcessManagerPropertyMapper();
 
             ConfigureHowToFindProcessManager(_mapper);
+
+            // Default mapping
+            _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
 
             return ProcessManagerFinder.FindData<T>(_mapper, message);
         }
 
         protected virtual void ConfigureHowToFindProcessManager(ProcessManagerPropertyMapper mapper)
-        {
-            mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
-        }
+        {}
     }
 }
