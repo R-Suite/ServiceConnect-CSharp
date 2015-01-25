@@ -39,7 +39,7 @@ namespace ProcessManager.Host
 
         protected override void ConfigureHowToFindProcessManager(R.MessageBus.Interfaces.ProcessManagerPropertyMapper mapper)
         {
-            mapper.ConfigureMapping<MyProcessManagerData, Process1ResponseMessage>(m=>m.Age, pm=>pm.Widget.Size);
+            mapper.ConfigureMapping<MyProcessManagerData, Process1ResponseMessage>(m=>m.PmWidget.Size.Width, pm=>pm.Widget.Size);
         }
 
         public void Execute(StartProcessManagerMessage message)

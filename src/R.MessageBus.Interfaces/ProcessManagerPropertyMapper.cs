@@ -21,17 +21,16 @@ namespace R.MessageBus.Interfaces
 
         public void ConfigureMapping<TProcessManagerData, TMessage>(Expression<Func<TProcessManagerData, object>> processManagerProperty, Expression<Func<TMessage, object>> messageExpression) where TProcessManagerData : IProcessManagerData
         {
-
-            MemberExpression me = GetMemberInfo(processManagerProperty);
+            MemberExpression me = GetMemberExpression(processManagerProperty);
             MemberInfo mi = me.Member;
-            var processManagerPropertyInfo = mi as PropertyInfo;
-            if (null == processManagerPropertyInfo) throw new ArgumentException("Member is not a property");
 
             var propertiesHierarchy = new Dictionary<String, Type>();
 
             while (true)
             {
                 var pi = mi as PropertyInfo;
+                if (null == pi) throw new ArgumentException("Member is not a property");
+
                 propertiesHierarchy.Add(mi.Name, pi.PropertyType);
 
                 if (mi.ReflectedType == typeof (TProcessManagerData))
@@ -39,12 +38,14 @@ namespace R.MessageBus.Interfaces
                     break;
                 }
                 me = (me.Expression as MemberExpression);
+                if (me == null)
+                    throw new ArgumentException("Expression is not a member access");
+
                 mi = me.Member;
             }
 
             Func<TMessage, object> compiledMessageExpression = messageExpression.Compile();
             var messageFunc = new Func<object, object>(o => compiledMessageExpression((TMessage)o));
-            //string processManagerPropName = processManagerPropertyInfo.Name;
 
             Mappings.Add(new ProcessManagerToMessageMap
             {
@@ -59,7 +60,7 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <param name="propertyExpression"></param>
         /// <returns></returns>
-        static MemberExpression GetMemberInfo(Expression propertyExpression)
+        static MemberExpression GetMemberExpression(Expression propertyExpression)
         {
             if (propertyExpression == null) 
                 throw new ArgumentNullException("propertyExpression");
