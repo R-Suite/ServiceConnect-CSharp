@@ -37,7 +37,7 @@ namespace ProcessManager.Host
             _bus = bus;
         }
 
-        protected override void ConfigureHowToFindProcessManager(R.MessageBus.Interfaces.ProcessManagerPropertyMapper mapper)
+        protected override void ConfigureHowToFindProcessManager(IProcessManagerPropertyMapper mapper)
         {
             mapper.ConfigureMapping<MyProcessManagerData, Process1ResponseMessage>(m=>m.PmWidget.Size.Width, pm=>pm.Widget.Size);
         }

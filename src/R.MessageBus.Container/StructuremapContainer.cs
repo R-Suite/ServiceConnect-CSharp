@@ -17,6 +17,7 @@ namespace R.MessageBus.Container
             {
                 x.For<IMessageHandlerProcessor>().Use<MessageHandlerProcessor>();
                 x.For<IProcessManagerProcessor>().Use<ProcessManagerProcessor>();
+                x.For<IProcessManagerPropertyMapper>().Use<ProcessManagerPropertyMapper>();
             });
         }
 

@@ -55,6 +55,7 @@
     <Compile Include="MessageHandlerProcessor.cs" />
     <Compile Include="ProcessManager.cs" />
     <Compile Include="ProcessManagerProcessor.cs" />
+    <Compile Include="ProcessManagerPropertyMapper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RequestConfiguration.cs" />
   </ItemGroup>
