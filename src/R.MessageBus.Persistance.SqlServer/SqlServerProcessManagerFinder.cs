@@ -44,9 +44,8 @@ namespace R.MessageBus.Persistance.SqlServer
         /// UPDLOCK is placed onf the relevant row to prevent reads until the transaction is commited in UpdateData
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="id"></param>
         /// <returns></returns>
-        public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
+        public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
             SqlServerData<T> result = null;
 
@@ -65,7 +64,7 @@ namespace R.MessageBus.Persistance.SqlServer
                     command.Connection = connection;
                     command.CommandTimeout = _commandTimeout;
                     command.CommandText = string.Format(@"SELECT * FROM {0} WHERE Id = @Id", tableName);
-                    command.Parameters.Add(new SqlParameter {ParameterName = "@Id", Value = id});
+                    command.Parameters.Add(new SqlParameter { ParameterName = "@Id", Value = message.CorrelationId });
                     var reader = command.ExecuteReader(CommandBehavior.SingleResult);
 
                     if (reader.HasRows)
@@ -81,9 +80,9 @@ namespace R.MessageBus.Persistance.SqlServer
 
                         result = new SqlServerData<T>
                         {
-                            Id = (Guid) reader["Id"],
+                            Id = (Guid)reader["Id"],
                             Data = data,
-                            Version = (int) reader["Version"]
+                            Version = (int)reader["Version"]
                         };
                     }
 
@@ -96,11 +95,7 @@ namespace R.MessageBus.Persistance.SqlServer
             }
 
             return result;
-        }
 
-        public IPersistanceData<T> FindData<T>(ProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
-        {
-            throw new NotImplementedException();
         }
 
         /// <summary>
