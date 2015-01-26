@@ -53,6 +53,7 @@
     <Compile Include="IConfigurationManager.cs" />
     <Compile Include="IConsumeContext.cs" />
     <Compile Include="IConsumer.cs" />
+    <Compile Include="IProcessManagerPropertyMapper.cs" />
     <Compile Include="IRequestConfiguration.cs" />
     <Compile Include="IMessageHandler.cs" />
     <Compile Include="IMessageHandlerProcessor.cs" />
@@ -64,7 +65,7 @@
     <Compile Include="IStartProcessManager.cs" />
     <Compile Include="ITransportSettings.cs" />
     <Compile Include="Message.cs" />
-    <Compile Include="ProcessManagerPropertyMapper.cs" />
+    <Compile Include="ProcessManagerToMessageMap.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

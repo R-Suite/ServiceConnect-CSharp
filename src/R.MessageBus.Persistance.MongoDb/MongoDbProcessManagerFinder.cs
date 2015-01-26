@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Runtime.InteropServices;
-using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
-using MongoDB.Driver.Wrappers;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Persistance.MongoDb
@@ -28,18 +25,10 @@ namespace R.MessageBus.Persistance.MongoDb
         /// Find existing instance of ProcessManager
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="id"></param>
+        /// <param name="mapper"></param>
+        /// <param name="message"></param>
         /// <returns></returns>
-        public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
-        {
-            var collectionName = typeof(T).Name;
-
-            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
-            IMongoQuery query = Query<MongoDbData<T>>.Where(i => i.Data.CorrelationId == id);
-            return collection.FindOneAs<MongoDbData<T>>(query);
-        }
-
-        public IPersistanceData<T> FindData<T>(ProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+        public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
             var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
                           mapper.Mappings.First(m => m.MessageType == typeof(Message));
