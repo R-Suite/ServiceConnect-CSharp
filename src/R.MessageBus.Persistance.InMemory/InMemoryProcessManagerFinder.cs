@@ -21,9 +21,9 @@ namespace R.MessageBus.Persistance.InMemory
         public InMemoryProcessManagerFinder(string connectionString, string databaseName)
         { }
 
-        public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
+        public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
-            string key = id.ToString();
+            string key = message.CorrelationId.ToString();
 
             var memoryData = (MemoryData<IProcessManagerData>)(Cache.Get(key));
 
@@ -35,11 +35,6 @@ namespace R.MessageBus.Persistance.InMemory
             }
 
             return retval;
-        }
-
-        public IPersistanceData<T> FindData<T>(ProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
-        {
-            throw new NotImplementedException();
         }
 
         public void InsertData(IProcessManagerData data)

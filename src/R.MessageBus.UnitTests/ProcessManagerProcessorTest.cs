@@ -51,7 +51,9 @@ namespace R.MessageBus.UnitTests
             };
             var mockPersistanceData = new Mock<IPersistanceData<FakeProcessManagerData>>();
             mockPersistanceData.Setup(x => x.Data).Returns(data);
-            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
+            //_mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
+            //_mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
+            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
@@ -97,7 +99,8 @@ namespace R.MessageBus.UnitTests
             };
             var mockPersistanceData = new Mock<IPersistanceData<FakeProcessManagerData>>();
             mockPersistanceData.Setup(x => x.Data).Returns(data);
-            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
+            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
+            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
@@ -143,7 +146,7 @@ namespace R.MessageBus.UnitTests
             };
             var mockPersistanceData = new Mock<IPersistanceData<FakeProcessManagerData>>();
             mockPersistanceData.Setup(x => x.Data).Returns(data);
-            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
+            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
@@ -190,7 +193,7 @@ namespace R.MessageBus.UnitTests
             };
             var mockPersistanceData = new Mock<IPersistanceData<FakeProcessManagerData>>();
             mockPersistanceData.Setup(x => x.Data).Returns(data);
-            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
+            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
 
@@ -428,7 +431,7 @@ namespace R.MessageBus.UnitTests
 
             var processManager = new FakeProcessManager1();
             _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
-            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(id)).Returns((IPersistanceData<FakeProcessManagerData>) null);
+            _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == id))).Returns((IPersistanceData<FakeProcessManagerData>) null);
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
 

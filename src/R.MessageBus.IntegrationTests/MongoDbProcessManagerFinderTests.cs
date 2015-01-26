@@ -1,6 +1,8 @@
 ﻿using System;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
+using Moq;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.MongoDb;
 using Xunit;
@@ -19,6 +21,7 @@ namespace R.MessageBus.IntegrationTests
         private readonly MongoCollection<TestData> _collection;
         private readonly string _connectionString;
         private readonly string _dbName;
+        private readonly IProcessManagerPropertyMapper _mapper;
 
 
         public MongoDbProcessManagerFinderTests()
@@ -30,6 +33,9 @@ namespace R.MessageBus.IntegrationTests
             MongoDatabase mongoDatabase = server.GetDatabase(_dbName);
             _collection = mongoDatabase.GetCollection<TestData>("TestData");
             _collection.Drop();
+
+            _mapper = new ProcessManagerPropertyMapper();
+            _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
         }
 
         [Fact]
@@ -56,7 +62,7 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
-            var result = processManagerFinder.FindData<TestData>(_correlationId);
+            var result = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
 
             // Assert
             Assert.Equal("TestData", result.Data.Name);
@@ -69,7 +75,8 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
-            var result = processManagerFinder.FindData<TestData>(_correlationId);
+            //var result = processManagerFinder.FindData<TestData>(_correlationId);
+            var result = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == _correlationId));
 
             // Assert
             Assert.Null(result);
@@ -102,9 +109,11 @@ namespace R.MessageBus.IntegrationTests
             _collection.Save(new MongoDbData<IProcessManagerData> { Data = data1 }); 
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
-            var foundData1 = processManagerFinder.FindData<TestData>(_correlationId);
-            var foundData2 = processManagerFinder.FindData<TestData>(_correlationId);
-
+            //var foundData1 = processManagerFinder.FindData<TestData>(_correlationId);
+            //var foundData2 = processManagerFinder.FindData<TestData>(_correlationId);
+            var foundData1 = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == _correlationId));
+            var foundData2 = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == _correlationId));
+            
             processManagerFinder.UpdateData(foundData1); // first update should be fine
 
             // Act / Assert

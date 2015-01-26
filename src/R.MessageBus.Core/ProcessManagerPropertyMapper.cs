@@ -2,22 +2,21 @@
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
+using R.MessageBus.Interfaces;
 
-namespace R.MessageBus.Interfaces
+namespace R.MessageBus.Core
 {
-    public class ProcessManagerToMessageMap
-    {
-        public Func<object, object> MessageProp;
-        public Type MessageType;
-        public Dictionary<string, Type> PropertiesHierarchy;
-    }
-
     /// <summary>
     /// Creates mapping between ProcessManager property and Message property.
     /// </summary>
-    public class ProcessManagerPropertyMapper
+    public class ProcessManagerPropertyMapper : IProcessManagerPropertyMapper
     {
-        public readonly List<ProcessManagerToMessageMap> Mappings = new List<ProcessManagerToMessageMap>();
+        public List<ProcessManagerToMessageMap> Mappings { get; set; }
+
+        public ProcessManagerPropertyMapper()
+        {
+            Mappings = new List<ProcessManagerToMessageMap>();
+        }
 
         public void ConfigureMapping<TProcessManagerData, TMessage>(Expression<Func<TProcessManagerData, object>> processManagerProperty, Expression<Func<TMessage, object>> messageExpression) where TProcessManagerData : IProcessManagerData
         {
