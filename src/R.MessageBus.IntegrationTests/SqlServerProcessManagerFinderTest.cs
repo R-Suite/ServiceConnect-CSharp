@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using Moq;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.SqlServer;
 using Xunit;
@@ -28,6 +30,7 @@ namespace R.MessageBus.IntegrationTests
     public class SqlServerProcessManagerFinderTest
     {
         private readonly string _connectionString;
+        private readonly IProcessManagerPropertyMapper _mapper;
 
         public SqlServerProcessManagerFinderTest()
         {
@@ -45,6 +48,9 @@ namespace R.MessageBus.IntegrationTests
                     command.ExecuteNonQuery();
                 }
             }
+
+            _mapper = new ProcessManagerPropertyMapper();
+            _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
         }
 
         [Fact]
@@ -96,7 +102,7 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
-            var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            var result = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
 
             // Assert
             Assert.Equal("TestData", result.Data.Name);
@@ -113,7 +119,8 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
-            var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            //var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            var result = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
 
             // Assert
             Assert.Null(result);
@@ -128,7 +135,8 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
-            var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            //var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            var result = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
 
             // Assert
             Assert.Null(result);
@@ -148,7 +156,8 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
-            processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            //processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            processManagerFinder.FindData<TestData>(_mapper, new Message(correlationId));
             processManagerFinder.UpdateData(sqlServerData);
 
             // Assert
@@ -169,8 +178,8 @@ namespace R.MessageBus.IntegrationTests
 
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
 
-            var foundData1 = processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            var foundData2 = processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            var foundData1 = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
+            var foundData2 = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
 
             processManagerFinder.UpdateData(foundData1); // first update should be fine
 
@@ -192,7 +201,8 @@ namespace R.MessageBus.IntegrationTests
             var sqlServerDataToBeDeleted = new SqlServerData<IProcessManagerData> { Data = data, Id = correlationId, Version = 1};
 
             // Act
-            processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            //processManagerFinder.FindData<TestSqlServerData>(correlationId);
+            processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
             processManagerFinder.DeleteData(sqlServerDataToBeDeleted);
 
             // Assert

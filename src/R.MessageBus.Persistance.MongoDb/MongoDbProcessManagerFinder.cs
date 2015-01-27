@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using System.Linq.Expressions;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
 using R.MessageBus.Interfaces;
@@ -23,15 +25,49 @@ namespace R.MessageBus.Persistance.MongoDb
         /// Find existing instance of ProcessManager
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="id"></param>
+        /// <param name="mapper"></param>
+        /// <param name="message"></param>
         /// <returns></returns>
-        public IPersistanceData<T> FindData<T>(Guid id) where T : class, IProcessManagerData
+        public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
-            var collectionName = typeof(T).Name;
+            var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
+                          mapper.Mappings.First(m => m.MessageType == typeof(Message));
 
+            var collectionName = typeof(T).Name;
             MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
             collection.CreateIndex("CorrelationId");
-            IMongoQuery query = Query<MongoDbData<T>>.Where(i => i.Data.CorrelationId == id);
+
+            object msgPropValue = mapping.MessageProp.Invoke(message);
+            if (null == msgPropValue)
+            {
+                throw new ArgumentException("Message property expression evaluates to null");
+            }
+
+            //Left
+            ParameterExpression pe = Expression.Parameter(typeof(MongoDbData<T>), "t");
+            Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetProperty("Data"));
+            foreach (var prop in mapping.PropertiesHierarchy.Reverse())
+            {
+                left = Expression.Property(left, left.Type, prop.Key);
+            }
+
+            //Right
+            Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
+
+            Expression expression;
+
+            try
+            {
+                expression = Expression.Equal(left, right);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new Exception("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
+            }
+
+            var lambda = Expression.Lambda<Func<MongoDbData<T>, bool>>(expression, pe);
+            IMongoQuery query = Query<MongoDbData<T>>.Where(lambda);
+            
             return collection.FindOneAs<MongoDbData<T>>(query);
         }
 

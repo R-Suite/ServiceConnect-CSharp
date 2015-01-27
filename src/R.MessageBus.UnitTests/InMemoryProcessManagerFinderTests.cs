@@ -1,4 +1,6 @@
 ﻿using System;
+using Moq;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.InMemory;
 using Xunit;
@@ -15,6 +17,13 @@ namespace R.MessageBus.UnitTests
     {
 
         readonly Guid _correlationId = Guid.NewGuid();
+        private readonly IProcessManagerPropertyMapper _mapper;
+
+        public InMemoryProcessManagerFinderTests()
+        {
+            _mapper = new ProcessManagerPropertyMapper();
+            _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
+        }
 
         [Fact]
         public void ShouldInsertData()
@@ -27,7 +36,7 @@ namespace R.MessageBus.UnitTests
             processManagerFinder.InsertData(data);
 
             // Assert
-            Assert.Equal("TestData", processManagerFinder.FindData<TestData>(_correlationId).Data.Name);
+            Assert.Equal("TestData", processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId)).Data.Name);
         }
 
         [Fact]
@@ -56,7 +65,7 @@ namespace R.MessageBus.UnitTests
             processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = dataUpdated, Version = 1});
 
             // Assert
-            Assert.Equal("TestDataUpdated", processManagerFinder.FindData<TestData>(_correlationId).Data.Name);
+            Assert.Equal("TestDataUpdated", processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId)).Data.Name);
         }
 
         [Fact]
@@ -78,8 +87,8 @@ namespace R.MessageBus.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             processManagerFinder.InsertData(data1);
 
-            var foundData1 = processManagerFinder.FindData<TestData>(_correlationId);
-            var foundData2 = processManagerFinder.FindData<TestData>(_correlationId);
+            var foundData1 = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
+            var foundData2 = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
 
             processManagerFinder.UpdateData(foundData1); // first update should be fine
 
@@ -99,7 +108,7 @@ namespace R.MessageBus.UnitTests
             processManagerFinder.DeleteData(new MemoryData<IProcessManagerData> { Data = data });
 
             // Assert
-            Assert.Null(processManagerFinder.FindData<IProcessManagerData>(_correlationId).Data);
+            Assert.Null(processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId)));
         }
 
         [Fact]
@@ -109,10 +118,10 @@ namespace R.MessageBus.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act
-            var result = processManagerFinder.FindData<IProcessManagerData>(_correlationId);
+            var result = processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
 
             // Assert
-            Assert.Null(result.Data);
+            Assert.Null(result);
         }
     }
 }
