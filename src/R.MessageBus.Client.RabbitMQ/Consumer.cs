@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using log4net;
 using Newtonsoft.Json;
@@ -403,13 +404,16 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Dispose()
         {
+            _connectionClosed = true;
+
             if (_connection != null)
             {
-                _connectionClosed = true;
                 _connection.Close(500);
             }
             if (_model != null)
+            {
                 _model.Abort();
+            }
         }
 
     }
