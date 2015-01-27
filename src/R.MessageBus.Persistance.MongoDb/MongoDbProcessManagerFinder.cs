@@ -30,6 +30,7 @@ namespace R.MessageBus.Persistance.MongoDb
             var collectionName = typeof(T).Name;
 
             MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
+            collection.CreateIndex("CorrelationId");
             IMongoQuery query = Query<MongoDbData<T>>.Where(i => i.Data.CorrelationId == id);
             return collection.FindOneAs<MongoDbData<T>>(query);
         }
@@ -45,6 +46,7 @@ namespace R.MessageBus.Persistance.MongoDb
             var collectionName = GetCollectionName(data);
 
             MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
+            collection.CreateIndex("CorrelationId");
 
             var mongoDbData = new MongoDbData<IProcessManagerData>
             {
@@ -66,6 +68,7 @@ namespace R.MessageBus.Persistance.MongoDb
             var collectionName = GetCollectionName(persistanceData.Data);
 
             MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
+            collection.CreateIndex("CorrelationId");
 
             var versionData = (MongoDbData<T>)persistanceData;
 
@@ -87,6 +90,7 @@ namespace R.MessageBus.Persistance.MongoDb
             var collectionName = GetCollectionName(persistanceData.Data);
 
             MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
+            collection.CreateIndex("CorrelationId");
 
             collection.Remove(Query.EQ("Data.CorrelationId", persistanceData.Data.CorrelationId));
         }
