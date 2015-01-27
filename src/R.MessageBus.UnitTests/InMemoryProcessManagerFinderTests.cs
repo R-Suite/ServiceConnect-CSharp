@@ -108,7 +108,7 @@ namespace R.MessageBus.UnitTests
             processManagerFinder.DeleteData(new MemoryData<IProcessManagerData> { Data = data });
 
             // Assert
-            Assert.Null(processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId)).Data);
+            Assert.Null(processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId)));
         }
 
         [Fact]
@@ -121,7 +121,7 @@ namespace R.MessageBus.UnitTests
             var result = processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
 
             // Assert
-            Assert.Null(result.Data);
+            Assert.Null(result);
         }
     }
 }

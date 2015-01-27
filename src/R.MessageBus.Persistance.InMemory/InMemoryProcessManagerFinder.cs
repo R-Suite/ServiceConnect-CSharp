@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Runtime.Caching;
 using R.MessageBus.Interfaces;
 
@@ -23,16 +26,43 @@ namespace R.MessageBus.Persistance.InMemory
 
         public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
-            string key = message.CorrelationId.ToString();
+            var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
+                          mapper.Mappings.First(m => m.MessageType == typeof (Message));
 
-            var memoryData = (MemoryData<IProcessManagerData>)(Cache.Get(key));
 
-            var retval = new MemoryData<T> { Data = null, Version = 0 };
-
-            if (null != memoryData)
+            object msgPropValue = mapping.MessageProp.Invoke(message);
+            if (null == msgPropValue)
             {
-                retval = new MemoryData<T> { Data = (T)memoryData.Data, Version = memoryData.Version };
+                throw new ArgumentException("Message property expression evaluates to null");
             }
+
+            //Left
+            ParameterExpression pe = Expression.Parameter(typeof(MemoryData<T>), "t");
+            Expression left = Expression.Property(pe, typeof(MemoryData<T>).GetProperty("Data"));
+            foreach (var prop in mapping.PropertiesHierarchy.Reverse())
+            {
+                left = Expression.Property(left, left.Type, prop.Key);
+            }
+
+            //Right
+            Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
+
+            Expression expression;
+
+            try
+            {
+                expression = Expression.Equal(left, right);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new Exception("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
+            }
+
+            Expression<Func<MemoryData<T>, bool>> lambda = Expression.Lambda<Func<MemoryData<T>, bool>>(expression, pe);
+
+            var cacheItems = (from n in Cache.AsParallel() select n.Value);
+            var newCacheItems = Enumerable.ToList((from dynamic cacheItem in cacheItems select new MemoryData<T> { Data = cacheItem.Data, Version = cacheItem.Version}));
+            MemoryData<T> retval = newCacheItems.FirstOrDefault(lambda.Compile());
 
             return retval;
         }
