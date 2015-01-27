@@ -1,6 +1,7 @@
 ﻿using System;
 using R.MessageBus;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Persistance.InMemory;
 using R.MessageBus.Persistance.MongoDb;
 
 namespace ProcessManager.Host
@@ -13,9 +14,10 @@ namespace ProcessManager.Host
             IBus bus = Bus.Initialize(config =>
             {
                 config.ScanForMesssageHandlers = true;
-                config.SetProcessManagerFinder<MongoDbProcessManagerFinder>();
-                config.PersistenceStoreConnectionString = "mongodb://localhost/";
-                config.PersistenceStoreDatabaseName = "RMessageBus-ProcessManagerSample";
+                config.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
+                //config.SetProcessManagerFinder<MongoDbProcessManagerFinder>();
+                //config.PersistenceStoreConnectionString = "mongodb://localhost/";
+                //config.PersistenceStoreDatabaseName = "RMessageBus-ProcessManagerSample";
             });
             bus.StartConsuming();
 
