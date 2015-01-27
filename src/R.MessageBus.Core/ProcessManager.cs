@@ -7,6 +7,8 @@ namespace R.MessageBus.Core
     /// </summary>
     public abstract class ProcessManager<T> where T : class, IProcessManagerData
     {
+        private ProcessManagerPropertyMapper _mapper;
+
         public IConsumeContext Context { get; set; }
 
         /// <summary>
@@ -30,13 +32,24 @@ namespace R.MessageBus.Core
         public bool Complete { get; set; }
 
         /// <summary>
-        /// Provides default implementation for finding ProcessManager by message correlation id.
+        /// Configure mapper and finds process manager data using configured ProcessManagerFinder
         /// </summary>
         /// <param name="message"></param>
         /// <returns></returns>
         public virtual IPersistanceData<T> FindProcessManagerData(Message message)
         {
-            return ProcessManagerFinder.FindData<T>(message.CorrelationId);
+            // FindProcessManagerData is always called on new instance of ProcessManager<T>
+            _mapper = new ProcessManagerPropertyMapper();
+
+            ConfigureHowToFindProcessManager(_mapper);
+
+            // Default mapping
+            _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
+
+            return ProcessManagerFinder.FindData<T>(_mapper, message);
         }
+
+        protected virtual void ConfigureHowToFindProcessManager(IProcessManagerPropertyMapper mapper)
+        {}
     }
 }

@@ -98,6 +98,10 @@
       <Project>{9FA4AA16-D8C4-4B0C-AF09-A17112655152}</Project>
       <Name>R.MessageBus.Container</Name>
     </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
+      <Project>{3a8569fd-0779-48a7-9400-2f0e39186436}</Project>
+      <Name>R.MessageBus.Core</Name>
+    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj">
       <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
       <Name>R.MessageBus.Interfaces</Name>
