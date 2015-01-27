@@ -20,7 +20,6 @@ namespace R.MessageBus
         private static IProducer _producer;
         private Timer _timer;
         private IConsumer _consumer;
-        private const string RoutingSlip = "RoutingSlip";
 
         public IConfiguration Configuration { get; set; }
 
@@ -259,7 +258,7 @@ namespace R.MessageBus
 
             var destionationsJson = JsonConvert.SerializeObject(destinations);
 
-            _producer.Send(nextDestination, message, new Dictionary<string, string> { { RoutingSlip, destionationsJson } });
+            _producer.Send(nextDestination, message, new Dictionary<string, string> { { "RoutingSlip", destionationsJson } });
         }
 
         private ConsumeEventResult ConsumeMessageEvent(string message, string type, IDictionary<string, object> headers)
@@ -284,9 +283,9 @@ namespace R.MessageBus
                 ProcessRequestReplyConfigurations(message, type, context);
 
                 // RoutingSlip
-                if (headers.ContainsKey(RoutingSlip))
+                if (headers.ContainsKey("RoutingSlip"))
                 {
-                    var routingSlip = Encoding.UTF8.GetString((byte[])headers[RoutingSlip]);
+                    var routingSlip = Encoding.UTF8.GetString((byte[])headers["RoutingSlip"]);
                     var destinations = JsonConvert.DeserializeObject<IList<string>>(routingSlip);
 
                     if (null != destinations && destinations.Count > 0)
