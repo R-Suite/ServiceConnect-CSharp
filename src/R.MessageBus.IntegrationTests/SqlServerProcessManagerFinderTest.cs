@@ -102,8 +102,7 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
-            //var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            var result = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
+            var result = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
 
             // Assert
             Assert.Equal("TestData", result.Data.Name);
@@ -179,10 +178,8 @@ namespace R.MessageBus.IntegrationTests
 
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
 
-            //var foundData1 = processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            //var foundData2 = processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            var foundData1 = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
-            var foundData2 = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
+            var foundData1 = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
+            var foundData2 = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
 
             processManagerFinder.UpdateData(foundData1); // first update should be fine
 
