@@ -1,8 +1,15 @@
 ﻿using System;
 using System.Data;
 using System.Data.SqlClient;
+using System.IO;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Text;
+using System.Xml;
+using System.Xml.Serialization;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
+using Formatting = Newtonsoft.Json.Formatting;
 
 namespace R.MessageBus.Persistance.SqlServer
 {
@@ -47,9 +54,23 @@ namespace R.MessageBus.Persistance.SqlServer
         /// <returns></returns>
         public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
-            SqlServerData<T> result = null;
+            var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
+                          mapper.Mappings.First(m => m.MessageType == typeof(Message));
 
             string tableName = typeof(T).Name;
+
+            var sbXPath = new StringBuilder();
+            sbXPath.Append("(/" + tableName);
+            foreach (var prop in mapping.PropertiesHierarchy.Reverse())
+            {
+                sbXPath.Append("/" + prop.Key);
+            }
+            sbXPath.Append(")[1]");
+
+            // Message Propery Value
+            object msgPropValue = mapping.MessageProp.Invoke(message);
+
+            SqlServerData<T> result = null;
 
             if (!GetTableNameExists(tableName))
                 return null;
@@ -63,25 +84,25 @@ namespace R.MessageBus.Persistance.SqlServer
                 {
                     command.Connection = connection;
                     command.CommandTimeout = _commandTimeout;
-                    command.CommandText = string.Format(@"SELECT * FROM {0} WHERE Id = @Id", tableName);
-                    command.Parameters.Add(new SqlParameter { ParameterName = "@Id", Value = message.CorrelationId });
+                    command.CommandText = string.Format(@"SELECT * FROM {0} WHERE DataXml.value('{1}', 'nvarchar(max)') = @val", tableName, sbXPath);
+                    command.Parameters.Add(new SqlParameter { ParameterName = "@val", Value = msgPropValue.ToString() });
                     var reader = command.ExecuteReader(CommandBehavior.SingleResult);
 
                     if (reader.HasRows)
                     {
                         reader.Read();
 
-                        var settings = new JsonSerializerSettings
+                        var serializer = new XmlSerializer(typeof(T));
+                        object res;
+                        using (TextReader r = new StringReader(reader["DataXml"].ToString()))
                         {
-                            TypeNameHandling = TypeNameHandling.Objects
-                        };
-
-                        var data = JsonConvert.DeserializeObject<T>(reader["DataJson"].ToString(), settings);
+                            res = serializer.Deserialize(r);
+                        }
 
                         result = new SqlServerData<T>
                         {
                             Id = (Guid)reader["Id"],
-                            Data = data,
+                            Data = (T)res,
                             Version = (int)reader["Version"]
                         };
                     }
@@ -115,8 +136,11 @@ namespace R.MessageBus.Persistance.SqlServer
                 Id = data.CorrelationId
             };
 
-            var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
-            var dataJson = JsonConvert.SerializeObject(sqlServerData.Data, Formatting.Indented, settings);
+            var xmlSerializer = new XmlSerializer(data.GetType());
+            var sww = new StringWriter();
+            XmlWriter writer = XmlWriter.Create(sww);
+            xmlSerializer.Serialize(writer, data);
+            var dataXml = sww.ToString();
 
             using (var sqlConnection = new SqlConnection(_connectionString))
             {
@@ -128,20 +152,20 @@ namespace R.MessageBus.Persistance.SqlServer
                     string upsertSql = string.Format(@"if exists (select * from {0} with (updlock,serializable) WHERE Id = @Id)
                                                     begin
                                                         UPDATE {0}
-		                                                SET DataJson = @DataJson, Version = @Version 
+		                                                SET DataXml = @DataXml, Version = @Version 
 		                                                WHERE Id = @Id
                                                     end
                                                 else
                                                     begin
-                                                        INSERT {0} (Id, Version, DataJson)
-                                                        VALUES (@Id,@Version,@DataJson)
+                                                        INSERT {0} (Id, Version, DataXml)
+                                                        VALUES (@Id,@Version,@DataXml)
                                                     end", tableName);
 
 
                     var command = new SqlCommand(upsertSql) {Transaction = dbTransaction, Connection = sqlConnection};
                     command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = data.CorrelationId;
                     command.Parameters.Add("@Version", SqlDbType.Int).Value = sqlServerData.Version;
-                    command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
+                    command.Parameters.Add("@DataXml", SqlDbType.Xml).Value = dataXml;
 
                     try
                     {
@@ -173,10 +197,13 @@ namespace R.MessageBus.Persistance.SqlServer
             var sqlServerData = (SqlServerData<T>)data;
             int currentVersion = sqlServerData.Version;
 
-            var settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Objects };
-            var dataJson = JsonConvert.SerializeObject(sqlServerData.Data, Formatting.Indented, settings);
+            var xmlSerializer = new XmlSerializer(data.Data.GetType());
+            var sww = new StringWriter();
+            XmlWriter writer = XmlWriter.Create(sww);
+            xmlSerializer.Serialize(writer, data.Data);
+            var dataXml = sww.ToString();
 
-            string sql = string.Format(@"UPDATE {0} SET DataJson = @DataJson, Version = @NewVersion WHERE Id = @Id AND Version = @CurrentVersion", tableName);
+            string sql = string.Format(@"UPDATE {0} SET DataXml = @DataXml, Version = @NewVersion WHERE Id = @Id AND Version = @CurrentVersion", tableName);
 
             var connection = new SqlConnection(_connectionString);
             connection.Open();
@@ -187,7 +214,7 @@ namespace R.MessageBus.Persistance.SqlServer
             {
                 var command = new SqlCommand(sql) {Connection = connection, CommandTimeout = _commandTimeout};
                 command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
-                command.Parameters.Add("@DataJson", SqlDbType.Text).Value = dataJson;
+                command.Parameters.Add("@DataXml", SqlDbType.Xml).Value = dataXml;
                 command.Parameters.Add("@CurrentVersion", SqlDbType.Int).Value = currentVersion;
                 command.Parameters.Add("@NewVersion", SqlDbType.Int).Value = ++currentVersion;
                 result = command.ExecuteNonQuery();
@@ -267,7 +294,7 @@ namespace R.MessageBus.Persistance.SqlServer
                 {
                     command.Connection = connection;
                     command.CommandText = string.Format("IF NOT EXISTS( SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{0}') ", tableName) +
-                        string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, Version int NOT NULL, DataJson text NULL);", tableName);
+                        string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, Version int NOT NULL, DataXml xml NULL);", tableName);
                     command.ExecuteNonQuery();
                 }
                 connection.Close();
