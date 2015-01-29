@@ -101,6 +101,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private void RetryConnection()
         {
+            Logger.Debug("In Producer.RetryConnection()");
+
             if (_hosts.Length > 1)
             {
                 if (_activeHost < _hosts.Length - 1)
@@ -190,11 +192,15 @@ namespace R.MessageBus.Client.RabbitMQ
 
         public void Disconnect()
         {
+            Logger.Debug("In Producer.Disconnect()");
+
             Dispose();
         }
 
         public void Dispose()
         {
+            Logger.Debug("In Producer.Dispose()");
+
             if (_connection != null)
                 _connection.Close();
             if (_model != null)
