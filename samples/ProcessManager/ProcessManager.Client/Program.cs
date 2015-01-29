@@ -16,10 +16,13 @@ namespace ProcessManager.Client
             });
             bus.StartConsuming();
 
-            Console.WriteLine("Press <ENTER> to start ProcessManager");
+            Console.WriteLine("Press <ENTER> to start ProcessManager(s)");
             Console.ReadLine();
 
-            bus.Send("ProcessManager.Host", new StartProcessManagerMessage(Guid.NewGuid()));
+            for (int i = 1; i <= 5000; i++)
+            {
+                bus.Send("ProcessManager.Host", new StartProcessManagerMessage(Guid.NewGuid()) { ProcessId = i});
+            }
         }
     }
 }
