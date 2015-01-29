@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using log4net;
+using Common.Logging;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 
