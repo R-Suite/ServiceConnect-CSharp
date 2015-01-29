@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
-using log4net;
+using Common.Logging;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
