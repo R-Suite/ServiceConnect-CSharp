@@ -3,13 +3,13 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
-using Newtonsoft.Json;
+using System.Xml.XPath;
+using Common.Logging;
 using R.MessageBus.Interfaces;
-using Formatting = Newtonsoft.Json.Formatting;
 
 namespace R.MessageBus.Persistance.SqlServer
 {
@@ -18,6 +18,7 @@ namespace R.MessageBus.Persistance.SqlServer
     /// </summary>
     public class SqlServerProcessManagerFinder : IProcessManagerFinder
     {
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly string _connectionString;
         private readonly int _commandTimeout = 30;
 
@@ -67,6 +68,17 @@ namespace R.MessageBus.Persistance.SqlServer
             }
             sbXPath.Append(")[1]");
 
+            XPathExpression xPathExpression;
+            try
+            {
+                xPathExpression = XPathExpression.Compile(sbXPath.ToString());
+            }
+            catch (XPathException ex)
+            {
+                Logger.ErrorFormat("Error compiling xpath expression. {0}", ex.Message);
+                throw;
+            }
+
             // Message Propery Value
             object msgPropValue = mapping.MessageProp.Invoke(message);
 
@@ -84,8 +96,8 @@ namespace R.MessageBus.Persistance.SqlServer
                 {
                     command.Connection = connection;
                     command.CommandTimeout = _commandTimeout;
-                    command.CommandText = string.Format(@"SELECT * FROM {0} WHERE DataXml.value('{1}', 'nvarchar(max)') = @val", tableName, sbXPath);
-                    command.Parameters.Add(new SqlParameter { ParameterName = "@val", Value = msgPropValue.ToString() });
+                    command.CommandText = string.Format(@"SELECT * FROM {0} WHERE DataXml.value('{1}', 'nvarchar(max)') = @val", tableName, xPathExpression.Expression);
+                    command.Parameters.Add(new SqlParameter { ParameterName = "@val", Value = msgPropValue });
                     var reader = command.ExecuteReader(CommandBehavior.SingleResult);
 
                     if (reader.HasRows)
@@ -116,7 +128,6 @@ namespace R.MessageBus.Persistance.SqlServer
             }
 
             return result;
-
         }
 
         /// <summary>
@@ -286,15 +297,25 @@ namespace R.MessageBus.Persistance.SqlServer
             Type typeParameterType = data.GetType();
             var tableName = typeParameterType.Name;
 
-            // Create table if doesn't exist
             using (var connection = new SqlConnection(_connectionString))
             {
                 connection.Open();
+
+                // Create table if doesn't exist
                 using (var command = new SqlCommand())
                 {
                     command.Connection = connection;
                     command.CommandText = string.Format("IF NOT EXISTS( SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{0}') ", tableName) +
                         string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, Version int NOT NULL, DataXml xml NULL);", tableName);
+                    command.ExecuteNonQuery();
+                }
+
+                // Create index if doesn't exist
+                using (var command = new SqlCommand())
+                {
+                    command.Connection = connection;
+                    command.CommandText = string.Format("IF NOT EXISTS( SELECT 1 FROM sys.indexes WHERE name='ClusteredIndex_{0}' AND object_id = OBJECT_ID('{0}')) ", tableName) +
+                        string.Format("CREATE UNIQUE CLUSTERED INDEX  [ClusteredIndex_{0}] ON [dbo].[{0}] ([Id] ASC)", tableName);
                     command.ExecuteNonQuery();
                 }
                 connection.Close();
