@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using log4net;
+using Common.Logging;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
