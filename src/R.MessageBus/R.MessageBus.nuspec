@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus</id>
-    <version>1.1.7-beta</version>
+    <version>1.1.8-beta</version>
     <title>R.MessageBus</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,12 +10,12 @@
     <description>A simple, easy to use asynchronous messaging framework for .NET.</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/R.MessageBus</projectUrl>
-    <copyright>Copyright 2014 R.MessageBus. All rights reserved</copyright>
+    <copyright>Copyright 2015 R.MessageBus. All rights reserved</copyright>
     <tags>MessageBus,R MessageBus,R.MessageBus,RabbitMQ MessageBus,RMessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
       <dependency id="R.MessageBus.Client.RabbitMQ" version="" />
       <dependency id="R.MessageBus.Interfaces" version="" />
-      <dependency id="log4net" version="2.0.3" />
+      <dependency id="Common.Logging" version="3.0.0" />
       <dependency id="structuremap" version="2.6.4.1" />
       <dependency id="Newtonsoft.Json" version="6.0.1" />
     </dependencies>

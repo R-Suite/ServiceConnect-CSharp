@@ -3,9 +3,9 @@ using R.MessageBus.Interfaces;
 
 namespace ProcessManager.Messages
 {
-    public class StartProcessManagerMessage : Message
+    public class Process2RequestMessage : Message
     {
-        public StartProcessManagerMessage(Guid correlationId) : base(correlationId)
+        public Process2RequestMessage(Guid correlationId) : base(correlationId)
         {
         }
 

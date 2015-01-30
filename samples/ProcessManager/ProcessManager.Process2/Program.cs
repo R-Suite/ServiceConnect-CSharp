@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using R.MessageBus;
+using R.MessageBus.Interfaces;
 
 namespace ProcessManager.Process2
 {
@@ -10,7 +8,12 @@ namespace ProcessManager.Process2
     {
         static void Main(string[] args)
         {
-            
+            Console.WriteLine("*********** ProcessManager.Process2 ***********");
+            IBus bus = Bus.Initialize(config =>
+            {
+                config.ScanForMesssageHandlers = true;
+            });
+            bus.StartConsuming();
         }
     }
 }
