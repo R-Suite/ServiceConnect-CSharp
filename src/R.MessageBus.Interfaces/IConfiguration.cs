@@ -13,7 +13,7 @@ namespace R.MessageBus.Interfaces
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
         ITransportSettings TransportSettings { get; set; }
-        IDictionary<string, string> QueueMappings { get; set; }
+        IDictionary<string, IList<string>> QueueMappings { get; set; }
         Action<Exception> ExceptionHandler { get; set; }
         bool AddBusToContainer { get; set; }
 
@@ -23,6 +23,13 @@ namespace R.MessageBus.Interfaces
         /// <param name="messageType">Type of message</param>
         /// <param name="queue">Queue to send the message to</param>
         void AddQueueMapping(Type messageType, string queue);
+
+        /// <summary>
+        /// Adds message queue mappings. 
+        /// </summary>
+        /// <param name="messageType">Type of message</param>
+        /// <param name="queues">Queues to send the message to</param>
+        void AddQueueMapping(Type messageType, IList<string> queues);
 
         /// <summary>
         /// Set Exception handler. Exception handler is called when an exception is thrown while processing a message.
