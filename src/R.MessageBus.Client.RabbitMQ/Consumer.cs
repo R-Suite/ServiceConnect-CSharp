@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
-using log4net;
+using Common.Logging;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
@@ -66,7 +65,9 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (!headers.ContainsKey("FullTypeName"))
             {
-                throw new Exception(string.Format("Error processing message, Message headers must contain FullTypeName."));
+                const string errMsg = "Error processing message, Message headers must contain FullTypeName.";
+                Logger.Error(errMsg);
+                throw new Exception(errMsg);
             }
 
             var typeName = Encoding.UTF8.GetString((byte[])headers["FullTypeName"]);
@@ -146,7 +147,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private void CreateConsumer()
         {
-            Logger.Info(string.Format("Connecting to queue - {0}", _queueName));
+            Logger.DebugFormat("Connecting to queue - {0}", _queueName);
 
             var connectionFactory = new ConnectionFactory
             {
@@ -415,6 +416,5 @@ namespace R.MessageBus.Client.RabbitMQ
                 _model.Abort();
             }
         }
-
     }
 }

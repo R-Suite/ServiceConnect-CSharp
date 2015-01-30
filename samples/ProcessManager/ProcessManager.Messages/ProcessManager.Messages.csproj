@@ -42,6 +42,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Process2ResponseMessage.cs" />
+    <Compile Include="Process2RequestMessage.cs" />
     <Compile Include="Process1RequestMessage.cs" />
     <Compile Include="Process1ResponseMessage.cs" />
     <Compile Include="StartProcessManagerMessage.cs" />
