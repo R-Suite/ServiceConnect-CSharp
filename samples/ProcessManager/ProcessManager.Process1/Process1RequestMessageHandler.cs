@@ -15,9 +15,15 @@ namespace ProcessManager.Process1
 
         public void Execute(Process1RequestMessage message)
         {
-            Console.WriteLine("In ProcessManager.Process1.Process1RequestMessageHandler.Execute() - {0}", message.CorrelationId);
+            Console.WriteLine("In ProcessManager.Process1.Process1RequestMessageHandler.Execute() - {0} ({1})", message.ProcessId, message.CorrelationId);
 
-            _bus.Send("ProcessManager.Host", new Process1ResponseMessage(Guid.NewGuid()) { Name = "Name1", Age = 1, Widget = new Widget {Size = 1}});
+            _bus.Send("ProcessManager.Host",
+                new Process1ResponseMessage(message.CorrelationId)
+                {
+                    ProcessId = message.ProcessId,
+                    Name = "Process_" + message.ProcessId,
+                    Widget = new Widget {Size = message.ProcessId}
+                });
         }
 
         public IConsumeContext Context { get; set; }
