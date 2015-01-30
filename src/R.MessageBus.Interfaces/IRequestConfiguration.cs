@@ -11,6 +11,8 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         Guid RequestMessageId { get; }
 
+        int EndpointsCount { get; set; }
+
         /// <summary>
         /// Configures a handler.
         /// </summary>

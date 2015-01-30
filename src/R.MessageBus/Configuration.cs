@@ -48,7 +48,7 @@ namespace R.MessageBus
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
-        public IDictionary<string, string> QueueMappings { get; set; }
+        public IDictionary<string, IList<string>> QueueMappings { get; set; }
         public Action<Exception> ExceptionHandler { get; set; }
         public bool AddBusToContainer { get; set; }
 
@@ -73,7 +73,7 @@ namespace R.MessageBus
             SetTransportSettings();
             SetPersistanceSettings();
 
-            QueueMappings = new Dictionary<string, string>();
+            QueueMappings = new Dictionary<string, IList<string>>();
 
             ConsumerType = typeof(Consumer);
             ProducerType = typeof(Producer);
@@ -88,7 +88,30 @@ namespace R.MessageBus
         /// <param name="queue">Queue to send the message to</param>
         public void AddQueueMapping(Type messageType, string queue)
         {
-            QueueMappings.Add(messageType.FullName, queue);
+            if (!QueueMappings.ContainsKey(messageType.FullName))
+            {
+                QueueMappings.Add(messageType.FullName, new List<string>());
+            }
+
+            QueueMappings[messageType.FullName].Add(queue);
+        }
+
+        /// <summary>
+        /// Adds message queue mappings. 
+        /// </summary>
+        /// <param name="messageType">Type of message</param>
+        /// <param name="queues">Queues to send the message to</param>
+        public void AddQueueMapping(Type messageType, IList<string> queues)
+        {
+            if (!QueueMappings.ContainsKey(messageType.FullName))
+            {
+                QueueMappings.Add(messageType.FullName, new List<string>());
+            }
+
+            foreach (string queue in queues)
+            {
+                QueueMappings[messageType.FullName].Add(queue);
+            }
         }
 
         public void SetExceptionHandler(Action<Exception> exceptionHandler)
