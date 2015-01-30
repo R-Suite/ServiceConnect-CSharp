@@ -3,14 +3,14 @@ using R.MessageBus.Interfaces;
 
 namespace ProcessManager.Messages
 {
-    public class Widget
+    public class Widget2
     {
         public int Size { get; set; }
     }
 
-    public class Process1ResponseMessage : Message
+    public class Process2ResponseMessage : Message
     {
-        public Process1ResponseMessage(Guid correlationId) : base(correlationId)
+        public Process2ResponseMessage(Guid correlationId) : base(correlationId)
         {
         }
 
@@ -18,6 +18,6 @@ namespace ProcessManager.Messages
 
         public string Name { get; set; }
 
-        public Widget Widget { get; set; }
+        public Widget2 Widget { get; set; }
     }
 }
