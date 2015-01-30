@@ -13,7 +13,7 @@ namespace R.MessageBus.Client.RabbitMQ
     public class Producer : IProducer
     {
         private readonly ITransportSettings _transportSettings;
-        private readonly IDictionary<string, string> _queueMappings;
+        private readonly IDictionary<string, IList<string>> _queueMappings;
         private IModel _model;
         private IConnection _connection;
         private readonly Object _lock = new Object();
@@ -22,7 +22,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly string[] _hosts;
         private int _activeHost;
 
-        public Producer(ITransportSettings transportSettings, IDictionary<string, string> queueMappings)
+        public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
             _transportSettings = transportSettings;
             _queueMappings = queueMappings;
@@ -125,16 +125,18 @@ namespace R.MessageBus.Client.RabbitMQ
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
                 basicProperties.SetPersistent(true);
-                var endPoint = _queueMappings[typeof(T).FullName];
+                IList<string> endPoints = _queueMappings[typeof(T).FullName];
 
-                ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
+                foreach (string endPoint in endPoints)
+                {
+                    ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
+                    basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
+                    basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
-                basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
-                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
-
-                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
-                         ex => RetryConnection(),
-                         new TimeSpan(0, 0, 0, 6), 10);
+                    Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
+                             ex => RetryConnection(),
+                             new TimeSpan(0, 0, 0, 6), 10);
+                }
             }
         }
 
