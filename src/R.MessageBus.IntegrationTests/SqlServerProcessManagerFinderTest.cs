@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.IO;
+using System.Xml;
+using System.Xml.Serialization;
 using Moq;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
@@ -15,7 +18,7 @@ namespace R.MessageBus.IntegrationTests
     public class TestDbRow
     {
         public string Id { get; set; }
-        public string DataJson { get; set; }
+        public string DataXml { get; set; }
         public int Version { get; set; }
     }
 
@@ -68,7 +71,7 @@ namespace R.MessageBus.IntegrationTests
             var results = GetTestDbData(correlationId);
             Assert.Equal(1, results.Count);
             Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.True(results[0].DataJson.Contains("TestData"));
+            Assert.True(results[0].DataXml.Contains("TestData"));
         }
 
         [Fact]
@@ -76,7 +79,7 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             var correlationId = Guid.NewGuid();
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = "FakeJsonData" } });
+            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = "FakeJsonData" } });
 
             IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
@@ -88,8 +91,8 @@ namespace R.MessageBus.IntegrationTests
             var results = GetTestDbData(correlationId);
             Assert.Equal(1, results.Count);
             Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.NotEqual("FakeJsonData", results[0].DataJson);
-            Assert.True(results[0].DataJson.Contains("TestData"));
+            Assert.NotEqual("FakeJsonData", results[0].DataXml);
+            Assert.True(results[0].DataXml.Contains("TestData"));
         }
 
         [Fact]
@@ -97,8 +100,15 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             var correlationId = Guid.NewGuid();
-            var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData\"}";
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson } });
+
+            var data = new TestSqlServerData {CorrelationId = correlationId, Name = "TestData"};
+            var xmlSerializer = new XmlSerializer(data.GetType());
+            var sww = new StringWriter();
+            XmlWriter writer = XmlWriter.Create(sww);
+            xmlSerializer.Serialize(writer, data);
+            var dataXml = sww.ToString();
+
+            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = dataXml, Version = 1} });
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
@@ -120,7 +130,7 @@ namespace R.MessageBus.IntegrationTests
 
             // Act
             //var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            var result = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
+            var result = processManagerFinder.FindData<TestData>(_mapper, new Message(correlationId));
 
             // Assert
             Assert.Null(result);
@@ -135,8 +145,7 @@ namespace R.MessageBus.IntegrationTests
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
             // Act
-            //var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            var result = processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
+            var result = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
 
             // Assert
             Assert.Null(result);
@@ -148,7 +157,14 @@ namespace R.MessageBus.IntegrationTests
             // Arrange
             var correlationId = Guid.NewGuid();
             var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestDataOriginal\"}";
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson } });
+
+            IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataOriginal" };
+            var xmlSerializer = new XmlSerializer(data.GetType());
+            var sww = new StringWriter();
+            XmlWriter writer = XmlWriter.Create(sww);
+            xmlSerializer.Serialize(writer, data);
+            var dataXml = sww.ToString();
+            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = dataXml } });
 
             IProcessManagerData updatedData = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
             var sqlServerData = new SqlServerData<IProcessManagerData> { Data = updatedData, Id = correlationId };
@@ -157,15 +173,15 @@ namespace R.MessageBus.IntegrationTests
 
             // Act
             //processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            processManagerFinder.FindData<TestData>(_mapper, new Message(correlationId));
+            processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
             processManagerFinder.UpdateData(sqlServerData);
 
             // Assert
             var results = GetTestDbData(correlationId);
             Assert.Equal(1, results.Count);
             Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.False(results[0].DataJson.Contains("TestDataOriginal"));
-            Assert.True(results[0].DataJson.Contains("TestDataUpdated"));
+            Assert.False(results[0].DataXml.Contains("TestDataOriginal"));
+            Assert.True(results[0].DataXml.Contains("TestDataUpdated"));
         }
 
         [Fact]
@@ -173,8 +189,14 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             var correlationId = Guid.NewGuid();
-            var testDataJson1 = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData1\"}";
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson1, Version = 1} });
+            IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
+            var xmlSerializer = new XmlSerializer(data.GetType());
+            var sww = new StringWriter();
+            XmlWriter writer = XmlWriter.Create(sww);
+            xmlSerializer.Serialize(writer, data);
+            var dataXml = sww.ToString();
+
+            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = dataXml, Version = 1 } });
 
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty, 1);
 
@@ -192,17 +214,22 @@ namespace R.MessageBus.IntegrationTests
         {
             // Arrange
             var correlationId = Guid.NewGuid();
-            var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestData\"}";
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataJson = testDataJson, Version = 1} });
+
+            IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
+            var xmlSerializer = new XmlSerializer(data.GetType());
+            var sww = new StringWriter();
+            XmlWriter writer = XmlWriter.Create(sww);
+            xmlSerializer.Serialize(writer, data);
+            var dataXml = sww.ToString();
+
+            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = dataXml, Version = 1 } });
 
             IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
 
-            IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
             var sqlServerDataToBeDeleted = new SqlServerData<IProcessManagerData> { Data = data, Id = correlationId, Version = 1};
 
             // Act
-            //processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            processManagerFinder.FindData<TestData>(It.IsAny<IProcessManagerPropertyMapper>(), It.Is<Message>(m => m.CorrelationId == correlationId));
+            processManagerFinder.FindData<TestData>(_mapper, new Message(correlationId));
             processManagerFinder.DeleteData(sqlServerDataToBeDeleted);
 
             // Assert
@@ -222,7 +249,7 @@ namespace R.MessageBus.IntegrationTests
                     command.Connection = connection;
                     command.CommandText =
                         "IF NOT EXISTS( SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'TestSqlServerData') " +
-                        "CREATE TABLE TestSqlServerData(Id uniqueidentifier NOT NULL, DataJson text NULL, Version int NOT NULL);";
+                        "CREATE TABLE TestSqlServerData(Id uniqueidentifier NOT NULL, DataXml xml NULL, Version int NOT NULL);";
                     command.ExecuteNonQuery();
                 }
 
@@ -233,9 +260,9 @@ namespace R.MessageBus.IntegrationTests
                         using (var command = new SqlCommand())
                         {
                             command.Connection = connection;
-                            command.CommandText = @"INSERT TestSqlServerData (Id, DataJson, Version) VALUES (@Id,@DataJson,@Version)";
+                            command.CommandText = @"INSERT TestSqlServerData (Id, DataXml, Version) VALUES (@Id,@DataXml,@Version)";
                             command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = new Guid(testDbRow.Id);
-                            command.Parameters.Add("@DataJson", SqlDbType.Text).Value = testDbRow.DataJson;
+                            command.Parameters.Add("@DataXml", SqlDbType.Xml).Value = testDbRow.DataXml;
                             command.Parameters.Add("@Version", SqlDbType.Int).Value = testDbRow.Version;
                             command.ExecuteNonQuery();
                         }
@@ -258,7 +285,7 @@ namespace R.MessageBus.IntegrationTests
                     var reader = command.ExecuteReader();
                     while (reader.Read())
                     {
-                        results.Add(new TestDbRow { Id = reader["Id"].ToString(), DataJson = reader["DataJson"].ToString() });
+                        results.Add(new TestDbRow { Id = reader["Id"].ToString(), DataXml = reader["DataXml"].ToString() });
                     }
                 }
             }
