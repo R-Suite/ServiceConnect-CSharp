@@ -437,6 +437,37 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
+        public void SendShouldSendCommandUsingSpecifiedEndpoints()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            const List<string> endPoints = new List<string> { "MyEndPoint1", "MyEndPoint1" };
+
+            mockProducer.Setup(x => x.Send(endPoint, message, null));
+
+            // Act
+            var bus = new MessageBus.Bus(mockConfiguration.Object);
+            bus.Send(endPoint, message);
+
+            // Assert
+            mockProducer.Verify(x => x.Send(endPoint, message, null), Times.Once);
+        }
+
+        [Fact]
         public void SendingRequestSynchronouslyShouldSendCommand()
         {
             // Arrange
