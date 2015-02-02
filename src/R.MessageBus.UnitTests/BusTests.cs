@@ -758,6 +758,176 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
+        public void SendingRequestToMultipleEndpointsShouldPassResponsesToCallbackHandler()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            var task = new Task(() => { });
+
+            int count = 0;
+            var r1 = new FakeMessage2(Guid.NewGuid());
+            var r2 = new FakeMessage2(Guid.NewGuid());
+
+            var responses = new List<FakeMessage2>();
+            Action<FakeMessage2> action = message2 =>
+            {
+                count++;
+                responses.Add(message2);
+            };
+
+            mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Callback<Action<object>>(a =>
+            {
+                a(r1);
+                a(r2);
+            }).Returns(task);
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            bus.SendRequest(message, action, null);
+
+            // Assert
+            mockRequestConfiguration.Verify(x => x.SetHandler(It.IsAny<Action<object>>()), Times.Exactly(1));
+            Assert.Equal(2, count);
+            Assert.True(responses.Contains(r1));
+            Assert.True(responses.Contains(r2));
+        }
+
+        [Fact]
+        public void SendingRequestToMultipleEndpointsWithCallbackShouldSendMessageToSpecifiedEndpoints()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            var task = new Task(() => { });
+            mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>()));
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            bus.SendRequest<FakeMessage1, FakeMessage2>(new List<string> { "test1", "test2" }, message, x => { });
+
+            // Assert
+            mockProducer.Verify(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+        }
+
+        [Fact]
+        public void SendingRequestToMultipleEndpointsSynchronouslyShouldReturnResponses()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            var task = new Task(() => { });
+
+            Action<FakeMessage2> action = null;
+            mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task).Callback<Action<FakeMessage2>>(r =>
+            {
+                action = r;
+            });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            var r1 = new FakeMessage2(Guid.NewGuid());
+            var r2 = new FakeMessage2(Guid.NewGuid());
+
+            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            {
+                action(r1);
+            });
+
+            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            {
+                action(r2);
+                task.Start();
+            });
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            IList<FakeMessage2> responses = bus.SendRequest<FakeMessage1, FakeMessage2>(new List<string>{ "test1", "test2" }, message, null, 1000);
+
+            // Assert
+            Assert.Equal(2, responses.Count);
+            Assert.True(responses.Contains(r1));
+            Assert.True(responses.Contains(r2));
+        }
+
+        [Fact]
+        public void SendingRequestToMultipleEndpointsSynchronouslyShouldSendCommandsToSpecifiedEndpoints()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            var task = new Task(() => { });
+            mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            var response = bus.SendRequest<FakeMessage1, FakeMessage2>(new List<string>
+            {
+                "test1",
+                "test2"
+            }, message, null, 1000);
+
+            // Assert
+            mockProducer.Verify(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+        }
+
+        [Fact]
         public void CustomExceptionHandlerShouldBeCalledIfConsumeMessageEventThrows()
         {
             // Arrange
