@@ -258,7 +258,7 @@ namespace R.MessageBus.UnitTests
 
             _mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
 
-            bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { });
+            bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { }, null);
             bus.StartConsuming();
 
             headers["SourceAddress"] = Encoding.ASCII.GetBytes(_correlationId.ToString());
@@ -297,7 +297,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            bus.Publish(new FakeMessage1(Guid.NewGuid()));
+            bus.Publish(new FakeMessage1(Guid.NewGuid()), null);
 
             // Assert
             mockConfiguration.Verify(x => x.GetProducer(), Times.Once());
@@ -326,7 +326,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
-            bus.Publish(message);
+            bus.Publish(message, null);
 
             // Assert
             mockProducer.Verify(x => x.Publish(message, null), Times.Once);
@@ -348,7 +348,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
-            bus.Send(new FakeMessage1(Guid.NewGuid()));
+            bus.Send(new FakeMessage1(Guid.NewGuid()), null);
 
             // Assert
             mockConfiguration.Verify(x => x.GetProducer(), Times.Once());
@@ -370,7 +370,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
-            bus.Send("EndPoint", new FakeMessage1(Guid.NewGuid()));
+            bus.Send("EndPoint", new FakeMessage1(Guid.NewGuid()), null);
 
             // Assert
             mockConfiguration.Verify(x => x.GetProducer(), Times.Once()); 
@@ -399,7 +399,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
-            bus.Send(message);
+            bus.Send(message, null);
 
             // Assert
             mockProducer.Verify(x => x.Send(message, null), Times.Once);
@@ -430,7 +430,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
-            bus.Send(endPoint, message);
+            bus.Send(endPoint, message, null);
 
             // Assert
             mockProducer.Verify(x => x.Send(endPoint, message, null), Times.Once);
@@ -455,16 +455,22 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            const List<string> endPoints = new List<string> { "MyEndPoint1", "MyEndPoint1" };
+            List<string> endPoints = new List<string> { "MyEndPoint1", "MyEndPoint2" };
 
-            mockProducer.Setup(x => x.Send(endPoint, message, null));
+            foreach (string endPoint in endPoints)
+            {
+                mockProducer.Setup(x => x.Send(endPoint, message, null));
+            }
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
-            bus.Send(endPoint, message);
+            bus.Send(endPoints, message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(endPoint, message, null), Times.Once);
+            foreach (string endPoint in endPoints)
+            {
+                mockProducer.Verify(x => x.Send(endPoint, message, null), Times.Once);
+            }
         }
 
         [Fact]
@@ -492,7 +498,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message, 1000);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message, null, 1000);
 
             // Assert
             mockProducer.Verify(x => x.Send(message, It.IsAny<Dictionary<string, string>>()), Times.Once);
@@ -534,7 +540,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message, 1000);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message, null, 1000);
 
             // Assert
             Assert.Equal("Tim Watson", response.DisplayName);
@@ -567,7 +573,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, 1000);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, null, 1000);
 
             // Assert
             mockProducer.Verify(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
@@ -609,7 +615,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, 1000);
+            FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, null, 1000);
 
             // Assert
             Assert.Equal("Tim Watson", response.DisplayName);
@@ -642,7 +648,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => {});
+            bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { }, null);
 
             // Assert
             mockProducer.Verify(x => x.Send(message, It.IsAny<Dictionary<string, string>>()), Times.Once);
@@ -677,7 +683,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            bus.SendRequest(message, action);
+            bus.SendRequest(message, action, null);
 
             // Assert
             mockRequestConfiguration.Verify(x => x.SetHandler(It.IsAny<Action<object>>()), Times.Once());
@@ -709,7 +715,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, x => { });
+            bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, x => { }, null);
 
             // Assert
             mockProducer.Verify(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
@@ -744,7 +750,7 @@ namespace R.MessageBus.UnitTests
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
-            bus.SendRequest("test", message, action);
+            bus.SendRequest("test", message, action, null);
 
             // Assert
             mockRequestConfiguration.Verify(x => x.SetHandler(It.IsAny<Action<object>>()), Times.Once());

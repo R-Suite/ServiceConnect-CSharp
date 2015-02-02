@@ -144,6 +144,44 @@ namespace R.MessageBus
             SendRequest(null, message, callback, headers);
         }
 
+        public void SendRequest<TRequest, TReply>(IList<string> endPoints, TRequest message, Action<IList<TReply>> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
+        {
+            var messageId = Guid.NewGuid();
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
+            configuration.EndpointsCount = endPoints.Count;
+
+            var responses = new List<TReply>();
+
+            configuration.SetHandler(r =>
+            {
+                responses.Add((TReply)r);
+                if (configuration.EndpointsCount == configuration.ProcessedCount)
+                {
+                    callback(responses);
+                }
+            });
+
+            lock (_requestLock)
+            {
+                _requestConfigurations[messageId.ToString()] = configuration;
+            }
+
+            if (headers == null)
+            {
+                headers = new Dictionary<string, string>();
+            }
+
+            headers["RequestMessageId"] = messageId.ToString();
+
+            IProducer producer = Configuration.GetProducer();
+
+            foreach (string endPoint in endPoints)
+            {
+                producer.Send(endPoint, message, headers);
+            }
+            producer.Disconnect();
+        }
+
         public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers) where TRequest : Message where TReply : Message
         {
             var messageId = Guid.NewGuid();
@@ -178,7 +216,7 @@ namespace R.MessageBus
 
         public TReply SendRequest<TRequest, TReply>(TRequest message, Dictionary<string, string> headers, int timeout) where TRequest : Message where TReply : Message
         {
-            return SendRequest<TRequest, TReply>(null, message, headers, timeout);
+            return SendRequest<TRequest, TReply>(default(string), message, headers, timeout);
         }
 
         public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, Dictionary<string, string> headers, int timeout) where TRequest : Message where TReply : Message
@@ -230,12 +268,12 @@ namespace R.MessageBus
             var messageId = Guid.NewGuid();
             IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
 
-            List<TReply> response = new List<TReply>();
+            List<TReply> responses = new List<TReply>();
             configuration.EndpointsCount = endPoints.Count;
 
             Task task = configuration.SetHandler(r =>
             {
-                response.Add((TReply)r);
+                responses.Add((TReply)r);
             });
 
             lock (_requestLock)
@@ -256,13 +294,8 @@ namespace R.MessageBus
             }
 
             Task.WaitAll(new[] { task }, timeout);
-
-            if (!task.IsCompleted)
-            {
-                throw new TimeoutException();
-            }
-
-            return response;
+            
+            return responses;
         }
         
         public void Route<T>(T message, IList<string> destinations) where T : Message
@@ -343,8 +376,12 @@ namespace R.MessageBus
                 IRequestConfiguration requestConfigration = _requestConfigurations[messageId];
                 
                 requestConfigration.ProcessMessage(message, type);
-                var item = _requestConfigurations.First(kvp => kvp.Key == messageId);
-                _requestConfigurations.Remove(item.Key);
+
+                if (requestConfigration.ProcessedCount == requestConfigration.EndpointsCount)
+                {
+                    var item = _requestConfigurations.First(kvp => kvp.Key == messageId);
+                    _requestConfigurations.Remove(item.Key);
+                }
             }
         }
 

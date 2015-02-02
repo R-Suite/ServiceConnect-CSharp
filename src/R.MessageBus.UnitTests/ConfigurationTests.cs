@@ -161,7 +161,7 @@ namespace R.MessageBus.UnitTests
             configuration.AddQueueMapping(typeof(FakeMessage1), "MyEndPoint");
 
             // Assert
-            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint"));
+            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value.Contains("MyEndPoint")));
         }
 
         [Fact]
