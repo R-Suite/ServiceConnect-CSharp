@@ -25,6 +25,7 @@ namespace RecipientList.Publisher
                 Console.WriteLine("1 Recipient List");
                 Console.WriteLine("2 Recipient List Reply Sync");
                 Console.WriteLine("3 Recipient List Reply Async");
+                Console.WriteLine("4 Recipient List Timeout (Should only receive a reply from Consumer 2)");
 
                 var result = Console.ReadLine();
                 switch (result)
@@ -38,8 +39,35 @@ namespace RecipientList.Publisher
                     case "3":
                         TestRecipientListReplyAsynch();
                         break;
+                    case "4":
+                        TestRecipientListReplySynchTimeout();
+                        break;
                 }
             }
+        }
+
+        private static void TestRecipientListReplySynchTimeout()
+        {
+            var id = Guid.NewGuid();
+            var responses = _bus.SendRequest<RecipientListMessage, RecipientListResponse>(
+                new List<string>
+                    {
+                        "Consumer1",
+                        "Consumer2"
+                    },
+                new RecipientListMessage(id)
+                {
+                    SendReply = true,
+                    Delay = true
+                }, timeout: 500
+            );
+
+            foreach (RecipientListResponse response in responses)
+            {
+                Console.WriteLine("Received response from - {0}", response.Endpoint);
+            }
+
+            Console.WriteLine("");
         }
 
         private static void TestRecipientListReplyAsynch()
