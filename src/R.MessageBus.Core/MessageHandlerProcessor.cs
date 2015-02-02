@@ -86,6 +86,7 @@ namespace R.MessageBus.Core
             catch (Exception ex)
             {
                 Logger.Error(string.Format("Error executing handler. {0}", handlerType.FullName), ex);
+                
                 throw;
             }
         }

@@ -172,8 +172,8 @@ namespace R.MessageBus.UnitTests
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value == "MyEndPoint1"));
-            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage2).FullName && x.Value == "MyEndPoint2"));
+            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value.Contains("MyEndPoint1")));
+            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage2).FullName && x.Value.Contains("MyEndPoint2")));
         }
 
         [Fact]
@@ -307,7 +307,7 @@ namespace R.MessageBus.UnitTests
 
             public void AddHandler<T>(Type handlerType, T handler)
             {
-                throw new NotImplementedException();
+               
             }
 
             public bool Initialized { get; set; }
@@ -348,48 +348,47 @@ namespace R.MessageBus.UnitTests
 
         public class FakePublisher : IProducer
         {
-            public FakePublisher(ITransportSettings transportSettings, IDictionary<string, string> queueMappings)
+            public FakePublisher(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
             {
             }
 
             public void Publish<T>(T message) where T : Message
             {
-                throw new NotImplementedException();
+                
             }
 
             public void Send<T>(T message) where T : Message
             {
-                throw new NotImplementedException();
+               
             }
 
             public void Send<T>(string endPoint, T message) where T : Message
             {
-                throw new NotImplementedException();
+               
             }
 
             public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
             {
-                throw new NotImplementedException();
+               
             }
 
             public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
             {
-                throw new NotImplementedException();
+               
             }
 
             public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
             {
-                throw new NotImplementedException();
+                
             }
 
             public void Disconnect()
             {
-                throw new NotImplementedException();
+                
             }
 
             public void Dispose()
             {
-                throw new NotImplementedException();
             }
 
             public string Type { get; private set; }
@@ -412,17 +411,17 @@ namespace R.MessageBus.UnitTests
 
             public void InsertData(IProcessManagerData data)
             {
-                throw new NotImplementedException();
+                
             }
 
             public void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
             {
-                throw new NotImplementedException();
+               
             }
 
             public void DeleteData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
             {
-                throw new NotImplementedException();
+               
             }
         }
 
