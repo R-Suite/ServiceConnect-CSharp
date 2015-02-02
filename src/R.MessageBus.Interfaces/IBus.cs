@@ -5,7 +5,6 @@ namespace R.MessageBus.Interfaces
 {
     public interface IBus : IDisposable
     {
-
         /// <summary>
         /// Contains the Bus configuration.
         /// </summary>
@@ -28,6 +27,18 @@ namespace R.MessageBus.Interfaces
         /// <param name="message"></param>
         /// <param name="headers">Custom headers</param>
         void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message;
+
+        /// <summary>
+        /// Publishes an event and wait for replies.
+        /// </summary>
+        /// <typeparam name="TRequest">The type of the request object.  Must be a message</typeparam>
+        /// <typeparam name="TReply">The type of the reply object. Must be a message</typeparam>
+        /// <param name="message">The message to send</param>
+        /// <param name="expectedCount">Expected number of replies. If -1 then the request will only return once the timeout has occurred</param>
+        /// <param name="headers">Custom headers</param>
+        /// <param name="timeout"></param>
+        /// <returns>Returns a list of response objects</returns>
+        IList<TReply> PublishRequest<TRequest, TReply>(TRequest message, int? expectedCount = null, Dictionary<string, string> headers = null, int timeout = 10000) where TRequest : Message;
 
         /// <summary>
         /// Sends a command.
@@ -88,7 +99,7 @@ namespace R.MessageBus.Interfaces
         /// <param name="timeout"></param>
         /// <param name="headers">Custom headers</param>
         /// <returns>Returns the response objects.</returns>
-        IList<TReply> SendRequest<TRequest, TReply>(IList<string> endPoints, TRequest message, Dictionary<string, string> headers = null, int timeout = 3000) where TRequest : Message where TReply : Message;
+        IList<TReply> SendRequest<TRequest, TReply>(IList<string> endPoints, TRequest message, Dictionary<string, string> headers = null, int timeout = 10000) where TRequest : Message where TReply : Message;
 
         /// <summary>
         /// Sends a commands to the specified endpoint.  The callback is called when receving the reply message.

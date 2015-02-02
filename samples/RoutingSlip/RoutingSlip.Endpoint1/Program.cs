@@ -12,7 +12,6 @@ namespace RoutingSlip.Endpoint1
             {
                 x.ScanForMesssageHandlers = true;
             });
-
             bus.StartConsuming();
 
             Console.ReadLine();

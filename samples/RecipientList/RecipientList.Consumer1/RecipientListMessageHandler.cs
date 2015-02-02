@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using R.MessageBus.Interfaces;
 using RecipientList.Messages;
 
@@ -9,6 +10,11 @@ namespace RecipientList.Consumer1
         public void Execute(RecipientListMessage message)
         {
             Console.WriteLine("Consumer 1 Received Message - {0}", message.CorrelationId);
+
+            if (message.Delay)
+            {
+                Thread.Sleep(1000);
+            }
 
             if (message.SendReply)
             {

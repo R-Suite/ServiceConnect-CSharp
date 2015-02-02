@@ -7,5 +7,6 @@ namespace RecipientList.Messages
     {
         public RecipientListMessage(Guid correlationId) : base(correlationId) { }
         public bool SendReply { get; set; }
+        public bool Delay { get; set; }
     }
 }
