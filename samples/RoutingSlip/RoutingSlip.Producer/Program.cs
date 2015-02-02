@@ -10,7 +10,10 @@ namespace RoutingSlip.Producer
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize(config => config.ScanForMesssageHandlers = false);
+            var bus = Bus.Initialize(config =>
+            {
+                config.ScanForMesssageHandlers = false;
+            });
 
             Console.WriteLine("Press enter to send message");
             Console.ReadLine();

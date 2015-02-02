@@ -121,6 +121,38 @@ namespace R.MessageBus
             _producer.Publish(message, headers);
         }
 
+        public IList<TReply> PublishRequest<TRequest, TReply>(TRequest message, int? expectedCount, Dictionary<string, string> headers, int timeout) where TRequest : Message
+        {
+            var messageId = Guid.NewGuid();
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
+
+            List<TReply> responses = new List<TReply>();
+            configuration.EndpointsCount = expectedCount ?? -1;
+
+            Task task = configuration.SetHandler(r =>
+            {
+                responses.Add((TReply)r);
+            });
+
+            lock (_requestLock)
+            {
+                _requestConfigurations[messageId.ToString()] = configuration;
+            }
+
+            if (headers == null)
+            {
+                headers = new Dictionary<string, string>();
+            }
+
+            headers["RequestMessageId"] = messageId.ToString();
+            
+            _producer.Publish(message, headers);
+
+            Task.WaitAll(new[] { task }, timeout);
+
+            return responses;
+        }
+
         public void Send<T>(T message, Dictionary<string, string> headers) where T : Message
         {
             _producer.Send(message, headers);
