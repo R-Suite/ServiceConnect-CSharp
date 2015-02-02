@@ -17,7 +17,10 @@ namespace PointToPoint.Producer
                 Console.ReadLine();
 
                 var id = Guid.NewGuid();
-                bus.Send(new PointToPointMessage(id));
+                for (int i = 0; i < 100000; i++)
+                {
+                    bus.Send(new PointToPointMessage(id));
+                }
 
                 Console.WriteLine("Sent message - {0}", id);
                 Console.WriteLine("");

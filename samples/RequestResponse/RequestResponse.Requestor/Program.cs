@@ -14,7 +14,6 @@ namespace RequestResponse.Requestor
             {
                 config.ScanForMesssageHandlers = true;
                 config.SetQueueName("Requestor");
-                config.SetHost("lonappdev04");
             });
             bus.StartConsuming();
 
@@ -25,7 +24,7 @@ namespace RequestResponse.Requestor
 
                 var id = Guid.NewGuid();
                 Console.WriteLine("Sending synchronous message - {0}", id);
-                var result = bus.SendRequest<RequestMessage, ResponseMessage>("Responder", new RequestMessage(id), 300000);
+                var result = bus.SendRequest<RequestMessage, ResponseMessage>("Responder", new RequestMessage(id), timeout: 300000);
                 Console.WriteLine("Sent synchronous message reply - {0}", result.CorrelationId);
                 Console.WriteLine();
 

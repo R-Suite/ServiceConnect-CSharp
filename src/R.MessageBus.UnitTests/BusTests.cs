@@ -207,8 +207,7 @@ namespace R.MessageBus.UnitTests
             // Assert
             mockProcessManagerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(y => ((FakeMessage1)JsonConvert.DeserializeObject(y, typeof(FakeMessage1))).Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once); 
         }
-
-
+        
         [Fact]
         public void ConsumeMessageEventShouldProcessResponseMessage()
         {
@@ -925,6 +924,55 @@ namespace R.MessageBus.UnitTests
             // Assert
             mockProducer.Verify(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
             mockProducer.Verify(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+        }
+
+        [Fact]
+        public void PublishRequestShouldPublishMessagesAndReturnResponses()
+        {
+            // Arrange
+            var mockConfiguration = new Mock<IConfiguration>();
+            var mockProducer = new Mock<IProducer>();
+            var mockContainer = new Mock<IBusContainer>();
+            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
+
+            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
+            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
+            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            var task = new Task(() => { });
+
+            Action<FakeMessage2> action = null;
+            mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task).Callback<Action<FakeMessage2>>(r =>
+            {
+                action = r;
+            });
+
+            var message = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Tim Watson"
+            };
+
+            var r1 = new FakeMessage2(Guid.NewGuid());
+            var r2 = new FakeMessage2(Guid.NewGuid());
+
+            mockProducer.Setup(x => x.Publish(message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            {
+                action(r1);
+                action(r2);
+                task.Start();
+            });
+            
+            // Act
+            var bus = new Bus(mockConfiguration.Object);
+            var responses = bus.PublishRequest<FakeMessage1, FakeMessage2>(message, 1, null, 1000);
+            
+            // Assert
+            Assert.Equal(2, responses.Count);
+            Assert.True(responses.Contains(r1));
+            Assert.True(responses.Contains(r2));
         }
 
         [Fact]
