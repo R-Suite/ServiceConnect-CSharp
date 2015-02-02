@@ -10,11 +10,13 @@ namespace R.MessageBus.Core
         private readonly Guid _requestMessageId;
         private Task _task;
         private Action<object> _action;
-
         public Guid RequestMessageId
         {
             get { return _requestMessageId; }
         }
+
+        public int EndpointsCount { get; set; }
+        public int ProcessedCount { get; set; }
 
         public RequestConfiguration(Guid requestMessageId)
         {
@@ -32,8 +34,15 @@ namespace R.MessageBus.Core
         public void ProcessMessage(string message, string type)
         {
             var messageObject = JsonConvert.DeserializeObject(message, Type.GetType(type));
+
+            ProcessedCount++;
+
             _action(messageObject);
-            _task.Start();
+            
+            if (EndpointsCount == ProcessedCount)
+            {
+                _task.Start();
+            }
         }
     }
 }
