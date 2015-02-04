@@ -21,11 +21,13 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly ConnectionFactory _connectionFactory;
         private readonly string[] _hosts;
         private int _activeHost;
+        private readonly long _maxMessageSize;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
             _transportSettings = transportSettings;
             _queueMappings = queueMappings;
+            _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
 
             _hosts = transportSettings.Host.Split(',');
             _activeHost = 0;
@@ -180,10 +182,14 @@ namespace R.MessageBus.Client.RabbitMQ
                 headers["MessageId"] = Guid.NewGuid().ToString();
             }
 
+            if (!headers.ContainsKey("MessageType"))
+            {
+                headers["MessageType"] = messageType;
+            }
+
             headers["SourceAddress"] = _transportSettings.Queue.Name;
             headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
-            headers["MessageType"] = messageType;
             headers["FullTypeName"] = type.AssemblyQualifiedName;
             headers["TypeName"] = type.Name;
             headers["ConsumerType"] = "RabbitMQ";
@@ -214,6 +220,29 @@ namespace R.MessageBus.Client.RabbitMQ
             get
             {
                 return "RabbitMQ";
+            }
+        }
+
+        public long MaximumMessageSize
+        {
+            get { return _maxMessageSize; }
+        }
+
+        public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers)
+        {
+            lock (_lock)
+            {
+                IBasicProperties basicProperties = _model.CreateBasicProperties();
+                basicProperties.SetPersistent(true);
+
+                basicProperties.Headers = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
+                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
+
+                ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
+
+                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, packet),
+                         ex => RetryConnection(),
+                         new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 

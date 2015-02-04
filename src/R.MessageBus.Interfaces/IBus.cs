@@ -141,5 +141,14 @@ namespace R.MessageBus.Interfaces
         /// <param name="message">The message to send.</param>
         /// <param name="destinations">Endpoints that the message is routed to</param>
         void Route<T>(T message, IList<string> destinations) where T : Message;
+
+        /// <summary>
+        /// Creates a new stream object, which can be used to transfer large amounds of data.  Method call will establish a connection with the remote endpoint before returning.
+        /// </summary>
+        /// <typeparam name="T">Message Type</typeparam>
+        /// <param name="endpoint">Endpoint that consume the stream</param>
+        /// <param name="message">The start message to send</param>
+        /// <returns>Stream for writing data</returns>
+        IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message;
     }
 }
