@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -16,7 +17,9 @@ namespace R.MessageBus
     {
         private readonly IBusContainer _container;
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
+        private readonly IDictionary<string, IMessageBusReadStream> _byteStreams = new Dictionary<string, IMessageBusReadStream>();
         private readonly object _requestLock = new object();
+        private readonly object _byteStreamLock = new object();
         private static IProducer _producer;
         private Timer _timer;
         private IConsumer _consumer;
@@ -341,7 +344,21 @@ namespace R.MessageBus
             _producer.Send(nextDestination, message, new Dictionary<string, string> { { "RoutingSlip", destionationsJson } });
         }
 
-        private ConsumeEventResult ConsumeMessageEvent(string message, string type, IDictionary<string, object> headers)
+        public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
+        {
+            var sequenceId = Guid.NewGuid().ToString();
+            var headers = new Dictionary<string, string>
+            {
+                { "MessageType", "ByteStream" },
+                { "Start", "" },
+                { "SequenceId", sequenceId }
+            };
+            SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 10000);
+            var stream = new MessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId);
+            return stream;
+        }
+
+        private ConsumeEventResult ConsumeMessageEvent(byte[] message, string type, IDictionary<string, object> headers)
         {
             var result = new ConsumeEventResult
             {
@@ -358,23 +375,19 @@ namespace R.MessageBus
 
             try
             {
-                ProcessMessageHandlers(message, typeObject, context);
-                ProcessProcessManagerHandlers(message, typeObject, context);
-                ProcessRequestReplyConfigurations(message, type, context);
-
-                // RoutingSlip
-                if (headers.ContainsKey("RoutingSlip"))
+                if (Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
-                    var routingSlip = Encoding.UTF8.GetString((byte[])headers["RoutingSlip"]);
-                    var destinations = JsonConvert.DeserializeObject<IList<string>>(routingSlip);
+                    ProcessStream(message, typeObject, headers);
+                }
+                else
+                {
+                    ProcessMessageHandlers(message, typeObject, context);
+                    ProcessProcessManagerHandlers(message, typeObject, context);
+                    ProcessRequestReplyConfigurations(message, type, context);
 
-                    if (null != destinations && destinations.Count > 0)
+                    if (headers.ContainsKey("RoutingSlip"))
                     {
-                        object messageObject = JsonConvert.DeserializeObject(message, typeObject);
-
-                        MethodInfo routeMethod = typeof (Bus).GetMethod("Route");
-                        MethodInfo genericRouteMethod = routeMethod.MakeGenericMethod(typeObject);
-                        genericRouteMethod.Invoke(this, new[] {messageObject, destinations});
+                        ProcessRoutingSlip(message, typeObject, headers);
                     }
                 }
             }
@@ -391,7 +404,90 @@ namespace R.MessageBus
             return result;
         }
 
-        private void ProcessRequestReplyConfigurations(string message, string type, ConsumeContext context)
+        private void ProcessRoutingSlip(byte[] message, Type type, IDictionary<string, object> headers)
+        {
+            var routingSlip = Encoding.UTF8.GetString((byte[])headers["RoutingSlip"]);
+            var destinations = JsonConvert.DeserializeObject<IList<string>>(routingSlip);
+
+            if (null != destinations && destinations.Count > 0)
+            {
+                object messageObject = JsonConvert.DeserializeObject(Encoding.UTF8.GetString(message), type);
+
+                MethodInfo routeMethod = typeof(Bus).GetMethod("Route");
+                MethodInfo genericRouteMethod = routeMethod.MakeGenericMethod(type);
+                genericRouteMethod.Invoke(this, new[] { messageObject, destinations });
+            }
+        }
+
+        private void ProcessStream(byte[] message, Type type, IDictionary<string, object> headers)
+        {
+            lock (_byteStreamLock)
+            {
+                var start = headers.ContainsKey("Start");
+                var sequenceId = Encoding.UTF8.GetString((byte[]) headers["SequenceId"]);
+                
+                IMessageBusReadStream stream;
+
+                if (start)
+                {
+                    var requestMessageId = Encoding.UTF8.GetString((byte[]) headers["RequestMessageId"]);
+                    var sourceAddress = Encoding.UTF8.GetString((byte[])headers["SourceAddress"]);
+                    
+                    stream = new MessageBusReadStream
+                    {
+                        CompleteEventHandler = StreamCompleteEventHandler,
+                        SequenceId = sequenceId
+                    };
+                    
+                    var messageHandlerProcessor = _container.GetInstance<StreamProcessor>(new Dictionary<string, object>
+                    {
+                        {"container", _container}
+                    });
+                    MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
+                    MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(type);
+                    object messageObject = JsonConvert.DeserializeObject(Encoding.UTF8.GetString(message), type);
+                    genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new[] { messageObject, stream });
+
+                    if (stream.HandlerCount > 0)
+                    {
+                        _byteStreams.Add(sequenceId, stream);
+                    }
+
+                    Send(sourceAddress, new StreamResponseMessage(Guid.NewGuid()), new Dictionary<string, string> { { "ResponseMessageId", requestMessageId } });
+                }
+                else
+                {
+                    if (!_byteStreams.ContainsKey(sequenceId))
+                    {
+                        return;
+                    }
+
+                    var packetNumber = Convert.ToInt64(Encoding.UTF8.GetString((byte[])headers["PacketNumber"]));
+                    var stop = headers.ContainsKey("Stop");
+
+                    stream = _byteStreams[sequenceId];
+                    
+                    if (!stop)
+                    {
+                        stream.Write(message, packetNumber);
+                    }
+                    else
+                    {
+                        stream.LastPacketNumber = packetNumber;
+                    }
+                }
+            }
+        }
+
+        private void StreamCompleteEventHandler(string sequenceId)
+        {
+            lock (_byteStreamLock)
+            {
+                _byteStreams.Remove(sequenceId);
+            }
+        }
+
+        private void ProcessRequestReplyConfigurations(byte[] byteMessage, string type, ConsumeContext context)
         {
             lock (_requestLock)
             {
@@ -407,7 +503,7 @@ namespace R.MessageBus
                 }
                 IRequestConfiguration requestConfigration = _requestConfigurations[messageId];
                 
-                requestConfigration.ProcessMessage(message, type);
+                requestConfigration.ProcessMessage(Encoding.UTF8.GetString(byteMessage), type);
 
                 if (requestConfigration.ProcessedCount == requestConfigration.EndpointsCount)
                 {
@@ -417,7 +513,7 @@ namespace R.MessageBus
             }
         }
 
-        private void ProcessProcessManagerHandlers(string objectMessage, Type type, IConsumeContext context)
+        private void ProcessProcessManagerHandlers(byte[] objectMessage, Type type, IConsumeContext context)
         {
             IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
             var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
@@ -428,10 +524,10 @@ namespace R.MessageBus
 
             MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(type);
-            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {objectMessage, context});
+            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {Encoding.UTF8.GetString(objectMessage), context});
         }
 
-        private void ProcessMessageHandlers(string objectMessage, Type type, IConsumeContext context)
+        private void ProcessMessageHandlers(byte[] objectMessage, Type type, IConsumeContext context)
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
             {
@@ -439,7 +535,7 @@ namespace R.MessageBus
             });
             MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(type);
-            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new object[] { objectMessage, context });
+            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new object[] { Encoding.UTF8.GetString(objectMessage), context });
         }
 
         public void StopConsuming()

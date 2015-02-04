@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Common.Logging;
 using Newtonsoft.Json;
@@ -61,8 +62,6 @@ namespace R.MessageBus.Client.RabbitMQ
             SetHeader(args, "DestinationMachine", Environment.MachineName);
             SetHeader(args, "DestinationAddress", _transportSettings.Queue.Name);
 
-            string message = Encoding.UTF8.GetString(args.Body);
-
             if (!headers.ContainsKey("FullTypeName"))
             {
                 const string errMsg = "Error processing message, Message headers must contain FullTypeName.";
@@ -72,7 +71,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             var typeName = Encoding.UTF8.GetString((byte[])headers["FullTypeName"]);
 
-            ConsumeEventResult result = _consumerEventHandler(message, typeName, headers);
+            ConsumeEventResult result = _consumerEventHandler(args.Body, typeName, headers);
             _model.BasicAck(args.DeliveryTag, false);
 
             SetHeader(args, "TimeProcessed", DateTime.UtcNow.ToString("O"));
