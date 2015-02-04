@@ -49,6 +49,11 @@ namespace R.MessageBus
             {
                 StartHeartbeatTimer();
             }
+
+            if (configuration.AutoStartConsuming)
+            {
+                StartConsuming();
+            }
         }
 
         private void StartHeartbeatTimer()

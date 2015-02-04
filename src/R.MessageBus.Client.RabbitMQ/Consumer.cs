@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Common.Logging;
 using Newtonsoft.Json;
@@ -32,6 +31,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly bool _errorsDisabled;
         private readonly bool _heartbeatEnabled;
         private readonly ushort _heartbeatTime;
+        private bool _purgeQueuesOnStartup;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -47,6 +47,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _errorsDisabled = transportSettings.DisableErrors;
             _heartbeatEnabled = !transportSettings.ClientSettings.ContainsKey("HeartbeatEnabled") || (bool)transportSettings.ClientSettings["HeartbeatEnabled"];
             _heartbeatTime = transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
+            _purgeQueuesOnStartup = transportSettings.Queue.PurgeOnStartup;
         }
 
         /// <summary>
@@ -187,6 +188,12 @@ namespace R.MessageBus.Client.RabbitMQ
             if (!string.IsNullOrEmpty(_errorExchange))
             {
                 _model.QueueBind(errorQueue, _errorExchange, string.Empty, null);
+            }
+
+            // Purge all messages on queue
+            if (_purgeQueuesOnStartup)
+            {
+                _model.QueuePurge(queueName);
             }
 
             // AUDIT QUEUE

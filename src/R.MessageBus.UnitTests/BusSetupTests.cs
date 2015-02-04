@@ -22,6 +22,8 @@ namespace R.MessageBus.UnitTests
                 config.SetProducer<FakePublisher>();
                 config.PersistenceStoreDatabaseName = "TestDatabaseName";
                 config.PersistenceStoreConnectionString = "TestConnectionString";
+                config.AutoStartConsuming = false;
+                config.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -41,6 +43,8 @@ namespace R.MessageBus.UnitTests
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
                 config.SetProducer<FakePublisher>();
+                config.AutoStartConsuming = false;
+                config.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -61,6 +65,7 @@ namespace R.MessageBus.UnitTests
                 config.SetContainer<FakeContainer>();
                 config.SetProducer<FakePublisher>();
                 config.ScanForMesssageHandlers = true;
+                config.AutoStartConsuming = false;
             });
 
             // Act
@@ -78,6 +83,8 @@ namespace R.MessageBus.UnitTests
             {
                 config.SetContainer<FakeContainer>();
                 config.SetProducer<FakePublisher>();
+                config.AutoStartConsuming = false;
+                config.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -95,6 +102,8 @@ namespace R.MessageBus.UnitTests
             {
                 config.SetConsumer<FakeConsumer>();
                 config.SetProducer<FakePublisher>();
+                config.AutoStartConsuming = false;
+                config.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -112,6 +121,8 @@ namespace R.MessageBus.UnitTests
             {
                 config.SetProducer<FakePublisher>();
                 config.SetContainer<FakeContainer>();
+                config.AutoStartConsuming = false;
+                config.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -129,7 +140,9 @@ namespace R.MessageBus.UnitTests
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainer<FakeContainer>();
-                config.SetProducer<FakePublisher>(); 
+                config.SetProducer<FakePublisher>();
+                config.AutoStartConsuming = false;
+                config.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -165,7 +178,9 @@ namespace R.MessageBus.UnitTests
                 conf.AddQueueMapping(typeof(FakeMessage1), "MyEndPoint1");
                 conf.AddQueueMapping(typeof(FakeMessage2), "MyEndPoint2");
                 conf.SetContainer<FakeContainer>();
-                conf.SetProducer<FakePublisher>(); 
+                conf.SetProducer<FakePublisher>();
+                conf.AutoStartConsuming = false;
+                conf.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -185,6 +200,8 @@ namespace R.MessageBus.UnitTests
                 c.SetQueueName("TestQueue");
                 c.SetContainer<FakeContainer>();
                 c.SetProducer<FakePublisher>();
+                c.AutoStartConsuming = false;
+                c.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -203,6 +220,8 @@ namespace R.MessageBus.UnitTests
                 c.SetErrorQueueName("TestErrorQueue");
                 c.SetContainer<FakeContainer>();
                 c.SetProducer<FakePublisher>();
+                c.AutoStartConsuming = false;
+                c.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -220,7 +239,9 @@ namespace R.MessageBus.UnitTests
             {
                 c.SetAuditQueueName("TestAuditQueue");
                 c.SetContainer<FakeContainer>();
-                c.SetProducer<FakePublisher>(); 
+                c.SetProducer<FakePublisher>();
+                c.AutoStartConsuming = false;
+                c.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -239,6 +260,8 @@ namespace R.MessageBus.UnitTests
                 c.SetHeartbeatQueueName("TestHeartbeatQueue");
                 c.SetContainer<FakeContainer>();
                 c.SetProducer<FakePublisher>();
+                c.AutoStartConsuming = false;
+                c.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -257,6 +280,8 @@ namespace R.MessageBus.UnitTests
                 c.SetAuditingEnabled(true);
                 c.SetContainer<FakeContainer>();
                 c.SetProducer<FakePublisher>();
+                c.AutoStartConsuming = false;
+                c.ScanForMesssageHandlers = false;
             });
 
             // Act
@@ -265,17 +290,53 @@ namespace R.MessageBus.UnitTests
             // Assert
             Assert.True(config.TransportSettings.AuditingEnabled);
         }
-        
+
+        [Fact]
+        public void ShouldPurgeQueuesOnStartup()
+        {
+            // Arrange
+            var bus = Bus.Initialize(c =>
+            {
+                c.SetContainer<FakeContainer>();
+                c.SetProducer<FakePublisher>();
+                c.PurgeQueuesOnStart();
+            });
+
+            // Act
+            var config = bus.Configuration;
+
+            // Assert
+            Assert.True(config.TransportSettings.Queue.PurgeOnStartup);
+        }
+
+        [Fact]
+        public void ShouldScanForMessageHandlersByDefault()
+        {
+            // Arrange
+            var bus = Bus.Initialize(c =>
+            {
+                c.SetContainer<FakeContainer>();
+                c.SetProducer<FakePublisher>();
+                c.AutoStartConsuming = false;
+            });
+
+            // Act
+            var config = bus.Configuration;
+
+            // Assert
+            Assert.True(config.ScanForMesssageHandlers);
+        }
+
         public class FakeContainer : IBusContainer
         {
             public IEnumerable<HandlerReference> GetHandlerTypes()
             {
-                throw new NotImplementedException();
+                return new List<HandlerReference>();
             }
 
             public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
             {
-                throw new NotImplementedException();
+                return new List<HandlerReference>();
             }
 
             public object GetInstance(Type handlerType)
