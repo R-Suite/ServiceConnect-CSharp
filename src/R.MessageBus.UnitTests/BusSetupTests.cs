@@ -392,6 +392,17 @@ namespace R.MessageBus.UnitTests
             }
 
             public string Type { get; private set; }
+
+            public long MaximumMessageSize
+            {
+                get { throw new NotImplementedException(); }
+                set { throw new NotImplementedException(); }
+            }
+
+            public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers)
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public class FakeProcessManagerFinder : IProcessManagerFinder

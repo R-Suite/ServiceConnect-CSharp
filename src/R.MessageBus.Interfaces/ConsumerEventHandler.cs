@@ -2,5 +2,5 @@
 
 namespace R.MessageBus.Interfaces
 {
-    public delegate ConsumeEventResult ConsumerEventHandler(string message, string type, IDictionary<string, object> headers);
+    public delegate ConsumeEventResult ConsumerEventHandler(byte[] message, string type, IDictionary<string, object> headers);
 }
