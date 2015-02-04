@@ -76,5 +76,6 @@ namespace R.MessageBus.Interfaces
         public bool Durable { get; set; }
         public bool Exclusive { get; set; }
         public bool IsReadOnly { get; set; }
+        public bool PurgeOnStartup { get; set; }
     }
 }

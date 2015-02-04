@@ -178,6 +178,19 @@ namespace R.MessageBus.UnitTests
             Assert.Equal(action, configuration.ExceptionHandler);
         }
 
+        [Fact]
+        public void ShouldSetPurgeQueuesOnStart()
+        {
+            // Arrange
+            var configuration = new Configuration();
+
+            // Act
+            configuration.PurgeQueuesOnStart();
+
+            // Assert
+            Assert.Equal(true, configuration.TransportSettings.Queue.PurgeOnStartup);
+        }
+
         public class FakeContainer : IBusContainer
         {
             public IEnumerable<HandlerReference> GetHandlerTypes()
