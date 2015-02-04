@@ -45,6 +45,7 @@ namespace R.MessageBus
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
+        public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
@@ -56,7 +57,10 @@ namespace R.MessageBus
 
         public Configuration()
         {
+            ScanForMesssageHandlers = true;
             AddBusToContainer = true;
+            AutoStartConsuming = true;
+
             var defaultQueueName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
             TransportSettings = new TransportSettings 
@@ -308,6 +312,11 @@ namespace R.MessageBus
         public void SetDisableErrors(bool disable)
         {
             TransportSettings.DisableErrors = disable;
+        }
+
+        public void PurgeQueuesOnStart()
+        {
+            TransportSettings.Queue.PurgeOnStartup = true;
         }
 
         #region Private Methods
