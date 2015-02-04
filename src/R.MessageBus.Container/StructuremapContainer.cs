@@ -17,6 +17,7 @@ namespace R.MessageBus.Container
             {
                 x.For<IMessageHandlerProcessor>().Use<MessageHandlerProcessor>();
                 x.For<IProcessManagerProcessor>().Use<ProcessManagerProcessor>();
+                x.For<IStreamProcessor>().Use<StreamProcessor>();
                 x.For<IProcessManagerPropertyMapper>().Use<ProcessManagerPropertyMapper>();
             });
         }
@@ -45,11 +46,12 @@ namespace R.MessageBus.Container
 
         public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
         {
-            return ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
+            var handlers = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
             {
                 MessageType = instance.PluginType.GetGenericArguments()[0],
                 HandlerType = instance.ConcreteType
             });
+            return handlers;
         }
 
         public object GetInstance(Type handlerType)
@@ -74,6 +76,7 @@ namespace R.MessageBus.Container
                 y.AssembliesFromApplicationBaseDirectory();
                 y.ConnectImplementationsToTypesClosing(typeof(IMessageHandler<>));
                 y.ConnectImplementationsToTypesClosing(typeof(IStartProcessManager<>));
+                y.ConnectImplementationsToTypesClosing(typeof(IStreamHandler<>));
             }));
         }
     }

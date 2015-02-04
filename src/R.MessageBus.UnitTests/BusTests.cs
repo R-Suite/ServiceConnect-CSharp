@@ -135,7 +135,10 @@ namespace R.MessageBus.UnitTests
                 }
             };
 
-            var headers = new Dictionary<string, object>();
+            var headers = new Dictionary<string, object>
+            {
+                { "MessageType", Encoding.ASCII.GetBytes("Send") }
+            };
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
             _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
@@ -148,10 +151,10 @@ namespace R.MessageBus.UnitTests
 
             bus.StartConsuming();
 
-            var message = JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            var message = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            });
+            }));
 
             // Act
             _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
@@ -183,8 +186,10 @@ namespace R.MessageBus.UnitTests
                 }
             };
 
-            var headers = new Dictionary<string, object>();
-
+            var headers = new Dictionary<string, object>
+            {
+                { "MessageType", Encoding.ASCII.GetBytes("Send") }
+            };
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
             _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
             var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
@@ -196,10 +201,10 @@ namespace R.MessageBus.UnitTests
             mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
             bus.StartConsuming();
-            var message = JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            var message = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            });
+            }));
 
             // Act
             _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
@@ -228,8 +233,10 @@ namespace R.MessageBus.UnitTests
                 }
             };
 
-            var headers = new Dictionary<string, object>();
-
+            var headers = new Dictionary<string, object>
+            {
+                { "MessageType", Encoding.ASCII.GetBytes("Send") }
+            };
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
             _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
@@ -262,9 +269,9 @@ namespace R.MessageBus.UnitTests
 
             headers["SourceAddress"] = Encoding.ASCII.GetBytes(_correlationId.ToString());
 
-            var message2 = JsonConvert.SerializeObject(new FakeMessage2(id)
+            var message2 = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new FakeMessage2(id)
             {
-            });
+            }));
 
 
             // Act
@@ -1012,10 +1019,10 @@ namespace R.MessageBus.UnitTests
             bus.StartConsuming();
 
             // Act
-            _fakeEventHandler(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            _fakeEventHandler(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }), typeof(FakeMessage2).FullName, headers);
+            })), typeof(FakeMessage2).FullName, headers);
 
             // Assert
             Assert.True(actionCalled);

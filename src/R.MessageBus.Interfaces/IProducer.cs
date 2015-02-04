@@ -10,5 +10,7 @@ namespace R.MessageBus.Interfaces
         void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message;
         void Disconnect();
         string Type { get;}
+        long MaximumMessageSize { get; }
+        void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers);
     }
 }
