@@ -10,6 +10,7 @@ namespace R.MessageBus.Interfaces
         Type Container { get; set; }
         Type ProcessManagerFinder { get; set; }
         bool ScanForMesssageHandlers { get; set; }
+        bool AutoStartConsuming { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
         ITransportSettings TransportSettings { get; set; }
@@ -155,5 +156,11 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         void SetDisableErrors(bool disable);
+
+        /// <summary>
+        /// Removes all messages from the queue on startup
+        /// </summary>
+        /// <returns></returns>
+        void PurgeQueuesOnStart();
     }
 }
