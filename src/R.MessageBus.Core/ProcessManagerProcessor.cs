@@ -49,33 +49,66 @@ namespace R.MessageBus.Core
             {
                 try
                 {
+                    var messageObject = JsonConvert.DeserializeObject(message, typeof (T));
+
                     // Create instance of the project manager
                     object processManager = _container.GetInstance(processManagerInstance.HandlerType);
 
+                    // Set Process Manager Finder property
+                    PropertyInfo processManagerFinderProp = processManagerInstance.HandlerType.GetProperty("ProcessManagerFinder");
+                    processManagerFinderProp.SetValue(processManager, _processManagerFinder, null);
+
+                    // Execute FindProcessManagerData - see if already exists
+                    object persistanceData = processManagerInstance.HandlerType.GetMethod("FindProcessManagerData").Invoke(processManager, new[] { messageObject });
+                    
                     // Get Data Type
                     Type dataType = processManagerInstance.HandlerType.BaseType.GetGenericArguments()[0];
 
-                    // Create new instance 
-                    var data = (IProcessManagerData) Activator.CreateInstance(dataType);
+                    bool processManagerAlreadyExists = true;
+                    object data;
+
+                    // Process Mnager Data does not exist, create new instance 
+                    if (null == persistanceData)
+                    {
+                        processManagerAlreadyExists = false;
+                        data = (IProcessManagerData) Activator.CreateInstance(dataType);
+                    }
+                    else
+                    {
+                        // Get data from persistance data
+                        Type persistanceType = typeof(IPersistanceData<>).MakeGenericType(dataType);
+                        PropertyInfo dataProp = persistanceType.GetProperty("Data");
+                        data = dataProp.GetValue(persistanceData);
+                    }
 
                     // Set data on process manager
-                    PropertyInfo dataProp = processManagerInstance.HandlerType.GetProperty("Data");
-                    dataProp.SetValue(processManager, data, null);
+                    PropertyInfo prop = processManagerInstance.HandlerType.GetProperty("Data", dataType);
+                    prop.SetValue(processManager, data, null);
 
                     // Set context property value
-                    PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context",
-                        typeof (IConsumeContext));
+                    PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context", typeof (IConsumeContext));
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute process manager execute method
-                    var messageObject = JsonConvert.DeserializeObject(message, typeof (T));
                     processManagerInstance.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new[] { messageObject });
 
-                    // Get data after execute has finished
-                    data = (IProcessManagerData) dataProp.GetValue(processManager);
+                    // Persist data if does not exist
+                    if (!processManagerAlreadyExists)
+                    {
+                        // Get data after execute has finished
+                        data = (IProcessManagerData)prop.GetValue(processManager);
 
-                    // Persist data
-                    _processManagerFinder.InsertData(data);
+                        // Insert it
+                        _processManagerFinder.InsertData((IProcessManagerData) data);
+                    }
+                    else
+                    {
+                        // Otherwise update
+                        _processManagerFinder.GetType()
+                            .GetMethod("UpdateData")
+                            .MakeGenericMethod(dataType)
+                            .Invoke(_processManagerFinder, new[] { persistanceData });
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -146,7 +179,7 @@ namespace R.MessageBus.Core
                     }
 
                     // Get data from persistance data
-                    var persistanceType = typeof (IPersistanceData<>).MakeGenericType(dataType);
+                    Type persistanceType = typeof (IPersistanceData<>).MakeGenericType(dataType);
                     PropertyInfo dataProp = persistanceType.GetProperty("Data");
                     object data = dataProp.GetValue(persistanceData);
 

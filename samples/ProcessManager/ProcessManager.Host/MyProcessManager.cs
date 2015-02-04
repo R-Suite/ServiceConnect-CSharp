@@ -24,7 +24,7 @@ namespace ProcessManager.Host
 
     public class MyProcessManager : R.MessageBus.Core.ProcessManager<MyProcessManagerData>,
         IStartProcessManager<StartProcessManagerMessage>,
-        IMessageHandler<Process1ResponseMessage>,
+        IStartProcessManager<Process1ResponseMessage>,
         IMessageHandler<Process2ResponseMessage>
     {
         private readonly IBus _bus;
