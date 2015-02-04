@@ -19,7 +19,7 @@ namespace ProcessManager.Client
             Console.WriteLine("Press <ENTER> to start ProcessManager(s)");
             Console.ReadLine();
 
-            for (int i = 1; i <= 5000; i++)
+            for (int i = 1; i <= 1; i++)
             {
                 bus.Send("ProcessManager.Host", new StartProcessManagerMessage(Guid.NewGuid()) { ProcessId = i});
             }
