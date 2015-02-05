@@ -7,7 +7,6 @@ namespace R.MessageBus.Persistance.InMemory
     {
         public Guid Id { get; set; }
         public int Version { get; set; }
-
         public T Data { get; set; }
     }
 }

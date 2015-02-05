@@ -5,6 +5,7 @@ using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Container;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
+using R.MessageBus.Persistance.InMemory;
 using R.MessageBus.Persistance.SqlServer;
 using R.MessageBus.Settings;
 using Queue = R.MessageBus.Interfaces.Queue;
@@ -44,6 +45,7 @@ namespace R.MessageBus
         public Type ProducerType { get; set; }
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
+        public Type AggregatorPersistor { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
@@ -82,7 +84,8 @@ namespace R.MessageBus
             ConsumerType = typeof(Consumer);
             ProducerType = typeof(Producer);
             Container = typeof(StructuremapContainer);
-            ProcessManagerFinder = typeof(SqlServerProcessManagerFinder);
+            ProcessManagerFinder = typeof (SqlServerProcessManagerFinder);
+            AggregatorPersistor = typeof (InMemoryAggregatorPersistor);
         }
 
         /// <summary>
@@ -173,6 +176,15 @@ namespace R.MessageBus
         public void SetProcessManagerFinder<T>() where T : class, IProcessManagerFinder
         {
             ProcessManagerFinder = typeof (T);
+        }
+
+        /// <summary>
+        /// Set the aggregator persistor
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        public void SetAggregatorPersistor<T>() where T : class, IAggregatorPersistor
+        {
+            AggregatorPersistor = typeof (T);
         }
 
         /// <summary>
@@ -301,6 +313,11 @@ namespace R.MessageBus
         public IProcessManagerFinder GetProcessManagerFinder()
         {
             return (IProcessManagerFinder)Activator.CreateInstance(ProcessManagerFinder, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
+        }
+
+        public IAggregatorPersistor GetAggregatorPersistor()
+        {
+            return (IAggregatorPersistor)Activator.CreateInstance(AggregatorPersistor, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
         }
 
         public IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid requestMessageId, string messageType)
