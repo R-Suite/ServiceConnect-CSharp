@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
