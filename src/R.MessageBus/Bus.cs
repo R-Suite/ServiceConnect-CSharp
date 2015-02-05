@@ -20,6 +20,7 @@ namespace R.MessageBus
         private readonly IDictionary<string, IMessageBusReadStream> _byteStreams = new Dictionary<string, IMessageBusReadStream>();
         private readonly object _requestLock = new object();
         private readonly object _byteStreamLock = new object();
+        private readonly IList<AggregatorTimer> _aggregatorTimers = new List<AggregatorTimer>();
         private static IProducer _producer;
         private Timer _timer;
         private IConsumer _consumer;
@@ -43,6 +44,7 @@ namespace R.MessageBus
             if (configuration.ScanForMesssageHandlers)
             {
                 _container.ScanForHandlers();
+                StartAggregatorTimers();
             }
 
             if (configuration.TransportSettings.AuditingEnabled)
@@ -53,6 +55,26 @@ namespace R.MessageBus
             if (configuration.AutoStartConsuming)
             {
                 StartConsuming();
+            }
+        }
+
+        private void StartAggregatorTimers()
+        {
+            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes().Where(x => x.HandlerType.BaseType != null && x.HandlerType.BaseType.GetGenericTypeDefinition() == typeof(Aggregator<>));
+            foreach (var handlerReference in instances)
+            {
+                object aggregator = _container.GetInstance(handlerReference.HandlerType);
+                var timeout = (TimeSpan)(handlerReference.HandlerType.GetMethod("Timeout").Invoke(aggregator, new object[] { }));
+                if (timeout != default(TimeSpan))
+                {
+                    var timer = new AggregatorTimer(Configuration.GetAggregatorPersistor(), _container, handlerReference);
+
+                    MethodInfo processManagerProcessorMethod = timer.GetType().GetMethod("StartTimer");
+                    MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(handlerReference.MessageType);
+                    genericProcessManagerProcessorMethod.Invoke(timer, new object[] {timeout});
+
+                    _aggregatorTimers.Add(timer);
+                }
             }
         }
 
@@ -388,6 +410,7 @@ namespace R.MessageBus
                 {
                     ProcessMessageHandlers(message, typeObject, context);
                     ProcessProcessManagerHandlers(message, typeObject, context);
+                    ProcessAggregatorHandlers(message, typeObject);
                     ProcessRequestReplyConfigurations(message, type, context);
 
                     if (headers.ContainsKey("RoutingSlip"))
@@ -532,6 +555,20 @@ namespace R.MessageBus
             genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {Encoding.UTF8.GetString(objectMessage), context});
         }
 
+        private void ProcessAggregatorHandlers(byte[] objectMessage, Type type)
+        {
+            IAggregatorPersistor persistor = Configuration.GetAggregatorPersistor();
+            var processManagerProcessor = _container.GetInstance<IAggregatorProcessor>(new Dictionary<string, object>
+            {
+                {"container", _container},
+                {"aggregatorPersistor", persistor}
+            });
+
+            MethodInfo aggregatorProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
+            MethodInfo genericAggregatorProcessorMethod = aggregatorProcessorMethod.MakeGenericMethod(type);
+            genericAggregatorProcessorMethod.Invoke(processManagerProcessor, new object[] { Encoding.UTF8.GetString(objectMessage) });
+        }
+
         private void ProcessMessageHandlers(byte[] objectMessage, Type type, IConsumeContext context)
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
@@ -556,6 +593,11 @@ namespace R.MessageBus
             if (Configuration.TransportSettings.AuditingEnabled)
             {
                 _timer.Dispose();
+            }
+
+            foreach (AggregatorTimer aggregatorTimer in _aggregatorTimers)
+            {
+                aggregatorTimer.Dispose();
             }
         }
     }
