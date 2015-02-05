@@ -13,7 +13,6 @@ namespace Aggregator
             var bus = Bus.Initialize(x =>
             {
                 x.SetQueueName("Aggregator.Publisher");
-                x.SetHost("lonappdev04");
                 x.PurgeQueuesOnStart();
             });
 
