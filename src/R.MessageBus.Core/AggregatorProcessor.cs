@@ -14,6 +14,7 @@ namespace R.MessageBus.Core
 
         private readonly IAggregatorPersistor _aggregatorPersistor;
         private readonly IBusContainer _container;
+        private readonly object _lock = new object();
 
         public AggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container)
         {
@@ -42,25 +43,29 @@ namespace R.MessageBus.Core
             }
             var typeName = typeof(T).AssemblyQualifiedName;
 
-            _aggregatorPersistor.InsertData(messageObject, typeName);
-
-            if (batchSize != 0)
+            lock (_lock)
             {
-                if (_aggregatorPersistor.Count(typeName) >= batchSize)
+                _aggregatorPersistor.InsertData(messageObject, typeName);
+
+                if (batchSize != 0)
                 {
-                    IList<object> messages = _aggregatorPersistor.GetData(typeName);
-
-                    try
+                    if (_aggregatorPersistor.Count(typeName) >= batchSize)
                     {
-                        aggregatorRef.HandlerType.GetMethod("Execute", new[] { typeof(IList<T>) }).Invoke(aggregator, new object[] { messages.Cast<T>().ToList() });
-                    }
-                    catch (Exception)
-                    {
-                        Logger.Error("Error executing aggregator execute method");
-                        throw;
-                    }
+                        IList<object> messages = _aggregatorPersistor.GetData(typeName);
 
-                    _aggregatorPersistor.RemoveAll(typeName);
+                        try
+                        {
+                            aggregatorRef.HandlerType.GetMethod("Execute", new[] {typeof (IList<T>)})
+                                .Invoke(aggregator, new object[] {messages.Cast<T>().ToList()});
+                        }
+                        catch (Exception)
+                        {
+                            Logger.Error("Error executing aggregator execute method");
+                            throw;
+                        }
+
+                        _aggregatorPersistor.RemoveAll(typeName);
+                    }
                 }
             }
         }
