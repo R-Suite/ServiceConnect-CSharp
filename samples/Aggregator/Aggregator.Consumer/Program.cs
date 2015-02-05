@@ -1,7 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using R.MessageBus;
 
-namespace Streaming.Consumer
+namespace Aggregator.Consumer
 {
     class Program
     {
@@ -10,7 +14,9 @@ namespace Streaming.Consumer
             Console.WriteLine("*********** Consumer 1 ***********");
             Bus.Initialize(x =>
             {
-                x.SetQueueName("StreamConsumer");
+                x.SetQueueName("Aggregator.Consumer");
+                x.SetHost("lonappdev04");
+                x.PurgeQueuesOnStart();
             });
 
             Console.ReadLine();

@@ -9,6 +9,7 @@ namespace R.MessageBus.Interfaces
         Type ProducerType { get; set; }
         Type Container { get; set; }
         Type ProcessManagerFinder { get; set; }
+        Type AggregatorPersistor { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         bool AutoStartConsuming { get; set; }
         string PersistenceStoreConnectionString { get; set; }
@@ -62,6 +63,12 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IProcessManagerFinder</typeparam>
         void SetProcessManagerFinder<T>() where T : class, IProcessManagerFinder;
+
+        /// <summary>
+        /// Set the aggregator persisitor
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        void SetAggregatorPersistor<T>() where T : class, IAggregatorPersistor;
 
         /// <summary>
         /// Sets the consumer type.
@@ -141,6 +148,12 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         IProcessManagerFinder GetProcessManagerFinder();
+
+        /// <summary>
+        /// Gets an instance of the Aggregator Persistor
+        /// </summary>
+        /// <returns></returns>
+        IAggregatorPersistor GetAggregatorPersistor();
 
         /// <summary>
         /// Gets a instance of the RequestConfiguration class.  Used to configure Request Reply messaging.
