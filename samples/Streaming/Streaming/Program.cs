@@ -1,9 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using R.MessageBus;
 using Streaming.Messages;
 
@@ -13,25 +9,27 @@ namespace Streaming
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("*********** Consumer 1 ***********");
+            Console.WriteLine("*********** Producer 1 ***********");
             var bus = Bus.Initialize(x =>
             {
                 x.SetQueueName("StreamPublisher");
-                x.ScanForMesssageHandlers = true;
+                x.PurgeQueuesOnStart();
             });
-            bus.StartConsuming();
 
             FileStream f = new FileStream(@"logo.bmp", FileMode.Open);
 
-            var bytes = new byte[f.Length];
-            f.Read(bytes, 0, Convert.ToInt32(f.Length));
             var stream = bus.CreateStream("StreamConsumer", new StartStreamMessage(Guid.NewGuid())
             {
                 Path = @"logoCopy.bmp"
             });
 
-            Console.WriteLine("Writing Bytes");
-            stream.Write(bytes);
+            byte[] buffer = new byte[100000];
+            int read;
+            while ((read = f.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                Console.WriteLine("Writing Bytes");
+                stream.Write(buffer);
+            }
 
             Console.WriteLine("Stopping sending");
             stream.Close();

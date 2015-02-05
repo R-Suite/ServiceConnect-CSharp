@@ -16,6 +16,7 @@ namespace R.MessageBus.Container
             ObjectFactory.Configure(x =>
             {
                 x.For<IMessageHandlerProcessor>().Use<MessageHandlerProcessor>();
+                x.For<IAggregatorProcessor>().Use<AggregatorProcessor>();
                 x.For<IProcessManagerProcessor>().Use<ProcessManagerProcessor>();
                 x.For<IStreamProcessor>().Use<StreamProcessor>();
                 x.For<IProcessManagerPropertyMapper>().Use<ProcessManagerPropertyMapper>();
@@ -35,7 +36,8 @@ namespace R.MessageBus.Container
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
             IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
-                                                                                                       i.PluginType.Name == typeof(IStartProcessManager<>).Name);
+                                                                                                       i.PluginType.Name == typeof(IStartProcessManager<>).Name || 
+                                                                                                       i.PluginType.Name == typeof(Aggregator<>).Name);
             return instances.Where(instance => instance.ConcreteType != null && !string.IsNullOrEmpty(instance.ConcreteType.Name))
                             .Select(instance => new HandlerReference
             {
@@ -77,6 +79,7 @@ namespace R.MessageBus.Container
                 y.ConnectImplementationsToTypesClosing(typeof(IMessageHandler<>));
                 y.ConnectImplementationsToTypesClosing(typeof(IStartProcessManager<>));
                 y.ConnectImplementationsToTypesClosing(typeof(IStreamHandler<>));
+                y.ConnectImplementationsToTypesClosing(typeof(Aggregator<>));
             }));
         }
     }
