@@ -15,7 +15,6 @@ namespace Aggregator.Consumer
             Bus.Initialize(x =>
             {
                 x.SetQueueName("Aggregator.Consumer");
-                x.SetHost("lonappdev04");
                 x.PurgeQueuesOnStart();
             });
 

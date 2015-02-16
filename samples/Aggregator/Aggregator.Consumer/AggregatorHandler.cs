@@ -7,18 +7,18 @@ namespace Aggregator.Consumer
 {
     public class StreamHandler : Aggregator<TestMessage>
     {
-        //public override int BatchSize()
-        //{
-        //    return 100;
-        //}
+        public override int BatchSize()
+        {
+            return 100;
+        }
         public override TimeSpan Timeout()
         {
-            return new TimeSpan(0, 0, 0, 1);
+            return new TimeSpan(0, 0, 0, 2);
         }
         
         public override void Execute(IList<TestMessage> message)
         {
-            Console.WriteLine("***** Received batch of messages ******");
+            Console.WriteLine("***** Received batch of messages ({0}) ******", message.Count);
         }
     }
 }
