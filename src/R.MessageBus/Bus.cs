@@ -33,7 +33,7 @@ namespace R.MessageBus
 
             _container = configuration.GetContainer();
             _producer = configuration.GetProducer();
-
+            
             _container.Initialize();
 
             if (configuration.AddBusToContainer)
@@ -60,7 +60,9 @@ namespace R.MessageBus
 
         private void StartAggregatorTimers()
         {
-            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes().Where(x => x.HandlerType.BaseType != null && x.HandlerType.BaseType.GetGenericTypeDefinition() == typeof(Aggregator<>));
+            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes().Where(x => x.HandlerType.BaseType != null && 
+                                                                                              x.HandlerType.BaseType.IsGenericTypeDefinition && 
+                                                                                              x.HandlerType.BaseType.GetGenericTypeDefinition() == typeof(Aggregator<>));
             foreach (var handlerReference in instances)
             {
                 object aggregator = _container.GetInstance(handlerReference.HandlerType);
@@ -80,11 +82,20 @@ namespace R.MessageBus
 
         private void StartHeartbeatTimer()
         {
-            var state = new HeartbeatTimerState
+            HeartbeatTimerState state;
+            try
             {
-                CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName),
-                RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName)
-            };
+                state = new HeartbeatTimerState
+                {
+                    CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName),
+                    RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName)
+                };
+            }
+            catch (Exception ex)
+            {
+                
+            }
+            
 
             var timerDelegate = new TimerCallback(CheckStatus);
             _timer = new Timer(timerDelegate, state, new TimeSpan(0, 0, 0), new TimeSpan(0, 0, 30));
