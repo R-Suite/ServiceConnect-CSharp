@@ -82,20 +82,11 @@ namespace R.MessageBus
 
         private void StartHeartbeatTimer()
         {
-            HeartbeatTimerState state;
-            try
+            var state = new HeartbeatTimerState
             {
-                state = new HeartbeatTimerState
-                {
-                    CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName),
-                    RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName)
-                };
-            }
-            catch (Exception ex)
-            {
-                
-            }
-            
+                CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName),
+                RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName)
+            };
 
             var timerDelegate = new TimerCallback(CheckStatus);
             _timer = new Timer(timerDelegate, state, new TimeSpan(0, 0, 0), new TimeSpan(0, 0, 30));
