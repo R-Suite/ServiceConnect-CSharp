@@ -25,6 +25,10 @@ namespace R.MessageBus.Core
         public void ProcessMessage<T>(string message) where T : Message
         {
             List<HandlerReference> aggregatorInstances = _container.GetHandlerTypes(typeof(Aggregator<T>)).ToList();
+            if (aggregatorInstances.Count == 0)
+            {
+                return;
+            }
             if (aggregatorInstances.Count > 1)
             {
                 throw new Exception("Can only have one implementation of an aggregator per message type.");
