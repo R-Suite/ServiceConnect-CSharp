@@ -383,7 +383,7 @@ namespace R.MessageBus
                 { "SequenceId", sequenceId }
             };
             SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 10000);
-            var stream = new MessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId);
+            var stream = Configuration.GetMessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId);
             return stream;
         }
 
@@ -462,14 +462,12 @@ namespace R.MessageBus
                 {
                     var requestMessageId = Encoding.UTF8.GetString((byte[]) headers["RequestMessageId"]);
                     var sourceAddress = Encoding.UTF8.GetString((byte[])headers["SourceAddress"]);
+
+                    stream = Configuration.GetMessageBusReadStream();
+                    stream.CompleteEventHandler = StreamCompleteEventHandler;
+                    stream.SequenceId = sequenceId;
                     
-                    stream = new MessageBusReadStream
-                    {
-                        CompleteEventHandler = StreamCompleteEventHandler,
-                        SequenceId = sequenceId
-                    };
-                    
-                    var messageHandlerProcessor = _container.GetInstance<StreamProcessor>(new Dictionary<string, object>
+                    var messageHandlerProcessor = _container.GetInstance<IStreamProcessor>(new Dictionary<string, object>
                     {
                         {"container", _container}
                     });

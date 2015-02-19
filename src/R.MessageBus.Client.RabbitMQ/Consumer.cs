@@ -31,7 +31,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly bool _errorsDisabled;
         private readonly bool _heartbeatEnabled;
         private readonly ushort _heartbeatTime;
-        private bool _purgeQueuesOnStartup;
+        private readonly bool _purgeQueuesOnStartup;
 
         public Consumer(ITransportSettings transportSettings)
         {
