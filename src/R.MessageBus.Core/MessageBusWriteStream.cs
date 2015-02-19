@@ -36,7 +36,7 @@ namespace R.MessageBus.Core
             }
         }
 
-        public static byte[] SubArray(byte[] data, Int64 index, Int64 length)
+        private static byte[] SubArray(byte[] data, Int64 index, Int64 length)
         {
             if (data.Length < index + length)
             {

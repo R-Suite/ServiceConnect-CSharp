@@ -46,6 +46,8 @@ namespace R.MessageBus
         public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public Type AggregatorPersistor { get; set; }
+        public Type MessageBusReadStream { get; set; }
+        public Type MessageBusWriteStream { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
@@ -86,6 +88,8 @@ namespace R.MessageBus
             Container = typeof(StructuremapContainer);
             ProcessManagerFinder = typeof (SqlServerProcessManagerFinder);
             AggregatorPersistor = typeof (InMemoryAggregatorPersistor);
+            MessageBusReadStream = typeof (MessageBusReadStream);
+            MessageBusWriteStream = typeof (IMessageBusWriteStream);
         }
 
         /// <summary>
@@ -334,6 +338,16 @@ namespace R.MessageBus
         public void PurgeQueuesOnStart()
         {
             TransportSettings.Queue.PurgeOnStartup = true;
+        }
+
+        public IMessageBusReadStream GetMessageBusReadStream()
+        {
+            return (IMessageBusReadStream) Activator.CreateInstance(MessageBusReadStream);
+        }
+
+        public IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId)
+        {
+            return (IMessageBusWriteStream)Activator.CreateInstance(MessageBusWriteStream, producer, endpoint, sequenceId);
         }
 
         #region Private Methods
