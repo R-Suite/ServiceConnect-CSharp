@@ -299,6 +299,7 @@ namespace R.MessageBus.UnitTests
             {
                 c.SetContainer<FakeContainer>();
                 c.SetProducer<FakePublisher>();
+                c.SetConsumer<FakeConsumer>();
                 c.PurgeQueuesOnStart();
             });
 

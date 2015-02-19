@@ -10,6 +10,8 @@ namespace R.MessageBus.Interfaces
         Type Container { get; set; }
         Type ProcessManagerFinder { get; set; }
         Type AggregatorPersistor { get; set; }
+        Type MessageBusReadStream { get; set; }
+        Type MessageBusWriteStream { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         bool AutoStartConsuming { get; set; }
         string PersistenceStoreConnectionString { get; set; }
@@ -175,5 +177,17 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         void PurgeQueuesOnStart();
+
+        /// <summary>
+        /// Gets an instance of the MessageBusReadStream
+        /// </summary>
+        /// <returns></returns>
+        IMessageBusReadStream GetMessageBusReadStream();
+
+        /// <summary>
+        /// Gets an instance of the MessageBusWriteStream
+        /// </summary>
+        /// <returns></returns>
+        IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId);
     }
 }
