@@ -58,7 +58,6 @@ namespace ScatterGather
         {
             var id = Guid.NewGuid();
             var responses = _bus.PublishRequest<Request, Response>(new Request(id), 2);
-
             foreach (var response in responses)
             {
                 Console.WriteLine("Received response from - {0}", response.Endpoint);
