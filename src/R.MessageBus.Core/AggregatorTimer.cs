@@ -1,30 +1,28 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Threading;
 using Common.Logging;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
 {
-    public class AggregatorTimer : IDisposable
+    public class AggregatorTimer : IAggregatorTimer
     {
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly IAggregatorPersistor _aggregatorPersistor;
         private readonly IBusContainer _container;
-        private readonly HandlerReference _aggregatorReference;
+        private readonly Type _handlerType;
         private Timer _timer;
         private Type _type;
         private Type _genericListType;
         private readonly object _lock = new object();
 
-        public AggregatorTimer(IAggregatorPersistor aggregatorPersistor, IBusContainer container, HandlerReference aggregatorReference)
+        public AggregatorTimer(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
         {
-            _aggregatorReference = aggregatorReference;
+            _handlerType = handlerType;
             _aggregatorPersistor = aggregatorPersistor;
             _container = container;
         }
@@ -42,7 +40,7 @@ namespace R.MessageBus.Core
             {
                 if (_aggregatorPersistor.Count(_type.AssemblyQualifiedName) > 0)
                 {
-                    object aggregator = _container.GetInstance(_aggregatorReference.HandlerType);
+                    object aggregator = _container.GetInstance(_handlerType);
                     var messages = _aggregatorPersistor.GetData(_type.AssemblyQualifiedName);
                     var messageList = (IList)Activator.CreateInstance(_genericListType);
 
@@ -53,7 +51,7 @@ namespace R.MessageBus.Core
 
                     try
                     {
-                        _aggregatorReference.HandlerType.GetMethod("Execute", new[] { _genericListType }).Invoke(aggregator, new object[] { messageList });
+                        _handlerType.GetMethod("Execute", new[] { _genericListType }).Invoke(aggregator, new object[] { messageList });
                     }
                     catch (Exception)
                     {
