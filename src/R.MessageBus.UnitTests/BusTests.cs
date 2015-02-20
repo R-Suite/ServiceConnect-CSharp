@@ -47,7 +47,8 @@ namespace R.MessageBus.UnitTests
             bus.StartConsuming();
 
             // Assert
-            _mockContainer.Verify(x => x.GetHandlerTypes(), Times.Once);
+            // One time for handlers and one time for aggregators
+            _mockContainer.Verify(x => x.GetHandlerTypes(), Times.Exactly(2));
             _mockContainer.VerifyAll();
         }
 
