@@ -12,7 +12,7 @@ namespace PolymorphicMessages.Producer
             var bus = Bus.Initialize(config =>
             {
                 config.AddQueueMapping(typeof (DerivedType), "PolymorphicConsumer");
-                config.AddQueueMapping(typeof (BaseType), "PolymorphicConsumer");
+                config.AddQueueMapping(typeof(BaseType), "PolymorphicConsumer");
             });
 
             while (true)

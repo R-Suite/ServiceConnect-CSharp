@@ -34,7 +34,7 @@
   <ItemGroup>
     <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.Interfaces.1.1.7-beta\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

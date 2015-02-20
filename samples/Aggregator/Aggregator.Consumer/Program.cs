@@ -11,7 +11,7 @@ namespace Aggregator.Consumer
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("*********** Consumer 1 ***********");
+            Console.WriteLine("*********** Consumer ***********");
             Bus.Initialize(x =>
             {
                 x.SetQueueName("Aggregator.Consumer");

@@ -9,7 +9,7 @@ namespace Aggregator
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("*********** Consumer 1 ***********");
+            Console.WriteLine("*********** Publisher ***********");
             var bus = Bus.Initialize(x =>
             {
                 x.SetQueueName("Aggregator.Publisher");

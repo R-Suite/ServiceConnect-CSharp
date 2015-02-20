@@ -12,13 +12,10 @@ namespace ScatterGather.Consumer1
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Consumer 1 ***********");
-            var bus = Bus.Initialize(x =>
+            Bus.Initialize(x =>
             {
-                x.ScanForMesssageHandlers = true;
                 x.SetQueueName("Consumer1");
             });
-
-            bus.StartConsuming();
 
             Console.ReadLine();
         }

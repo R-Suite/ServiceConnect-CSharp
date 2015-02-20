@@ -8,13 +8,8 @@ namespace RoutingSlip.Endpoint2
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Endpoint 2 ***********");
-            var bus = Bus.Initialize(x =>
-            {
-                x.ScanForMesssageHandlers = true;
-            });
-
-            bus.StartConsuming();
-
+            Bus.Initialize();
+            
             Console.ReadLine();
         }
     }
