@@ -16,6 +16,6 @@ namespace R.MessageBus.Core
             return 0;
         }
 
-        public abstract void Execute(IList<T> message);
+        public abstract void Execute(IList<T> messages);
     }
 }

@@ -48,6 +48,7 @@ namespace R.MessageBus
         public Type AggregatorPersistor { get; set; }
         public Type MessageBusReadStream { get; set; }
         public Type MessageBusWriteStream { get; set; }
+        public Type AggregatorTimer { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
@@ -90,6 +91,7 @@ namespace R.MessageBus
             AggregatorPersistor = typeof (InMemoryAggregatorPersistor);
             MessageBusReadStream = typeof (MessageBusReadStream);
             MessageBusWriteStream = typeof (IMessageBusWriteStream);
+            AggregatorTimer = typeof (AggregatorTimer);
         }
 
         /// <summary>
@@ -348,6 +350,11 @@ namespace R.MessageBus
         public IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId)
         {
             return (IMessageBusWriteStream)Activator.CreateInstance(MessageBusWriteStream, producer, endpoint, sequenceId);
+        }
+
+        public IAggregatorTimer GetAggregatorTimer(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
+        {
+            return (IAggregatorTimer)Activator.CreateInstance(AggregatorTimer, aggregatorPersistor, container, handlerType);
         }
 
         #region Private Methods
