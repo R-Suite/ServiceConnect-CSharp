@@ -10,11 +10,7 @@ namespace ProcessManager.Client
         static void Main(string[] args)
         {
             Console.WriteLine("*********** ProcessManager.Client ***********");
-            IBus bus = Bus.Initialize(config =>
-            {
-                config.ScanForMesssageHandlers = true;
-            });
-            bus.StartConsuming();
+            IBus bus = Bus.Initialize();
 
             Console.WriteLine("Press <ENTER> to start ProcessManager(s)");
             Console.ReadLine();
