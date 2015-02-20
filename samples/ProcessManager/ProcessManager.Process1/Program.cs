@@ -9,11 +9,7 @@ namespace ProcessManager.Process1
         static void Main(string[] args)
         {
             Console.WriteLine("*********** ProcessManager.Process1 ***********");
-            IBus bus = Bus.Initialize(config =>
-            {
-                config.ScanForMesssageHandlers = true;
-            });
-            bus.StartConsuming();
+            Bus.Initialize();
         }
     }
 }

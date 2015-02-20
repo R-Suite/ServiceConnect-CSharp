@@ -9,7 +9,10 @@ namespace CompetingConsumers.Producer
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize(config => config.AddQueueMapping(typeof(PointToPointMessage), "CompetingConsumers"));
+            var bus = Bus.Initialize(config =>
+            {
+                config.AddQueueMapping(typeof(PointToPointMessage), "CompetingConsumers");
+            });
 
             while (true)
             {

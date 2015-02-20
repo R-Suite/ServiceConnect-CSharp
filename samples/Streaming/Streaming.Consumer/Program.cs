@@ -11,6 +11,7 @@ namespace Streaming.Consumer
             Bus.Initialize(x =>
             {
                 x.SetQueueName("StreamConsumer");
+                x.PurgeQueuesOnStart();
             });
 
             Console.ReadLine();

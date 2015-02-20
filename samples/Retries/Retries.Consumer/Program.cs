@@ -8,14 +8,11 @@ namespace Retries.Consumer
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Consumer ***********");
-            var bus = Bus.Initialize(x =>
+            Bus.Initialize(x =>
             {
-                x.ScanForMesssageHandlers = true;
                 x.SetQueueName("RetryTest");
             });
-
-            bus.StartConsuming();
-
+            
             Console.ReadLine();
         }
     }

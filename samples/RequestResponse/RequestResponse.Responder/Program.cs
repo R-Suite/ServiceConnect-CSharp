@@ -9,14 +9,11 @@ namespace RequestResponse.Responder
         {
             Console.WriteLine("*********** Responder ***********");
 
-            var bus = Bus.Initialize(x =>
+            Bus.Initialize(x =>
             {
-                x.ScanForMesssageHandlers = true;
                 x.SetQueueName("Responder");
             });
-
-            bus.StartConsuming();
-
+            
             Console.ReadLine();
         }
     }
