@@ -62,9 +62,9 @@ namespace R.MessageBus.Core
                             aggregatorRef.HandlerType.GetMethod("Execute", new[] {typeof (IList<T>)})
                                 .Invoke(aggregator, new object[] {messages.Cast<T>().ToList()});
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            Logger.Error("Error executing aggregator execute method");
+                            Logger.Error("Error executing aggregator execute method", ex);
                             throw;
                         }
 
