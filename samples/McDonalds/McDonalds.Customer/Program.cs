@@ -13,7 +13,6 @@ namespace McDonalds.Customer
             Console.WriteLine("*********** Customer ***********");
             IBus bus = Bus.Initialize(config =>
             {
-                config.SetHost("lonappdev04");
                 config.ScanForMesssageHandlers = true;
                 config.SetAuditingEnabled(true);
             });

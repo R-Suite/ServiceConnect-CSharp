@@ -10,7 +10,6 @@ namespace McDonalds.BurgerFlipper
             Console.WriteLine("*********** Burger Flipper ***********");
             var bus = Bus.Initialize(x =>
             {
-                x.SetHost("lonappdev04");
                 x.ScanForMesssageHandlers = true;
                 x.SetAuditingEnabled(true);
             });

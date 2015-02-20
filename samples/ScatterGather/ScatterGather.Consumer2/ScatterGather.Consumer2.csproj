@@ -32,44 +32,57 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Common.Logging">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\Common.Logging.dll</HintPath>
+    <Reference Include="Common.Logging, Version=3.0.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Common.Logging.dll</HintPath>
     </Reference>
-    <Reference Include="Common.Logging.Core">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\Common.Logging.Core.dll</HintPath>
+    <Reference Include="Common.Logging.Core, Version=3.0.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Common.Logging.Core.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\Newtonsoft.Json.dll</HintPath>
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.dll</HintPath>
+    <Reference Include="R.MessageBus, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Client.RabbitMQ">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+    <Reference Include="R.MessageBus.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Container">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.Container.dll</HintPath>
+    <Reference Include="R.MessageBus.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Container.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Core">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.Core.dll</HintPath>
+    <Reference Include="R.MessageBus.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Core.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.Interfaces.dll</HintPath>
+    <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.InMemory">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.InMemory.dll</HintPath>
+    <Reference Include="R.MessageBus.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.InMemory.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.SqlServer">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.SqlServer.dll</HintPath>
+    <Reference Include="R.MessageBus.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Settings">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\R.MessageBus.Settings.dll</HintPath>
+    <Reference Include="R.MessageBus.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Settings.dll</HintPath>
     </Reference>
-    <Reference Include="RabbitMQ.Client">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\RabbitMQ.Client.dll</HintPath>
+    <Reference Include="RabbitMQ.Client, Version=3.2.1.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\RabbitMQ.Client.dll</HintPath>
     </Reference>
-    <Reference Include="StructureMap">
-      <HintPath>..\..\..\git\R.MessageBus\src\R.MessageBus\bin\Debug\StructureMap.dll</HintPath>
+    <Reference Include="StructureMap, Version=2.6.4.0, Culture=neutral, PublicKeyToken=e60ad81abae3c223, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
