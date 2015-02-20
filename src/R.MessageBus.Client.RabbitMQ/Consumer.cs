@@ -299,12 +299,11 @@ namespace R.MessageBus.Client.RabbitMQ
             // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
             // dead-letter exchange is of type "direct" and bound to the original queue.
             _retryQueueName = _queueName + ".Retries";
-            var autoDelete = _exclusive;
             string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
 
             try
             {
-                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", true, autoDelete, null);
+                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", _exclusive, _autoDelete, null);
             }
             catch (Exception ex)
             {
@@ -328,7 +327,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             try
             {
-                _model.QueueDeclare(_retryQueueName, _transportSettings.Queue.Durable, _exclusive, false, arguments);
+                _model.QueueDeclare(_retryQueueName, _transportSettings.Queue.Durable, _exclusive, _autoDelete, arguments);
             }
             catch (Exception ex)
             {
@@ -366,7 +365,7 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             try
             {
-                _model.ExchangeDeclare(exchangeName, "fanout", true, _exclusive, null);
+                _model.ExchangeDeclare(exchangeName, "fanout", _exclusive, _autoDelete, null);
             }
             catch (Exception ex)
             {
