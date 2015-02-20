@@ -57,25 +57,38 @@ namespace R.MessageBus.Client.RabbitMQ
         /// <param name="args"></param>
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
         {
-            var headers = args.BasicProperties.Headers;
+            ConsumeEventResult result;
 
-            SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
-            SetHeader(args, "DestinationMachine", Environment.MachineName);
-            SetHeader(args, "DestinationAddress", _transportSettings.Queue.Name);
-
-            if (!headers.ContainsKey("FullTypeName"))
+            try
             {
-                const string errMsg = "Error processing message, Message headers must contain FullTypeName.";
-                Logger.Error(errMsg);
-                throw new Exception(errMsg);
+                var headers = args.BasicProperties.Headers;
+
+                SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
+                SetHeader(args, "DestinationMachine", Environment.MachineName);
+                SetHeader(args, "DestinationAddress", _transportSettings.Queue.Name);
+
+                if (!headers.ContainsKey("FullTypeName"))
+                {
+                    const string errMsg = "Error processing message, Message headers must contain FullTypeName.";
+                    Logger.Error(errMsg);
+                    throw new Exception(errMsg);
+                }
+
+                var typeName = Encoding.UTF8.GetString((byte[])headers["FullTypeName"]);
+
+                result = _consumerEventHandler(args.Body, typeName, headers);
+                _model.BasicAck(args.DeliveryTag, false);
+
+                SetHeader(args, "TimeProcessed", DateTime.UtcNow.ToString("O"));
             }
-
-            var typeName = Encoding.UTF8.GetString((byte[])headers["FullTypeName"]);
-
-            ConsumeEventResult result = _consumerEventHandler(args.Body, typeName, headers);
-            _model.BasicAck(args.DeliveryTag, false);
-
-            SetHeader(args, "TimeProcessed", DateTime.UtcNow.ToString("O"));
+            catch (Exception ex)
+            {
+                result = new ConsumeEventResult
+                {
+                    Exception = ex,
+                    Success = false
+                };
+            }
 
             if (!result.Success)
             {
@@ -147,7 +160,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private void CreateConsumer()
         {
-            Logger.DebugFormat("Connecting to queue - {0}", _queueName);
+            Logger.DebugFormat("Creating consumer on queue {0}", _queueName);
 
             var connectionFactory = new ConnectionFactory
             {
@@ -193,6 +206,7 @@ namespace R.MessageBus.Client.RabbitMQ
             // Purge all messages on queue
             if (_purgeQueuesOnStartup)
             {
+                Logger.Debug("Purging queue");
                 _model.QueuePurge(queueName);
             }
 
@@ -212,6 +226,8 @@ namespace R.MessageBus.Client.RabbitMQ
             consumer.Received += Event;
             consumer.Shutdown += ConsumerShutdown;
             _model.BasicConsume(queueName, false, consumer);
+
+            Logger.Debug("Started consuming");
         }
 
         public void ConsumeMessageType(string messageTypeName)
@@ -236,6 +252,8 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             if (_connectionClosed)
             {
+                Logger.Debug("Heartbeat missed but connection has been closed so not reconnecting");
+
                 return;
             }
 
@@ -250,6 +268,8 @@ namespace R.MessageBus.Client.RabbitMQ
                     _activeHost = 0;
                 }
             }
+
+            Logger.Debug("Heartbeat missed reconnecting to queue");
 
             Retry.Do(CreateConsumer, ex => Logger.Error("Error connecting to queue - {0}", ex), new TimeSpan(0, 0, 0, 10));
         }
@@ -282,6 +302,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureQueue()
         {
+            Logger.Debug("Configuring queue");
+
             var arguments = _transportSettings.Queue.Arguments;
             try
             {
@@ -301,6 +323,8 @@ namespace R.MessageBus.Client.RabbitMQ
             _retryQueueName = _queueName + ".Retries";
             string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
 
+            Logger.Debug("Configuring retry exchange");
+
             try
             {
                 _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", _exclusive, _autoDelete, null);
@@ -318,6 +342,8 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 Logger.Warn(string.Format("Error binding dead letter queue - {0}", ex.Message));
             }
+
+            Logger.Debug("Configuring retry queue");
 
             var arguments = new Dictionary<string, object>
             {
@@ -337,6 +363,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureErrorQueue()
         {
+            Logger.Debug("Configuring error queue");
+
             try
             {
                 _model.QueueDeclare(_transportSettings.ErrorQueueName, true, false, false, null);
@@ -350,6 +378,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureAuditQueue()
         {
+            Logger.Debug("Configuring audit queue");
+
             try
             {
                 _model.QueueDeclare(_transportSettings.AuditQueueName, true, false, false, null);
@@ -363,6 +393,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureExchange(string exchangeName)
         {
+            Logger.Debug("Configuring exchange");
+
             try
             {
                 _model.ExchangeDeclare(exchangeName, "fanout", _exclusive, _autoDelete, null);
@@ -377,6 +409,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureErrorExchange()
         {
+            Logger.Debug("Configuring error exchange");
+
             try
             {
                 _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct");
@@ -391,6 +425,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
         private string ConfigureAuditExchange()
         {
+            Logger.Debug("Configuring audit exchange");
+
             try
             {
                 _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct");
@@ -420,6 +456,8 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 _model.Abort();
             }
+
+            Logger.Debug("Disposing message bus consumer");
         }
     }
 }
