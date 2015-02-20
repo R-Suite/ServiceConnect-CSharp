@@ -13,10 +13,7 @@ namespace RecipientList.Publisher
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            _bus = Bus.Initialize(config =>
-            {
-                config.SetHost("lonappdev04");
-            });
+            _bus = Bus.Initialize();
             _bus.StartConsuming();
 
             while (true)

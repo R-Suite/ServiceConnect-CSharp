@@ -12,6 +12,7 @@ namespace PointToPoint.Consumer
             {
                 x.ScanForMesssageHandlers = true;
                 x.SetQueueName("PointToPoint");
+                x.SetHost("lonappdev04");
             });
 
             bus.StartConsuming();

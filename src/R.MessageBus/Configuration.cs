@@ -90,7 +90,7 @@ namespace R.MessageBus
             ProcessManagerFinder = typeof (SqlServerProcessManagerFinder);
             AggregatorPersistor = typeof (InMemoryAggregatorPersistor);
             MessageBusReadStream = typeof (MessageBusReadStream);
-            MessageBusWriteStream = typeof (IMessageBusWriteStream);
+            MessageBusWriteStream = typeof (MessageBusWriteStream);
             AggregatorTimer = typeof (AggregatorTimer);
         }
 
