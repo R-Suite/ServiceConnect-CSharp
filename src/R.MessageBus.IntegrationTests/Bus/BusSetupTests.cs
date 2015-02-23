@@ -16,6 +16,7 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Act
             IConfiguration configuration = bus.Configuration;
+            bus.Dispose();
 
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
@@ -32,6 +33,7 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Act
             IConfiguration configuration = bus.Configuration;
+            bus.Dispose();
 
             // Assert
             Assert.Equal("TestDatabase", configuration.PersistenceStoreDatabaseName);
@@ -59,6 +61,7 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Act
             IConfiguration configuration = bus.Configuration;
+            bus.Dispose();
 
             // Assert
             Assert.Equal("NewDatabase", configuration.PersistenceStoreDatabaseName);
@@ -76,6 +79,7 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Act
             IConfiguration configuration = bus.Configuration;
+            bus.Dispose();
 
             // Assert
             Assert.Equal("NewErrorQueue", configuration.TransportSettings.ErrorQueueName);
@@ -93,6 +97,7 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Act
             IConfiguration configuration = bus.Configuration;
+            bus.Dispose();
 
             // Assert
             Assert.Equal("NewAuditQueue", configuration.TransportSettings.AuditQueueName);
@@ -110,6 +115,7 @@ namespace R.MessageBus.IntegrationTests.Bus
 
             // Act
             IConfiguration configuration = bus.Configuration;
+            bus.Dispose();
 
             // Assert
             Assert.False(configuration.TransportSettings.AuditingEnabled);
