@@ -327,7 +327,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             try
             {
-                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", _exclusive, _autoDelete, null);
+                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct",  _transportSettings.Queue.Durable, _autoDelete, null);
             }
             catch (Exception ex)
             {
@@ -397,7 +397,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             try
             {
-                _model.ExchangeDeclare(exchangeName, "fanout", _exclusive, _autoDelete, null);
+                _model.ExchangeDeclare(exchangeName, "fanout",  _transportSettings.Queue.Durable, _autoDelete, null);
             }
             catch (Exception ex)
             {

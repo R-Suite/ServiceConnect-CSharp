@@ -250,7 +250,7 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             try
             {
-                _model.ExchangeDeclare(exchangeName, "fanout", true);
+                _model.ExchangeDeclare(exchangeName, "fanout", _transportSettings.Queue.Durable, _transportSettings.Queue.AutoDelete, null);
             }
             catch (Exception ex)
             {
