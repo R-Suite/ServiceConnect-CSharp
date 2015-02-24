@@ -16,11 +16,11 @@ namespace PublishSubscribe.Publisher
                 Console.WriteLine("Press enter to publish message");
                 Console.ReadLine();
 
-                var id = Guid.NewGuid();
-                bus.Publish(new PublishSubscribeMessage(id));
-
-                Console.WriteLine("Published message - {0}", id);
-                Console.WriteLine("");
+                for (int i = 0; i < 1000000; i++)
+                {
+                    var id = Guid.NewGuid();
+                    bus.Publish(new PublishSubscribeMessage(id));
+                }
             }
         }
     }
