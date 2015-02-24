@@ -1,3 +1,5 @@
+**_Getting closer... Major/Production-ready release is planned for the end of March 2015._**
+
 # R.MessageBus
 A simple, easy to use asynchronous messaging framework for .NET.
 
