@@ -29,11 +29,6 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         string Password { get; set; }
 
-        /// <summary>
-        /// Message queue settings
-        /// </summary>
-        Queue Queue { get; set; }
-
         string MachineName { get; set; }
 
         /// <summary>
@@ -65,17 +60,9 @@ namespace R.MessageBus.Interfaces
         /// Contains settings specific to client
         /// </summary>
         IDictionary<string, object> ClientSettings { get; set; }
-    }
 
-    public class Queue
-    {
-        public string Name { get; set; }
-        public string RoutingKey { get; set; }
-        public Dictionary<string, object> Arguments { get; set; }
-        public bool AutoDelete { get; set; }
-        public bool Durable { get; set; }
-        public bool Exclusive { get; set; }
-        public bool IsReadOnly { get; set; }
-        public bool PurgeOnStartup { get; set; }
+        string QueueName { get; set; }
+
+        bool PurgeQueueOnStartup { get; set; }
     }
 }

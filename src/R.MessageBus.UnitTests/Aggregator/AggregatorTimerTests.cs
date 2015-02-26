@@ -38,7 +38,6 @@ namespace R.MessageBus.UnitTests.Aggregator
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.AutoStartConsuming).Returns(true);
             mockConfiguration.Setup(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.TransportSettings.Queue).Returns(new Queue());
             mockConfiguration.Setup(x => x.GetConsumer()).Returns(new Mock<IConsumer>().Object);
 
             // Act
