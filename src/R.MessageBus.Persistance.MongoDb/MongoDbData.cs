@@ -7,7 +7,7 @@ namespace R.MessageBus.Persistance.MongoDb
     {
         public Guid Id { get; set; }
         public int Version { get; set; }
-
         public T Data { get; set; }
+        public string Name { get; set; }
     }
 }
