@@ -99,7 +99,7 @@ namespace R.MessageBus
             {
                 Timestamp = DateTime.UtcNow,
                 Location = Configuration.TransportSettings.MachineName,
-                Name = Configuration.TransportSettings.Queue.Name,
+                Name = Configuration.TransportSettings.QueueName,
                 LatestCpu = heartbeatState.CpuCounter.NextValue(),
                 LatestMemory = heartbeatState.RamCounter.NextValue(),
                 Language = "C#",
@@ -137,7 +137,7 @@ namespace R.MessageBus
 
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
 
-            string queueName = Configuration.TransportSettings.Queue.Name;
+            string queueName = Configuration.TransportSettings.QueueName;
 
             _consumer = Configuration.GetConsumer();
             _consumer.StartConsuming(ConsumeMessageEvent, queueName);
