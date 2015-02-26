@@ -32,6 +32,8 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly bool _heartbeatEnabled;
         private readonly ushort _heartbeatTime;
         private readonly bool _purgeQueuesOnStartup;
+        private readonly IDictionary<string, object> _queueArguments;
+        private readonly bool _durable;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -42,12 +44,14 @@ namespace R.MessageBus.Client.RabbitMQ
 
             _retryDelay = transportSettings.RetryDelay;
             _maxRetries = transportSettings.MaxRetries;
-            _exclusive = transportSettings.Queue.Exclusive;
-            _autoDelete = transportSettings.Queue.AutoDelete;
+            _durable = !transportSettings.ClientSettings.ContainsKey("Durable") || (bool)transportSettings.ClientSettings["Durable"];
+            _exclusive = transportSettings.ClientSettings.ContainsKey("Exclusive") && (bool)transportSettings.ClientSettings["Exclusive"];
+            _autoDelete = transportSettings.ClientSettings.ContainsKey("AutoDelete") && (bool)transportSettings.ClientSettings["AutoDelete"];
+            _queueArguments = transportSettings.ClientSettings.ContainsKey("Arguments") ? (IDictionary<string, object>)transportSettings.ClientSettings["Arguments"] : new Dictionary<string, object>();
             _errorsDisabled = transportSettings.DisableErrors;
             _heartbeatEnabled = !transportSettings.ClientSettings.ContainsKey("HeartbeatEnabled") || (bool)transportSettings.ClientSettings["HeartbeatEnabled"];
             _heartbeatTime = transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
-            _purgeQueuesOnStartup = transportSettings.Queue.PurgeOnStartup;
+            _purgeQueuesOnStartup = transportSettings.PurgeQueueOnStartup;
         }
 
         /// <summary>
@@ -65,7 +69,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
                 SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
                 SetHeader(args, "DestinationMachine", Environment.MachineName);
-                SetHeader(args, "DestinationAddress", _transportSettings.Queue.Name);
+                SetHeader(args, "DestinationAddress", _transportSettings.QueueName);
 
                 if (!headers.ContainsKey("FullTypeName"))
                 {
@@ -224,7 +228,10 @@ namespace R.MessageBus.Client.RabbitMQ
 
             var consumer = new EventingBasicConsumer();
             consumer.Received += Event;
-            consumer.Shutdown += ConsumerShutdown;
+            if (_heartbeatEnabled)
+            {
+                consumer.Shutdown += ConsumerShutdown;
+            }
             _model.BasicConsume(queueName, false, consumer);
 
             Logger.Debug("Started consuming");
@@ -236,7 +243,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (!string.IsNullOrEmpty(exchange))
             {
-                _model.QueueBind(_queueName, exchange, string.Empty);
+                _model.QueueBind(_queueName, messageTypeName, string.Empty);
             }
         }
 
@@ -253,7 +260,6 @@ namespace R.MessageBus.Client.RabbitMQ
             if (_connectionClosed)
             {
                 Logger.Debug("Heartbeat missed but connection has been closed so not reconnecting");
-
                 return;
             }
 
@@ -304,10 +310,9 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             Logger.Debug("Configuring queue");
 
-            var arguments = _transportSettings.Queue.Arguments;
             try
             {
-                _model.QueueDeclare(_queueName, _transportSettings.Queue.Durable, _exclusive, _autoDelete, arguments);
+                _model.QueueDeclare(_queueName, _durable, _exclusive, _autoDelete, _queueArguments);
             }
             catch (Exception ex)
             {
@@ -327,7 +332,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             try
             {
-                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct",  _transportSettings.Queue.Durable, _autoDelete, null);
+                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct",  _durable, _autoDelete, null);
             }
             catch (Exception ex)
             {
@@ -353,7 +358,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
             try
             {
-                _model.QueueDeclare(_retryQueueName, _transportSettings.Queue.Durable, _exclusive, _autoDelete, arguments);
+                // We never have consumers on the retry queue.  Therefore set autodelete to false.
+                _model.QueueDeclare(_retryQueueName, _durable, false, false, arguments);
             }
             catch (Exception ex)
             {
@@ -397,7 +403,8 @@ namespace R.MessageBus.Client.RabbitMQ
 
             try
             {
-                _model.ExchangeDeclare(exchangeName, "fanout",  _transportSettings.Queue.Durable, _autoDelete, null);
+                // Hard code auto delete and durable to sensible defaults so that producers and consumers dont try to declare exchanges with different settings.
+                _model.ExchangeDeclare(exchangeName, "fanout", true, false, null);
             }
             catch (Exception ex)
             {
@@ -448,13 +455,20 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             _connectionClosed = true;
 
+            if (_autoDelete && _model != null)
+            {
+                _model.QueueDelete(_queueName + ".Retries");
+            }
+
             if (_connection != null)
             {
                 _connection.Close(500);
+                _connection.Dispose();
             }
             if (_model != null)
             {
-                _model.Abort();
+                _model.Close();
+                _model.Dispose();
             }
 
             Logger.Debug("Disposing message bus consumer");

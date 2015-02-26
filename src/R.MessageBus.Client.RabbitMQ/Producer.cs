@@ -28,7 +28,6 @@ namespace R.MessageBus.Client.RabbitMQ
             _transportSettings = transportSettings;
             _queueMappings = queueMappings;
             _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
-
             _hosts = transportSettings.Host.Split(',');
             _activeHost = 0;
 
@@ -78,7 +77,7 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
-                basicProperties.Headers = GetHeaders(typeof (T), headers, _transportSettings.Queue.Name, "Publish");
+                basicProperties.Headers = GetHeaders(typeof (T), headers, _transportSettings.QueueName, "Publish");
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 basicProperties.SetPersistent(true);
@@ -86,7 +85,7 @@ namespace R.MessageBus.Client.RabbitMQ
                     ? ConfigureExchange(baseType.FullName.Replace(".", string.Empty))
                     : ConfigureExchange(typeof (T).FullName.Replace(".", string.Empty));
 
-                Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.Queue.Name, basicProperties, bytes),
+                Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.QueueName, basicProperties, bytes),
                     ex => RetryConnection(),
                     new TimeSpan(0, 0, 0, 6), 10);
             }
@@ -133,7 +132,6 @@ namespace R.MessageBus.Client.RabbitMQ
 
                 foreach (string endPoint in endPoints)
                 {
-                    ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
                     basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
                     basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
@@ -156,8 +154,6 @@ namespace R.MessageBus.Client.RabbitMQ
 
                 basicProperties.Headers = GetHeaders(typeof(T), headers, endPoint, "Send");
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
-
-                ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, bytes),
                          ex => RetryConnection(),
@@ -187,7 +183,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 headers["MessageType"] = messageType;
             }
 
-            headers["SourceAddress"] = _transportSettings.Queue.Name;
+            headers["SourceAddress"] = _transportSettings.QueueName;
             headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
             headers["FullTypeName"] = type.AssemblyQualifiedName;
@@ -210,9 +206,15 @@ namespace R.MessageBus.Client.RabbitMQ
             Logger.Debug("In Producer.Dispose()");
 
             if (_connection != null)
+            {
                 _connection.Close();
+                _connection.Dispose();
+            }
             if (_model != null)
+            {
                 _model.Abort();
+                _model.Dispose();
+            }
         }
 
         public string Type
@@ -238,8 +240,6 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.Headers = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
-                ConfigureQueue(endPoint, _transportSettings.Queue.Exclusive, _transportSettings.Queue.AutoDelete);
-
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, packet),
                          ex => RetryConnection(),
                          new TimeSpan(0, 0, 0, 6), 10);
@@ -250,7 +250,7 @@ namespace R.MessageBus.Client.RabbitMQ
         {
             try
             {
-                _model.ExchangeDeclare(exchangeName, "fanout", _transportSettings.Queue.Durable, _transportSettings.Queue.AutoDelete, null);
+                _model.ExchangeDeclare(exchangeName, "fanout", true, false, null);
             }
             catch (Exception ex)
             {
@@ -258,20 +258,6 @@ namespace R.MessageBus.Client.RabbitMQ
             }
 
             return exchangeName;
-        }
-
-        private string ConfigureQueue(string queueName, bool exclusive, bool autoDelete)
-        {
-            var arguments = _transportSettings.Queue.Arguments;
-            try
-            {
-                _model.QueueDeclare(queueName, _transportSettings.Queue.Durable, exclusive, autoDelete, arguments);
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn(string.Format("Error declaring queue - {0}", ex.Message));
-            }
-            return queueName;
         }
     }
 }

@@ -40,14 +40,7 @@ namespace R.MessageBus.UnitTests
             Assert.Equal(3000, configuration.TransportSettings.RetryDelay);
             Assert.Null(configuration.TransportSettings.Username);
             Assert.Null(configuration.TransportSettings.Password);
-            Assert.NotNull(configuration.TransportSettings.Queue);
-            Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().ProcessName, configuration.TransportSettings.Queue.Name);
-            Assert.Null(configuration.TransportSettings.Queue.RoutingKey);
-            Assert.Null(configuration.TransportSettings.Queue.Arguments);
-            Assert.False(configuration.TransportSettings.Queue.AutoDelete);
-            Assert.False(configuration.TransportSettings.Queue.Exclusive);
-            Assert.False(configuration.TransportSettings.Queue.IsReadOnly);
-            Assert.True(configuration.TransportSettings.Queue.Durable);
+            Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().ProcessName, configuration.TransportSettings.QueueName);
             Assert.False(configuration.TransportSettings.AuditingEnabled);
             Assert.Equal("errors", configuration.TransportSettings.ErrorQueueName);
             Assert.Equal("audit", configuration.TransportSettings.AuditQueueName);
@@ -188,7 +181,7 @@ namespace R.MessageBus.UnitTests
             configuration.PurgeQueuesOnStart();
 
             // Assert
-            Assert.Equal(true, configuration.TransportSettings.Queue.PurgeOnStartup);
+            Assert.Equal(true, configuration.TransportSettings.PurgeQueueOnStartup);
         }
 
         public class FakeContainer : IBusContainer

@@ -29,7 +29,7 @@ namespace R.MessageBus.UnitTests.Stream
             _mockConfiguration.Setup(x => x.GetContainer()).Returns(_mockContainer.Object);
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
             _mockConfiguration.Setup(x => x.GetProducer()).Returns(_mockProducer.Object);
-            _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue { Name = "R.MessageBus.UnitTests" } });
+            _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { QueueName = "R.MessageBus.UnitTests" });
         }
 
         public bool AssignEventHandler(ConsumerEventHandler eventHandler)
