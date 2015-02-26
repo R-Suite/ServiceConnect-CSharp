@@ -9,7 +9,11 @@ namespace PublishSubscribe.Publisher
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize();
+            var bus = Bus.Initialize(x =>
+            {
+                x.SetHost("lonappdev04");
+                x.TransportSettings.ClientSettings["AutoDelete"] = true;
+            });
 
             while (true)
             {
@@ -21,6 +25,8 @@ namespace PublishSubscribe.Publisher
                     var id = Guid.NewGuid();
                     bus.Publish(new PublishSubscribeMessage(id));
                 }
+
+                bus.Dispose();
             }
         }
     }
