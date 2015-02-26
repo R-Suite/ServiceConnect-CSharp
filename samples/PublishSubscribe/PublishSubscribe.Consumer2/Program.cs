@@ -12,11 +12,17 @@ namespace PublishSubscribe.Consumer2
             {
                 x.ScanForMesssageHandlers = true;
                 x.SetQueueName("Consumer2");
+                x.SetHost("lonappdev04");
+                x.TransportSettings.ClientSettings["AutoDelete"] = true;
+                x.TransportSettings.ClientSettings["HeartbeatEnabled"] = false;
+                x.TransportSettings.ClientSettings["HeartbeatTime"] = 1;
             });
 
             bus.StartConsuming();
 
             Console.ReadLine();
+
+            bus.Dispose();
         }
     }
 }

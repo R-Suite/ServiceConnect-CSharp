@@ -25,7 +25,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
-            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings ());
             mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(StreamResponseMessage).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
             mockConfiguration.Setup(x=> x.GetMessageBusWriteStream(It.IsAny<IProducer>(), "TestEndpoint", It.IsAny<string>())).Returns(mockStream.Object);
             var task = new Task(() => { });
@@ -60,7 +60,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
-            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
             mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(StreamResponseMessage).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);

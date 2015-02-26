@@ -160,7 +160,7 @@ namespace R.MessageBus.UnitTests
             var mockContainer = new Mock<IBusContainer>();
             mockContainer.Setup(x => x.Initialize());
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
-            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { Queue = new Queue() });
+            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings {});
 
             // Act
             new Bus(mockConfiguration.Object);
@@ -208,7 +208,7 @@ namespace R.MessageBus.UnitTests
             var config = bus.Configuration;
 
             // Assert
-            Assert.Equal("TestQueue", config.TransportSettings.Queue.Name);
+            Assert.Equal("TestQueue", config.TransportSettings.QueueName);
         }
 
         [Fact]
@@ -307,7 +307,7 @@ namespace R.MessageBus.UnitTests
             var config = bus.Configuration;
 
             // Assert
-            Assert.True(config.TransportSettings.Queue.PurgeOnStartup);
+            Assert.True(config.TransportSettings.PurgeQueueOnStartup);
         }
 
         [Fact]
