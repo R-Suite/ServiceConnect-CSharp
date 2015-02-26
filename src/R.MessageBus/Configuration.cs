@@ -8,7 +8,6 @@ using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.InMemory;
 using R.MessageBus.Persistance.SqlServer;
 using R.MessageBus.Settings;
-using Queue = R.MessageBus.Interfaces.Queue;
 
 namespace R.MessageBus
 {
@@ -70,10 +69,7 @@ namespace R.MessageBus
 
             TransportSettings = new TransportSettings 
             { 
-                Queue = new Queue
-                {
-                    Name = defaultQueueName
-                },
+                QueueName = defaultQueueName,
                 ClientSettings = new Dictionary<string, object>()
             };
 
@@ -217,7 +213,7 @@ namespace R.MessageBus
         public void SetQueueName(string queueName)
         {
             _queueName = queueName;
-            TransportSettings.Queue.Name = queueName;
+            TransportSettings.QueueName = queueName;
         }
 
         /// <summary>
@@ -264,7 +260,7 @@ namespace R.MessageBus
         /// </summary>
         public string GetQueueName()
         {
-            return TransportSettings.Queue.Name;
+            return TransportSettings.QueueName;
         }
 
         /// <summary>
@@ -339,7 +335,7 @@ namespace R.MessageBus
 
         public void PurgeQueuesOnStart()
         {
-            TransportSettings.Queue.PurgeOnStartup = true;
+            TransportSettings.PurgeQueueOnStartup = true;
         }
 
         public IMessageBusReadStream GetMessageBusReadStream()
@@ -419,7 +415,7 @@ namespace R.MessageBus
             }
             else
             {
-                queueName = TransportSettings.Queue.Name;
+                queueName = TransportSettings.QueueName;
             }
 
             ITransportSettings transportSettings = new TransportSettings();
@@ -428,16 +424,7 @@ namespace R.MessageBus
             transportSettings.RetryDelay = settings.Retries.RetryDelay;
             transportSettings.Username = settings.Username;
             transportSettings.Password = settings.Password;
-            transportSettings.Queue = new Queue
-            {
-                Name = queueName,
-                RoutingKey = settings.Queue.RoutingKey,
-                Arguments = GetQueueArguments(settings),
-                AutoDelete = settings.Queue.AutoDelete,
-                Durable = settings.Queue.Durable,
-                Exclusive = settings.Queue.Exclusive,
-                IsReadOnly = settings.Queue.IsReadOnly()
-            };
+            transportSettings.QueueName = queueName;
             transportSettings.ErrorQueueName = (!string.IsNullOrEmpty(_errorQueueName)) ? _errorQueueName : settings.ErrorQueueName;
             transportSettings.AuditingEnabled = (_auditingEnabled.HasValue) ? _auditingEnabled.Value : settings.AuditingEnabled;
             transportSettings.AuditQueueName = (!string.IsNullOrEmpty(_auditQueueName)) ? _auditQueueName : settings.AuditQueueName;
@@ -454,16 +441,7 @@ namespace R.MessageBus
             transportSettings.RetryDelay = 3000;
             transportSettings.Username = null;
             transportSettings.Password = null;
-            transportSettings.Queue = new Queue
-            {
-                Name = TransportSettings.Queue.Name,
-                RoutingKey = null,
-                Arguments = null,
-                AutoDelete = false,
-                Durable = true,
-                Exclusive = false,
-                IsReadOnly = false
-            };
+            transportSettings.QueueName = TransportSettings.QueueName;
             transportSettings.MachineName = Environment.MachineName;
             transportSettings.ErrorQueueName = "errors";
             transportSettings.AuditingEnabled = false;
@@ -472,16 +450,6 @@ namespace R.MessageBus
             transportSettings.ClientSettings = new Dictionary<string, object>();
 
             return transportSettings;
-        }
-
-        private static Dictionary<string, object> GetQueueArguments(BusConfiguration.TransportSettings settings)
-        {
-            var queueArguments = new Dictionary<string, object>();
-            for (var i = 0; i < settings.Queue.Arguments.Count; i++)
-            {
-                queueArguments.Add(settings.Queue.Arguments[i].Name, settings.Queue.Arguments[i].Value);
-            }
-            return queueArguments;
         }
 
         #endregion
