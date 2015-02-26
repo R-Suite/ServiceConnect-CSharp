@@ -48,6 +48,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MongoDBAggregatorPersistor.cs" />
     <Compile Include="MongoDbData.cs" />
     <Compile Include="MongoDbProcessManagerFinder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
