@@ -121,5 +121,29 @@ namespace R.MessageBus.UnitTests.Aggregator
            
             timer.Dispose();
         }
+
+        [Fact]
+        public void TimerShouldReset()
+        {
+            // Arrange
+            var mockPersistor = new Mock<IAggregatorPersistor>();
+            var mockContainer = new Mock<IBusContainer>();
+
+            var timer = new AggregatorTimer(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+
+            var count = 0;
+
+            mockPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(0).Callback(() => count++);
+
+            // Act
+            timer.StartTimer<FakeMessage1>(new TimeSpan(0, 0, 0, 2));
+            Thread.Sleep(1100);
+            timer.ResetTimer();
+            Thread.Sleep(1000);
+            timer.Dispose();
+
+            // Assert 
+            Assert.Equal(0, count);
+        }
     }
 }

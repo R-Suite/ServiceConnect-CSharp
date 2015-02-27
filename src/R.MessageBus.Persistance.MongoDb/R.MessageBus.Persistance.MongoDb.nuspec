@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus.Persistance.MongoDb</id>
-    <version>1.1.14-beta</version>
+    <version>1.1.16-beta</version>
     <title>R.MessageBus.Persistance.MongoDb</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>

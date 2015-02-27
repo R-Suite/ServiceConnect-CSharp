@@ -8,6 +8,9 @@ using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
 {
+    /// <summary>
+    /// Manage aggregator timeouts
+    /// </summary>
     public class AggregatorTimer : IAggregatorTimer
     {
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -19,6 +22,7 @@ namespace R.MessageBus.Core
         private Type _type;
         private Type _genericListType;
         private readonly object _lock = new object();
+        private TimeSpan _timeout;
 
         public AggregatorTimer(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
         {
@@ -27,11 +31,27 @@ namespace R.MessageBus.Core
             _container = container;
         }
 
+        /// <summary>
+        /// Start new instance of <see cref="System.Threading.Timer"/> specifying a callback that
+        /// get all messages from an aggregator persistance store and 
+        /// executes relevant handler type
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="timeout"></param>
         public void StartTimer<T>(TimeSpan timeout)
         {
             _type = typeof (T);
+            _timeout = timeout;
             _genericListType = typeof(List<>).MakeGenericType(_type);
             _timer = new Timer(Callback, timeout, timeout, timeout);
+        }
+
+        /// <summary>
+        /// Reset timer with previously defined <see cref="_timeout"/>
+        /// </summary>
+        public void ResetTimer()
+        {
+            _timer.Change(_timeout, _timeout);
         }
 
         private void Callback(object state)
@@ -64,6 +84,9 @@ namespace R.MessageBus.Core
             }
         }
 
+        /// <summary>
+        /// Dispose timer
+        /// </summary>
         public void Dispose()
         {
             _timer.Dispose();
