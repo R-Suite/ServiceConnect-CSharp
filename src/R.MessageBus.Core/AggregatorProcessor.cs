@@ -8,6 +8,10 @@ using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.Core
 {
+    /// <summary>
+    /// Aggregate messages into batches of a predefined size
+    /// and pass them to relevant handlers
+    /// </summary>
     public class AggregatorProcessor : IAggregatorProcessor
     {
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
@@ -15,6 +19,9 @@ namespace R.MessageBus.Core
         private readonly IAggregatorPersistor _aggregatorPersistor;
         private readonly IBusContainer _container;
         private readonly object _lock = new object();
+
+        public event BatchProcessedHandler BatchProcessed;
+        private readonly EventArgs _e = null;
 
         public AggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container)
         {
@@ -69,6 +76,11 @@ namespace R.MessageBus.Core
                         }
 
                         _aggregatorPersistor.RemoveAll(typeName);
+
+                        if (BatchProcessed != null)
+                        {
+                            BatchProcessed(aggregatorRef.HandlerType, _e);
+                        }
                     }
                 }
             }
