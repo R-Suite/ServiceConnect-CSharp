@@ -45,7 +45,7 @@ public class YourMessage : Message
 
 ##### 2. Send your message
 
-In the standard command line ```Main``` method we start the bus with ```var bus = Bus.Initialize();```. Calling initialize with no parameters will create an instance of the Bus with default configuration options. Next, we simply send ```YourMessage``` using ```bus.Send(new YourMessage(id), "YourConsumer");```  - where the first method argument is an instance of ```YourMessage```, the second argument is the receiving enpoint called "YourConsumer" (which we are going to initialize next). 
+In the standard command line ```Main``` method we start the bus with ```var bus = Bus.Initialize();```. Calling initialize with no parameters will create an instance of the Bus with default configuration options. Next, we simply send ```YourMessage``` using ```bus.Send(new YourMessage(id), "YourConsumer");```  - where the first argument is an instance of ```YourMessage```, the second argument, "YourConsumer", is the receiving enpoint name.  (We are going to configure "YourConsumer" next). 
 
 ```c#
 public class Program
@@ -61,7 +61,7 @@ public class Program
 
 ##### 3. Receive your message
 
-Again, in the standard command line ```Main``` method we start the bus. This time, however, with ```var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));```. Because the method initialize can also take a single lambda/action parameter for custom configuration, we explicitly set the name of the receiving endpoint to "YourConsumer". 
+Again,  we start the bus in the standard command line ```Main``` method. This time, however, with ```var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));```. Because the method initialize can also take a single lambda/action parameter for custom configuration, we explicitly set the name of the receiving endpoint to "YourConsumer". 
 
 ```c#
 public class Program
@@ -73,7 +73,7 @@ public class Program
 }
 ```
 
-Finally, we define a "handler" that will receive the message. The handler is a .NET class that implements ```R.MessageBus.Interfaces.IMessageHandler<TMessage>``` where the generic parameter TMessage is the type of the message being consumed.
+Finally, we define a "handler" that will receive the message. The handler is a .NET class that implements ```R.MessageBus.Interfaces.IMessageHandler<T>``` where the generic parameter ```T``` is the type of the message being consumed.
 
 ```c#
 public class YourMessageHandler : IMessageHandler<YourMessage>
