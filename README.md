@@ -1,8 +1,10 @@
-**_Getting closer... Major/Production-ready release is planned for the end of March 2015._**
+**_(Major/Production-ready release is planned for the end of March 2015.)_**
 
 <img src="https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/logo/logo.png" height="150">
 
 A simple, easy to use asynchronous messaging framework for .NET.
+
+In order to get started, have a look at the documentation at [http://rmessagebus.com/guides](http://rmessagebus.com/guides)
 
 ## Features
 * Support for many well-known Enteprise Integration Patterns
@@ -19,44 +21,68 @@ A simple, easy to use asynchronous messaging framework for .NET.
 
 
 ## Project Maturity
-R.MessageBus is used by a number of high-profile financial applications in production environments. However,  it is still in early stages of development and hasn’t been officially released.  It may not yet be suitable for the most demanding and conservative projects. Production-ready release is planned for the end of March 2015
+R.MessageBus is used by a number of high-profile financial applications in production environments. However,  it hasn’t been officially released and the current pre-release version may not yet be suitable for the most demanding and conservative projects. Production-ready release is planned for the end of March 2015
 
-Public API is relatively stable and no major changes are planned in the next version.
+Public API is stable and no major changes are planned in the next version.
 
 
-## Getting Started
+## Simple example
 
-In order to get started, have a look at the documentation at [http://rmessagebus.com/guides](http://rmessagebus.com/guides)
+In this example we simply send a message from one endpoint and consume the same message on another endpoint.
+See [Point To Point](https://github.com/R-Suite/R.MessageBus/tree/master/samples/PointToPoint) sample application for a complete example. 
 
-### Configuration
+##### 1. Define your message
 
-#### Simple Configuration
-
-Calling initialize with no parameters will create an instance of the Bus with default configuration options.
+```YourMessage``` is a .Net class that inherits from 
+```R.MessageBus.Interfaces.Message``` base class
 
 ```c#
-IBus bus = Bus.Initialize();
+public class YourMessage : Message
+{
+    public YourMessage(Guid correlationId) : base(correlationId){}
+}
 ```
 
-Default configuration is the following,
+##### 2. Send your message
 
-* Consumer - RabbitMQ
-* Container - StructureMap
-* ScanForMessageHandlers - False
-
-#### Custom Configuration
-
-Initialize also takes a single lambda/action parameter for custom configuration.
+In the standard command line ```Main``` method we start the bus with ```var bus = Bus.Initialize();```. Calling initialize with no parameters will create an instance of the Bus with default configuration options. Next, we simply send ```YourMessage``` using ```bus.Send(new YourMessage(id), "YourConsumer");```  - where the first method argument is an instance of ```YourMessage```, the second argument is the receiving enpoint called "YourConsumer" (which we are going to initialize next). 
 
 ```c#
-IBus bus = Bus.Initialize(config =>
+public class Program
 {
-    config.LoadSettings("MyConfigurationPath", "MyEndpoint");
-    config.SetConsumer<Consumer>();
-    config.SetPublisher<Publisher>();
-    config.SetContainer<Container>();
-    config.ScanForMesssageHandlers = true;
-});
+    public static void Main()
+    {
+        var bus = Bus.Initialize();
+        
+        bus.Send(new YourMessage(Guid.NewGuid()), "YourConsumer");
+    }
+}
+```
+
+##### 3. Receive your message
+
+Again, in the standard command line ```Main``` method we start the bus. This time, however, with ```var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));```. Because the method initialize can also take a single lambda/action parameter for custom configuration, we explicitly set the name of the receiving endpoint to "YourConsumer". 
+
+```c#
+public class Program
+{
+    public static void Main()
+    {
+        var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));
+    }
+}
+```
+
+Finally, we define a "handler" that will receive the message. The handler is a .NET class that implements ```R.MessageBus.Interfaces.IMessageHandler<TMessage>``` where the generic parameter TMessage is the type of the message being consumed.
+
+```c#
+public class YourMessageHandler : IMessageHandler<YourMessage>
+{
+    public void Execute(YourMessage message)
+    {
+        Console.WriteLine("Received message - {0}", message.CorrelationId);
+    }
+}
 ```
 
 
