@@ -70,5 +70,22 @@ namespace R.MessageBus.UnitTests.Aggregator
             // Assert
             mockProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(y => JsonConvert.DeserializeObject<FakeMessage1>(y).Username == "Tim")), Times.Once);
         }
+
+        [Fact]
+        public void ShouldNotCreateMultipleConsumers()
+        {
+            // Arrange
+            _mockConfiguration.SetupGet(x => x.AutoStartConsuming).Returns(true);
+            _mockConfiguration.SetupGet(x => x.ScanForMesssageHandlers).Returns(false);
+            _mockConfiguration.Setup(x => x.SetAuditingEnabled(false));
+
+            var bus = new Bus(_mockConfiguration.Object);
+
+            // Act
+            bus.StartConsuming();
+
+            // Assert
+            _mockConfiguration.Verify(x => x.GetConsumer(), Times.Once);
+        }
     }
 }
