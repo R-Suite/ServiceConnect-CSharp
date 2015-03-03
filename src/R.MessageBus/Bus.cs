@@ -24,6 +24,7 @@ namespace R.MessageBus
         private static IProducer _producer;
         private Timer _timer;
         private IConsumer _consumer;
+        private bool _startedConsuming = false;
 
         public IConfiguration Configuration { get; set; }
 
@@ -74,7 +75,10 @@ namespace R.MessageBus
                     MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(handlerReference.MessageType);
                     genericProcessManagerProcessorMethod.Invoke(timer, new object[] {timeout});
 
-                    _aggregatorTimers.Add(handlerReference.HandlerType, timer);
+                    if (!_aggregatorTimers.ContainsKey(handlerReference.HandlerType))
+                    {
+                        _aggregatorTimers.Add(handlerReference.HandlerType, timer);
+                    }
                 }
             }
         }
@@ -133,6 +137,9 @@ namespace R.MessageBus
 
         public void StartConsuming()
         {
+            if (_startedConsuming) // prevent creating multiple consumers
+                return;
+
             StartAggregatorTimers();
 
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
@@ -147,6 +154,8 @@ namespace R.MessageBus
                 string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
                 _consumer.ConsumeMessageType(messageTypeName);
             }
+
+            _startedConsuming = true;
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
