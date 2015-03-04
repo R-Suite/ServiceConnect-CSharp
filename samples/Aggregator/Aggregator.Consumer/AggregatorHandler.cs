@@ -6,7 +6,7 @@ using R.MessageBus.Core;
 
 namespace Aggregator.Consumer
 {
-    public class StreamHandler : Aggregator<TestMessage>
+    public class TestMessageHandler : Aggregator<TestMessage>
     {
         public override int BatchSize()
         {
