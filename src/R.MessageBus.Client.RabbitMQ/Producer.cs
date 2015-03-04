@@ -204,17 +204,27 @@ namespace R.MessageBus.Client.RabbitMQ
         public void Dispose()
         {
             Logger.Debug("In Producer.Dispose()");
+            
+            if (_model != null)
+            {
+                Logger.Debug("Disposing Model");
+                _model.Dispose();
+                _model = null;
+            }
 
             if (_connection != null)
             {
-                _connection.Close();
-                _connection.Dispose();
-            }
-            if (_model != null)
-            {
-                _model.Abort();
-                _model.Dispose();
-            }
+                try
+                {
+                    Logger.Debug("Disposing connection");
+                    _connection.Dispose();
+                }
+                catch (System.IO.EndOfStreamException ex)
+                {
+                    Logger.Warn("Error disposing connection", ex);
+                }
+                _connection = null;
+            } 
         }
 
         public string Type
