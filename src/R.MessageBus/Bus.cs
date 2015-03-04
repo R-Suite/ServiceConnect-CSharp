@@ -604,15 +604,22 @@ namespace R.MessageBus
 
         public void StopConsuming()
         {
-            _consumer.StopConsuming();
+            if (null != _consumer)
+            {
+                _consumer.StopConsuming();
+            }
         }
 
         public void Dispose()
         {
             StopConsuming();
-            _producer.Dispose();
 
-            if (Configuration.TransportSettings.AuditingEnabled)
+            if (null != _producer)
+            {
+                _producer.Dispose();
+            }
+
+            if (Configuration.TransportSettings.AuditingEnabled && null != _timer)
             {
                 _timer.Dispose();
             }

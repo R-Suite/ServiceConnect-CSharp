@@ -2,12 +2,12 @@
 <package>
   <metadata>
     <id>R.MessageBus.Persistance.MongoDb</id>
-    <version>1.1.17-beta</version>
+    <version>1.1.20-beta</version>
     <title>R.MessageBus.Persistance.MongoDb</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>MonoDb implementation of IProcessManagerFinder.</description>
+    <description>MongoDb implementation of IProcessManagerFinder.</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/R.MessageBus</projectUrl>
     <copyright>Copyright 2015 R.MessageBus. All rights reserved</copyright>
