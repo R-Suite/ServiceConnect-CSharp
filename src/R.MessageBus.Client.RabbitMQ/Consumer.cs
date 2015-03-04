@@ -465,7 +465,7 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 Logger.Debug("Disposing Model");
                 _model.Dispose();
-                _mode = null;
+                _model = null;
             }
 
             if (_connection != null)
@@ -475,7 +475,7 @@ namespace R.MessageBus.Client.RabbitMQ
                     Logger.Debug("Disposing connection");
                     _connection.Dispose();
                 }
-                catch(EndOfStreamException ex) 
+                catch(System.IO.EndOfStreamException ex) 
                 {
                     Logger.Warn("Error disposing connection", ex);
                 }
