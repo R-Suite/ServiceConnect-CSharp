@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
 using Aggregator.Messages;
 using R.MessageBus.Core;
 
@@ -13,7 +14,7 @@ namespace Aggregator.Consumer
         }
         public override TimeSpan Timeout()
         {
-            return new TimeSpan(0, 0, 0, 2);
+            return new TimeSpan(0, 0, 0, 10);
         }
         
         public override void Execute(IList<TestMessage> message)

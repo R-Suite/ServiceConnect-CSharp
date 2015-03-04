@@ -457,21 +457,30 @@ namespace R.MessageBus.Client.RabbitMQ
 
             if (_autoDelete && _model != null)
             {
+                Logger.Debug("Deleting retry queue");
                 _model.QueueDelete(_queueName + ".Retries");
+            }
+
+            if (_model != null)
+            {
+                Logger.Debug("Disposing Model");
+                _model.Dispose();
+                _mode = null;
             }
 
             if (_connection != null)
             {
-                _connection.Close(500);
-                _connection.Dispose();
-            }
-            if (_model != null)
-            {
-                _model.Close();
-                _model.Dispose();
-            }
-
-            Logger.Debug("Disposing message bus consumer");
+                try
+                {
+                    Logger.Debug("Disposing connection");
+                    _connection.Dispose();
+                }
+                catch(EndOfStreamException ex) 
+                {
+                    Logger.Warn("Error disposing connection", ex);
+                }
+                _connection = null;
+            } 
         }
     }
 }
