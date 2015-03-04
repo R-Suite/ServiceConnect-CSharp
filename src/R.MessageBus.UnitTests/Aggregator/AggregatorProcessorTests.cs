@@ -323,5 +323,36 @@ namespace R.MessageBus.UnitTests.Aggregator
             mockAggregatorPersistor.Verify(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName), Times.Once);
 
         }
+
+        [Fact]
+        public void ShouldRaiseBatchProcessedEventIfMessageCountIsEqualToOrGreaterThanBatchSize()
+        {
+            // Arrange
+            var mockContainer = new Mock<IBusContainer>();
+            var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+
+            var handlerRef = new HandlerReference
+            {
+                HandlerType = typeof(FakeAggregator),
+                MessageType = typeof(FakeMessage1)
+            };
+            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Aggregator<FakeMessage1>))).Returns(new List<HandlerReference> { handlerRef });
+            var aggregator = new FakeAggregator();
+            mockContainer.Setup(x => x.GetInstance(typeof(FakeAggregator))).Returns(aggregator);
+            mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<object>(), It.IsAny<string>()));
+
+            mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(10);
+            mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
+
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            bool eventRaised = false;
+            aggregatorProcessor.BatchProcessed += (type, args) => { eventRaised = true; };
+
+            // Act
+            aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
+
+            // Assert
+            Assert.True(eventRaised);
+        }
     }
 }
