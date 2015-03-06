@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -21,7 +20,7 @@ namespace R.MessageBus
         private readonly object _requestLock = new object();
         private readonly object _byteStreamLock = new object();
         private readonly IDictionary<Type, IAggregatorTimer> _aggregatorTimers = new Dictionary<Type, IAggregatorTimer>();
-        private static IProducer _producer;
+        private IProducer _producer;
         private Timer _timer;
         private IConsumer _consumer;
         private bool _startedConsuming = false;
