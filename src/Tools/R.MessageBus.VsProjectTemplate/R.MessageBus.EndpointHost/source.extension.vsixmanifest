@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+  <Metadata>
+    <Identity Id="R.MessageBus.EndpointHost.R.MessageBus.a728a4b3-455c-484b-92c6-90eaf198e2b7" Version="1.2" Language="en-US" Publisher="R.MessageBus" />
+    <DisplayName>R.MessageBus.EndpointHost</DisplayName>
+    <Description xml:space="preserve">R.MessageBus Endpoint Host Project Template</Description>
+    <MoreInfo>http://www.rmessagebus.com</MoreInfo>
+    <License>apache2.txt</License>
+    <Icon>icon_mini.png</Icon>
+    <PreviewImage>icon_small.png</PreviewImage>
+  </Metadata>
+  <Installation>
+    <InstallationTarget Version="[11.0,13.0)" Id="Microsoft.VisualStudio.Pro" />
+  </Installation>
+  <Dependencies>
+    <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.5,)" />
+  </Dependencies>
+  <Assets>
+    <Asset Type="Microsoft.VisualStudio.ProjectTemplate" d:Source="File" Path="ProjectTemplates" d:TargetPath="ProjectTemplates\R.MessageBus.EndpointHost.zip" />
+  </Assets>
+</PackageManifest>
