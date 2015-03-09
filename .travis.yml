@@ -1,2 +1,2 @@
 language: csharp
-solution: R.MessageBus.sln
+solution: src/R.MessageBus.sln
