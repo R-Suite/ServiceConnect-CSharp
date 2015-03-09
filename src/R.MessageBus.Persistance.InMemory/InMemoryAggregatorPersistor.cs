@@ -57,6 +57,19 @@ namespace R.MessageBus.Persistance.InMemory
             }
         }
 
+        public void RemoveData(string name, Guid correlationsId)
+        {
+            lock (_memoryCacheLock)
+            {
+                if (Cache.Contains(name))
+                {
+                    var cacheItem = ((List<MemoryData<object>>)Cache.GetCacheItem(name).Value);
+                    var message = cacheItem.FirstOrDefault(x => ((Message)x.Data).CorrelationId == correlationsId);
+                    cacheItem.Remove(message);
+                }
+            }
+        }
+
         public void RemoveAll(string name)
         {
             lock (_memoryCacheLock)

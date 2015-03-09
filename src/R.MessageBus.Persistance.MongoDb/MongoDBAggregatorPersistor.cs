@@ -39,11 +39,16 @@ namespace R.MessageBus.Persistance.MongoDb
             return _collection.Find(Query<MongoDbData<object>>.EQ(x => x.Name, name)).Select(x => x.Data).ToList();
         }
 
-        public void RemoveAll(string name)
+        public void RemoveData(string name, Guid correlationsId)
         {
-            _collection.Remove(Query<MongoDbData<object>>.EQ(x => x.Name, name));
+            _collection.Remove(
+                Query.And(
+                    Query<MongoDbData<object>>.EQ(x => x.Name, name),
+                    Query<MongoDbData<Message>>.EQ(x => x.Data.CorrelationId, correlationsId)
+                )
+            );
         }
-
+        
         public int Count(string name)
         {
             return Convert.ToInt32(_collection.Count(Query<MongoDbData<object>>.EQ(x => x.Name, name)));
