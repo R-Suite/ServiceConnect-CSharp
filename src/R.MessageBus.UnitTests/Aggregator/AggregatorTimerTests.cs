@@ -88,7 +88,7 @@ namespace R.MessageBus.UnitTests.Aggregator
 
             // Act
             timer.StartTimer<FakeMessage1>(new TimeSpan(0, 0, 0, 0, 50));
-            Thread.Sleep(90);
+            Thread.Sleep(75);
 
             // Assert 
             mockPersistor.Verify(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName), Times.Once);
