@@ -78,8 +78,10 @@ namespace R.MessageBus.Core
                         Logger.Error("Error executing aggregator execute method");
                         throw;
                     }
-
-                    _aggregatorPersistor.RemoveAll(_type.AssemblyQualifiedName);
+                    foreach (var persistedMessage in messages)
+                    {
+                        _aggregatorPersistor.RemoveData(_type.AssemblyQualifiedName, ((Message)persistedMessage).CorrelationId);
+                    }
                 }
             }
         }
