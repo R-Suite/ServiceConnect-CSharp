@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace R.MessageBus.Interfaces
 {
@@ -6,7 +7,7 @@ namespace R.MessageBus.Interfaces
     {
         void InsertData(object data, string name);
         IList<object> GetData(string name);
-        void RemoveAll(string name);
+        void RemoveData(string name, Guid correlationsId);
         int Count(string name);
     }
 }

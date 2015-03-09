@@ -117,7 +117,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             Thread.Sleep(90);
 
             // Assert 
-            mockPersistor.Verify(x => x.RemoveAll(typeof(FakeMessage1).AssemblyQualifiedName), Times.Once);
+            mockPersistor.Verify(x => x.RemoveData(typeof(FakeMessage1).AssemblyQualifiedName, message.CorrelationId), Times.Once);
            
             timer.Dispose();
         }

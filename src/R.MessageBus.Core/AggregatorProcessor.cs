@@ -46,7 +46,7 @@ namespace R.MessageBus.Core
             var timeout = (TimeSpan)(aggregatorRef.HandlerType.GetMethod("Timeout").Invoke(aggregator, new object[]{}));
             var batchSize = (int)(aggregatorRef.HandlerType.GetMethod("BatchSize").Invoke(aggregator, new object[]{}));
 
-            var messageObject = (Message)JsonConvert.DeserializeObject(message, typeof(T));
+            var messageObject = JsonConvert.DeserializeObject(message, typeof(T));
 
             if (batchSize == 0 && timeout == default(TimeSpan))
             {
@@ -75,7 +75,10 @@ namespace R.MessageBus.Core
                             throw;
                         }
 
-                        _aggregatorPersistor.RemoveAll(typeName);
+                        foreach (var persistedMessage in messages)
+                        {
+                            _aggregatorPersistor.RemoveData(typeName, ((Message)persistedMessage).CorrelationId);
+                        }
 
                         if (BatchProcessed != null)
                         {
