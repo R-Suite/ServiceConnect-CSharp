@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using R.MessageBus;
+using R.MessageBus.Persistance.MongoDb;
 
 namespace Aggregator.Consumer
 {
