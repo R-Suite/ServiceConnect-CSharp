@@ -17,6 +17,7 @@ namespace Aggregator.Consumer
             {
                 x.SetQueueName("Aggregator.Consumer");
                 x.PurgeQueuesOnStart();
+                x.SetAuditingEnabled(true);
             });
 
             Console.ReadLine();
