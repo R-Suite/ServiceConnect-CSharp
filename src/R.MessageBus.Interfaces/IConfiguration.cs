@@ -12,7 +12,7 @@ namespace R.MessageBus.Interfaces
         Type AggregatorPersistor { get; set; }
         Type MessageBusReadStream { get; set; }
         Type MessageBusWriteStream { get; set; }
-        Type AggregatorTimer { get; set; }
+        Type AggregatorProcessor { get; set; }
         bool ScanForMesssageHandlers { get; set; }
         bool AutoStartConsuming { get; set; }
         string PersistenceStoreConnectionString { get; set; }
@@ -192,12 +192,12 @@ namespace R.MessageBus.Interfaces
         IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId);
 
         /// <summary>
-        /// Gets an instance of the AggregatorTimer
+        /// Gets an instance of the AggregatorProcessor
         /// </summary>
         /// <param name="aggregatorPersistor"></param>
         /// <param name="container"></param>
         /// <param name="handlerType"></param>
         /// <returns></returns>
-        IAggregatorTimer GetAggregatorTimer(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType);
+        IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType);
     }
 }

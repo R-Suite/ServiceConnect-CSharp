@@ -14,6 +14,7 @@ namespace Aggregator
             {
                 x.SetQueueName("Aggregator.Publisher");
                 x.PurgeQueuesOnStart();
+                x.SetAuditingEnabled(true);
             });
 
             for (int i = 0; i < 1000; i++)

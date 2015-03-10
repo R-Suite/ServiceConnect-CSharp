@@ -57,60 +57,13 @@ namespace R.MessageBus.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
 
 
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
             
             // Act
             aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
 
             // Assert
-            mockContainer.Verify(x => x.GetHandlerTypes(typeof(Core.Aggregator<FakeMessage1>)), Times.Once);
-        }
-
-        [Fact]
-        public void ShouldThrowExceptionIfThereAreMultipleAggregatorsForTheSameMessageType()
-        {
-            // Arrange
-            var mockContainer = new Mock<IBusContainer>();
-            var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
-            
-            var handlerRef = new HandlerReference
-            {
-                HandlerType = typeof(FakeAggregator),
-                MessageType = typeof(FakeMessage1)
-            };
-            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Aggregator<FakeMessage1>))).Returns(new List<HandlerReference>{ handlerRef, handlerRef });
-            mockContainer.Setup(x => x.GetInstance(typeof (FakeAggregator))).Returns(new FakeAggregator
-            {
-                Time = new TimeSpan(0, 0, 0, 1)
-            });
-            mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
-            
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
-            
-            // Act and Assert
-            Assert.Throws<Exception>(() => aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid()))));
-
-            mockAggregatorPersistor.Verify(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()), Times.Never);
-        }
-        
-
-        [Fact]
-        public void ShouldDoNothingIfThereAreNoAggregatorsForMessageType()
-        {
-            // Arrange
-            var mockContainer = new Mock<IBusContainer>();
-            var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
-
-            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Aggregator<FakeMessage1>))).Returns(new List<HandlerReference>());
-
-            mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
-
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
-
-            // Act and Assert
-            Assert.DoesNotThrow(() => aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid()))));
-
-            mockAggregatorPersistor.Verify(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()), Times.Never);
+            mockContainer.Verify(x => x.GetInstance(typeof (FakeAggregator)), Times.Once());
         }
 
         [Fact]
@@ -132,8 +85,8 @@ namespace R.MessageBus.UnitTests.Aggregator
 
             mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(10);
             mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
-            
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -163,7 +116,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
 
 
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             // Act
             aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -193,7 +146,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
 
 
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             // Act
             aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -226,7 +179,7 @@ namespace R.MessageBus.UnitTests.Aggregator
                 new FakeMessage1(Guid.NewGuid())
             });
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -259,7 +212,7 @@ namespace R.MessageBus.UnitTests.Aggregator
                 new FakeMessage1(Guid.NewGuid())
             });
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid()){ Username = "Tim"}));
@@ -288,7 +241,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(9);
             mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -320,7 +273,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(20);
             mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -328,37 +281,6 @@ namespace R.MessageBus.UnitTests.Aggregator
             // Assert
             mockAggregatorPersistor.Verify(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName), Times.Once);
 
-        }
-
-        [Fact]
-        public void ShouldRaiseBatchProcessedEventIfMessageCountIsEqualToOrGreaterThanBatchSize()
-        {
-            // Arrange
-            var mockContainer = new Mock<IBusContainer>();
-            var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
-
-            var handlerRef = new HandlerReference
-            {
-                HandlerType = typeof(FakeAggregator),
-                MessageType = typeof(FakeMessage1)
-            };
-            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Aggregator<FakeMessage1>))).Returns(new List<HandlerReference> { handlerRef });
-            var aggregator = new FakeAggregator();
-            mockContainer.Setup(x => x.GetInstance(typeof(FakeAggregator))).Returns(aggregator);
-            mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
-
-            mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(10);
-            mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
-
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object);
-            bool eventRaised = false;
-            aggregatorProcessor.BatchProcessed += (type, args) => { eventRaised = true; };
-
-            // Act
-            aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
-
-            // Assert
-            Assert.True(eventRaised);
         }
     }
 }
