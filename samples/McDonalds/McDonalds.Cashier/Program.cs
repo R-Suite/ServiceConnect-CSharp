@@ -11,7 +11,6 @@ namespace McDonalds.Cashier
             Console.WriteLine("*********** Cashier ***********");
             var bus = Bus.Initialize(x =>
             {
-                x.ScanForMesssageHandlers = true;
                 x.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
                 x.SetAuditingEnabled(true);
             });

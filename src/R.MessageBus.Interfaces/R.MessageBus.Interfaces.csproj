@@ -48,7 +48,6 @@
     <Compile Include="ConsumerEventHandler.cs" />
     <Compile Include="HandlerReference.cs" />
     <Compile Include="IAggregatorProcessor.cs" />
-    <Compile Include="IAggregatorTimer.cs" />
     <Compile Include="IBus.cs" />
     <Compile Include="IBusContainer.cs" />
     <Compile Include="IConfiguration.cs" />

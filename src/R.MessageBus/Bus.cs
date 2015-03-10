@@ -19,11 +19,11 @@ namespace R.MessageBus
         private readonly IDictionary<string, IMessageBusReadStream> _byteStreams = new Dictionary<string, IMessageBusReadStream>();
         private readonly object _requestLock = new object();
         private readonly object _byteStreamLock = new object();
-        private readonly IDictionary<Type, IAggregatorTimer> _aggregatorTimers = new Dictionary<Type, IAggregatorTimer>();
-        private IProducer _producer;
+        private readonly IDictionary<Type, IAggregatorProcessor> _aggregatorProcessors = new Dictionary<Type, IAggregatorProcessor>();
+        private readonly IProducer _producer;
         private Timer _timer;
         private IConsumer _consumer;
-        private bool _startedConsuming = false;
+        private bool _startedConsuming;
 
         public IConfiguration Configuration { get; set; }
 
@@ -65,19 +65,20 @@ namespace R.MessageBus
             foreach (HandlerReference handlerReference in instances)
             {
                 object aggregator = _container.GetInstance(handlerReference.HandlerType);
+
+                var processor = Configuration.GetAggregatorProcessor(Configuration.GetAggregatorPersistor(), _container, handlerReference.HandlerType);
+                if (!_aggregatorProcessors.ContainsKey(handlerReference.MessageType))
+                {
+                    _aggregatorProcessors.Add(handlerReference.MessageType, processor);
+                }
+
                 var timeout = (TimeSpan)(handlerReference.HandlerType.GetMethod("Timeout").Invoke(aggregator, new object[] { }));
+
                 if (timeout != default(TimeSpan))
                 {
-                    IAggregatorTimer timer = Configuration.GetAggregatorTimer(Configuration.GetAggregatorPersistor(), _container, handlerReference.HandlerType);
-
-                    MethodInfo processManagerProcessorMethod = timer.GetType().GetMethod("StartTimer");
+                    MethodInfo processManagerProcessorMethod = processor.GetType().GetMethod("StartTimer");
                     MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(handlerReference.MessageType);
-                    genericProcessManagerProcessorMethod.Invoke(timer, new object[] {timeout});
-
-                    if (!_aggregatorTimers.ContainsKey(handlerReference.HandlerType))
-                    {
-                        _aggregatorTimers.Add(handlerReference.HandlerType, timer);
-                    }
+                    genericProcessManagerProcessorMethod.Invoke(processor, new object[] { timeout });
                 }
             }
         }
@@ -566,30 +567,13 @@ namespace R.MessageBus
 
         private void ProcessAggregatorHandlers(byte[] objectMessage, Type type)
         {
-            IAggregatorPersistor persistor = Configuration.GetAggregatorPersistor();
-            var aggregatorProcessor = _container.GetInstance<IAggregatorProcessor>(new Dictionary<string, object>
-            {
-                {"container", _container},
-                {"aggregatorPersistor", persistor}
-            });
-
-            // when the batch isprocessed, reset relevant timer
-            aggregatorProcessor.BatchProcessed += AggregatorProcessorBatchProcessed;
+            IAggregatorProcessor aggregatorProcessor = _aggregatorProcessors[type];
 
             MethodInfo aggregatorProcessorMethod = aggregatorProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericAggregatorProcessorMethod = aggregatorProcessorMethod.MakeGenericMethod(type);
             genericAggregatorProcessorMethod.Invoke(aggregatorProcessor, new object[] { Encoding.UTF8.GetString(objectMessage) });
         }
-
-        void AggregatorProcessorBatchProcessed(Type messageType, EventArgs e)
-        {
-            if (_aggregatorTimers.ContainsKey(messageType))
-            {
-                IAggregatorTimer timer = _aggregatorTimers[messageType];
-                timer.ResetTimer();
-            }
-        }
-
+        
         private void ProcessMessageHandlers(byte[] objectMessage, Type type, IConsumeContext context)
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
@@ -623,10 +607,9 @@ namespace R.MessageBus
                 _timer.Dispose();
             }
 
-            foreach (var aggregatorTimer1 in _aggregatorTimers.Values)
+            foreach (var aggregatorProcessor in _aggregatorProcessors.Values)
             {
-                var aggregatorTimer = (AggregatorTimer) aggregatorTimer1;
-                aggregatorTimer.Dispose();
+                aggregatorProcessor.Dispose();
             }
         }
     }

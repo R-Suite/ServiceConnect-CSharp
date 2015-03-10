@@ -19,7 +19,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
-            var mockAggregatorTImer = new Mock<IAggregatorTimer>();
+            var mockAggregatorProcessor = new Mock<IAggregatorProcessor>();
             var mockConfiguration = new Mock<IConfiguration>();
 
             var handlerRef = new HandlerReference()
@@ -33,7 +33,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             {
                 Time = timeout
             });
-            mockConfiguration.Setup(x => x.GetAggregatorTimer(It.IsAny<IAggregatorPersistor>(), mockContainer.Object, typeof(FakeAggregator))).Returns(mockAggregatorTImer.Object);
+            mockConfiguration.Setup(x => x.GetAggregatorProcessor(It.IsAny<IAggregatorPersistor>(), mockContainer.Object, typeof(FakeAggregator))).Returns(mockAggregatorProcessor.Object);
             mockConfiguration.Setup(x => x.GetAggregatorPersistor()).Returns(mockAggregatorPersistor.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.AutoStartConsuming).Returns(true);
@@ -44,7 +44,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             new Bus(mockConfiguration.Object);
 
             // Assert
-            mockAggregatorTImer.Verify(x => x.StartTimer<FakeMessage1>(timeout), Times.Once);
+            mockAggregatorProcessor.Verify(x => x.StartTimer<FakeMessage1>(timeout), Times.Once);
         }
 
         [Fact]
@@ -54,7 +54,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
 
-            var timer = new AggregatorTimer(mockPersistor.Object, mockContainer.Object, typeof (FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof (FakeAggregator));
 
             var count = 0;
 
@@ -78,7 +78,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
 
-            var timer = new AggregatorTimer(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             mockPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(1);
             var aggregator = new FakeAggregator();
@@ -104,7 +104,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
 
-            var timer = new AggregatorTimer(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             mockPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(1);
             var aggregator = new FakeAggregator();
@@ -129,7 +129,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
 
-            var timer = new AggregatorTimer(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
 
             var count = 0;
 
