@@ -51,7 +51,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AggregatorTimer.cs" />
     <Compile Include="AggregatorProcessor.cs" />
     <Compile Include="Aggregator.cs" />
     <Compile Include="ConfigurationManagerWrapper.cs" />
