@@ -583,11 +583,14 @@ namespace R.MessageBus
 
         private void ProcessAggregatorHandlers(byte[] objectMessage, Type type)
         {
-            IAggregatorProcessor aggregatorProcessor = _aggregatorProcessors[type];
+            if (_aggregatorProcessors.ContainsKey(type))
+            {
+                IAggregatorProcessor aggregatorProcessor = _aggregatorProcessors[type];
 
-            MethodInfo aggregatorProcessorMethod = aggregatorProcessor.GetType().GetMethod("ProcessMessage");
-            MethodInfo genericAggregatorProcessorMethod = aggregatorProcessorMethod.MakeGenericMethod(type);
-            genericAggregatorProcessorMethod.Invoke(aggregatorProcessor, new object[] { Encoding.UTF8.GetString(objectMessage) });
+                MethodInfo aggregatorProcessorMethod = aggregatorProcessor.GetType().GetMethod("ProcessMessage");
+                MethodInfo genericAggregatorProcessorMethod = aggregatorProcessorMethod.MakeGenericMethod(type);
+                genericAggregatorProcessorMethod.Invoke(aggregatorProcessor, new object[] { Encoding.UTF8.GetString(objectMessage) });
+            }
         }
         
         private void ProcessMessageHandlers(byte[] objectMessage, Type type, IConsumeContext context)
