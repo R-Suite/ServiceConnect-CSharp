@@ -46,11 +46,21 @@ namespace R.MessageBus.UnitTests.Aggregator
             _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockProcessor = new Mock<IAggregatorProcessor>();
+            var fakeAggregator = new FakeAggregator();
 
             _mockConfiguration.Setup(x => x.GetAggregatorPersistor()).Returns(mockPersistor.Object);
-            _mockContainer.Setup(x => x.GetInstance<IAggregatorProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessor.Object);
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(new Mock<IMessageHandlerProcessor>().Object);
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(new Mock<IProcessManagerProcessor>().Object);
+            _mockConfiguration.Setup(x => x.GetAggregatorProcessor(It.IsAny<IAggregatorPersistor>(), It.IsAny<IBusContainer>(), It.IsAny<Type>())).Returns(mockProcessor.Object);
+            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(new List<HandlerReference>
+            {
+                new HandlerReference
+                {
+                    HandlerType = typeof (FakeAggregator),
+                    MessageType = typeof (FakeMessage1)
+                }
+            });
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeAggregator))).Returns(fakeAggregator);
             
             var message = new FakeMessage1(Guid.NewGuid())
             {
