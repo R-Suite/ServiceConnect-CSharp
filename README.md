@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/R-Suite/R.MessageBus.svg?branch=master)](https://travis-ci.org/R-Suite/R.MessageBus)
+
 **_(Major/Production-ready release is planned for the end of March 2015.)_**
 
 <img src="https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/logo/logo.png" height="150">
