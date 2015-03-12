@@ -78,11 +78,10 @@ namespace R.MessageBus.Client.RabbitMQ
         public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
         {
             ConsumeEventResult result;
+            IDictionary<string, object> headers = args.BasicProperties.Headers;
 
             try
             {
-                var headers = args.BasicProperties.Headers;
-
                 SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
                 SetHeader(args, "DestinationMachine", Environment.MachineName);
                 SetHeader(args, "DestinationAddress", _transportSettings.QueueName);
@@ -157,7 +156,13 @@ namespace R.MessageBus.Client.RabbitMQ
             }
             else if (!_errorsDisabled)
             {
-                if (_transportSettings.AuditingEnabled)
+                string messageType = null;
+                if (headers.ContainsKey("MessageType"))
+                {
+                    messageType = Encoding.UTF8.GetString((byte[])headers["MessageType"]);
+                }
+
+                if (_transportSettings.AuditingEnabled && messageType != "ByteStream")
                 {
                     _model.BasicPublish(_auditExchange, string.Empty, args.BasicProperties, args.Body);
                 }
