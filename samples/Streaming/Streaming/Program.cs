@@ -17,18 +17,20 @@ namespace Streaming
             });
 
             FileStream f = new FileStream(@"logo.bmp", FileMode.Open);
+            //FileStream f = new FileStream(@"TestPackage.nupkg", FileMode.Open);
 
             var stream = bus.CreateStream("StreamConsumer", new StartStreamMessage(Guid.NewGuid())
             {
                 Path = @"logoCopy.bmp"
+                //Path = @"TestPackageCopy.nupkg"
             });
 
-            byte[] buffer = new byte[100000];
+            byte[] buffer = new byte[1000];
             int read;
             while ((read = f.Read(buffer, 0, buffer.Length)) > 0)
             {
                 Console.WriteLine("Writing Bytes");
-                stream.Write(buffer);
+                stream.Write(buffer, 0, read);
             }
 
             Console.WriteLine("Stopping sending");
