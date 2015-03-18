@@ -63,7 +63,7 @@ namespace R.MessageBus.UnitTests.Stream
             }
 
             // Act
-            stream.Write(byteArray);
+            stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
             _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet1)), It.IsAny<Dictionary<string, string>>()));
@@ -85,7 +85,7 @@ namespace R.MessageBus.UnitTests.Stream
             var byteArray = new byte[20];
 
             // Act
-            stream.Write(byteArray);
+            stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
             _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence")));
@@ -102,7 +102,7 @@ namespace R.MessageBus.UnitTests.Stream
             var byteArray = new byte[20];
 
             // Act
-            stream.Write(byteArray);
+            stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
             _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "1")));

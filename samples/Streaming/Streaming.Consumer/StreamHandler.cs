@@ -19,6 +19,7 @@ namespace Streaming.Consumer
                 var bytes = Stream.Read();
                 if (bytes.Length > 0)
                 {
+                    Console.WriteLine("Writing...");
                     ms.Write(bytes, 0, bytes.Length);
                 }
             }
