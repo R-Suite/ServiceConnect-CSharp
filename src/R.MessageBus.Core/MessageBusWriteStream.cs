@@ -37,12 +37,14 @@ namespace R.MessageBus.Core
             _packetsSent = 0;
         }
 
-        public void Write(byte[] data)
+        public void Write(byte[] buffer, int offset, int count)
         {
-            for (Int64 i = 0; i < data.Length; i++)
+            var currentPacketSize = (count <= _packetSize) ? count : _packetSize;
+
+            for (Int64 i = offset; i < count; i += currentPacketSize)
             {
-                var subArray = SubArray(data, i, _packetSize);
-                i = i + (_packetSize - 1);
+                var subArray = SubArray(buffer, i, currentPacketSize);
+
                 _packetsSent++;
                 _producer.SendBytes(_endPoint, subArray, new Dictionary<string, string>
                 {
