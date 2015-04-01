@@ -9,10 +9,7 @@ namespace PointToPoint.Producer
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize(config =>
-            {
-                config.AddQueueMapping(typeof (PointToPointMessage), "PointToPoint");
-            });
+            var bus = Bus.Initialize(config => config.AddQueueMapping(typeof (PointToPointMessage), "PointToPoint2"));
 
             while (true)
             {
@@ -23,6 +20,7 @@ namespace PointToPoint.Producer
                 for (int i = 0; i < 100000; i++)
                 {
                     bus.Send(new PointToPointMessage(id));
+                    Console.ReadLine();
                 }
 
                 Console.WriteLine("Sent message - {0}", id);

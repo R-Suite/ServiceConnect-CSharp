@@ -36,7 +36,11 @@ namespace R.MessageBus.Client.RabbitMQ
                 }
                 catch (Exception ex)
                 {
-                    exceptionAction(ex);
+                    try
+                    {
+                        exceptionAction(ex);
+                    }
+                    catch { }
                     Thread.Sleep(retryInterval);
                 }
             }
@@ -56,7 +60,11 @@ namespace R.MessageBus.Client.RabbitMQ
                 catch (Exception ex)
                 {
                     exceptions.Add(ex);
-                    exceptionAction(ex);
+                    try
+                    {
+                        exceptionAction(ex);
+                    }
+                    catch{}
                     Thread.Sleep(retryInterval);
                 }
             }
@@ -77,7 +85,11 @@ namespace R.MessageBus.Client.RabbitMQ
                 catch (Exception ex)
                 {
                     exceptions.Add(ex);
-                    exceptionAction(ex);
+                    try
+                    {
+                        exceptionAction(ex);
+                    }
+                    catch { }
                     Thread.Sleep(retryInterval);
                 }
             }
