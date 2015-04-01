@@ -41,7 +41,8 @@
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus">
+    <Reference Include="R.MessageBus, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Client.RabbitMQ">
