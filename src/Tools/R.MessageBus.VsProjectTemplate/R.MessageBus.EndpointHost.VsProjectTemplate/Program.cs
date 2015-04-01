@@ -2,6 +2,7 @@
 using System.Reflection;
 using System.ServiceProcess;
 using Common.Logging;
+using R.MessageBus;
 using R.MessageBus.Interfaces;
 
 namespace R.MessageBus.EndpointHost.VsProjectTemplate

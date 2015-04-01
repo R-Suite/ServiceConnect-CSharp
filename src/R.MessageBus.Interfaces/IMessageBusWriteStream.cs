@@ -20,7 +20,7 @@ namespace R.MessageBus.Interfaces
 {
     public interface IMessageBusWriteStream : IDisposable
     {
-        void Write(byte[] data);
+        void Write(byte[] buffer, int offset, int count);
         void Close();
     }
 }
