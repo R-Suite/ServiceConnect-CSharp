@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/R-Suite/R.MessageBus.svg?branch=master)](https://travis-ci.org/R-Suite/R.MessageBus)
 
-**_R.MessageBus 2.0.0 is avaiable at [https://www.nuget.org/packages/R.MessageBus] (https://www.nuget.org/packages/R.MessageBus/)_**
+**_R.MessageBus 2.0.0 is available at [https://www.nuget.org/packages/R.MessageBus] (https://www.nuget.org/packages/R.MessageBus/)_**
 
 <img src="https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/logo/logo.png" height="150">
 
