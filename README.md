@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/R-Suite/R.MessageBus.svg?branch=master)](https://travis-ci.org/R-Suite/R.MessageBus)
 
-**_(Major/Production-ready release is planned for the end of March 2015.)_**
+**_R.MessageBus 2.0.0 is avaiable at [https://www.nuget.org/packages/R.MessageBus] (https://www.nuget.org/packages/R.MessageBus/)_**
 
 <img src="https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/logo/logo.png" height="150">
 
@@ -23,9 +23,7 @@ In order to get started, have a look at the documentation at [http://rmessagebus
 
 
 ## Project Maturity
-R.MessageBus is used by a number of high-profile financial applications in production environments. However,  it hasn’t been officially released and the current pre-release version may not yet be suitable for the most demanding and conservative projects. Production-ready release is planned for the end of March 2015
-
-Public API is stable and no major changes are planned in the next version.
+R.MessageBus has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.
 
 
 ## Simple example
