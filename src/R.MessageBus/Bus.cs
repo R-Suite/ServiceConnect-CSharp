@@ -184,13 +184,10 @@ namespace R.MessageBus
             var messageId = Guid.NewGuid();
             IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
 
-            List<TReply> responses = new List<TReply>();
+            var responses = new List<TReply>();
             configuration.EndpointsCount = expectedCount ?? -1;
 
-            Task task = configuration.SetHandler(r =>
-            {
-                responses.Add((TReply)r);
-            });
+            Task task = configuration.SetHandler(r => responses.Add((TReply)r));
 
             lock (_requestLock)
             {
@@ -358,13 +355,10 @@ namespace R.MessageBus
             var messageId = Guid.NewGuid();
             IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
 
-            List<TReply> responses = new List<TReply>();
+            var responses = new List<TReply>();
             configuration.EndpointsCount = endPoints.Count;
 
-            Task task = configuration.SetHandler(r =>
-            {
-                responses.Add((TReply)r);
-            });
+            Task task = configuration.SetHandler(r => responses.Add((TReply)r));
 
             lock (_requestLock)
             {
