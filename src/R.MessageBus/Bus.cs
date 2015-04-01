@@ -342,6 +342,7 @@ namespace R.MessageBus
 
             Task.WaitAll(new[]{ task }, timeout);
 
+            
             if (!task.IsCompleted)
             {
                 throw new TimeoutException();
