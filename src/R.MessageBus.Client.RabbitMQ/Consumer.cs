@@ -76,7 +76,7 @@ namespace R.MessageBus.Client.RabbitMQ
         /// </summary>
         /// <param name="consumer"></param>
         /// <param name="args"></param>
-        public void Event(IBasicConsumer consumer, BasicDeliverEventArgs args)
+        public void Event(object consumer, BasicDeliverEventArgs args)
         {
             ConsumeEventResult result;
             IDictionary<string, object> headers = args.BasicProperties.Headers;
@@ -191,7 +191,7 @@ namespace R.MessageBus.Client.RabbitMQ
             var connectionFactory = new ConnectionFactory
             {
                 HostName = _hosts[_activeHost],
-                Protocol = Protocols.FromEnvironment(),
+                Protocol = Protocols.DefaultProtocol,
                 Port = AmqpTcpEndpoint.UseDefaultPort
             };
 
@@ -248,7 +248,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 }
             }
 
-            var consumer = new EventingBasicConsumer();
+            var consumer = new EventingBasicConsumer(_model);
             consumer.Received += Event;
             if (_heartbeatEnabled)
             {
