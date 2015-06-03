@@ -65,6 +65,17 @@ namespace R.MessageBus.Client.RabbitMQ
                 _connectionFactory.Password = transportSettings.Password;
             }
 
+            if (_transportSettings.SslEnabled)
+            {
+                _connectionFactory.Ssl = new SslOption
+                {
+                    Enabled = true,
+                    AcceptablePolicyErrors = transportSettings.AcceptablePolicyErrors,
+                    ServerName = transportSettings.ServerName
+                };
+                _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
+            }
+
             CreateConnection();
         }
 

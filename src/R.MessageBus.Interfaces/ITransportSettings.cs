@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System.Collections.Generic;
+using System.Net.Security;
 
 namespace R.MessageBus.Interfaces
 {
@@ -80,5 +81,25 @@ namespace R.MessageBus.Interfaces
         string QueueName { get; set; }
 
         bool PurgeQueueOnStartup { get; set; }
+
+        /// <summary>
+        /// Communicate over AMQPS instead of AMQP?
+        /// See also <see cref="AcceptablePolicyErrors">AcceptablePolicyErrors</see>
+        /// See also <see cref="ServerName">ServerName</see>
+        /// </summary>
+        bool SslEnabled { get; set; }
+
+        /// <summary>
+        /// Used during server certificate validation. Useful mainly for development purposes.
+        /// In production, this should be left to <see cref="SslPolicyErrors.None">SslPolicyErrors.None</see> (default)
+        /// </summary>
+        SslPolicyErrors AcceptablePolicyErrors { get; set; }
+
+        /// <summary>
+        /// Used during SSL validation.
+        /// If set, it must match exactly with Canonical Name (CN) of the certificate.
+        /// Useful for wildcard certificates where rabbitmq factory will fail to validate ssl certificate otherwise.
+        /// </summary>
+        string ServerName { get; set; }
     }
 }
