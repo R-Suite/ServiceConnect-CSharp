@@ -27,7 +27,7 @@ using ConsumerEventHandler = R.MessageBus.Interfaces.ConsumerEventHandler;
 
 namespace R.MessageBus.Client.RabbitMQ
 {
-    public class Consumer :  IConsumer
+    public class Consumer : IConsumer
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ITransportSettings _transportSettings;
@@ -210,6 +210,17 @@ namespace R.MessageBus.Client.RabbitMQ
                 connectionFactory.Password = _transportSettings.Password;
             }
 
+            if (_transportSettings.SslEnabled)
+            {
+                connectionFactory.Ssl = new SslOption
+                {
+                    Enabled = true,
+                    AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
+                    ServerName = _transportSettings.ServerName
+                };
+                connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
+            }
+
             _connection = connectionFactory.CreateConnection();
 
             _model = _connection.CreateModel();
@@ -354,7 +365,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             try
             {
-                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct",  _durable, _autoDelete, null);
+                _model.ExchangeDeclare(retryDeadLetterExchangeName, "direct", _durable, _autoDelete, null);
             }
             catch (Exception ex)
             {
@@ -497,12 +508,12 @@ namespace R.MessageBus.Client.RabbitMQ
                     Logger.Debug("Disposing connection");
                     _connection.Dispose();
                 }
-                catch(System.IO.EndOfStreamException ex) 
+                catch (System.IO.EndOfStreamException ex)
                 {
                     Logger.Warn("Error disposing connection", ex);
                 }
                 _connection = null;
-            } 
+            }
         }
     }
 }
