@@ -16,6 +16,7 @@
 
 using System.Collections.Generic;
 using R.MessageBus.Interfaces;
+using System.Net.Security;
 
 namespace R.MessageBus.Settings
 {
@@ -35,5 +36,8 @@ namespace R.MessageBus.Settings
         public bool DisableErrors { get; set; }
         public string HeartbeatQueueName { get; set; }
         public IDictionary<string, object> ClientSettings { get; set; }
+        public bool SslEnabled { get; set; }
+        public SslPolicyErrors AcceptablePolicyErrors { get; set; }
+        public string ServerName { get; set; }
     }
 }
