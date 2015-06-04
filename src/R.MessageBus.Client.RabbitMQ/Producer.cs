@@ -51,7 +51,7 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 HostName = _hosts[_activeHost],
                 VirtualHost = "/",
-                Protocol = Protocols.FromEnvironment(),
+                Protocol = Protocols.DefaultProtocol,
                 Port = AmqpTcpEndpoint.UseDefaultPort
             };
 
@@ -63,6 +63,17 @@ namespace R.MessageBus.Client.RabbitMQ
             if (!string.IsNullOrEmpty(transportSettings.Password))
             {
                 _connectionFactory.Password = transportSettings.Password;
+            }
+
+            if (_transportSettings.SslEnabled)
+            {
+                _connectionFactory.Ssl = new SslOption
+                {
+                    Enabled = true,
+                    AcceptablePolicyErrors = transportSettings.AcceptablePolicyErrors,
+                    ServerName = transportSettings.ServerName
+                };
+                _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
             }
 
             CreateConnection();
@@ -93,13 +104,13 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
-                basicProperties.Headers = GetHeaders(typeof (T), headers, _transportSettings.QueueName, "Publish");
+                basicProperties.Headers = GetHeaders(typeof(T), headers, _transportSettings.QueueName, "Publish");
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 basicProperties.SetPersistent(true);
                 var exchangeName = (null != baseType)
                     ? ConfigureExchange(baseType.FullName.Replace(".", string.Empty))
-                    : ConfigureExchange(typeof (T).FullName.Replace(".", string.Empty));
+                    : ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
 
                 Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.QueueName, basicProperties, bytes),
                     ex => RetryConnection(),
@@ -112,7 +123,7 @@ namespace R.MessageBus.Client.RabbitMQ
             {
                 MethodInfo publish = GetType().GetMethod("PublishBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
                 MethodInfo genericPublish = publish.MakeGenericMethod(typeof(T), newBaseType);
-                genericPublish.Invoke(this, new object[] {message, headers});
+                genericPublish.Invoke(this, new object[] { message, headers });
             }
         }
 
@@ -220,7 +231,7 @@ namespace R.MessageBus.Client.RabbitMQ
         public void Dispose()
         {
             Logger.Debug("In Producer.Dispose()");
-            
+
             if (_model != null)
             {
                 Logger.Debug("Disposing Model");
@@ -240,7 +251,7 @@ namespace R.MessageBus.Client.RabbitMQ
                     Logger.Warn("Error disposing connection", ex);
                 }
                 _connection = null;
-            } 
+            }
         }
 
         public string Type
