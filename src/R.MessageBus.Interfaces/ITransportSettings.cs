@@ -139,5 +139,12 @@ namespace R.MessageBus.Interfaces
         /// determine if the remote server certificate is valid.
         /// </summary>
         RemoteCertificateValidationCallback CertificateValidationCallback { get; set; }
+
+        /// <summary>
+        /// Virtual host to be used for communication.
+        /// This should only be set if your setup actually has this configured.
+        /// This value is case sensitive. Incorrectly changing this value will break all communications with RabbitMQ server.
+        /// </summary>
+        string VirtualHost { get; set; }
     }
 }
