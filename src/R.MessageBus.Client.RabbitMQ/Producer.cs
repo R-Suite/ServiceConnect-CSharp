@@ -71,7 +71,13 @@ namespace R.MessageBus.Client.RabbitMQ
                 {
                     Enabled = true,
                     AcceptablePolicyErrors = transportSettings.AcceptablePolicyErrors,
-                    ServerName = transportSettings.ServerName
+                    ServerName = transportSettings.ServerName,
+                    CertPassphrase = transportSettings.CertPassphrase,
+                    CertPath = transportSettings.CertPath,
+                    Certs = transportSettings.Certs,
+                    Version = transportSettings.Version,
+                    CertificateSelectionCallback = transportSettings.CertificateSelectionCallback,
+                    CertificateValidationCallback = transportSettings.CertificateValidationCallback
                 };
                 _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
             }
