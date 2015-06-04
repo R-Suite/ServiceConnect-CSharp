@@ -16,6 +16,8 @@
 
 using System.Collections.Generic;
 using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 
 namespace R.MessageBus.Interfaces
 {
@@ -84,14 +86,16 @@ namespace R.MessageBus.Interfaces
 
         /// <summary>
         /// Communicate over AMQPS instead of AMQP?
-        /// See also <see cref="AcceptablePolicyErrors">AcceptablePolicyErrors</see>
-        /// See also <see cref="ServerName">ServerName</see>
+        /// See also <seealso cref="AcceptablePolicyErrors" />, <seealso cref="ServerName" />, <seealso cref="CertPath"/>,
+        /// <seealso cref="CertPassphrase"/>, <seealso cref="Certs"/>, <seealso cref="Version"/>,
+        /// <seealso cref="CertificateSelectionCallback"/>, <seealso cref="CertificateValidationCallback"/>
+        /// for configuring SSL specific aspects of transport
         /// </summary>
         bool SslEnabled { get; set; }
 
         /// <summary>
         /// Used during server certificate validation. Useful mainly for development purposes.
-        /// In production, this should be left to <see cref="SslPolicyErrors.None">SslPolicyErrors.None</see> (default)
+        /// In production, this should be left to <seealso cref="SslPolicyErrors.None" /> (default)
         /// </summary>
         SslPolicyErrors AcceptablePolicyErrors { get; set; }
 
@@ -101,5 +105,39 @@ namespace R.MessageBus.Interfaces
         /// Useful for wildcard certificates where rabbitmq factory will fail to validate ssl certificate otherwise.
         /// </summary>
         string ServerName { get; set; }
+
+        /// <summary>
+        /// Optional client certificate to use during SSL handshake
+        /// </summary>
+        string CertPath { get; set; }
+
+        /// <summary>
+        /// Password for the optional client certificate used during SSL handshake
+        /// </summary>
+        string CertPassphrase { get; set; }
+
+        /// <summary>
+        /// X509CertificateCollection containing the optional client certificate.
+        /// If no collection is set, the client will attempt to load one from the specified <see cref="CertPath"/>
+        /// </summary>
+        X509CertificateCollection Certs { get; set; }
+
+        /// <summary>
+        /// Optionally use specific ssl protocol version
+        /// </summary>
+        SslProtocols Version { get; set; }
+
+        /// <summary>
+        /// An optional client specified SSL certificate selection callback.  If this is not specified,
+        /// the first valid certificate found will be used.
+        /// </summary>
+        LocalCertificateSelectionCallback CertificateSelectionCallback { get; set; }
+
+        /// <summary>
+        /// An optional client specified SSL certificate validation callback.  If this is not specified,
+        /// the default callback will be used in conjunction with the <seealso cref="AcceptablePolicyErrors"/> property to
+        /// determine if the remote server certificate is valid.
+        /// </summary>
+        RemoteCertificateValidationCallback CertificateValidationCallback { get; set; }
     }
 }
