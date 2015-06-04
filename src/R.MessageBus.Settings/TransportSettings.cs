@@ -47,5 +47,6 @@ namespace R.MessageBus.Settings
         public SslProtocols Version { get; set; }
         public LocalCertificateSelectionCallback CertificateSelectionCallback { get; set; }
         public RemoteCertificateValidationCallback CertificateValidationCallback { get; set; }
+        public string VirtualHost { get; set; }
     }
 }
