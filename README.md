@@ -21,7 +21,7 @@ In order to get started, have a look at the documentation at [http://rmessagebus
 * Streaming
 * Retries
 * Auditing
-
+* SSL Support
 
 ## Project Maturity
 R.MessageBus has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.
