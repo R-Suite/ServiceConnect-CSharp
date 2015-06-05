@@ -9,6 +9,8 @@ A simple, easy to use asynchronous messaging framework for .NET.
 In order to get started, have a look at the documentation at [http://rmessagebus.com/guides](http://rmessagebus.com/guides)
 
 ## Features
+
+[![Join the chat at https://gitter.im/R-Suite/R.MessageBus](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/R.MessageBus?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 * Support for many well-known Enteprise Integration Patterns
     - Point to Point
     - Publish/Subcribe
