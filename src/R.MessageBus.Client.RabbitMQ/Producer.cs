@@ -82,6 +82,11 @@ namespace R.MessageBus.Client.RabbitMQ
                 _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
             }
 
+            if (!string.IsNullOrEmpty(transportSettings.VirtualHost))
+            {
+                _connectionFactory.VirtualHost = transportSettings.VirtualHost;
+            }
+
             CreateConnection();
         }
 
