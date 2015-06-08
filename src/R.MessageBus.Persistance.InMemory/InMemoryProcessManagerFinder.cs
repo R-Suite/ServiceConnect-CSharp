@@ -41,59 +41,62 @@ namespace R.MessageBus.Persistance.InMemory
 
         public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
-            var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
-                          mapper.Mappings.First(m => m.MessageType == typeof (Message));
-
-
-            object msgPropValue = mapping.MessageProp.Invoke(message);
-            if (null == msgPropValue)
+            lock (_memoryCacheLock)
             {
-                throw new ArgumentException("Message property expression evaluates to null");
+                var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
+                          mapper.Mappings.First(m => m.MessageType == typeof(Message));
+
+
+                object msgPropValue = mapping.MessageProp.Invoke(message);
+                if (null == msgPropValue)
+                {
+                    throw new ArgumentException("Message property expression evaluates to null");
+                }
+
+                //Left
+                ParameterExpression pe = Expression.Parameter(typeof(MemoryData<T>), "t");
+                Expression left = Expression.Property(pe, typeof(MemoryData<T>).GetProperty("Data"));
+                foreach (var prop in mapping.PropertiesHierarchy.Reverse())
+                {
+                    left = Expression.Property(left, left.Type, prop.Key);
+                }
+
+                //Right
+                Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
+
+                Expression expression;
+
+                try
+                {
+                    expression = Expression.Equal(left, right);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    throw new Exception("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
+                }
+
+                Expression<Func<MemoryData<T>, bool>> lambda = Expression.Lambda<Func<MemoryData<T>, bool>>(expression, pe);
+
+                var cacheItems = (from n in Cache.AsParallel() select n.Value);
+                var newCacheItems = Enumerable.ToList((from dynamic cacheItem in cacheItems select new MemoryData<T> { Data = cacheItem.Data, Version = cacheItem.Version }));
+                MemoryData<T> retval = newCacheItems.FirstOrDefault(lambda.Compile());
+
+                return retval;
             }
-
-            //Left
-            ParameterExpression pe = Expression.Parameter(typeof(MemoryData<T>), "t");
-            Expression left = Expression.Property(pe, typeof(MemoryData<T>).GetProperty("Data"));
-            foreach (var prop in mapping.PropertiesHierarchy.Reverse())
-            {
-                left = Expression.Property(left, left.Type, prop.Key);
-            }
-
-            //Right
-            Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
-
-            Expression expression;
-
-            try
-            {
-                expression = Expression.Equal(left, right);
-            }
-            catch (InvalidOperationException ex)
-            {
-                throw new Exception("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
-            }
-
-            Expression<Func<MemoryData<T>, bool>> lambda = Expression.Lambda<Func<MemoryData<T>, bool>>(expression, pe);
-
-            var cacheItems = (from n in Cache.AsParallel() select n.Value);
-            var newCacheItems = Enumerable.ToList((from dynamic cacheItem in cacheItems select new MemoryData<T> { Data = cacheItem.Data, Version = cacheItem.Version}));
-            MemoryData<T> retval = newCacheItems.FirstOrDefault(lambda.Compile());
-
-            return retval;
         }
 
         public void InsertData(IProcessManagerData data)
         {
-            var memoryData = new MemoryData<IProcessManagerData>
-            {
-                Data = data,
-                Version = 1
-            };
-
-            string key = data.CorrelationId.ToString();
-
             lock (_memoryCacheLock)
             {
+                var memoryData = new MemoryData<IProcessManagerData>
+                {
+                    Data = data,
+                    Version = 1
+                };
+
+                string key = data.CorrelationId.ToString();
+            
                 if (!Cache.Contains(key))
                 {
                     Cache.Set(key, memoryData, _policy);
@@ -107,22 +110,22 @@ namespace R.MessageBus.Persistance.InMemory
 
         public void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
         {
-            string error = null;
-            var newData = (MemoryData<T>)data;
-            string key = data.Data.CorrelationId.ToString();
-
-            if (Cache.Contains(key))
+            lock (_memoryCacheLock)
             {
-                var currentVersion = ((MemoryData<IProcessManagerData>)(Cache.Get(key))).Version;
+                string error = null;
+                var newData = (MemoryData<T>) data;
+                string key = data.Data.CorrelationId.ToString();
 
-                var updatedData = new MemoryData<IProcessManagerData>
+                if (Cache.Contains(key))
                 {
-                    Data = data.Data,
-                    Version = newData.Version + 1
-                };
+                    var currentVersion = ((MemoryData<IProcessManagerData>) (Cache.Get(key))).Version;
 
-                lock (_memoryCacheLock)
-                {
+                    var updatedData = new MemoryData<IProcessManagerData>
+                    {
+                        Data = data.Data,
+                        Version = newData.Version + 1
+                    };
+
                     if (currentVersion == newData.Version)
                     {
                         Cache.Set(key, updatedData, _policy);
@@ -132,21 +135,26 @@ namespace R.MessageBus.Persistance.InMemory
                         error = string.Format("Possible Concurrency Error. ProcessManagerData with CorrelationId {0} and Version {1} could not be updated.", key, currentVersion);
                     }
                 }
-            }
-            else
-            {
-                error = string.Format("ProcessManagerData with CorrelationId {0} does not exist in memory.", key);
-            }
+                else
+                {
+                    error = string.Format("ProcessManagerData with CorrelationId {0} does not exist in memory.", key);
+                }
 
-            if (!string.IsNullOrEmpty(error))
-                throw new ArgumentException(error);
+                if (!string.IsNullOrEmpty(error))
+                {
+                    throw new ArgumentException(error);
+                }
+            }
         }
 
         public void DeleteData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-            string key = persistanceData.Data.CorrelationId.ToString();
+            lock (_memoryCacheLock)
+            {
+                string key = persistanceData.Data.CorrelationId.ToString();
 
-            Cache.Remove(key);
+                Cache.Remove(key);
+            }
         }
     }
 }
