@@ -103,44 +103,47 @@ namespace R.MessageBus.Persistance.SqlServer
             if (!GetTableNameExists(tableName))
                 return null;
 
-            var connection = new SqlConnection(_connectionString);
-            connection.Open();
-
-            try
+            using (var sqlConnection = new SqlConnection(_connectionString))
             {
+                sqlConnection.Open();
+
                 using (var command = new SqlCommand())
                 {
-                    command.Connection = connection;
+                    command.Connection = sqlConnection;
                     command.CommandTimeout = _commandTimeout;
                     command.CommandText = string.Format(@"SELECT * FROM {0} WHERE DataXml.value('{1}', 'nvarchar(max)') = @val", tableName, xPathExpression.Expression);
-                    command.Parameters.Add(new SqlParameter { ParameterName = "@val", Value = msgPropValue });
-                    var reader = command.ExecuteReader(CommandBehavior.SingleResult);
-
-                    if (reader.HasRows)
+                    command.Parameters.Add(new SqlParameter {ParameterName = "@val", Value = msgPropValue});
+                    
+                    try
                     {
-                        reader.Read();
+                        var reader = command.ExecuteReader(CommandBehavior.SingleResult);
 
-                        var serializer = new XmlSerializer(typeof(T));
-                        object res;
-                        using (TextReader r = new StringReader(reader["DataXml"].ToString()))
+                        if (reader.HasRows)
                         {
-                            res = serializer.Deserialize(r);
+                            reader.Read();
+
+                            var serializer = new XmlSerializer(typeof (T));
+                            object res;
+                            using (TextReader r = new StringReader(reader["DataXml"].ToString()))
+                            {
+                                res = serializer.Deserialize(r);
+                            }
+
+                            result = new SqlServerData<T>
+                            {
+                                Id = (Guid) reader["Id"],
+                                Data = (T) res,
+                                Version = (int) reader["Version"]
+                            };
                         }
 
-                        result = new SqlServerData<T>
-                        {
-                            Id = (Guid)reader["Id"],
-                            Data = (T)res,
-                            Version = (int)reader["Version"]
-                        };
+                        reader.Close();
                     }
-
-                    reader.Close();
+                    finally
+                    {
+                        sqlConnection.Close();
+                    }
                 }
-            }
-            finally
-            {
-                connection.Close();
             }
 
             return result;
@@ -189,24 +192,28 @@ namespace R.MessageBus.Persistance.SqlServer
                                                     end", tableName);
 
 
-                    var command = new SqlCommand(upsertSql) {Transaction = dbTransaction, Connection = sqlConnection};
-                    command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = data.CorrelationId;
-                    command.Parameters.Add("@Version", SqlDbType.Int).Value = sqlServerData.Version;
-                    command.Parameters.Add("@DataXml", SqlDbType.Xml).Value = dataXml;
+                    using (var command = new SqlCommand(upsertSql))
+                    {
+                        command.Connection = sqlConnection;
+                        command.Transaction = dbTransaction;
+                        command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = data.CorrelationId;
+                        command.Parameters.Add("@Version", SqlDbType.Int).Value = sqlServerData.Version;
+                        command.Parameters.Add("@DataXml", SqlDbType.Xml).Value = dataXml;
 
-                    try
-                    {
-                        command.ExecuteNonQuery();
-                        dbTransaction.Commit();
-                    }
-                    catch
-                    {
-                        dbTransaction.Rollback();
-                        throw;
-                    }
-                    finally
-                    {
-                        sqlConnection.Close();
+                        try
+                        {
+                            command.ExecuteNonQuery();
+                            dbTransaction.Commit();
+                        }
+                        catch
+                        {
+                            dbTransaction.Rollback();
+                            throw;
+                        }
+                        finally
+                        {
+                            sqlConnection.Close();
+                        }
                     }
                 }
             }
@@ -232,23 +239,29 @@ namespace R.MessageBus.Persistance.SqlServer
 
             string sql = string.Format(@"UPDATE {0} SET DataXml = @DataXml, Version = @NewVersion WHERE Id = @Id AND Version = @CurrentVersion", tableName);
 
-            var connection = new SqlConnection(_connectionString);
-            connection.Open();
-
             int result;
+            using (var sqlConnection = new SqlConnection(_connectionString))
+            {
+                sqlConnection.Open();
 
-            try
-            {
-                var command = new SqlCommand(sql) {Connection = connection, CommandTimeout = _commandTimeout};
-                command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
-                command.Parameters.Add("@DataXml", SqlDbType.Xml).Value = dataXml;
-                command.Parameters.Add("@CurrentVersion", SqlDbType.Int).Value = currentVersion;
-                command.Parameters.Add("@NewVersion", SqlDbType.Int).Value = ++currentVersion;
-                result = command.ExecuteNonQuery();
-            }
-            finally
-            {
-                connection.Close();
+                using (var command = new SqlCommand(sql))
+                {
+                    command.Connection = sqlConnection;
+                    command.CommandTimeout = _commandTimeout;
+                    command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
+                    command.Parameters.Add("@DataXml", SqlDbType.Xml).Value = dataXml;
+                    command.Parameters.Add("@CurrentVersion", SqlDbType.Int).Value = currentVersion;
+                    command.Parameters.Add("@NewVersion", SqlDbType.Int).Value = ++currentVersion;
+
+                    try
+                    {
+                        result = command.ExecuteNonQuery();
+                    }
+                    finally
+                    {
+                        sqlConnection.Close();
+                    }
+                }
             }
 
             if (result == 0)
@@ -269,18 +282,24 @@ namespace R.MessageBus.Persistance.SqlServer
 
             string sql = string.Format(@"DELETE FROM {0} WHERE Id = @Id", tableName);
 
-            var connection = new SqlConnection(_connectionString);
-            connection.Open();
+            using (var sqlConnection = new SqlConnection(_connectionString))
+            {
+                sqlConnection.Open();
 
-            try
-            {
-                var command = new SqlCommand(sql) {Connection = connection};
-                command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
-                command.ExecuteNonQuery();
-            }
-            finally
-            {
-                connection.Close();
+                using (var command = new SqlCommand(sql))
+                {
+                    command.Connection = sqlConnection;
+                    command.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = sqlServerData.Id;
+
+                    try
+                    {
+                        command.ExecuteNonQuery();
+                    }
+                    finally
+                    {
+                        sqlConnection.Close();
+                    }
+                }
             }
         }
 
