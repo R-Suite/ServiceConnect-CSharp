@@ -130,7 +130,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
             // Get message BaseType and call Publish recursively
             Type newBaseType = (null != baseType) ? baseType.BaseType : typeof(T).BaseType;
-            if (newBaseType != null && newBaseType.Name != typeof(object).Name)
+            if (newBaseType != null && newBaseType.Name != typeof(object).Name && newBaseType.Name != typeof(Message).Name)
             {
                 MethodInfo publish = GetType().GetMethod("PublishBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
                 MethodInfo genericPublish = publish.MakeGenericMethod(typeof(T), newBaseType);
