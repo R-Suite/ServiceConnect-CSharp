@@ -27,9 +27,11 @@ namespace R.MessageBus.Container
 {
     public class StructuremapContainer : IBusContainer
     {
+        private IContainer _smContainer = ObjectFactory.Container;
+
         public void Initialize()
         {
-            ObjectFactory.Configure(x =>
+            _smContainer.Configure(x =>
             {
                 x.For<IMessageHandlerProcessor>().Use<MessageHandlerProcessor>();
                 x.For<IAggregatorProcessor>().Use<AggregatorProcessor>();
@@ -39,19 +41,25 @@ namespace R.MessageBus.Container
             });
         }
 
+        public void Initialize(IContainer smContainer)
+        {
+            _smContainer = smContainer;
+            Initialize();
+        }
+
         public void AddHandler<T>(Type handlerType, T handler)
         {
-            ObjectFactory.Configure(x => x.For(handlerType).Singleton().Use(handler));
+            _smContainer.Configure(x => x.For(handlerType).Singleton().Use(handler));
         }
 
         public void AddBus(IBus bus)
         {
-            ObjectFactory.Configure(x => x.For<IBus>().Singleton().Use(bus));
+            _smContainer.Configure(x => x.For<IBus>().Singleton().Use(bus));
         }
 
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
-            IEnumerable<InstanceRef> instances = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
+            IEnumerable<InstanceRef> instances = _smContainer.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
                                                                                                        i.PluginType.Name == typeof(IStartProcessManager<>).Name || 
                                                                                                        i.PluginType.Name == typeof(Aggregator<>).Name);
             return instances.Where(instance => instance.ConcreteType != null && !string.IsNullOrEmpty(instance.ConcreteType.Name))
@@ -64,7 +72,7 @@ namespace R.MessageBus.Container
 
         public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
         {
-            var handlers = ObjectFactory.Container.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
+            var handlers = _smContainer.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
             {
                 MessageType = instance.PluginType.GetGenericArguments()[0],
                 HandlerType = instance.ConcreteType
@@ -74,22 +82,22 @@ namespace R.MessageBus.Container
 
         public object GetInstance(Type handlerType)
         {
-            return ObjectFactory.GetInstance(handlerType);
+            return _smContainer.GetInstance(handlerType);
         }
 
         public T GetInstance<T>(IDictionary<string, object> arguments)
-        { 
-            return ObjectFactory.GetInstance<T>(new ExplicitArguments(arguments));
+        {
+            return _smContainer.GetInstance<T>(new ExplicitArguments(arguments));
         }
 
         public T GetInstance<T>()
         {
-            return ObjectFactory.GetInstance<T>();
+            return _smContainer.GetInstance<T>();
         }
 
         public void ScanForHandlers()
         {
-            ObjectFactory.Configure(x => x.Scan(y =>
+            _smContainer.Configure(x => x.Scan(y =>
             {
                 y.AssembliesFromApplicationBaseDirectory();
                 y.ConnectImplementationsToTypesClosing(typeof(IMessageHandler<>));
