@@ -72,6 +72,7 @@ namespace R.MessageBus
         public IDictionary<string, IList<string>> QueueMappings { get; set; }
         public Action<Exception> ExceptionHandler { get; set; }
         public bool AddBusToContainer { get; set; }
+        public int Threads { get; set; }
 
         #endregion
 
@@ -104,6 +105,8 @@ namespace R.MessageBus
             MessageBusReadStream = typeof (MessageBusReadStream);
             MessageBusWriteStream = typeof (MessageBusWriteStream);
             AggregatorProcessor = typeof(AggregatorProcessor);
+
+            Threads = 1;
         }
 
         /// <summary>
@@ -367,6 +370,11 @@ namespace R.MessageBus
         public IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
         {
             return (IAggregatorProcessor)Activator.CreateInstance(AggregatorProcessor, aggregatorPersistor, container, handlerType);
+        }
+
+        public void SetThreads(int numberOfThreads)
+        {
+            Threads = numberOfThreads;
         }
 
         #region Private Methods

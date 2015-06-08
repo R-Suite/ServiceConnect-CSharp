@@ -37,6 +37,7 @@ namespace R.MessageBus.Interfaces
         IDictionary<string, IList<string>> QueueMappings { get; set; }
         Action<Exception> ExceptionHandler { get; set; }
         bool AddBusToContainer { get; set; }
+        int Threads { get; set; }
 
         /// <summary>
         /// Adds a message queue mapping. 
@@ -215,5 +216,11 @@ namespace R.MessageBus.Interfaces
         /// <param name="handlerType"></param>
         /// <returns></returns>
         IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType);
+
+        /// <summary>
+        /// Sets the number of threads to consume messages on.
+        /// </summary>
+        /// <returns></returns>
+        void SetThreads(int numberOfThreads);
     }
 }
