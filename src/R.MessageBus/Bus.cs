@@ -38,8 +38,8 @@ namespace R.MessageBus
         private readonly IDictionary<Type, IAggregatorProcessor> _aggregatorProcessors = new Dictionary<Type, IAggregatorProcessor>();
         private readonly IProducer _producer;
         private Timer _timer;
-        private IConsumer _consumer;
         private bool _startedConsuming;
+        private readonly IList<IConsumer> _consumers = new List<IConsumer>();
 
         public IConfiguration Configuration { get; set; }
 
@@ -153,25 +153,35 @@ namespace R.MessageBus
 
         public void StartConsuming()
         {
-            if (_startedConsuming) // prevent creating multiple consumers
+            if (_startedConsuming)
                 return;
 
             StartAggregatorTimers();
 
-            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
-
             string queueName = Configuration.TransportSettings.QueueName;
 
-            _consumer = Configuration.GetConsumer();
-            _consumer.StartConsuming(ConsumeMessageEvent, queueName);
+            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
+            IEnumerable<string> messageTypes = instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName))
+                                                        .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
+                                                        .ToList();
 
-            foreach (HandlerReference reference in instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName)))
+            for (int i = 0; i < Configuration.Threads; i++)
             {
-                string messageTypeName = reference.MessageType.FullName.Replace(".", string.Empty);
-                _consumer.ConsumeMessageType(messageTypeName);
+                new Thread(() => AddConsumer(queueName, messageTypes)).Start();
             }
 
             _startedConsuming = true;
+        }
+
+        private void AddConsumer(string queueName, IEnumerable<string> messageTypes)
+        {
+            var consumer = Configuration.GetConsumer();
+            consumer.StartConsuming(ConsumeMessageEvent, queueName);
+            foreach (string messageType in messageTypes)
+            {
+                consumer.ConsumeMessageType(messageType);
+            }
+            _consumers.Add(consumer);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
@@ -601,9 +611,9 @@ namespace R.MessageBus
 
         public void StopConsuming()
         {
-            if (null != _consumer)
+            foreach (var consumer in _consumers)
             {
-                _consumer.StopConsuming();
+                consumer.StopConsuming();
             }
         }
 
