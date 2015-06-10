@@ -18,8 +18,6 @@ namespace Ssl.Consumer
                 config.TransportSettings.SslEnabled = true;
                 config.TransportSettings.ServerName = "SslTest";
                 config.SetQueueName("Ssl.Consumer");
-                config.SetHost("lonappdev01");
-            });
         }
     }
 }
