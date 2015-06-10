@@ -22,7 +22,6 @@ using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.InMemory;
 using R.MessageBus.Persistance.SqlServer;
-using R.MessageBus.Settings;
 
 namespace R.MessageBus
 {
@@ -32,9 +31,6 @@ namespace R.MessageBus
     /// Implicit initialization <see cref="Configuration"/>:
     /// Initialize from default values.
     /// 
-    /// Explicit initialization <see cref="LoadSettings"/>:
-    /// Initialize from BusSettings section of a custom configuration file,
-    /// throw exception if the section is not found
     /// </summary>
     public class Configuration : IConfiguration
     {
@@ -166,31 +162,6 @@ namespace R.MessageBus
         public void SetHost(string host)
         {
             TransportSettings.Host = host;
-        }
-
-        /// <summary>
-        /// Load settings from configFilePath. 
-        /// Use default App.config when configFilePath is not specified. 
-        /// </summary>
-        /// <param name="configFilePath">configuration file path</param>
-        /// <param name="endPoint">RabbitMq settings endpoint name</param>
-        public void LoadSettings(string configFilePath = null, string endPoint = null)
-        {
-            if (null != configFilePath)
-            {
-                _configurationPath = configFilePath;
-            }
-
-            _endPoint = endPoint;
-
-            var configurationManager = new ConfigurationManagerWrapper(_configurationPath);
-
-            var section = configurationManager.GetSection<BusSettings.BusSettings>("BusSettings");
-
-            if (section == null) throw new ArgumentException("BusSettings section not found in the configuration file.");
-
-            SetTransportSettings(section);
-            SetPersistanceSettings(section);
         }
 
         /// <summary>
@@ -417,82 +388,16 @@ namespace R.MessageBus
 
         #region Private Methods
 
-        private void SetTransportSettings(BusSettings.BusSettings section = null)
+        private void SetTransportSettings()
         {
-            if (null != section)
-            {
-                var endPointSettings = !string.IsNullOrEmpty(_endPoint) ? section.EndpointSettings.GetItemByKey(_endPoint) : section.EndpointSettings.GetItemAt(0);
-                var transportSettings = endPointSettings.TransportSettings;
-
-                if (null != transportSettings)
-                {
-                    TransportSettings = GetTransportSettingsFromBusSettings(transportSettings);
-
-                    return;
-                }
-            }
-
-            // Set defaults
             TransportSettings = GetTransportSettingsFromDefaults();
         }
 
-        private void SetPersistanceSettings(BusSettings.BusSettings section = null)
+        private void SetPersistanceSettings()
         {
-            if (null != section)
-            {
-                var endPointSettings = !string.IsNullOrEmpty(_endPoint) ? section.EndpointSettings.GetItemByKey(_endPoint) : section.EndpointSettings.GetItemAt(0);
-                var persistanceSettings = endPointSettings.PersistanceSettings;
-
-                if (null != persistanceSettings)
-                {
-                    PersistenceStoreDatabaseName = !string.IsNullOrEmpty(persistanceSettings.Database) ? persistanceSettings.Database : DefaultDatabaseName;
-                    PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? persistanceSettings.ConnectionString;
-
-                    return;
-                }
-            }
-
             // Set defaults
             PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? DefaultDatabaseName;
             PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? DefaultConnectionString;
-        }
-
-        private ITransportSettings GetTransportSettingsFromBusSettings(BusConfiguration.TransportSettings settings)
-        {
-            /*
-             * QUEUE NAME:
-             * If set via fluent API, use it
-             * else, if set in the config files, use it
-             * else, use default queue name
-            */
-            string queueName;
-
-            if (!string.IsNullOrEmpty(_queueName))
-            {
-                queueName = _queueName;
-            }
-            else if (!string.IsNullOrEmpty(settings.Queue.Name))
-            {
-                queueName = settings.Queue.Name;
-            }
-            else
-            {
-                queueName = TransportSettings.QueueName;
-            }
-
-            ITransportSettings transportSettings = new TransportSettings();
-            transportSettings.Host = settings.Host;
-            transportSettings.MaxRetries = settings.Retries.MaxRetries;
-            transportSettings.RetryDelay = settings.Retries.RetryDelay;
-            transportSettings.Username = settings.Username;
-            transportSettings.Password = settings.Password;
-            transportSettings.QueueName = queueName;
-            transportSettings.ErrorQueueName = (!string.IsNullOrEmpty(_errorQueueName)) ? _errorQueueName : settings.ErrorQueueName;
-            transportSettings.AuditingEnabled = (_auditingEnabled.HasValue) ? _auditingEnabled.Value : settings.AuditingEnabled;
-            transportSettings.AuditQueueName = (!string.IsNullOrEmpty(_auditQueueName)) ? _auditQueueName : settings.AuditQueueName;
-            transportSettings.ClientSettings = new Dictionary<string, object>();
-
-            return transportSettings;
         }
 
         private ITransportSettings GetTransportSettingsFromDefaults()

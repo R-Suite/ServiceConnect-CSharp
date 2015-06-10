@@ -16,8 +16,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Client.RabbitM
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Interfaces", "R.MessageBus.Interfaces\R.MessageBus.Interfaces.csproj", "{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Settings", "R.MessageBus.Settings\R.MessageBus.Settings.csproj", "{58A100CE-CC7E-43BF-A054-D28648F092AC}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{AAED4869-7897-4FB4-B55C-8903D0EB321F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.IntegrationTests", "R.MessageBus.IntegrationTests\R.MessageBus.IntegrationTests.csproj", "{3A2C68E8-7F11-461A-AC51-603148AAEC72}"
@@ -35,6 +33,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Containers", "Containers", "{17D69048-F5BF-481B-8ACF-32787BBF61B5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Container.StructureMap", "R.MessageBus.Container.StructureMap\R.MessageBus.Container.StructureMap.csproj", "{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Clients", "Clients", "{3055CCE6-1EF9-49D4-A3E8-39E4F6D6E135}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Persistance", "Persistance", "{B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -76,16 +78,6 @@ Global
 		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|x86.ActiveCfg = Release|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|Any CPU.Build.0 = Release|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|Mixed Platforms.Build.0 = Release|Any CPU
-		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|x86.ActiveCfg = Release|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
@@ -161,8 +153,12 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{69846FE1-24D2-48F5-8E7B-9DBA042A767A} = {3055CCE6-1EF9-49D4-A3E8-39E4F6D6E135}
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
 		{ADEAF945-97EF-4506-9982-4797EEDD24F4} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
+		{567327E9-63AA-4729-A4D0-90B627226C68} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
+		{48272709-228F-4C56-AA52-0C0D1F8B818A} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
+		{6801518D-B5E1-4555-8AB9-073F028467B4} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
 		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
 	EndGlobalSection
 EndGlobal
