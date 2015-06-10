@@ -20,7 +20,6 @@ using System.Linq;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.SqlServer;
-using R.MessageBus.StructureMap;
 using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -36,7 +35,6 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
-            //Assert.Equal(typeof(StructureMapContainer), configuration.ContainerType);
             Assert.Equal(typeof(SqlServerProcessManagerFinder), configuration.ProcessManagerFinder);
             Assert.Equal("RMessageBusPersistantStore", configuration.PersistenceStoreDatabaseName);
             Assert.Equal("mongodb://localhost/", configuration.PersistenceStoreConnectionString);
@@ -76,20 +74,6 @@ namespace R.MessageBus.UnitTests
             Assert.Equal(typeof(FakeConsumer), consumer.GetType());
         }
         
-        [Fact]
-        public void ShouldCreateInstanceOfContainer()
-        {
-            // Arrange
-            var configuration = new Configuration();
-            //configuration.SetContainer();
-
-            // Act
-            IBusContainer container = configuration.GetContainer();
-
-            // Assert
-            Assert.Equal(typeof(FakeContainer), container.GetType());
-        }
-
         [Fact]
         public void ShouldSetupQueueName()
         {
