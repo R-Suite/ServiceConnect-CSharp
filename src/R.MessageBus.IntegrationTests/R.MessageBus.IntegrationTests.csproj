@@ -110,9 +110,9 @@
       <Project>{48272709-228F-4C56-AA52-0C0D1F8B818A}</Project>
       <Name>R.MessageBus.Persistance.SqlServer</Name>
     </ProjectReference>
-    <ProjectReference Include="..\R.MessageBus.StructureMap\R.MessageBus.StructureMap.csproj">
+    <ProjectReference Include="..\R.MessageBus.Container.StructureMap\R.MessageBus.Container.StructureMap.csproj">
       <Project>{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}</Project>
-      <Name>R.MessageBus.StructureMap</Name>
+      <Name>R.MessageBus.Container.StructureMap</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus\R.MessageBus.csproj">
       <Project>{6911293d-3b22-4d8a-9b23-25ec4fad1742}</Project>
