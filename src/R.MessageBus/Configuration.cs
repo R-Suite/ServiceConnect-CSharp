@@ -52,8 +52,8 @@ namespace R.MessageBus
         private bool? _auditingEnabled;
         private Type _containerType;
         private IBusContainer _busContainer;
-        private const string DefaultContainerTypeName = "R.MessageBus.StructureMap.StructureMapContainer";
-        private const string DefaultContainerAssemblyName = "R.MessageBus.StructureMap";
+        private const string DefaultContainerTypeName = "R.MessageBus.Container.StructureMap.StructureMapContainer";
+        private const string DefaultContainerAssemblyName = "R.MessageBus.Container.StructureMap";
 
         #endregion
 
@@ -351,6 +351,7 @@ namespace R.MessageBus
 
             if (null == _containerType)
             {
+                //todo: check if assembly is already loaded
                 Assembly assembly = Assembly.LoadFrom(DefaultContainerAssemblyName + ".dll");
                 _containerType = assembly.GetType(DefaultContainerTypeName);
             }
