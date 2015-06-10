@@ -68,6 +68,7 @@
     <Compile Include="ProcessManagerPropertyMapper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RequestConfiguration.cs" />
+    <Compile Include="TransportSettings.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
