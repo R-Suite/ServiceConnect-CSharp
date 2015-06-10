@@ -66,6 +66,7 @@ namespace R.MessageBus
         public Type MessageBusReadStream { get; set; }
         public Type MessageBusWriteStream { get; set; }
         public Type AggregatorProcessor { get; set; }
+        public Type ConsumerPoolType { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
@@ -75,6 +76,10 @@ namespace R.MessageBus
         public Action<Exception> ExceptionHandler { get; set; }
         public bool AddBusToContainer { get; set; }
         public int Threads { get; set; }
+        public IList<Type> BeforeConsumingFilters { get; set; }
+        public IList<Type> AfterConsumingFilters { get; set; }
+        public IList<Type> OutgoingFilters { get; set; }
+        public IConsumerPool ConsumerPool { get; set; }
 
         #endregion
 
@@ -108,6 +113,12 @@ namespace R.MessageBus
             AggregatorProcessor = typeof(AggregatorProcessor);
 
             Threads = 1;
+
+            BeforeConsumingFilters = new List<Type>();
+            AfterConsumingFilters = new List<Type>();
+            OutgoingFilters = new List<Type>();
+
+            ConsumerPoolType = typeof(ConsumerPool);
         }
 
         /// <summary>
@@ -384,9 +395,9 @@ namespace R.MessageBus
             return (IMessageBusReadStream) Activator.CreateInstance(MessageBusReadStream);
         }
 
-        public IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId)
+        public IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId, IConfiguration configuration)
         {
-            return (IMessageBusWriteStream)Activator.CreateInstance(MessageBusWriteStream, producer, endpoint, sequenceId);
+            return (IMessageBusWriteStream)Activator.CreateInstance(MessageBusWriteStream, producer, endpoint, sequenceId, configuration);
         }
 
         public IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
@@ -397,6 +408,11 @@ namespace R.MessageBus
         public void SetThreads(int numberOfThreads)
         {
             Threads = numberOfThreads;
+        }
+
+        public IConsumerPool GetConsumerPool()
+        {
+            return ConsumerPool ?? (IConsumerPool)Activator.CreateInstance(ConsumerPoolType);
         }
 
         #region Private Methods

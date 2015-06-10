@@ -35,15 +35,19 @@ namespace R.MessageBus.UnitTests
         private readonly Mock<IConsumer> _mockConsumer;
         private ConsumerEventHandler _fakeEventHandler;
         private Guid _correlationId;
+        private Mock<IConsumerPool> _mockConsumerPool;
 
         public BusTests()
         {
             _mockConfiguration = new Mock<IConfiguration>();
             _mockContainer = new Mock<IBusContainer>();
             _mockConsumer = new Mock<IConsumer>();
+            _mockConsumerPool = new Mock<IConsumerPool>();
             _mockConfiguration.Setup(x => x.GetContainer()).Returns(_mockContainer.Object);
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
             _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { QueueName = "R.MessageBus.UnitTests" });
+            _mockConfiguration.Setup(x => x.Threads).Returns(1);
+            _mockConfiguration.Setup(x => x.GetConsumerPool()).Returns(_mockConsumerPool.Object);
         }
 
         public bool AssignEventHandler(ConsumerEventHandler eventHandler)
@@ -91,47 +95,17 @@ namespace R.MessageBus.UnitTests
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
 
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.Is<IList<string>>(m => m.Contains(typeof(FakeMessage1).FullName.Replace(".", string.Empty)) && m.Contains(typeof(FakeMessage2).FullName.Replace(".", string.Empty))), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConsumer>()));
+
             // Act
             bus.StartConsuming();
 
             // Assert
             _mockConfiguration.Verify(x => x.GetConsumer(), Times.Exactly(1));
             _mockContainer.VerifyAll();
-            _mockConsumer.Verify(x => x.ConsumeMessageType(typeof(FakeMessage1).FullName.Replace(".", string.Empty)));
-            _mockConsumer.Verify(x => x.ConsumeMessageType(typeof(FakeMessage2).FullName.Replace(".", string.Empty)));
+            _mockConsumerPool.Verify(x => x.AddConsumer(It.IsAny<string>(), It.Is<IList<string>>(m => m.Contains(typeof(FakeMessage1).FullName.Replace(".", string.Empty)) && m.Contains(typeof(FakeMessage2).FullName.Replace(".", string.Empty))), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConsumer>()), Times.Once);
         }
-
-        [Fact]
-        public void StartConsumingShouldStartConsumingAllMessagesFromTheContainer()
-        {
-            // Arrange
-            var bus = new Bus(_mockConfiguration.Object);
-
-            var handlerReferences = new List<HandlerReference>
-            {
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler1),
-                    MessageType = typeof (FakeMessage1)
-                },
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler2),
-                    MessageType = typeof (FakeMessage2)
-                }
-            };
-
-            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-
-            // Act
-            bus.StartConsuming();
-
-            // Assert
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "R.MessageBus.UnitTests", null, null), Times.Once);
-            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<ConsumerEventHandler>(), "R.MessageBus.UnitTests", null, null), Times.Once);
-            _mockConsumer.VerifyAll();
-        }
-
+        
         [Fact]
         public void ConsumeMessageEventShouldProcessMessagesOnMessageHandler()
         {
@@ -158,7 +132,7 @@ namespace R.MessageBus.UnitTests
             };
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
             mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
@@ -208,7 +182,7 @@ namespace R.MessageBus.UnitTests
                 { "MessageType", Encoding.ASCII.GetBytes("Send") }
             };
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object &&
                                                                                                                      y["processManagerFinder"] == mockProcessManagerFinder.Object))).Returns(mockProcessManagerProcessor.Object);
@@ -255,7 +229,7 @@ namespace R.MessageBus.UnitTests
                 { "MessageType", Encoding.ASCII.GetBytes("Send") }
             };
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
             mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage2>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
@@ -277,7 +251,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             _mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
 
@@ -345,14 +319,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Publish(message, null));
+            mockProducer.Setup(x => x.Publish(message, It.IsAny<IList<Type>>(), null));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Publish(message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Publish(message, null), Times.Once);
+            mockProducer.Verify(x => x.Publish(message, It.IsAny<IList<Type>>(), null), Times.Once);
         }
 
         [Fact]
@@ -418,14 +392,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, null));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), null));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Send(message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(message, null), Times.Once);
+            mockProducer.Verify(x => x.Send(message, It.IsAny<IList<Type>>(), null), Times.Once);
         }
 
         [Fact]
@@ -449,14 +423,14 @@ namespace R.MessageBus.UnitTests
 
             const string endPoint = "MyEndPoint";
 
-            mockProducer.Setup(x => x.Send(endPoint, message, null));
+            mockProducer.Setup(x => x.Send(endPoint, message, It.IsAny<IList<Type>>(), null));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Send(endPoint, message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(endPoint, message, null), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint, message, It.IsAny<IList<Type>>(), null), Times.Once);
         }
 
         [Fact]
@@ -482,7 +456,7 @@ namespace R.MessageBus.UnitTests
 
             foreach (string endPoint in endPoints)
             {
-                mockProducer.Setup(x => x.Send(endPoint, message, null));
+                mockProducer.Setup(x => x.Send(endPoint, message, It.IsAny<IList<Type>>(), null));
             }
 
             // Act
@@ -492,7 +466,7 @@ namespace R.MessageBus.UnitTests
             // Assert
             foreach (string endPoint in endPoints)
             {
-                mockProducer.Verify(x => x.Send(endPoint, message, null), Times.Once);
+                mockProducer.Verify(x => x.Send(endPoint, message, It.IsAny<IList<Type>>(), null), Times.Once);
             }
         }
 
@@ -517,14 +491,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send(message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -551,7 +525,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(new FakeMessage2(message.CorrelationId)
                 {
@@ -592,14 +566,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send("test", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -626,7 +600,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send("test", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(new FakeMessage2(message.CorrelationId)
                 {
@@ -667,14 +641,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { }, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -702,7 +676,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -734,14 +708,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, x => { }, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -769,7 +743,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -817,7 +791,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -851,16 +825,16 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()));
-            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>(new List<string> { "test1", "test2" }, message, x => { });
 
             // Assert
-            mockProducer.Verify(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
-            mockProducer.Verify(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test1", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test2", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -892,12 +866,12 @@ namespace R.MessageBus.UnitTests
             var r1 = new FakeMessage2(Guid.NewGuid());
             var r2 = new FakeMessage2(Guid.NewGuid());
 
-            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(r1);
             });
 
-            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(r2);
                 task.Start();
@@ -934,8 +908,8 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()));
-            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send("test1", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test2", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -946,8 +920,8 @@ namespace R.MessageBus.UnitTests
             }, message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test1", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
-            mockProducer.Verify(x => x.Send("test2", message, It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test1", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test2", message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -982,7 +956,7 @@ namespace R.MessageBus.UnitTests
             var r1 = new FakeMessage2(Guid.NewGuid());
             var r2 = new FakeMessage2(Guid.NewGuid());
 
-            mockProducer.Setup(x => x.Publish(message, It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Publish(message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(r1);
                 action(r2);
@@ -1027,7 +1001,7 @@ namespace R.MessageBus.UnitTests
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
 
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
 
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
@@ -1067,16 +1041,16 @@ namespace R.MessageBus.UnitTests
             const string endPoint1 = "MyEndPoint1";
             const string endPoint2 = "MyEndPoint2";
 
-            mockProducer.Setup(x => x.Send(endPoint1, message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(endPoint1, message, It.IsAny<IList<Type>>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Route(message, new List<string> { endPoint1, endPoint2 });
 
             // Assert
-            mockProducer.Verify(x => x.Send(endPoint1, message, It.Is<Dictionary<string, string>>(i => i.Count == 1)), Times.Once);
-            mockProducer.Verify(x => x.Send(endPoint1, message, It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingSlip"))), Times.Once);
-            mockProducer.Verify(x => x.Send(endPoint1, message, It.Is<Dictionary<string, string>>(i => i.ContainsValue("[\"MyEndPoint2\"]"))), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, message, It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(i => i.Count == 1)), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, message, It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingSlip"))), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, message, It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(i => i.ContainsValue("[\"MyEndPoint2\"]"))), Times.Once);
         }
     }
 }
