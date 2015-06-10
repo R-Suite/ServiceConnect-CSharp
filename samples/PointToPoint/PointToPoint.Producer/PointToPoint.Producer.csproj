@@ -51,10 +51,6 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Container.dll</HintPath>
-    </Reference>
     <Reference Include="R.MessageBus.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Core.dll</HintPath>
@@ -74,6 +70,9 @@
     <Reference Include="R.MessageBus.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Settings.dll</HintPath>
+    </Reference>
+    <Reference Include="R.MessageBus.StructureMap">
+      <HintPath>..\..\..\src\R.MessageBus.StructureMap\bin\Debug\R.MessageBus.StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client, Version=3.2.4.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
