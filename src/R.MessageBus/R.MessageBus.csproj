@@ -85,10 +85,6 @@
       <Project>{48272709-228f-4c56-aa52-0c0d1f8b818a}</Project>
       <Name>R.MessageBus.Persistance.SqlServer</Name>
     </ProjectReference>
-    <ProjectReference Include="..\R.MessageBus.Settings\R.MessageBus.Settings.csproj">
-      <Project>{58a100ce-cc7e-43bf-a054-d28648f092ac}</Project>
-      <Name>R.MessageBus.Settings</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>

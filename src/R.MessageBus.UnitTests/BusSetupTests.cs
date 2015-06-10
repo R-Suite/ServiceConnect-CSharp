@@ -17,8 +17,8 @@
 using System;
 using System.Collections.Generic;
 using Moq;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
-using R.MessageBus.Settings;
 using System.Linq;
 using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
