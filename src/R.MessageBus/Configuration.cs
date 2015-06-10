@@ -18,7 +18,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using R.MessageBus.Client.RabbitMQ;
-using R.MessageBus.Container;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.InMemory;
@@ -51,6 +50,10 @@ namespace R.MessageBus
         private string _errorQueueName;
         private string _auditQueueName;
         private bool? _auditingEnabled;
+        private Type _containerType;
+        private IBusContainer _busContainer;
+        private const string DefaultContainerTypeName = "R.MessageBus.StructureMap.StructureMapContainer";
+        private const string DefaultContainerAssemblyName = "R.MessageBus.StructureMap";
 
         #endregion
 
@@ -58,7 +61,6 @@ namespace R.MessageBus
 
         public Type ConsumerType { get; set; }
         public Type ProducerType { get; set; }
-        public Type Container { get; set; }
         public Type ProcessManagerFinder { get; set; }
         public Type AggregatorPersistor { get; set; }
         public Type MessageBusReadStream { get; set; }
@@ -99,7 +101,6 @@ namespace R.MessageBus
 
             ConsumerType = typeof(Consumer);
             ProducerType = typeof(Producer);
-            Container = typeof(StructuremapContainer);
             ProcessManagerFinder = typeof (SqlServerProcessManagerFinder);
             AggregatorPersistor = typeof (InMemoryAggregatorPersistor);
             MessageBusReadStream = typeof (MessageBusReadStream);
@@ -180,14 +181,22 @@ namespace R.MessageBus
             SetTransportSettings(section);
             SetPersistanceSettings(section);
         }
-        
+
         /// <summary>
         /// Sets the container.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        public void SetContainer<T>() where T : class, IBusContainer
+        public void SetContainer(IBusContainer container)
         {
-            Container = typeof(T);
+            _busContainer = container;
+        }
+
+        /// <summary>
+        /// Sets the container type.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        public void SetContainerType<T>() where T : class, IBusContainer
+        {
+            _containerType = typeof(T);
         }
 
         /// <summary>
@@ -324,7 +333,20 @@ namespace R.MessageBus
         /// <returns></returns>
         public IBusContainer GetContainer()
         {
-            return (IBusContainer)Activator.CreateInstance(Container);
+            if (null != _busContainer)
+            {
+                return _busContainer;
+            }
+
+            if (null == _containerType)
+            {
+                Assembly assembly = Assembly.LoadFrom(DefaultContainerAssemblyName + ".dll");
+                _containerType = assembly.GetType(DefaultContainerTypeName);
+            }
+
+            _busContainer = (IBusContainer)Activator.CreateInstance(_containerType);
+
+            return _busContainer;
         }
 
         /// <summary>
