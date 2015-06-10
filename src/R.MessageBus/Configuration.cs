@@ -74,8 +74,9 @@ namespace R.MessageBus
         public Action<Exception> ExceptionHandler { get; set; }
         public bool AddBusToContainer { get; set; }
         public int Threads { get; set; }
-        public IList<Type> BeforeFilters { get; set; }
-        public IList<Type> AfterFilters { get; set; }
+        public IList<Type> BeforeConsumingFilters { get; set; }
+        public IList<Type> AfterConsumingFilters { get; set; }
+        public IList<Type> OutgoingFilters { get; set; }
         public IConsumerPool ConsumerPool { get; set; }
 
         #endregion
@@ -112,8 +113,9 @@ namespace R.MessageBus
 
             Threads = 1;
 
-            BeforeFilters = new List<Type>();
-            AfterFilters = new List<Type>();
+            BeforeConsumingFilters = new List<Type>();
+            AfterConsumingFilters = new List<Type>();
+            OutgoingFilters = new List<Type>();
 
             ConsumerPoolType = typeof(ConsumerPool);
         }
@@ -371,9 +373,9 @@ namespace R.MessageBus
             return (IMessageBusReadStream) Activator.CreateInstance(MessageBusReadStream);
         }
 
-        public IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId)
+        public IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId, IConfiguration configuration)
         {
-            return (IMessageBusWriteStream)Activator.CreateInstance(MessageBusWriteStream, producer, endpoint, sequenceId);
+            return (IMessageBusWriteStream)Activator.CreateInstance(MessageBusWriteStream, producer, endpoint, sequenceId, configuration);
         }
 
         public IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)

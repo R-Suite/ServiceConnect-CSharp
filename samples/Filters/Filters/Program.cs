@@ -19,26 +19,40 @@ namespace Filters
                 config.SetThreads(10);
                 config.AutoStartConsuming = false;
                 config.ScanForMesssageHandlers = false;
+                config.OutgoingFilters = new List<Type>
+                {
+                    typeof(Filter1),
+                    typeof(Filter2)
+                };
+                config.SetHost("lonappdev04");
             });
 
             while (true)
             {
                 Console.WriteLine("1 to successfully filter messages");
-                Console.WriteLine("2 to fail filtering messages");
+                Console.WriteLine("2 for consumer fail filtering messages");
+                Console.WriteLine("3 for producer fail filtering messages");
                 var result = Console.ReadLine();
 
                 if (result == "1")
                 {
                     bus.Send("Filters.Consumer", new FilterMessage(Guid.NewGuid())
                     {
-                        FilterFail = false
+                        ConsumerFilterFail = false
+                    });
+                }
+                else if (result == "2")
+                {
+                    bus.Send("Filters.Consumer", new FilterMessage(Guid.NewGuid())
+                    {
+                        ConsumerFilterFail = true
                     });
                 }
                 else
                 {
                     bus.Send("Filters.Consumer", new FilterMessage(Guid.NewGuid())
                     {
-                        FilterFail = true
+                        ProducerFilterFail = true
                     });
                 }
             }
