@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Security.Cryptography.X509Certificates;
 using R.MessageBus;
-using R.MessageBus.Container;
 
 namespace PointToPoint.Consumer
 {
