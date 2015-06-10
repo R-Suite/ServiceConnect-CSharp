@@ -31,10 +31,12 @@ namespace R.MessageBus.UnitTests.Stream
         static extern int memcmp(byte[] b1, byte[] b2, long count);
 
         private readonly Mock<IProducer> _producer;
+        private Mock<IConfiguration> _mockConfigurtaion;
 
         public WriteStreamTests()
         {
             _producer = new Mock<IProducer>();
+            _mockConfigurtaion = new Mock<IConfiguration>();
         }
 
         [Fact]
@@ -42,7 +44,7 @@ namespace R.MessageBus.UnitTests.Stream
         {
             // Arrange
             _producer.Setup(x => x.MaximumMessageSize).Returns(10);
-            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence");
+            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence", _mockConfigurtaion.Object);
             
             var byteArray = new byte[20];
             for (int i = 0; i < byteArray.Length; i++)
@@ -66,8 +68,8 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet1)), It.IsAny<Dictionary<string, string>>()));
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet2)), It.IsAny<Dictionary<string, string>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet1)), It.IsAny<Dictionary<string, string>>(), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet2)), It.IsAny<Dictionary<string, string>>(), It.IsAny<IList<Type>>()));
         }
 
         public bool CompareByteArrays(byte[] b1, byte[] b2)
@@ -80,7 +82,7 @@ namespace R.MessageBus.UnitTests.Stream
         {
             // Arrange
             _producer.Setup(x => x.MaximumMessageSize).Returns(10);
-            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence");
+            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence", _mockConfigurtaion.Object);
 
             var byteArray = new byte[20];
 
@@ -88,8 +90,8 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence")));
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence")));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence"), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence"), It.IsAny<IList<Type>>()));
         }
 
         [Fact]
@@ -97,7 +99,7 @@ namespace R.MessageBus.UnitTests.Stream
         {
             // Arrange
             _producer.Setup(x => x.MaximumMessageSize).Returns(10);
-            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence");
+            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence", _mockConfigurtaion.Object);
 
             var byteArray = new byte[20];
 
@@ -105,8 +107,8 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "1")));
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "2")));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "1"), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "2"), It.IsAny<IList<Type>>()));
         }
 
         [Fact]
@@ -114,13 +116,13 @@ namespace R.MessageBus.UnitTests.Stream
         {
             // Arrange
             _producer.Setup(x => x.MaximumMessageSize).Returns(10);
-            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence");
+            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence", _mockConfigurtaion.Object);
 
             // Act
             stream.Close();
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop"))));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop")), It.IsAny<IList<Type>>()));
         }
 
         [Fact]
@@ -128,13 +130,13 @@ namespace R.MessageBus.UnitTests.Stream
         {
             // Arrange
             _producer.Setup(x => x.MaximumMessageSize).Returns(10);
-            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence");
+            var stream = new MessageBusWriteStream(_producer.Object, "TestEndpoint", "TestSequence", _mockConfigurtaion.Object);
 
             // Act
             stream.Dispose();
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop"))));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop")), It.IsAny<IList<Type>>()));
         } 
     }
 }

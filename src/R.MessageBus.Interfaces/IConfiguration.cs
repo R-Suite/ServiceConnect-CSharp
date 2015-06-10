@@ -38,6 +38,10 @@ namespace R.MessageBus.Interfaces
         Action<Exception> ExceptionHandler { get; set; }
         bool AddBusToContainer { get; set; }
         int Threads { get; set; }
+        IList<Type> BeforeConsumingFilters { get; set; }
+        IList<Type> AfterConsumingFilters { get; set; }
+        IList<Type> OutgoingFilters { get; set; }
+        IConsumerPool ConsumerPool { get; set; }
 
         /// <summary>
         /// Adds a message queue mapping. 
@@ -206,7 +210,7 @@ namespace R.MessageBus.Interfaces
         /// Gets an instance of the MessageBusWriteStream
         /// </summary>
         /// <returns></returns>
-        IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId);
+        IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId, IConfiguration configuration);
 
         /// <summary>
         /// Gets an instance of the AggregatorProcessor
@@ -222,5 +226,11 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         void SetThreads(int numberOfThreads);
+
+        /// <summary>
+        /// Creates a consumer pool on first call.  Subsequent calls return the consumer pool.
+        /// </summary>
+        /// <returns></returns>
+        IConsumerPool GetConsumerPool();
     }
 }

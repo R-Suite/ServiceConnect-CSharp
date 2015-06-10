@@ -26,13 +26,15 @@ namespace R.MessageBus.Core
         private readonly long _packetSize;
         private readonly string _endPoint;
         private readonly string _sequenceId;
+        private readonly IConfiguration _configuration;
         private Int64 _packetsSent;
 
-        public MessageBusWriteStream(IProducer producer, string endPoint, string sequenceId)
+        public MessageBusWriteStream(IProducer producer, string endPoint, string sequenceId, IConfiguration configuration)
         {
             _producer = producer;
             _endPoint = endPoint;
             _sequenceId = sequenceId;
+            _configuration = configuration;
             _packetSize = producer.MaximumMessageSize;
             _packetsSent = 0;
         }
@@ -50,7 +52,7 @@ namespace R.MessageBus.Core
                 {
                     { "SequenceId", _sequenceId },
                     { "PacketNumber", _packetsSent.ToString() }
-                });
+                }, _configuration.OutgoingFilters);
             }
         }
 
