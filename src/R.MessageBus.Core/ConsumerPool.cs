@@ -13,14 +13,13 @@ namespace R.MessageBus.Core
         {
             new Thread(() =>
             {
-                
+                consumer.StartConsuming(eventHandler, queueName);
+                foreach (string messageType in messageTypes)
+                {
+                    consumer.ConsumeMessageType(messageType);
+                }
+                _consumers.Add(consumer);
             }).Start();
-            consumer.StartConsuming(eventHandler, queueName);
-            foreach (string messageType in messageTypes)
-            {
-                consumer.ConsumeMessageType(messageType);
-            }
-            _consumers.Add(consumer);
         }
 
         public void Dispose()
