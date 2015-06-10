@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using R.MessageBus;
+using Streaming.Messages;
 
 namespace Streaming.Consumer
 {
