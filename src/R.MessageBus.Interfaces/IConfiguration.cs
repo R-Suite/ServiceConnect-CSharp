@@ -38,8 +38,9 @@ namespace R.MessageBus.Interfaces
         Action<Exception> ExceptionHandler { get; set; }
         bool AddBusToContainer { get; set; }
         int Threads { get; set; }
-        IList<Type> BeforeFilters { get; set; }
-        IList<Type> AfterFilters { get; set; }
+        IList<Type> BeforeConsumingFilters { get; set; }
+        IList<Type> AfterConsumingFilters { get; set; }
+        IList<Type> OutgoingFilters { get; set; }
         IConsumerPool ConsumerPool { get; set; }
 
         /// <summary>
@@ -209,7 +210,7 @@ namespace R.MessageBus.Interfaces
         /// Gets an instance of the MessageBusWriteStream
         /// </summary>
         /// <returns></returns>
-        IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId);
+        IMessageBusWriteStream GetMessageBusWriteStream(IProducer producer, string endpoint, string sequenceId, IConfiguration configuration);
 
         /// <summary>
         /// Gets an instance of the AggregatorProcessor

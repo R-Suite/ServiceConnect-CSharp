@@ -115,7 +115,7 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteBeforeFilters()
+        public void ShouldExecuteBeforeConsumingFilters()
         {
             // Arrange
             var bus = new Bus(_mockConfiguration.Object);
@@ -134,7 +134,7 @@ namespace R.MessageBus.UnitTests
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
             mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
-            _mockConfiguration.Setup(x => x.BeforeFilters).Returns(new List<Type>
+            _mockConfiguration.Setup(x => x.BeforeConsumingFilters).Returns(new List<Type>
             {
                 typeof (BeforeFilter1),
                 typeof (BeforeFilter2)
@@ -156,7 +156,7 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteAfterFilters()
+        public void ShouldExecuteAfterConsumingFilters()
         {
             // Arrange
             var bus = new Bus(_mockConfiguration.Object);
@@ -175,7 +175,7 @@ namespace R.MessageBus.UnitTests
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
             mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
-            _mockConfiguration.Setup(x => x.AfterFilters).Returns(new List<Type>
+            _mockConfiguration.Setup(x => x.AfterConsumingFilters).Returns(new List<Type>
             {
                 typeof (AfterFilter1),
                 typeof (AfterFilter2)
@@ -216,7 +216,7 @@ namespace R.MessageBus.UnitTests
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
             mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
-            _mockConfiguration.Setup(x => x.BeforeFilters).Returns(new List<Type>
+            _mockConfiguration.Setup(x => x.BeforeConsumingFilters).Returns(new List<Type>
             {
                 typeof (BeforeFilter1),
                 typeof (BeforeFilter2),
@@ -257,7 +257,7 @@ namespace R.MessageBus.UnitTests
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
             mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
-            _mockConfiguration.Setup(x => x.BeforeFilters).Returns(new List<Type>
+            _mockConfiguration.Setup(x => x.BeforeConsumingFilters).Returns(new List<Type>
             {
                 typeof (BeforeFilter1),
                 typeof (BeforeFilter2)
@@ -297,7 +297,7 @@ namespace R.MessageBus.UnitTests
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
             mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
-            _mockConfiguration.Setup(x => x.BeforeFilters).Returns(new List<Type>
+            _mockConfiguration.Setup(x => x.BeforeConsumingFilters).Returns(new List<Type>
             {
                 typeof (BeforeFilter1)
             });
