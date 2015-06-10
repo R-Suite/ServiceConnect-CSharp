@@ -23,7 +23,6 @@ namespace R.MessageBus.Interfaces
     {
         Type ConsumerType { get; set; }
         Type ProducerType { get; set; }
-        //Type ContainerType { get; set; }
         Type ProcessManagerFinder { get; set; }
         Type AggregatorPersistor { get; set; }
         Type MessageBusReadStream { get; set; }
@@ -68,13 +67,6 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <param name="host">Server connection string</param>
         void SetHost(string host);
-
-        /// <summary>
-        /// Load configuration from file path an initialize Transport Settings
-        /// </summary>;
-        /// <param name="configFilePath"></param>
-        /// <param name="endPoint"></param>
-        void LoadSettings(string configFilePath = null, string endPoint = null);
 
         /// <summary>
         /// Sets the container.
