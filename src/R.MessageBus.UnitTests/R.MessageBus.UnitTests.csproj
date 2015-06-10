@@ -54,8 +54,9 @@
   <ItemGroup>
     <Compile Include="Aggregator\AggregatorTimerTests.cs" />
     <Compile Include="Aggregator\AggregatorProcessorTests.cs" />
-    <Compile Include="Aggregator\ConsumeMessageEventTests.cs" />
+    <Compile Include="ConsumeMessageEventTests.cs" />
     <Compile Include="BusSetupTests.cs" />
+    <Compile Include="FilterTests.cs" />
     <Compile Include="MessageHandlerProcessorTest.cs" />
     <Compile Include="ConfigurationTests.cs" />
     <Compile Include="BusTests.cs" />

@@ -46,6 +46,7 @@
   <ItemGroup>
     <Compile Include="ConsumeEventResult.cs" />
     <Compile Include="ConsumerEventHandler.cs" />
+    <Compile Include="Envelope.cs" />
     <Compile Include="HandlerReference.cs" />
     <Compile Include="IAggregatorProcessor.cs" />
     <Compile Include="IBus.cs" />
@@ -55,6 +56,8 @@
     <Compile Include="IConsumeContext.cs" />
     <Compile Include="IConsumer.cs" />
     <Compile Include="IAggregatorPersistor.cs" />
+    <Compile Include="IConsumerPool.cs" />
+    <Compile Include="IFilter.cs" />
     <Compile Include="IStreamHandler.cs" />
     <Compile Include="IMessageBusReadStream.cs" />
     <Compile Include="IMessageBusWriteStream.cs" />
