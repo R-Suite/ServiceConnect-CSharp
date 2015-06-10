@@ -34,7 +34,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Persistance.In
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Containers", "Containers", "{17D69048-F5BF-481B-8ACF-32787BBF61B5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.StructureMap", "R.MessageBus.StructureMap\R.MessageBus.StructureMap.csproj", "{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Container.StructureMap", "R.MessageBus.Container.StructureMap\R.MessageBus.Container.StructureMap.csproj", "{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
