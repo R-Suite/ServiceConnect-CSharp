@@ -13,16 +13,17 @@ namespace Filters.Consumer
             {
                 config.SetQueueName("Filters.Consumer");
                 config.SetThreads(10);
-                config.BeforeFilters = new List<Type>
+                config.BeforeConsumingFilters = new List<Type>
                 {
                     typeof(BeforeFilter1),
                     typeof(BeforeFilter2)
                 };
-                config.AfterFilters = new List<Type>
+                config.AfterConsumingFilters = new List<Type>
                 {
                     typeof(AfterFilter1),
                     typeof(AfterFilter2)
                 };
+                config.SetHost("lonappdev04");
             });
 
             bus.StartConsuming();

@@ -4,53 +4,36 @@ using Filters.Messages;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 
-namespace Filters.Consumer
+namespace Filters
 {
-    public class BeforeFilter1 : IFilter
+    public class Filter1 : IFilter
     {
         public bool Process(Envelope envelope)
         {
-            Console.WriteLine("Inside before filter 1");
+            Console.WriteLine("Inside outgoing filter 1");
             var json = Encoding.UTF8.GetString(envelope.Body);
             var message = JsonConvert.DeserializeObject<FilterMessage>(json);
-            message.FilterModifiedValue = "modified by consumer";
+            message.FilterModifiedValue = "modified by producer";
             envelope.Body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message));
+
             return true;
         }
     }
 
-    public class BeforeFilter2 : IFilter
+    public class Filter2 : IFilter
     {
         public bool Process(Envelope envelope)
         {
             var json = Encoding.UTF8.GetString(envelope.Body);
             var message = JsonConvert.DeserializeObject<FilterMessage>(json);
 
-            Console.WriteLine("Inside before filter 2");
+            Console.WriteLine("Inside outgoing filter 2");
 
-            if (message.ConsumerFilterFail)
+            if (message.ProducerFilterFail)
             {
                 return false;
             }
-            
-            return true;
-        }
-    }
 
-    public class AfterFilter1 : IFilter
-    {
-        public bool Process(Envelope envelope)
-        {
-            Console.WriteLine("Inside after filter 1");
-            return true;
-        }
-    }
-
-    public class AfterFilter2: IFilter
-    {
-        public bool Process(Envelope envelope)
-        {
-            Console.WriteLine("Inside after filter 2");
             return true;
         }
     }

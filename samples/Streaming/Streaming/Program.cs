@@ -15,7 +15,6 @@ namespace Streaming
             {
                 x.SetQueueName("StreamPublisher");
                 x.PurgeQueuesOnStart();
-                x.SetHost("lonappdev04");
             });
 
             FileStream f = new FileStream(@"logo.bmp", FileMode.Open);
