@@ -82,10 +82,6 @@
       <Project>{69846fe1-24d2-48f5-8e7b-9dba042a767a}</Project>
       <Name>R.MessageBus.Client.RabbitMQ</Name>
     </ProjectReference>
-    <ProjectReference Include="..\R.MessageBus.Container\R.MessageBus.Container.csproj">
-      <Project>{9FA4AA16-D8C4-4B0C-AF09-A17112655152}</Project>
-      <Name>R.MessageBus.Container</Name>
-    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
       <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
       <Name>R.MessageBus.Core</Name>
@@ -105,6 +101,10 @@
     <ProjectReference Include="..\R.MessageBus.Settings\R.MessageBus.Settings.csproj">
       <Project>{58A100CE-CC7E-43BF-A054-D28648F092AC}</Project>
       <Name>R.MessageBus.Settings</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.StructureMap\R.MessageBus.StructureMap.csproj">
+      <Project>{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}</Project>
+      <Name>R.MessageBus.StructureMap</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus\R.MessageBus.csproj">
       <Project>{6911293D-3B22-4D8A-9B23-25EC4FAD1742}</Project>
