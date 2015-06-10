@@ -181,7 +181,7 @@ namespace R.MessageBus
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
         {
-            _producer.Publish(message, headers);
+            _producer.Publish(message, Configuration.OutgoingFilters, headers);
         }
 
         public IList<TReply> PublishRequest<TRequest, TReply>(TRequest message, int? expectedCount, Dictionary<string, string> headers, int timeout) where TRequest : Message
@@ -205,8 +205,8 @@ namespace R.MessageBus
             }
 
             headers["RequestMessageId"] = messageId.ToString();
-            
-            _producer.Publish(message, headers);
+
+            _producer.Publish(message, Configuration.OutgoingFilters, headers);
 
             Task.WaitAll(new[] { task }, timeout);
 
@@ -215,19 +215,19 @@ namespace R.MessageBus
 
         public void Send<T>(T message, Dictionary<string, string> headers) where T : Message
         {
-            _producer.Send(message, headers);
+            _producer.Send(message, Configuration.OutgoingFilters, headers);
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message
         {
-            _producer.Send(endPoint, message, headers);
+            _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
         }
         
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers) where T : Message
         {
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
         }
 
@@ -269,7 +269,7 @@ namespace R.MessageBus
 
             foreach (string endPoint in endPoints)
             {
-                producer.Send(endPoint, message, headers);
+                producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
             producer.Disconnect();
         }
@@ -297,11 +297,11 @@ namespace R.MessageBus
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(message, headers);
+                producer.Send(message, Configuration.OutgoingFilters, headers);
             }
             else
             {
-                producer.Send(endPoint, message, headers);
+                producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
             producer.Disconnect();
         }
@@ -338,11 +338,11 @@ namespace R.MessageBus
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(message, headers);
+                _producer.Send(message, Configuration.OutgoingFilters, headers);
             }
             else
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
 
             Task.WaitAll(new[]{ task }, timeout);
@@ -380,7 +380,7 @@ namespace R.MessageBus
 
             foreach (var endPoint in endPoints)
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
 
             Task.WaitAll(new[] { task }, timeout);
@@ -396,7 +396,7 @@ namespace R.MessageBus
 
             var destionationsJson = JsonConvert.SerializeObject(destinations);
 
-            _producer.Send(nextDestination, message, new Dictionary<string, string> { { "RoutingSlip", destionationsJson } });
+            _producer.Send(nextDestination, message, Configuration.OutgoingFilters, new Dictionary<string, string> { { "RoutingSlip", destionationsJson } });
         }
 
         public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
@@ -409,7 +409,7 @@ namespace R.MessageBus
                 { "SequenceId", sequenceId }
             };
             SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 10000);
-            var stream = Configuration.GetMessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId);
+            var stream = Configuration.GetMessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId, Configuration);
             return stream;
         }
 
@@ -436,7 +436,7 @@ namespace R.MessageBus
                     Body = message
                 };
 
-                bool stop = ProcessFilters(Configuration.BeforeFilters, envelope);
+                bool stop = ProcessFilters(Configuration.BeforeConsumingFilters, envelope);
                 if (stop)
                 {
                     return result;
@@ -459,7 +459,7 @@ namespace R.MessageBus
                     }
                 }
 
-                ProcessFilters(Configuration.AfterFilters, envelope);
+                ProcessFilters(Configuration.AfterConsumingFilters, envelope);
             }
             catch (Exception ex)
             {

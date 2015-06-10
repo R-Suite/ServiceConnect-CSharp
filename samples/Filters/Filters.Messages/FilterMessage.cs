@@ -9,8 +9,8 @@ namespace Filters.Messages
         {
         }
 
-        public bool FilterFail { get; set; }
-
+        public bool ConsumerFilterFail { get; set; }
+        public bool ProducerFilterFail { get; set; }
         public string FilterModifiedValue { get; set; }
     }
 }
