@@ -18,9 +18,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using R.MessageBus.Client.RabbitMQ;
-using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.SqlServer;
+using R.MessageBus.StructureMap;
 using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -36,7 +36,7 @@ namespace R.MessageBus.UnitTests
 
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
-            Assert.Equal(typeof(StructuremapContainer), configuration.Container);
+            //Assert.Equal(typeof(StructureMapContainer), configuration.ContainerType);
             Assert.Equal(typeof(SqlServerProcessManagerFinder), configuration.ProcessManagerFinder);
             Assert.Equal("RMessageBusPersistantStore", configuration.PersistenceStoreDatabaseName);
             Assert.Equal("mongodb://localhost/", configuration.PersistenceStoreConnectionString);
@@ -81,7 +81,7 @@ namespace R.MessageBus.UnitTests
         {
             // Arrange
             var configuration = new Configuration();
-            configuration.SetContainer<FakeContainer>();
+            //configuration.SetContainer();
 
             // Act
             IBusContainer container = configuration.GetContainer();
@@ -200,6 +200,34 @@ namespace R.MessageBus.UnitTests
             Assert.Equal(true, configuration.TransportSettings.PurgeQueueOnStartup);
         }
 
+        [Fact]
+        public void ShouldGetDefaultContainer()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            configuration.SetContainer(null);
+
+            // Act
+            var result = configuration.GetContainer();
+
+            // Assert
+            Assert.NotNull(result);
+        }
+
+        [Fact]
+        public void ShouldGetContainerOfSpecifiedType()
+        {
+            // Arrange
+            var configuration = new Configuration();
+            configuration.SetContainerType<FakeContainer>();
+
+            // Act
+            var result = configuration.GetContainer();
+
+            // Assert
+            Assert.IsType<FakeContainer>(result);
+        }
+
         public class FakeContainer : IBusContainer
         {
             public IEnumerable<HandlerReference> GetHandlerTypes()
@@ -236,7 +264,17 @@ namespace R.MessageBus.UnitTests
             {
             }
 
+            public void Initialize(object container)
+            {
+                throw new NotImplementedException();
+            }
+
             public void AddBus(IBus bus)
+            {
+                throw new NotImplementedException();
+            }
+
+            public object GetContainer()
             {
                 throw new NotImplementedException();
             }

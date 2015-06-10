@@ -1,6 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 2013
+VisualStudioVersion = 12.0.30723.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{F6AA773B-5C5E-4EAA-AF50-3579298ECC5C}"
 	ProjectSection(SolutionItems) = preProject
 		.nuget\NuGet.Config = .nuget\NuGet.Config
@@ -16,8 +18,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Interfaces", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Settings", "R.MessageBus.Settings\R.MessageBus.Settings.csproj", "{58A100CE-CC7E-43BF-A054-D28648F092AC}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Container", "R.MessageBus.Container\R.MessageBus.Container.csproj", "{9FA4AA16-D8C4-4B0C-AF09-A17112655152}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{AAED4869-7897-4FB4-B55C-8903D0EB321F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.IntegrationTests", "R.MessageBus.IntegrationTests\R.MessageBus.IntegrationTests.csproj", "{3A2C68E8-7F11-461A-AC51-603148AAEC72}"
@@ -31,6 +31,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Persistance.SqlServer", "R.MessageBus.Persistance.SqlServer\R.MessageBus.Persistance.SqlServer.csproj", "{48272709-228F-4C56-AA52-0C0D1F8B818A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Persistance.InMemory", "R.MessageBus.Persistance.InMemory\R.MessageBus.Persistance.InMemory.csproj", "{6801518D-B5E1-4555-8AB9-073F028467B4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Containers", "Containers", "{17D69048-F5BF-481B-8ACF-32787BBF61B5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.StructureMap", "R.MessageBus.StructureMap\R.MessageBus.StructureMap.csproj", "{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -82,16 +86,6 @@ Global
 		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{58A100CE-CC7E-43BF-A054-D28648F092AC}.Release|x86.ActiveCfg = Release|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Release|Any CPU.Build.0 = Release|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Release|Mixed Platforms.Build.0 = Release|Any CPU
-		{9FA4AA16-D8C4-4B0C-AF09-A17112655152}.Release|x86.ActiveCfg = Release|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
@@ -152,6 +146,16 @@ Global
 		{6801518D-B5E1-4555-8AB9-073F028467B4}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{6801518D-B5E1-4555-8AB9-073F028467B4}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{6801518D-B5E1-4555-8AB9-073F028467B4}.Release|x86.ActiveCfg = Release|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -159,5 +163,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
 		{ADEAF945-97EF-4506-9982-4797EEDD24F4} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
+		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
 	EndGlobalSection
 EndGlobal

@@ -14,11 +14,10 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System.Threading;
 using R.MessageBus.Client.RabbitMQ;
-using R.MessageBus.Container;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.SqlServer;
+using R.MessageBus.StructureMap;
 using Xunit;
 
 namespace R.MessageBus.IntegrationTests.Bus
@@ -38,7 +37,7 @@ namespace R.MessageBus.IntegrationTests.Bus
             // Assert
             Assert.Equal(typeof(Consumer), configuration.ConsumerType);
             Assert.Equal(typeof(Producer), configuration.ProducerType);
-            Assert.Equal(typeof(StructuremapContainer), configuration.Container);
+            //Assert.Equal(typeof(StructureMapContainer), configuration.ContainerType);
             Assert.Equal(typeof(SqlServerProcessManagerFinder), configuration.ProcessManagerFinder);
         }
 

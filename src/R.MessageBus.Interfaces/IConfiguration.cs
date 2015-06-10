@@ -23,7 +23,7 @@ namespace R.MessageBus.Interfaces
     {
         Type ConsumerType { get; set; }
         Type ProducerType { get; set; }
-        Type Container { get; set; }
+        //Type ContainerType { get; set; }
         Type ProcessManagerFinder { get; set; }
         Type AggregatorPersistor { get; set; }
         Type MessageBusReadStream { get; set; }
@@ -76,7 +76,7 @@ namespace R.MessageBus.Interfaces
         /// Sets the container.
         /// </summary>
         /// <typeparam name="T">The type must be a class that implements IBusContainer.</typeparam>
-        void SetContainer<T>() where T : class, IBusContainer;
+        void SetContainerType<T>() where T : class, IBusContainer;
 
         /// <summary>
         /// Sets the process manager finder
