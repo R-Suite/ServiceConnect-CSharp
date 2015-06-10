@@ -23,7 +23,6 @@ namespace Filters.Consumer
                     typeof(AfterFilter1),
                     typeof(AfterFilter2)
                 };
-                config.SetHost("lonappdev04");
             });
 
             bus.StartConsuming();

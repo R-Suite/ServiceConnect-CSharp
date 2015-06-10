@@ -24,7 +24,6 @@ namespace Filters
                     typeof(Filter1),
                     typeof(Filter2)
                 };
-                config.SetHost("lonappdev04");
             });
 
             while (true)
