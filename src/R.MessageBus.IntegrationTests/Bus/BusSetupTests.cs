@@ -17,7 +17,6 @@
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.SqlServer;
-using R.MessageBus.StructureMap;
 using Xunit;
 
 namespace R.MessageBus.IntegrationTests.Bus

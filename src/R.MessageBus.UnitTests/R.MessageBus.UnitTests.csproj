@@ -103,9 +103,9 @@
       <Project>{58A100CE-CC7E-43BF-A054-D28648F092AC}</Project>
       <Name>R.MessageBus.Settings</Name>
     </ProjectReference>
-    <ProjectReference Include="..\R.MessageBus.StructureMap\R.MessageBus.StructureMap.csproj">
+    <ProjectReference Include="..\R.MessageBus.Container.StructureMap\R.MessageBus.Container.StructureMap.csproj">
       <Project>{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}</Project>
-      <Name>R.MessageBus.StructureMap</Name>
+      <Name>R.MessageBus.Container.StructureMap</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus\R.MessageBus.csproj">
       <Project>{6911293D-3B22-4D8A-9B23-25EC4FAD1742}</Project>
