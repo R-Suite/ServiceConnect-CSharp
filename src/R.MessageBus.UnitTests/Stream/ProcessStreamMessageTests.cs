@@ -35,6 +35,7 @@ namespace R.MessageBus.UnitTests.Stream
         private Mock<IConsumer> _mockConsumer;
         private Mock<IProducer> _mockProducer;
         private ConsumerEventHandler _fakeEventHandler;
+        private Mock<IConsumerPool> _mockConsumerPool;
 
         public ProcessStreamMessageTests()
         {
@@ -46,6 +47,9 @@ namespace R.MessageBus.UnitTests.Stream
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
             _mockConfiguration.Setup(x => x.GetProducer()).Returns(_mockProducer.Object);
             _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { QueueName = "R.MessageBus.UnitTests" });
+            _mockConfiguration.Setup(x => x.Threads).Returns(1);
+            _mockConsumerPool = new Mock<IConsumerPool>();
+            _mockConfiguration.Setup(x => x.GetConsumerPool()).Returns(_mockConsumerPool.Object);
         }
 
         public bool AssignEventHandler(ConsumerEventHandler eventHandler)
@@ -62,7 +66,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             var mockStream = new Mock<IMessageBusReadStream>();
             mockStream.Setup(x => x.HandlerCount).Returns(1);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockProcessor = new Mock<IStreamProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IStreamProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockProcessor.Object);
             mockProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), mockStream.Object));
@@ -96,7 +100,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             var mockStream = new Mock<IMessageBusReadStream>();
             mockStream.Setup(x => x.HandlerCount).Returns(1);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockProcessor = new Mock<IStreamProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IStreamProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockProcessor.Object);
             mockProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), mockStream.Object));
@@ -130,7 +134,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             var mockStream = new Mock<IMessageBusReadStream>();
             mockStream.Setup(x => x.HandlerCount).Returns(1);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockProcessor = new Mock<IStreamProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IStreamProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockProcessor.Object);
             mockProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), mockStream.Object));
@@ -141,7 +145,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim"
             };
 
-            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
+            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
 
             bus.StartConsuming();
 
@@ -156,7 +160,7 @@ namespace R.MessageBus.UnitTests.Stream
             });
 
             // Assert
-            _mockProducer.Verify(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")), Times.Once);
+            _mockProducer.Verify(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")), Times.Once);
         }
 
         [Fact]
@@ -167,7 +171,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             var mockStream = new Mock<IMessageBusReadStream>();
             mockStream.Setup(x => x.HandlerCount).Returns(1);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockProcessor = new Mock<IStreamProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IStreamProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockProcessor.Object);
             mockProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), mockStream.Object));
@@ -201,7 +205,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             var mockStream = new Mock<IMessageBusReadStream>();
             mockStream.Setup(x => x.HandlerCount).Returns(1);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockProcessor = new Mock<IStreamProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IStreamProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockProcessor.Object);
             mockProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), mockStream.Object));
@@ -212,7 +216,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim"
             };
 
-            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
+            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
 
             bus.StartConsuming();
 
@@ -252,7 +256,7 @@ namespace R.MessageBus.UnitTests.Stream
 
             var mockStream = new Mock<IMessageBusReadStream>();
             mockStream.Setup(x => x.HandlerCount).Returns(1);
-            _mockConsumer.Setup(x => x.StartConsuming(It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<string>(), null, null));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
             var mockProcessor = new Mock<IStreamProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IStreamProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockProcessor.Object);
             mockProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), mockStream.Object));
@@ -263,7 +267,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim"
             };
 
-            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
+            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
 
             bus.StartConsuming();
 

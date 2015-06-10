@@ -13,7 +13,6 @@ namespace Ssl.Producer
                 config.TransportSettings.SslEnabled = true;
                 config.TransportSettings.ServerName = "SslTest";
                 config.SetQueueName("Ssl.Producer");
-                config.SetHost("lonappdev01");
             });
 
             bus.Send("Ssl.Consumer", new SslMessage(Guid.NewGuid()));
