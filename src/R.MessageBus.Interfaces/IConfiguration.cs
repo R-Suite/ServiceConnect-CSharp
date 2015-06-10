@@ -38,6 +38,9 @@ namespace R.MessageBus.Interfaces
         Action<Exception> ExceptionHandler { get; set; }
         bool AddBusToContainer { get; set; }
         int Threads { get; set; }
+        IList<Type> BeforeFilters { get; set; }
+        IList<Type> AfterFilters { get; set; }
+        IConsumerPool ConsumerPool { get; set; }
 
         /// <summary>
         /// Adds a message queue mapping. 
@@ -222,5 +225,11 @@ namespace R.MessageBus.Interfaces
         /// </summary>
         /// <returns></returns>
         void SetThreads(int numberOfThreads);
+
+        /// <summary>
+        /// Creates a consumer pool on first call.  Subsequent calls return the consumer pool.
+        /// </summary>
+        /// <returns></returns>
+        IConsumerPool GetConsumerPool();
     }
 }

@@ -64,6 +64,7 @@ namespace R.MessageBus
         public Type MessageBusReadStream { get; set; }
         public Type MessageBusWriteStream { get; set; }
         public Type AggregatorProcessor { get; set; }
+        public Type ConsumerPoolType { get; set; }
         public bool ScanForMesssageHandlers { get; set; }
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
@@ -73,6 +74,9 @@ namespace R.MessageBus
         public Action<Exception> ExceptionHandler { get; set; }
         public bool AddBusToContainer { get; set; }
         public int Threads { get; set; }
+        public IList<Type> BeforeFilters { get; set; }
+        public IList<Type> AfterFilters { get; set; }
+        public IConsumerPool ConsumerPool { get; set; }
 
         #endregion
 
@@ -107,6 +111,11 @@ namespace R.MessageBus
             AggregatorProcessor = typeof(AggregatorProcessor);
 
             Threads = 1;
+
+            BeforeFilters = new List<Type>();
+            AfterFilters = new List<Type>();
+
+            ConsumerPoolType = typeof(ConsumerPool);
         }
 
         /// <summary>
@@ -375,6 +384,11 @@ namespace R.MessageBus
         public void SetThreads(int numberOfThreads)
         {
             Threads = numberOfThreads;
+        }
+
+        public IConsumerPool GetConsumerPool()
+        {
+            return ConsumerPool ?? (IConsumerPool)Activator.CreateInstance(ConsumerPoolType);
         }
 
         #region Private Methods

@@ -39,7 +39,6 @@ namespace R.MessageBus
         private readonly IProducer _producer;
         private Timer _timer;
         private bool _startedConsuming;
-        private readonly IList<IConsumer> _consumers = new List<IConsumer>();
 
         public IConfiguration Configuration { get; set; }
 
@@ -161,27 +160,23 @@ namespace R.MessageBus
             string queueName = Configuration.TransportSettings.QueueName;
 
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
-            IEnumerable<string> messageTypes = instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName))
+            IList<string> messageTypes = instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName))
                                                         .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
                                                         .ToList();
 
             for (int i = 0; i < Configuration.Threads; i++)
             {
-                new Thread(() => AddConsumer(queueName, messageTypes)).Start();
+                AddConsumer(queueName, messageTypes);
             }
 
             _startedConsuming = true;
         }
 
-        private void AddConsumer(string queueName, IEnumerable<string> messageTypes)
+        private void AddConsumer(string queueName, IList<string> messageTypes)
         {
             var consumer = Configuration.GetConsumer();
-            consumer.StartConsuming(ConsumeMessageEvent, queueName);
-            foreach (string messageType in messageTypes)
-            {
-                consumer.ConsumeMessageType(messageType);
-            }
-            _consumers.Add(consumer);
+            var consumerPool = Configuration.GetConsumerPool();
+            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, consumer);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
@@ -435,6 +430,18 @@ namespace R.MessageBus
 
             try
             {
+                var envelope = new Envelope
+                {
+                    Headers = headers,
+                    Body = message
+                };
+
+                bool stop = ProcessFilters(Configuration.BeforeFilters, envelope);
+                if (stop)
+                {
+                    return result;
+                }
+
                 if (Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
                     ProcessStream(message, typeObject, headers);
@@ -445,11 +452,17 @@ namespace R.MessageBus
                     ProcessProcessManagerHandlers(message, typeObject, context);
                     ProcessAggregatorHandlers(message, typeObject);
                     ProcessRequestReplyConfigurations(message, type, context);
+                }
 
-                    if (headers.ContainsKey("RoutingSlip"))
-                    {
-                        ProcessRoutingSlip(message, typeObject, headers);
-                    }
+                stop = ProcessFilters(Configuration.AfterFilters, envelope);
+                if (stop)
+                {
+                    return result;
+                }
+
+                if (headers.ContainsKey("RoutingSlip"))
+                {
+                    ProcessRoutingSlip(message, typeObject, headers);
                 }
             }
             catch (Exception ex)
@@ -463,6 +476,23 @@ namespace R.MessageBus
             }
 
             return result;
+        }
+
+        private bool ProcessFilters(IEnumerable<Type> filters, Envelope envelope)
+        {
+            if (filters != null)
+            {
+                foreach (Type filterType in filters)
+                {
+                    var filter = (IFilter)Activator.CreateInstance(filterType);
+                    var stop = !filter.Process(envelope);
+                    if (stop)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private void ProcessRoutingSlip(byte[] message, Type type, IDictionary<string, object> headers)
@@ -611,10 +641,8 @@ namespace R.MessageBus
 
         public void StopConsuming()
         {
-            foreach (var consumer in _consumers)
-            {
-                consumer.StopConsuming();
-            }
+            var consumerPool = Configuration.GetConsumerPool();
+            consumerPool.Dispose();
         }
 
         public void Dispose()
