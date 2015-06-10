@@ -39,7 +39,6 @@ namespace R.MessageBus
         private readonly IProducer _producer;
         private Timer _timer;
         private bool _startedConsuming;
-        private readonly IList<IConsumer> _consumers = new List<IConsumer>();
 
         public IConfiguration Configuration { get; set; }
 
@@ -161,32 +160,28 @@ namespace R.MessageBus
             string queueName = Configuration.TransportSettings.QueueName;
 
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
-            IEnumerable<string> messageTypes = instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName))
+            IList<string> messageTypes = instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName))
                                                         .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
                                                         .ToList();
 
             for (int i = 0; i < Configuration.Threads; i++)
             {
-                new Thread(() => AddConsumer(queueName, messageTypes)).Start();
+                AddConsumer(queueName, messageTypes);
             }
 
             _startedConsuming = true;
         }
 
-        private void AddConsumer(string queueName, IEnumerable<string> messageTypes)
+        private void AddConsumer(string queueName, IList<string> messageTypes)
         {
             var consumer = Configuration.GetConsumer();
-            consumer.StartConsuming(ConsumeMessageEvent, queueName);
-            foreach (string messageType in messageTypes)
-            {
-                consumer.ConsumeMessageType(messageType);
-            }
-            _consumers.Add(consumer);
+            var consumerPool = Configuration.GetConsumerPool();
+            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, consumer);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
         {
-            _producer.Publish(message, headers);
+            _producer.Publish(message, Configuration.OutgoingFilters, headers);
         }
 
         public IList<TReply> PublishRequest<TRequest, TReply>(TRequest message, int? expectedCount, Dictionary<string, string> headers, int timeout) where TRequest : Message
@@ -210,8 +205,8 @@ namespace R.MessageBus
             }
 
             headers["RequestMessageId"] = messageId.ToString();
-            
-            _producer.Publish(message, headers);
+
+            _producer.Publish(message, Configuration.OutgoingFilters, headers);
 
             Task.WaitAll(new[] { task }, timeout);
 
@@ -220,19 +215,19 @@ namespace R.MessageBus
 
         public void Send<T>(T message, Dictionary<string, string> headers) where T : Message
         {
-            _producer.Send(message, headers);
+            _producer.Send(message, Configuration.OutgoingFilters, headers);
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message
         {
-            _producer.Send(endPoint, message, headers);
+            _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
         }
         
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers) where T : Message
         {
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
         }
 
@@ -274,7 +269,7 @@ namespace R.MessageBus
 
             foreach (string endPoint in endPoints)
             {
-                producer.Send(endPoint, message, headers);
+                producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
             producer.Disconnect();
         }
@@ -302,11 +297,11 @@ namespace R.MessageBus
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(message, headers);
+                producer.Send(message, Configuration.OutgoingFilters, headers);
             }
             else
             {
-                producer.Send(endPoint, message, headers);
+                producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
             producer.Disconnect();
         }
@@ -343,11 +338,11 @@ namespace R.MessageBus
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(message, headers);
+                _producer.Send(message, Configuration.OutgoingFilters, headers);
             }
             else
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
 
             Task.WaitAll(new[]{ task }, timeout);
@@ -385,7 +380,7 @@ namespace R.MessageBus
 
             foreach (var endPoint in endPoints)
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, message, Configuration.OutgoingFilters, headers);
             }
 
             Task.WaitAll(new[] { task }, timeout);
@@ -401,7 +396,7 @@ namespace R.MessageBus
 
             var destionationsJson = JsonConvert.SerializeObject(destinations);
 
-            _producer.Send(nextDestination, message, new Dictionary<string, string> { { "RoutingSlip", destionationsJson } });
+            _producer.Send(nextDestination, message, Configuration.OutgoingFilters, new Dictionary<string, string> { { "RoutingSlip", destionationsJson } });
         }
 
         public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
@@ -414,7 +409,7 @@ namespace R.MessageBus
                 { "SequenceId", sequenceId }
             };
             SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 10000);
-            var stream = Configuration.GetMessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId);
+            var stream = Configuration.GetMessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId, Configuration);
             return stream;
         }
 
@@ -435,22 +430,36 @@ namespace R.MessageBus
 
             try
             {
+                var envelope = new Envelope
+                {
+                    Headers = headers,
+                    Body = message
+                };
+
+                bool stop = ProcessFilters(Configuration.BeforeConsumingFilters, envelope);
+                if (stop)
+                {
+                    return result;
+                }
+
                 if (Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
-                    ProcessStream(message, typeObject, headers);
+                    ProcessStream(envelope.Body, typeObject, headers);
                 }
                 else
                 {
-                    ProcessMessageHandlers(message, typeObject, context);
-                    ProcessProcessManagerHandlers(message, typeObject, context);
-                    ProcessAggregatorHandlers(message, typeObject);
-                    ProcessRequestReplyConfigurations(message, type, context);
+                    ProcessMessageHandlers(envelope.Body, typeObject, context);
+                    ProcessProcessManagerHandlers(envelope.Body, typeObject, context);
+                    ProcessAggregatorHandlers(envelope.Body, typeObject);
+                    ProcessRequestReplyConfigurations(envelope.Body, type, context);
 
                     if (headers.ContainsKey("RoutingSlip"))
                     {
-                        ProcessRoutingSlip(message, typeObject, headers);
+                        ProcessRoutingSlip(envelope.Body, typeObject, headers);
                     }
                 }
+
+                ProcessFilters(Configuration.AfterConsumingFilters, envelope);
             }
             catch (Exception ex)
             {
@@ -463,6 +472,23 @@ namespace R.MessageBus
             }
 
             return result;
+        }
+
+        private bool ProcessFilters(IEnumerable<Type> filters, Envelope envelope)
+        {
+            if (filters != null)
+            {
+                foreach (Type filterType in filters)
+                {
+                    var filter = (IFilter)Activator.CreateInstance(filterType);
+                    var stop = !filter.Process(envelope);
+                    if (stop)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private void ProcessRoutingSlip(byte[] message, Type type, IDictionary<string, object> headers)
@@ -611,10 +637,8 @@ namespace R.MessageBus
 
         public void StopConsuming()
         {
-            foreach (var consumer in _consumers)
-            {
-                consumer.StopConsuming();
-            }
+            var consumerPool = Configuration.GetConsumerPool();
+            consumerPool.Dispose();
         }
 
         public void Dispose()
