@@ -444,26 +444,22 @@ namespace R.MessageBus
 
                 if (Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
-                    ProcessStream(message, typeObject, headers);
+                    ProcessStream(envelope.Body, typeObject, headers);
                 }
                 else
                 {
-                    ProcessMessageHandlers(message, typeObject, context);
-                    ProcessProcessManagerHandlers(message, typeObject, context);
-                    ProcessAggregatorHandlers(message, typeObject);
-                    ProcessRequestReplyConfigurations(message, type, context);
+                    ProcessMessageHandlers(envelope.Body, typeObject, context);
+                    ProcessProcessManagerHandlers(envelope.Body, typeObject, context);
+                    ProcessAggregatorHandlers(envelope.Body, typeObject);
+                    ProcessRequestReplyConfigurations(envelope.Body, type, context);
+
+                    if (headers.ContainsKey("RoutingSlip"))
+                    {
+                        ProcessRoutingSlip(envelope.Body, typeObject, headers);
+                    }
                 }
 
-                stop = ProcessFilters(Configuration.AfterFilters, envelope);
-                if (stop)
-                {
-                    return result;
-                }
-
-                if (headers.ContainsKey("RoutingSlip"))
-                {
-                    ProcessRoutingSlip(message, typeObject, headers);
-                }
+                ProcessFilters(Configuration.AfterFilters, envelope);
             }
             catch (Exception ex)
             {
