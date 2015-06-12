@@ -46,6 +46,9 @@
   <ItemGroup>
     <Compile Include="ConsumeEventResult.cs" />
     <Compile Include="ConsumerEventHandler.cs" />
+    <Compile Include="Container\IContainer.cs" />
+    <Compile Include="Container\IServicesRegistrar.cs" />
+    <Compile Include="Container\ITypeRegistrar.cs" />
     <Compile Include="Envelope.cs" />
     <Compile Include="HandlerReference.cs" />
     <Compile Include="IAggregatorProcessor.cs" />
