@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using R.MessageBus.Client.RabbitMQ;
 using R.MessageBus.Core;
+using R.MessageBus.Core.Container;
 using R.MessageBus.Interfaces;
 using R.MessageBus.Persistance.InMemory;
 using R.MessageBus.Persistance.SqlServer;
@@ -46,10 +47,8 @@ namespace R.MessageBus
         private string _errorQueueName;
         private string _auditQueueName;
         private bool? _auditingEnabled;
-        private Type _containerType;
+        private Type _containerType = typeof(DefaultBusContainer);
         private IBusContainer _busContainer;
-        private const string DefaultContainerTypeName = "R.MessageBus.Container.StructureMap.StructureMapContainer";
-        private const string DefaultContainerAssemblyName = "R.MessageBus.Container.StructureMap";
 
         #endregion
 
@@ -318,13 +317,6 @@ namespace R.MessageBus
             if (null != _busContainer)
             {
                 return _busContainer;
-            }
-
-            if (null == _containerType)
-            {
-                //todo: check if assembly is already loaded
-                Assembly assembly = Assembly.LoadFrom(DefaultContainerAssemblyName + ".dll");
-                _containerType = assembly.GetType(DefaultContainerTypeName);
             }
 
             _busContainer = (IBusContainer)Activator.CreateInstance(_containerType);
