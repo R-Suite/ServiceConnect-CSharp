@@ -56,6 +56,11 @@
     <Compile Include="ConfigurationManagerWrapper.cs" />
     <Compile Include="ConsumeContext.cs" />
     <Compile Include="ConsumerPool.cs" />
+    <Compile Include="Container\ContainerSingleton.cs" />
+    <Compile Include="Container\DefaultBusContainerExtensions.cs" />
+    <Compile Include="Container\ServiceDescriptor.cs" />
+    <Compile Include="Container\Container.cs" />
+    <Compile Include="Container\DefaultBusContainer.cs" />
     <Compile Include="StreamProcessor.cs" />
     <Compile Include="StreamResponseMessage.cs" />
     <Compile Include="HeartbeatMessage.cs" />

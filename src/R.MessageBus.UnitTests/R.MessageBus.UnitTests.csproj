@@ -56,6 +56,8 @@
     <Compile Include="Aggregator\AggregatorProcessorTests.cs" />
     <Compile Include="ConsumeMessageEventTests.cs" />
     <Compile Include="BusSetupTests.cs" />
+    <Compile Include="Container\RegistrationTests.cs" />
+    <Compile Include="DefaultBusContainerTests.cs" />
     <Compile Include="FilterTests.cs" />
     <Compile Include="MessageHandlerProcessorTest.cs" />
     <Compile Include="ConfigurationTests.cs" />
