@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <package>
   <metadata>
-    <id>R.MessageBus.StructureMap</id>
-    <version>2.0.0</version>
-    <title>R.MessageBus.StructureMap</title>
+    <id>R.MessageBus.Container.StructureMap</id>
+    <version>2.1.1-beta</version>
+    <title>R.MessageBus.Container.StructureMap</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
@@ -13,6 +13,7 @@
     <copyright>Copyright 2015 R.MessageBus. All rights reserved</copyright>
     <tags>MessageBus,StructureMap,R MessageBus,R.MessageBus StructureMap,RabbitMQ MessageBus,RMessageBus StructureMap,Messaging,Message,Bus,Service</tags>
     <dependencies>
+      <dependency id="structuremap" version="2.6.4.1" />
     </dependencies>
   </metadata>
   <files>
