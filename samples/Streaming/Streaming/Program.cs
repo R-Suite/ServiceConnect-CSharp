@@ -18,12 +18,10 @@ namespace Streaming
             });
 
             FileStream f = new FileStream(@"logo.bmp", FileMode.Open);
-            //FileStream f = new FileStream(@"TestPackage.nupkg", FileMode.Open);
 
             var stream = bus.CreateStream("StreamConsumer", new StartStreamMessage(Guid.NewGuid())
             {
                 Path = @"logoCopy.bmp"
-                //Path = @"TestPackageCopy.nupkg"
             });
 
             byte[] buffer = new byte[1000];
