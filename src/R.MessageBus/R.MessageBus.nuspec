@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus</id>
-    <version>2.0.0</version>
+    <version>2.1.0-beta</version>
     <title>R.MessageBus</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -16,15 +16,12 @@
       <dependency id="R.MessageBus.Client.RabbitMQ" version="" />
       <dependency id="R.MessageBus.Interfaces" version="" />
       <dependency id="Common.Logging" version="3.0.0" />
-      <dependency id="structuremap" version="2.6.4.1" />
       <dependency id="Newtonsoft.Json" version="6.0.1" />
     </dependencies>
   </metadata>
   <files>
     <file src="bin\Release\R.MessageBus.dll" target="lib\net40\R.MessageBus.dll" />
     <file src="bin\Release\R.MessageBus.Core.dll" target="lib\net40\R.MessageBus.Core.dll" />
-    <file src="bin\Release\R.MessageBus.Settings.dll" target="lib\net40\R.MessageBus.Settings.dll" />
-    <file src="bin\Release\R.MessageBus.Container.dll" target="lib\net40\R.MessageBus.Container.dll" />
     <file src="bin\Release\R.MessageBus.Persistance.SqlServer.dll" target="lib\net40\R.MessageBus.Persistance.SqlServer.dll" />
     <file src="bin\Release\R.MessageBus.Persistance.InMemory.dll" target="lib\net40\R.MessageBus.Persistance.InMemory.dll" />
   </files>

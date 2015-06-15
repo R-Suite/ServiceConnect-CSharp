@@ -16,7 +16,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
 using R.MessageBus.Interfaces;
@@ -24,13 +23,17 @@ using R.MessageBus.Interfaces;
 namespace R.MessageBus.Core.Container
 {
     /// <summary>
-    /// Abstraction of Custom IoC Container.
+    /// R.MessageBus abstraction of the custom IoC Container.
     /// Used as default to remove any hard dependencies on third-party containers.
     /// </summary>
     public class DefaultBusContainer : IBusContainer
     {
         private Container _container = ContainerSingleton._instance; // using field for performance
 
+        /// <summary>
+        /// Get all handler references for the current container
+        /// </summary>
+        /// <returns></returns>
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
             IEnumerable<KeyValuePair<Type, ServiceDescriptor>> instances = _container.AllInstances.Where(
@@ -49,6 +52,11 @@ namespace R.MessageBus.Core.Container
                 });
         }
 
+        /// <summary>
+        /// Get handler references for a handler type (e.g. IMessageHandler`1)
+        /// </summary>
+        /// <param name="messageHandler"></param>
+        /// <returns></returns>
         public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
         {
             var handlers = _container.AllInstances.Where(i => i.Key == messageHandler).Select(instance => new HandlerReference
@@ -60,50 +68,56 @@ namespace R.MessageBus.Core.Container
             return handlers;
         }
 
+        /// <summary>
+        /// Get instance for a handler type with parameterless ctor
+        /// </summary>
+        /// <param name="handlerType"></param>
+        /// <returns>handler instance</returns>
         public object GetInstance(Type handlerType)
         {
             return _container.Resolve(handlerType);
         }
 
-        public T GetInstance<T>(IDictionary<string, object> arguments)
-        {
-            return (T) _container.Resolve(typeof(T), arguments);
-        }
-
+        /// <summary>
+        /// Get typed instance for a handler type with parameterless ctor
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns>handler instance</returns>
         public T GetInstance<T>()
         {
             return _container.Resolve<T>();
         }
 
+        /// <summary>
+        /// Get instance for a handler type with ctor parameters
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="arguments"></param>
+        /// <returns>handler instance</returns>
+        public T GetInstance<T>(IDictionary<string, object> arguments)
+        {
+            return (T) _container.Resolve(typeof(T), arguments);
+        }
+
+        /// <summary>
+        /// Scan all assemblies loaded into the current appdomain for message handlers
+        /// </summary>
         public void ScanForHandlers()
         {
-            string path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-
-            var list = new List<string>();
-            list.AddRange(Directory.GetFiles(path, "*.dll"));
-            list.AddRange(Directory.GetFiles(path, "*.exe"));
-
-            foreach (string dll in list)
+            foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                if (!string.IsNullOrEmpty(dll) && File.Exists(dll))
+                Type pluginType = asm != null ? asm.GetTypes().Where(IsHandler).FirstOrDefault() : null;
+
+                if (pluginType != null)
                 {
-                    var asm = Assembly.LoadFrom(dll);
-                    Type pluginType = asm != null ? asm.GetTypes().Where(IsHandler).FirstOrDefault() : null;
-
-                    if (pluginType != null)
-                    {
-
-                        //if (pluginType.GetInterfaces().Any(i => i.Name == "IStartProcessManager`1"))
-                        //{
-                        //    _container.RegisterFor(pluginType.TypeHandle);
-                        //}
-                        //else
-                            _container.RegisterForAll(pluginType);
-                    }
+                    _container.RegisterForAll(pluginType);
                 }
             }
         }
 
+        /// <summary>
+        /// Register all the internal message processors with a new/empty container
+        /// </summary>
         public void Initialize()
         {
             _container.RegisterForAll(typeof(MessageHandlerProcessor));
@@ -113,22 +127,40 @@ namespace R.MessageBus.Core.Container
             _container.RegisterForAll(typeof(ProcessManagerPropertyMapper));
         }
 
+        /// <summary>
+        /// Register all the internal message processors with a provided container
+        /// </summary>
+        /// <param name="container"></param>
         public void Initialize(object container)
         {
             _container = (Container)container;
             Initialize();
         }
 
+        /// <summary>
+        /// Register instance of a handler with the current container
+        /// </summary>
+        /// <typeparam name="T">generic handler type</typeparam>
+        /// <param name="handlerType">type of the handler instance</param>
+        /// <param name="handler">handler instance</param>
         public void AddHandler<T>(Type handlerType, T handler)
         {
             _container.RegisterFor(handler, handlerType);
         }
 
+        /// <summary>
+        /// Register instance of the <see cref="IBus"/> to the current container
+        /// </summary>
+        /// <param name="bus"></param>
         public void AddBus(IBus bus)
         {
             _container.RegisterFor(bus, typeof(IBus));
         }
 
+        /// <summary>
+        /// Get instance of the current container
+        /// </summary>
+        /// <returns></returns>
         public object GetContainer()
         {
             return _container;
@@ -139,10 +171,10 @@ namespace R.MessageBus.Core.Container
             if (t == null)
                 return false;
 
-            var isHandler = t.GetInterfaces().Any(i => i.Name == "IMessageHandler`1") ||
-                            t.GetInterfaces().Any(i => i.Name == "IStartProcessManager`1") ||
-                            t.GetInterfaces().Any(i => i.Name == "IStreamHandler`1") ||
-                            t.BaseType == typeof(Aggregator<>);
+            var isHandler = t.GetInterfaces().Any(i => i.Name == typeof(IMessageHandler<>).Name) ||
+                            t.GetInterfaces().Any(i => i.Name == typeof(IStartProcessManager<>).Name) ||
+                            t.GetInterfaces().Any(i => i.Name == typeof(IStreamHandler<>).Name) ||
+                            (t.BaseType != null && t.BaseType.Name == typeof(Aggregator<>).Name);
             return isHandler;
         }
     }

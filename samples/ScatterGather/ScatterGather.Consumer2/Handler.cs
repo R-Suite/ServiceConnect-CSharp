@@ -9,7 +9,7 @@ namespace ScatterGather.Consumer2
     {
         public void Execute(Request message)
         {
-            Console.WriteLine("Consumer 1 Received Message - {0}", message.CorrelationId);
+            Console.WriteLine("Consumer 2 Received Message - {0}", message.CorrelationId);
 
             Context.Reply(new Response(message.CorrelationId)
             {

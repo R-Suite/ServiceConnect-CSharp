@@ -128,7 +128,14 @@ namespace R.MessageBus.Core.Container
         public ITypeRegistrar RegisterForAll(IEnumerable<Type> implementations)
         {
             foreach (var impl in implementations)
-                RegisterFor(impl, impl.GetInterfaces());
+            {
+                var types = impl.GetInterfaces().ToList();
+                if (impl.BaseType != null && impl.BaseType != typeof(object))
+                {
+                    types.Add(impl.BaseType);
+                }
+                RegisterFor(impl, types.ToArray());
+            }
 
             return this;
         }
