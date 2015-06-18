@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Ninject;
-using Ninject.Extensions.Conventions;
+using global::Ninject.Extensions.Conventions;
 using Ninject.Parameters;
 using Ninject.Planning.Bindings.Resolvers;
 using R.MessageBus.Core;
