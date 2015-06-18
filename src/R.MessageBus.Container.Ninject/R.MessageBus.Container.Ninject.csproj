@@ -54,7 +54,9 @@
     <Compile Include="NinjectExtensions.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <None Include="packages.config">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="R.MessageBus.Container.Ninject.nuspec">
       <SubType>Designer</SubType>
     </None>
