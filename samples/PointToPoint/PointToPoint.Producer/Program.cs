@@ -20,8 +20,9 @@ namespace PointToPoint.Producer
                 Console.WriteLine("Press enter to send message");
                 Console.ReadLine();
 
+                Console.WriteLine("Start: {0}", DateTime.Now);
                 var id = Guid.NewGuid();
-                for (int i = 0; i < 1000; i++)
+                for (int i = 0; i < 100000; i++)
                 {
                     bus.Send(new PointToPointMessage(id));
                     //Console.ReadLine();

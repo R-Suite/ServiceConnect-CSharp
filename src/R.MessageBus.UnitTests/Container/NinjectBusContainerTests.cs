@@ -1,17 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using R.MessageBus.Core.Container;
+using Ninject;
+using R.MessageBus.Container.Ninject;
 using R.MessageBus.Interfaces;
 using Xunit;
 
-namespace R.MessageBus.UnitTests
+namespace R.MessageBus.UnitTests.Container
 {
-    public class DefaultBusContainerTests
+    public class NinjectBusContainerTests
     {
         public class MyMessage : Message
         {
-            public MyMessage(Guid correlationId) : base(correlationId)
+            public MyMessage(Guid correlationId)
+                : base(correlationId)
             {
             }
         }
@@ -28,7 +30,7 @@ namespace R.MessageBus.UnitTests
         public class MyMessageHandler2 : IMessageHandler<MyMessage>
         {
             public MyMessageHandler2(string name)
-            {}
+            { }
             public IConsumeContext Context { get; set; }
             public void Execute(MyMessage message)
             {
@@ -37,13 +39,31 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
+        public void ShouldInitialzeStandardKernelWithInternalTypes()
+        {
+            // Arrange
+            var ninjectContainer = new NinjectContainer();
+            var kernel = new StandardKernel();
+
+            // Act
+            ninjectContainer.Initialize(kernel);
+
+            // Assert
+            Assert.NotNull(kernel.GetBindings(typeof(IMessageHandlerProcessor)));
+            Assert.NotNull(kernel.GetBindings(typeof(IAggregatorProcessor)));
+            Assert.NotNull(kernel.GetBindings(typeof(IProcessManagerProcessor)));
+            Assert.NotNull(kernel.GetBindings(typeof(IStreamProcessor)));
+            Assert.NotNull(kernel.GetBindings(typeof(IProcessManagerPropertyMapper)));
+        }
+
+        [Fact]
         public void ShouldGetAllHandlerReferences()
         {
             // Arrange
-            var services = new Core.Container.Container();
-            services.RegisterForAll(typeof(MyMessageHandler));
-            var busContainer = new DefaultBusContainer();
-            busContainer.Initialize(services);
+            var kernel = new StandardKernel();
+            kernel.Bind<IMessageHandler<MyMessage>>().To(typeof(MyMessageHandler));
+            var busContainer = new NinjectContainer();
+            busContainer.Initialize(kernel);
 
             // Act
             var result = busContainer.GetHandlerTypes();
@@ -59,10 +79,10 @@ namespace R.MessageBus.UnitTests
         public void ShouldGetAllHandlerReferencesForMessageHandlerType()
         {
             // Arrange
-            var services = new Core.Container.Container();
-            services.RegisterForAll(typeof(MyMessageHandler));
-            var busContainer = new DefaultBusContainer();
-            busContainer.Initialize(services);
+            var kernel = new StandardKernel();
+            kernel.Bind<IMessageHandler<MyMessage>>().To(typeof(MyMessageHandler));
+            var busContainer = new NinjectContainer();
+            busContainer.Initialize(kernel);
 
             // Act
             var result = busContainer.GetHandlerTypes(typeof(IMessageHandler<MyMessage>));
@@ -78,10 +98,10 @@ namespace R.MessageBus.UnitTests
         public void ShouldGetInstanceOfRegisteredType()
         {
             // Arrange
-            var services = new Core.Container.Container();
-            services.RegisterForAll(typeof(MyMessageHandler));
-            var busContainer = new DefaultBusContainer();
-            busContainer.Initialize(services);
+            var kernel = new StandardKernel();
+            kernel.Bind<IMessageHandler<MyMessage>>().To(typeof(MyMessageHandler));
+            var busContainer = new NinjectContainer();
+            busContainer.Initialize(kernel);
 
             // Act
             var result = busContainer.GetInstance(typeof(IMessageHandler<MyMessage>));
@@ -95,13 +115,13 @@ namespace R.MessageBus.UnitTests
         public void ShouldGetInstanceOfRegisteredTypeWithCtorParameters()
         {
             // Arrange
-            var services = new Core.Container.Container();
-            services.RegisterForAll(typeof(MyMessageHandler2));
-            var busContainer = new DefaultBusContainer();
-            busContainer.Initialize(services);
+            var kernel = new StandardKernel();
+            kernel.Bind<IMessageHandler<MyMessage>>().To(typeof(MyMessageHandler2));
+            var busContainer = new NinjectContainer();
+            busContainer.Initialize(kernel);
 
             // Act
-            var result = busContainer.GetInstance<IMessageHandler<MyMessage>>(new Dictionary<string, object> {{"name", "TestName"}});
+            var result = busContainer.GetInstance<IMessageHandler<MyMessage>>(new Dictionary<string, object> { { "name", "TestName" } });
 
             // Assert
             Assert.NotNull(result);
@@ -112,10 +132,10 @@ namespace R.MessageBus.UnitTests
         public void ShouldGetTypedInstanceOfRegisteredType()
         {
             // Arrange
-            var services = new Core.Container.Container();
-            services.RegisterForAll(typeof(MyMessageHandler));
-            var busContainer = new DefaultBusContainer();
-            busContainer.Initialize(services);
+            var kernel = new StandardKernel();
+            kernel.Bind<IMessageHandler<MyMessage>>().To(typeof(MyMessageHandler));
+            var busContainer = new NinjectContainer();
+            busContainer.Initialize(kernel);
 
             // Act
             var result = busContainer.GetInstance<IMessageHandler<MyMessage>>();

@@ -44,6 +44,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Aggregator.cs" />
     <Compile Include="ConsumeEventResult.cs" />
     <Compile Include="ConsumerEventHandler.cs" />
     <Compile Include="Container\IContainer.cs" />
