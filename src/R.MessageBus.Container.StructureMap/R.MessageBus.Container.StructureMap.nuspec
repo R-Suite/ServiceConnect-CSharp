@@ -13,7 +13,7 @@
     <copyright>Copyright 2015 R.MessageBus. All rights reserved</copyright>
     <tags>MessageBus,StructureMap,R MessageBus,R.MessageBus StructureMap,RabbitMQ MessageBus,RMessageBus StructureMap,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <dependency id="structuremap" version="2.6.4.1" />
+      <dependency id="structuremap" version="3.1.5.154" />
     </dependencies>
   </metadata>
   <files>
