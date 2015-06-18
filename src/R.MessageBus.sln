@@ -40,6 +40,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Persistance", "Persistance"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Container.Ninject", "R.MessageBus.Container.Ninject\R.MessageBus.Container.Ninject.csproj", "{62AEEB53-EE09-496D-885C-D2EBCB82FA59}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "R.MessageBus.Container.Default", "R.MessageBus.Container.Default\R.MessageBus.Container.Default.csproj", "{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -160,6 +162,16 @@ Global
 		{62AEEB53-EE09-496D-885C-D2EBCB82FA59}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{62AEEB53-EE09-496D-885C-D2EBCB82FA59}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{62AEEB53-EE09-496D-885C-D2EBCB82FA59}.Release|x86.ActiveCfg = Release|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -173,5 +185,6 @@ Global
 		{6801518D-B5E1-4555-8AB9-073F028467B4} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
 		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
 		{62AEEB53-EE09-496D-885C-D2EBCB82FA59} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
+		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
 	EndGlobalSection
 EndGlobal

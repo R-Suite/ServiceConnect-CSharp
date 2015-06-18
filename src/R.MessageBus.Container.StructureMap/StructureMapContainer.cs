@@ -4,6 +4,7 @@ using System.Linq;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 using StructureMap;
+using StructureMap.Graph;
 using StructureMap.Pipeline;
 using StructureMap.Query;
 
@@ -14,7 +15,7 @@ namespace R.MessageBus.Container.StructureMap
     /// </summary>
     public class StructureMapContainer : IBusContainer
     {
-        private IContainer _container = ObjectFactory.Container;
+        private IContainer _container = new global::StructureMap.Container();
         private bool _initialized;
 
         public void Initialize()
@@ -61,12 +62,12 @@ namespace R.MessageBus.Container.StructureMap
             IEnumerable<InstanceRef> instances = _container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
                                                                                                        i.PluginType.Name == typeof(IStartProcessManager<>).Name ||
                                                                                                        i.PluginType.Name == typeof(Aggregator<>).Name);
-            
-            return instances.Where(instance => instance.ConcreteType != null && !string.IsNullOrEmpty(instance.ConcreteType.Name))
+
+            return instances.Where(instance => instance.ReturnedType != null && !string.IsNullOrEmpty(instance.ReturnedType.Name))
                             .Select(instance => new HandlerReference
                             {
                                 MessageType = instance.PluginType.GetGenericArguments()[0],
-                                HandlerType = instance.ConcreteType
+                                HandlerType = instance.ReturnedType
                             });
         }
 
@@ -75,7 +76,7 @@ namespace R.MessageBus.Container.StructureMap
             var handlers = _container.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
             {
                 MessageType = instance.PluginType.GetGenericArguments()[0],
-                HandlerType = instance.ConcreteType
+                HandlerType = instance.ReturnedType
             });
             return handlers;
         }
