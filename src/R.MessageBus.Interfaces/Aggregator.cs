@@ -16,9 +16,8 @@
 
 using System;
 using System.Collections.Generic;
-using R.MessageBus.Interfaces;
 
-namespace R.MessageBus.Core
+namespace R.MessageBus.Interfaces
 {
     /// <summary>
     /// Define aggregated message handlers

@@ -8,7 +8,7 @@ namespace PointToPoint.Consumer
     {
         public void Execute(PointToPointMessage command)
         {
-            Console.WriteLine("Received message - {0}", command.CorrelationId);
+            Console.WriteLine("Received message - {0} {1}", command.CorrelationId, DateTime.Now);
         }
 
         public IConsumeContext Context { get; set; }

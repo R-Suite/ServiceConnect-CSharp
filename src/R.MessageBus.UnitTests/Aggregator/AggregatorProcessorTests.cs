@@ -65,7 +65,7 @@ namespace R.MessageBus.UnitTests.Aggregator
                 HandlerType = typeof(FakeAggregator),
                 MessageType = typeof(FakeMessage1)
             };
-            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Core.Aggregator<FakeMessage1>))).Returns(new List<HandlerReference>{ handlerRef });
+            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Aggregator<FakeMessage1>))).Returns(new List<HandlerReference>{ handlerRef });
             mockContainer.Setup(x => x.GetInstance(typeof (FakeAggregator))).Returns(new FakeAggregator
             {
                 Time = new TimeSpan(0, 0, 0, 1)
@@ -124,7 +124,7 @@ namespace R.MessageBus.UnitTests.Aggregator
                 HandlerType = typeof(FakeAggregator),
                 MessageType = typeof(FakeMessage1)
             };
-            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Core.Aggregator<FakeMessage1>))).Returns(new List<HandlerReference> { handlerRef });
+            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Aggregator<FakeMessage1>))).Returns(new List<HandlerReference> { handlerRef });
             mockContainer.Setup(x => x.GetInstance(typeof(FakeAggregator))).Returns(new FakeAggregator
             {
                 Time = new TimeSpan(0, 0, 0, 1)
@@ -153,7 +153,7 @@ namespace R.MessageBus.UnitTests.Aggregator
                 HandlerType = typeof(FakeAggregator),
                 MessageType = typeof(FakeMessage1)
             };
-            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Core.Aggregator<FakeMessage1>))).Returns(new List<HandlerReference> { handlerRef });
+            mockContainer.Setup(x => x.GetHandlerTypes(typeof(Aggregator<FakeMessage1>))).Returns(new List<HandlerReference> { handlerRef });
             var fakeAggregator = new FakeAggregator
             {
                 Time = new TimeSpan(0, 0, 0, 1)
