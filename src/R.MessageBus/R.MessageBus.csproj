@@ -65,6 +65,10 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\R.MessageBus.Container.Default\R.MessageBus.Container.Default.csproj">
+      <Project>{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}</Project>
+      <Name>R.MessageBus.Container.Default</Name>
+    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
       <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
       <Name>R.MessageBus.Core</Name>
