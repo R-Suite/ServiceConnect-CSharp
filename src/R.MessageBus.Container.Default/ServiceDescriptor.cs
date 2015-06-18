@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace R.MessageBus.Core.Container
+namespace R.MessageBus.Container.Default
 {
     public class ServiceDescriptor
     {

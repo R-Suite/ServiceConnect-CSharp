@@ -4,7 +4,7 @@ using System.Linq;
 using System.Reflection;
 using R.MessageBus.Interfaces.Container;
 
-namespace R.MessageBus.Core.Container
+namespace R.MessageBus.Container.Default
 {
     /// <summary>
     /// Custom implementation of IoC Container
