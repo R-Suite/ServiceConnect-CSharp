@@ -2,7 +2,7 @@
 using R.MessageBus.Interfaces;
 using R.MessageBus.Interfaces.Container;
 
-namespace R.MessageBus.Core.Container
+namespace R.MessageBus.Container.Default
 {
     public static class DefaultBusContainerExtensions
     {

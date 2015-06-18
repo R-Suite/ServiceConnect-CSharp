@@ -18,9 +18,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
 
-namespace R.MessageBus.Core.Container
+namespace R.MessageBus.Container.Default
 {
     /// <summary>
     /// R.MessageBus abstraction of the custom IoC Container.
@@ -28,7 +29,7 @@ namespace R.MessageBus.Core.Container
     /// </summary>
     public class DefaultBusContainer : IBusContainer
     {
-        private Container _container = ContainerSingleton._instance; // using field for performance
+        private Container _container = new Container();
 
         /// <summary>
         /// Get all handler references for the current container
@@ -133,7 +134,7 @@ namespace R.MessageBus.Core.Container
         /// <param name="container"></param>
         public void Initialize(object container)
         {
-            _container = (Container)container;
+            _container = (Default.Container)container;
             Initialize();
         }
 

@@ -93,6 +93,10 @@
       <Project>{62aeeb53-ee09-496d-885c-d2ebcb82fa59}</Project>
       <Name>R.MessageBus.Container.Ninject</Name>
     </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Container.Default\R.MessageBus.Container.Default.csproj">
+      <Project>{5ecfb9e6-3824-4a00-83da-0490f036df3f}</Project>
+      <Name>R.MessageBus.Container.Default</Name>
+    </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
       <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
       <Name>R.MessageBus.Core</Name>
