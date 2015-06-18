@@ -39,6 +39,9 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
+    <Reference Include="Ninject">
+      <HintPath>..\packages\Ninject.3.2.2.0\lib\net45-full\Ninject.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
@@ -56,8 +59,9 @@
     <Compile Include="Aggregator\AggregatorProcessorTests.cs" />
     <Compile Include="ConsumeMessageEventTests.cs" />
     <Compile Include="BusSetupTests.cs" />
-    <Compile Include="Container\RegistrationTests.cs" />
-    <Compile Include="DefaultBusContainerTests.cs" />
+    <Compile Include="Container\NinjectBusContainerTests.cs" />
+    <Compile Include="Container\DefaultContainerTests.cs" />
+    <Compile Include="Container\DefaultBusContainerTests.cs" />
     <Compile Include="FilterTests.cs" />
     <Compile Include="MessageHandlerProcessorTest.cs" />
     <Compile Include="ConfigurationTests.cs" />
@@ -84,6 +88,10 @@
     <ProjectReference Include="..\R.MessageBus.Client.RabbitMQ\R.MessageBus.Client.RabbitMQ.csproj">
       <Project>{69846fe1-24d2-48f5-8e7b-9dba042a767a}</Project>
       <Name>R.MessageBus.Client.RabbitMQ</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\R.MessageBus.Container.Ninject\R.MessageBus.Container.Ninject.csproj">
+      <Project>{62aeeb53-ee09-496d-885c-d2ebcb82fa59}</Project>
+      <Name>R.MessageBus.Container.Ninject</Name>
     </ProjectReference>
     <ProjectReference Include="..\R.MessageBus.Core\R.MessageBus.Core.csproj">
       <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>

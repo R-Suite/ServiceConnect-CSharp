@@ -1,5 +1,6 @@
 ﻿using System;
 using R.MessageBus;
+using R.MessageBus.Container.Ninject;
 using R.MessageBus.Container.StructureMap;
 using R.MessageBus.Persistance.InMemory;
 
@@ -14,6 +15,7 @@ namespace McDonalds.Cashier
             {
                 x.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
                 x.SetAuditingEnabled(true);
+                x.SetContainerType<NinjectContainer>();
                 //x.SetContainerType<StructureMapContainer>();
             });
 
