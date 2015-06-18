@@ -1,5 +1,7 @@
 ﻿using System;
 using R.MessageBus;
+using R.MessageBus.Container.Ninject;
+using R.MessageBus.Container.StructureMap;
 
 namespace PointToPoint.Consumer
 {
@@ -11,11 +13,10 @@ namespace PointToPoint.Consumer
             var bus = Bus.Initialize(config =>
             {
                 config.SetQueueName("PointToPoint2");
-                config.SetThreads(10);
+                config.SetThreads(2);
+                config.SetContainerType<NinjectContainer>();
             });
-            
-            bus.StartConsuming();
-            
+           
             Console.ReadLine();
         }
     }

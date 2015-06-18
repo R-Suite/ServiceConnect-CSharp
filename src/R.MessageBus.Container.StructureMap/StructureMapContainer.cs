@@ -15,22 +15,29 @@ namespace R.MessageBus.Container.StructureMap
     public class StructureMapContainer : IBusContainer
     {
         private IContainer _container = ObjectFactory.Container;
+        private bool _initialized;
 
         public void Initialize()
         {
-            _container.Configure(x =>
+            if (!_initialized)
             {
-                x.For<IMessageHandlerProcessor>().Use<MessageHandlerProcessor>();
-                x.For<IAggregatorProcessor>().Use<AggregatorProcessor>();
-                x.For<IProcessManagerProcessor>().Use<ProcessManagerProcessor>();
-                x.For<IStreamProcessor>().Use<StreamProcessor>();
-                x.For<IProcessManagerPropertyMapper>().Use<ProcessManagerPropertyMapper>();
-            });
+                _container.Configure(x =>
+                {
+                    x.For<IMessageHandlerProcessor>().Use<MessageHandlerProcessor>();
+                    x.For<IAggregatorProcessor>().Use<AggregatorProcessor>();
+                    x.For<IProcessManagerProcessor>().Use<ProcessManagerProcessor>();
+                    x.For<IStreamProcessor>().Use<StreamProcessor>();
+                    x.For<IProcessManagerPropertyMapper>().Use<ProcessManagerPropertyMapper>();
+                });
+
+                _initialized = true;
+            }
         }
 
         public void Initialize(object container)
         {
             _container = (IContainer) container;
+            _initialized = false;
             Initialize();
         }
 
@@ -54,6 +61,7 @@ namespace R.MessageBus.Container.StructureMap
             IEnumerable<InstanceRef> instances = _container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
                                                                                                        i.PluginType.Name == typeof(IStartProcessManager<>).Name ||
                                                                                                        i.PluginType.Name == typeof(Aggregator<>).Name);
+            
             return instances.Where(instance => instance.ConcreteType != null && !string.IsNullOrEmpty(instance.ConcreteType.Name))
                             .Select(instance => new HandlerReference
                             {

@@ -1,11 +1,10 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using R.MessageBus.Core.Container;
 using Xunit;
 
 namespace R.MessageBus.UnitTests.Container
 {
-    public class RegistrationTests
+    public class DefaultContainerTests
     {
         public interface IMyInterface<T>
         {
