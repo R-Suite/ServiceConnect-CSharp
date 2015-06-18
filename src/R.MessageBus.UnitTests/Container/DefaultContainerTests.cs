@@ -41,7 +41,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldResolveExplicitelyRegisteredType()
         {
             // Arrange
-            var services = new R.MessageBus.Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterFor(typeof (MyImplementation), typeof (IMyInterface<string>));
 
             // Act
@@ -56,7 +56,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldResolveImplicitelyRegisteredType()
         {
             // Arrange
-            var services = new R.MessageBus.Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterForAll(typeof(MyImplementation));
 
             // Act
@@ -71,7 +71,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldResolveImplicitelyRegisteredGenericTypes()
         {
             // Arrange
-            var services = new R.MessageBus.Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterForAll(typeof(MyGenericImplementation<>));
 
             // Act
@@ -96,7 +96,7 @@ namespace R.MessageBus.UnitTests.Container
             // Arrange
             IMyInterface<string> myInstance = new MyGenericImplementation<string>();
             myInstance.Name = "test";
-            var services = new R.MessageBus.Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterFor(myInstance, typeof(IMyInterface<string>));
 
             // Act
@@ -111,7 +111,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldResolveRegisteredTypeWithCtorParams()
         {
             // Arrange
-            var services = new R.MessageBus.Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterFor(typeof(MyImplementationWithCtor), typeof(IMyInterface<string>));
 
             // Act

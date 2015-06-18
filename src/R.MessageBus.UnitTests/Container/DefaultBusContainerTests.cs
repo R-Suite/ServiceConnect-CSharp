@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using R.MessageBus.Core.Container;
+using R.MessageBus.Container.Default;
 using R.MessageBus.Interfaces;
 using Xunit;
 
@@ -40,7 +40,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldGetAllHandlerReferences()
         {
             // Arrange
-            var services = new Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterForAll(typeof(MyMessageHandler));
             var busContainer = new DefaultBusContainer();
             busContainer.Initialize(services);
@@ -59,7 +59,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldGetAllHandlerReferencesForMessageHandlerType()
         {
             // Arrange
-            var services = new Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterForAll(typeof(MyMessageHandler));
             var busContainer = new DefaultBusContainer();
             busContainer.Initialize(services);
@@ -78,7 +78,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldGetInstanceOfRegisteredType()
         {
             // Arrange
-            var services = new Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterForAll(typeof(MyMessageHandler));
             var busContainer = new DefaultBusContainer();
             busContainer.Initialize(services);
@@ -95,7 +95,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldGetInstanceOfRegisteredTypeWithCtorParameters()
         {
             // Arrange
-            var services = new Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterForAll(typeof(MyMessageHandler2));
             var busContainer = new DefaultBusContainer();
             busContainer.Initialize(services);
@@ -112,7 +112,7 @@ namespace R.MessageBus.UnitTests.Container
         public void ShouldGetTypedInstanceOfRegisteredType()
         {
             // Arrange
-            var services = new Core.Container.Container();
+            var services = new MessageBus.Container.Default.Container();
             services.RegisterForAll(typeof(MyMessageHandler));
             var busContainer = new DefaultBusContainer();
             busContainer.Initialize(services);
