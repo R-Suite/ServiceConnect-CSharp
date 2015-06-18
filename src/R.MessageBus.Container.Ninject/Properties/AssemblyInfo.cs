@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Ruffer PLC")]
 [assembly: AssemblyProduct("R.MessageBus.Container.Ninject")]
-[assembly: AssemblyCopyright("Copyright © Ruffer PLC 2015")]
+[assembly: AssemblyCopyright("Copyright © R.MessageBus 2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
