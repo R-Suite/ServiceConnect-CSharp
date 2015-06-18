@@ -1,6 +1,13 @@
 [![Build Status](https://travis-ci.org/R-Suite/R.MessageBus.svg?branch=master)](https://travis-ci.org/R-Suite/R.MessageBus)     [![Join the chat at https://gitter.im/R-Suite/R.MessageBus](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/R.MessageBus?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-**_R.MessageBus 2.0.0 is available at [https://www.nuget.org/packages/R.MessageBus] (https://www.nuget.org/packages/R.MessageBus/)_**
+**_R.MessageBus 2.1.0-beta is available at [https://www.nuget.org/packages/R.MessageBus] (https://www.nuget.org/packages/R.MessageBus/)_**
+* **New in R.MessageBus 2.1.0-beta**
+    - Support for multi-threaded consumers
+    - SSL support
+    - Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/R.MessageBus/tree/master/samples/Filters) sample application for a complete example.
+    - Removed dependency on StructureMap. (To use StructureMap, pull down _R.MessageBus.Container.StructureMap_ nuget and set
+     ```Bus.Initialize(config =>config.SetContainerType<StructureMapContainer>());``` when initializing the bus. You can also initialize the bus with your own container by specifying ```config.InitializeContainer(myStructureMapContainer)```)
+
 
 <img src="https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/logo/logo.png" height="150">
 
