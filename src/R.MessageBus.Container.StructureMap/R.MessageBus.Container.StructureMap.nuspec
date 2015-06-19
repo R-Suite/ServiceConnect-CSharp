@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus.Container.StructureMap</id>
-    <version>2.1.1-beta</version>
+    <version>2.1.3-beta</version>
     <title>R.MessageBus.Container.StructureMap</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -17,6 +17,7 @@
     </dependencies>
   </metadata>
   <files>
+    <file src="bin\Release\R.MessageBus.Container.StructureMap.dll" target="lib\net40\R.MessageBus.Container.StructureMap.dll" />
   </files>
 </package>
 
