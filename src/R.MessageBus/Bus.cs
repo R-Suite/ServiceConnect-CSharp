@@ -452,14 +452,14 @@ namespace R.MessageBus
                     ProcessProcessManagerHandlers(envelope.Body, typeObject, context);
                     ProcessAggregatorHandlers(envelope.Body, typeObject);
                     ProcessRequestReplyConfigurations(envelope.Body, type, context);
-
-                    if (headers.ContainsKey("RoutingSlip"))
-                    {
-                        ProcessRoutingSlip(envelope.Body, typeObject, headers);
-                    }
                 }
 
                 ProcessFilters(Configuration.AfterConsumingFilters, envelope);
+
+                if (headers.ContainsKey("RoutingSlip"))
+                {
+                    ProcessRoutingSlip(envelope.Body, typeObject, headers);
+                }
             }
             catch (Exception ex)
             {

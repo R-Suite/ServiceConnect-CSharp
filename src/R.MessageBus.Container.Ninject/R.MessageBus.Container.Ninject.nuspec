@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>R.MessageBus.Container.Ninject</id>
-    <version>2.1.1-beta</version>
+    <version>2.1.2-beta</version>
     <title>R.MessageBus.Container.Ninject</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -17,6 +17,7 @@
     </dependencies>
   </metadata>
   <files>
+    <file src="bin\Release\R.MessageBus.Container.Ninject.dll" target="lib\net40\R.MessageBus.Container.Ninject.dll" />
   </files>
 </package>
 
