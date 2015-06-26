@@ -107,11 +107,11 @@ namespace R.MessageBus.Container.Default
         {
             foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                Type pluginType = asm != null ? asm.GetTypes().Where(IsHandler).FirstOrDefault() : null;
+                var pluginTypes = asm != null ? asm.GetTypes().Where(IsHandler).ToList() : null;
 
-                if (pluginType != null)
+                if (null != pluginTypes && pluginTypes.Count > 0)
                 {
-                    _container.RegisterForAll(pluginType);
+                    _container.RegisterForAll(pluginTypes);
                 }
             }
         }
@@ -176,6 +176,7 @@ namespace R.MessageBus.Container.Default
                             t.GetInterfaces().Any(i => i.Name == typeof(IStartProcessManager<>).Name) ||
                             t.GetInterfaces().Any(i => i.Name == typeof(IStreamHandler<>).Name) ||
                             (t.BaseType != null && t.BaseType.Name == typeof(Aggregator<>).Name);
+
             return isHandler;
         }
     }
