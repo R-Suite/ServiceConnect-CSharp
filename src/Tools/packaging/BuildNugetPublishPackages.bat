@@ -16,7 +16,7 @@ NuGet pack "%OUTDIR%R.MessageBus\R.MessageBus.nuspec"
 ::NuGet pack "%OUTDIR%R.MessageBus.Container.Ninject\R.MessageBus.Container.Ninject.nuspec"
 
 
-nuget push R.MessageBus.2.1.2-beta.nupkg
+nuget push R.MessageBus.2.1.3-beta.nupkg
 ::nuget push R.MessageBus.Interfaces.2.1.1-beta.nupkg
 ::nuget push R.MessageBus.Client.RabbitMQ.2.1.0-beta.nupkg
 ::nuget push R.MessageBus.Container.StructureMap.2.1.3-beta.nupkg
