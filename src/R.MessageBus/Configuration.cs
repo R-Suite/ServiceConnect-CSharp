@@ -338,7 +338,7 @@ namespace R.MessageBus
             return (IAggregatorPersistor)Activator.CreateInstance(AggregatorPersistor, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
         }
 
-        public IRequestConfiguration GetRequestConfiguration(ConsumerEventHandler consumeMessageEvent, Guid requestMessageId, string messageType)
+        public IRequestConfiguration GetRequestConfiguration(Guid requestMessageId)
         {
             var configuration = new RequestConfiguration(requestMessageId);
             return configuration;
