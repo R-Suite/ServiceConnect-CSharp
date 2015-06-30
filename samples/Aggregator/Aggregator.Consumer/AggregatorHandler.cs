@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading;
 using Aggregator.Messages;
-using R.MessageBus.Core;
+using R.MessageBus.Interfaces;
 
 namespace Aggregator.Consumer
 {

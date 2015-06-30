@@ -9,7 +9,9 @@ namespace PublishSubscribe.Publisher
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            var bus = Bus.Initialize();
+            var bus = Bus.Initialize(config =>
+            {
+            });
 
             while (true)
             {

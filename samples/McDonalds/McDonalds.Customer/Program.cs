@@ -11,7 +11,10 @@ namespace McDonalds.Customer
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Customer ***********");
-            IBus bus = Bus.Initialize(config => config.SetAuditingEnabled(true));
+            IBus bus = Bus.Initialize(config =>
+            {
+                config.SetAuditingEnabled(true);
+            });
             bus.StartConsuming();
 
             while (true)
