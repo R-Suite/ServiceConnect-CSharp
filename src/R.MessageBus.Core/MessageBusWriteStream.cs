@@ -52,7 +52,7 @@ namespace R.MessageBus.Core
                 {
                     { "SequenceId", _sequenceId },
                     { "PacketNumber", _packetsSent.ToString() }
-                }, _configuration.OutgoingFilters);
+                });
             }
         }
 

@@ -13,7 +13,9 @@ namespace RecipientList.Publisher
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Producer ***********");
-            _bus = Bus.Initialize();
+            _bus = Bus.Initialize(config =>
+            {
+            });
             _bus.StartConsuming();
 
             while (true)

@@ -143,7 +143,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim"
             };
 
-            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
+            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(),  It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
 
             bus.StartConsuming();
 
@@ -158,7 +158,7 @@ namespace R.MessageBus.UnitTests.Stream
             });
 
             // Assert
-            _mockProducer.Verify(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")), Times.Once);
+            _mockProducer.Verify(x => x.Send("Source", It.IsAny<StreamResponseMessage>(),  It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")), Times.Once);
         }
 
         [Fact]
@@ -214,7 +214,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim"
             };
 
-            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
+            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(),  It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
 
             bus.StartConsuming();
 
@@ -265,7 +265,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim"
             };
 
-            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(), It.IsAny<IList<Type>>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
+            _mockProducer.Setup(x => x.Send("Source", It.IsAny<StreamResponseMessage>(),  It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
 
             bus.StartConsuming();
 
