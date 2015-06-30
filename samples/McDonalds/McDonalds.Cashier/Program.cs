@@ -15,7 +15,6 @@ namespace McDonalds.Cashier
             {
                 x.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
                 x.SetAuditingEnabled(true);
-                //x.SetContainerType<NinjectContainer>();
                 x.SetContainerType<StructureMapContainer>();
             });
 
