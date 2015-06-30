@@ -13,6 +13,7 @@ namespace PointToPoint.Producer
             {
                 config.AddQueueMapping(typeof (PointToPointMessage), "PointToPoint2");
                 config.SetThreads(10);
+                config.SetHost("lonappdev04");
             });
 
             while (true)

@@ -114,7 +114,7 @@ namespace R.MessageBus
         {
             var heartbeatState = (HeartbeatTimerState) state;
 
-            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, new HeartbeatMessage(Guid.NewGuid())
+            var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
             {
                 Timestamp = DateTime.UtcNow,
                 Location = Configuration.TransportSettings.MachineName,
@@ -124,6 +124,9 @@ namespace R.MessageBus
                 Language = "C#",
                 ConsumerType = _producer.Type
             });
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage).FullName, messageBytes);
         }
 
         /// <summary>
@@ -181,18 +184,42 @@ namespace R.MessageBus
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
         {
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+            
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return;
+                var envelope = new Envelope
+                {
+                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object) x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
-            _producer.Publish(message, headers);
+
+            _producer.Publish(typeof(T).FullName, messageBytes, headers);
+
+            Type newBaseType = typeof(T).BaseType;
+            if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
+            {
+                MethodInfo publish = GetType().GetMethod("Publish", BindingFlags.Public | BindingFlags.Instance);
+                MethodInfo genericPublish = publish.MakeGenericMethod(newBaseType);
+                genericPublish.Invoke(this, new object[] { message, headers == null ? null : new Dictionary<string, string>(headers) });
+            }
         }
 
         public IList<TReply> PublishRequest<TRequest, TReply>(TRequest message, int? expectedCount, Dictionary<string, string> headers, int timeout) where TRequest : Message
         {
             var messageId = Guid.NewGuid();
-            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(messageId);
 
             var responses = new List<TReply>();
             configuration.EndpointsCount = expectedCount ?? -1;
@@ -210,13 +237,29 @@ namespace R.MessageBus
             }
 
             headers["RequestMessageId"] = messageId.ToString();
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return responses;
+                var envelope = new Envelope
+                {
+                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return responses;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
 
-            _producer.Publish(message, headers);
+            _producer.Publish(typeof(TRequest).FullName, messageBytes, headers);
 
             Task.WaitAll(new[] { task }, timeout);
 
@@ -225,34 +268,79 @@ namespace R.MessageBus
 
         public void Send<T>(T message, Dictionary<string, string> headers) where T : Message
         {
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return;
+                var envelope = new Envelope
+                {
+                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
-            _producer.Send(message, headers);
+            _producer.Send(typeof(T).FullName, messageBytes, headers);
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message
         {
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return;
+                var envelope = new Envelope
+                {
+                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
-            _producer.Send(endPoint, message, headers);
+            _producer.Send(endPoint, typeof(T).FullName, messageBytes, headers);
         }
         
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers) where T : Message
         {
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return;
+                var envelope = new Envelope
+                {
+                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, typeof(T).FullName, messageBytes, headers);
             }
         }
 
@@ -264,7 +352,7 @@ namespace R.MessageBus
         public void SendRequest<TRequest, TReply>(IList<string> endPoints, TRequest message, Action<IList<TReply>> callback, Dictionary<string, string> headers = null) where TRequest : Message where TReply : Message
         {
             var messageId = Guid.NewGuid();
-            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(messageId);
             configuration.EndpointsCount = endPoints.Count;
 
             var responses = new List<TReply>();
@@ -289,17 +377,33 @@ namespace R.MessageBus
             }
 
             headers["RequestMessageId"] = messageId.ToString();
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return;
+                var envelope = new Envelope
+                {
+                    Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
 
             IProducer producer = Configuration.GetProducer();
 
             foreach (string endPoint in endPoints)
             {
-                producer.Send(endPoint, message, headers);
+                producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
             }
             producer.Disconnect();
         }
@@ -307,7 +411,7 @@ namespace R.MessageBus
         public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers) where TRequest : Message where TReply : Message
         {
             var messageId = Guid.NewGuid();
-            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(messageId);
             configuration.EndpointsCount = 1;
 
             configuration.SetHandler(r => callback((TReply)r));
@@ -323,20 +427,36 @@ namespace R.MessageBus
             }
 
             headers["RequestMessageId"] = messageId.ToString();
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return;
+                var envelope = new Envelope
+                {
+                    Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
 
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(message, headers);
+                producer.Send(typeof(TRequest).FullName, messageBytes, headers);
             }
             else
             {
-                producer.Send(endPoint, message, headers);
+                producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
             }
             producer.Disconnect();
         }
@@ -349,7 +469,7 @@ namespace R.MessageBus
         public TReply SendRequest<TRequest, TReply>(string endPoint, TRequest message, Dictionary<string, string> headers, int timeout) where TRequest : Message where TReply : Message
         {
             var messageId = Guid.NewGuid();
-            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(messageId);
             configuration.EndpointsCount = 1;
 
             TReply response = default(TReply);
@@ -370,19 +490,34 @@ namespace R.MessageBus
             }
 
             headers["RequestMessageId"] = messageId.ToString();
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                return response;
+                var envelope = new Envelope
+                {
+                    Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return response;
+                }
+
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(message, headers);
+                _producer.Send(typeof(TRequest).FullName, messageBytes, headers);
             }
             else
             {
-                _producer.Send(endPoint, message, headers);
+                _producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
             }
 
             Task.WaitAll(new[]{ task }, timeout);
@@ -399,7 +534,7 @@ namespace R.MessageBus
         public IList<TReply> SendRequest<TRequest, TReply>(IList<string> endPoints, TRequest message, Dictionary<string, string> headers, int timeout) where TRequest : Message where TReply : Message
         {
             var messageId = Guid.NewGuid();
-            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(ConsumeMessageEvent, messageId, typeof(TReply).FullName.Replace(".", string.Empty));
+            IRequestConfiguration configuration = Configuration.GetRequestConfiguration(messageId);
 
             var responses = new List<TReply>();
             configuration.EndpointsCount = endPoints.Count;
@@ -417,17 +552,33 @@ namespace R.MessageBus
             }
 
             headers["RequestMessageId"] = messageId.ToString();
-            var stop = ProcessOutgoingFilters(message, headers);
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
 
-            if (!stop)
+            if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
-                foreach (var endPoint in endPoints)
+                var envelope = new Envelope
                 {
-                    _producer.Send(endPoint, message, headers);
+                    Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
+                };
+
+                var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
+                if (stop)
+                {
+                    return responses;
                 }
 
-                Task.WaitAll(new[] { task }, timeout);
+                headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
+            
+            foreach (var endPoint in endPoints)
+            {
+                _producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
+            }
+
+            Task.WaitAll(new[] { task }, timeout);
             
             return responses;
         }
@@ -441,32 +592,27 @@ namespace R.MessageBus
             var destionationsJson = JsonConvert.SerializeObject(destinations);
 
             var headers = new Dictionary<string, string> {{"RoutingSlip", destionationsJson}};
-            var stop = ProcessOutgoingFilters(message, headers);
-            if (stop)
-            {
-                return;
-            }
-            _producer.Send(nextDestination, message, headers);
-        }
+            var messageString = JsonConvert.SerializeObject(message);
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
 
-        private bool ProcessOutgoingFilters<T>(T message, Dictionary<string, string> headers) where T : Message
-        {
             if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
                 var envelope = new Envelope
                 {
-                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object)x.Value),
-                    Body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message))
+                    Headers = headers.ToDictionary(x => x.Key, x => (object)x.Value),
+                    Body = messageBytes
                 };
+
                 var stop = ProcessFilters(Configuration.OutgoingFilters, envelope);
                 if (stop)
                 {
-                    return true;
+                    return;
                 }
-                message = (T) JsonConvert.DeserializeObject(Encoding.UTF8.GetString(envelope.Body), typeof (T));
+
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
+                messageBytes = envelope.Body;
             }
-            return false;
+            _producer.Send(nextDestination, typeof(T).FullName, messageBytes, headers);
         }
 
         public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
@@ -496,7 +642,7 @@ namespace R.MessageBus
                 Headers = headers
             };
 
-            Type typeObject = Type.GetType(type);
+            Type typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
 
             try
             {

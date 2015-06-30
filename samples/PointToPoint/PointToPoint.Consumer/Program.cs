@@ -15,6 +15,7 @@ namespace PointToPoint.Consumer
                 config.SetQueueName("PointToPoint2");
                 config.SetThreads(2);
                 config.SetContainerType<NinjectContainer>();
+                config.SetHost("lonappdev04");
             });
            
             Console.ReadLine();

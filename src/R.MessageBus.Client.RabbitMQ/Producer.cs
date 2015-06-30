@@ -96,32 +96,22 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
         }
 
-        public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
+        public void Publish(string type, byte[] message, Dictionary<string, string> headers = null)
         {
-            DoPublish(message, headers);
+            DoPublish(type, message, headers);
         }
 
-        private void PublishBaseType<T, TB>(T message, Dictionary<string, string> headers = null)
-            where T : Message
-            where TB : Message
+        private void DoPublish(string type, byte[] message, Dictionary<string, string> headers)
         {
-            DoPublish(message, headers, typeof(TB));
-        }
-
-        private void DoPublish<T>(T message, Dictionary<string, string> headers, Type baseType = null) where T : Message
-        {
-            var serializedMessage = JsonConvert.SerializeObject(message);
-            var bytes = Encoding.UTF8.GetBytes(serializedMessage);
-
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
-                var messageHeaders = GetHeaders(typeof(T), headers, _transportSettings.QueueName, "Publish");
+                var messageHeaders = GetHeaders(type, headers, _transportSettings.QueueName, "Publish");
 
                 var envelope = new Envelope
                 {
-                    Body = bytes,
+                    Body = message,
                     Headers = messageHeaders
                 };
 
@@ -129,23 +119,11 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
                 
                 basicProperties.SetPersistent(true);
-                var exchangeName = (null != baseType)
-                    ? ConfigureExchange(baseType.FullName.Replace(".", string.Empty))
-                    : ConfigureExchange(typeof(T).FullName.Replace(".", string.Empty));
+                var exchangeName = ConfigureExchange(type.Replace(".", string.Empty));
 
                 Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.QueueName, basicProperties, envelope.Body),
                     ex => RetryConnection(),
                     new TimeSpan(0, 0, 0, 6), 10);
-            }
-
-            // Get message BaseType and call Publish recursively
-            Type newBaseType = (null != baseType) ? baseType.BaseType : typeof(T).BaseType;
-
-            if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
-            {
-                MethodInfo publish = GetType().GetMethod("PublishBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
-                MethodInfo genericPublish = publish.MakeGenericMethod(typeof(T), newBaseType);
-                genericPublish.Invoke(this, new object[] { message, headers });
             }
         }
 
@@ -167,68 +145,48 @@ namespace R.MessageBus.Client.RabbitMQ
             CreateConnection();
         }
 
-        public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
+        public void Send(string type, byte[] message, Dictionary<string, string> headers = null)
         {
-            var serializedMessage = JsonConvert.SerializeObject(message);
-            var bytes = Encoding.UTF8.GetBytes(serializedMessage);
-
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
                 basicProperties.SetPersistent(true);
-                IList<string> endPoints = _queueMappings[typeof(T).FullName];
-
-               
+                IList<string> endPoints = _queueMappings[type];
 
                 foreach (string endPoint in endPoints)
                 {
-                    var messageHeaders = GetHeaders(typeof(T), headers, endPoint, "Send");
-
-                    var envelope = new Envelope
-                    {
-                        Body = bytes,
-                        Headers = messageHeaders
-                    };
-
-                    basicProperties.Headers = envelope.Headers;
+                    Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
+                    
+                    basicProperties.Headers = messageHeaders;
                     basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
-                    Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, envelope.Body),
+                    Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, message),
                              ex => RetryConnection(),
                              new TimeSpan(0, 0, 0, 6), 10);
                 }
             }
         }
 
-        public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
+        public void Send(string endPoint, string type, byte[] message, Dictionary<string, string> headers = null)
         {
-            var serializedMessage = JsonConvert.SerializeObject(message);
-            var bytes = Encoding.UTF8.GetBytes(serializedMessage);
-
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.SetPersistent(true);
 
-                var messageHeaders = GetHeaders(typeof(T), headers, endPoint, "Send");
+                var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
-                var envelope = new Envelope
-                {
-                    Body = bytes,
-                    Headers = messageHeaders
-                };
-
-                basicProperties.Headers = envelope.Headers; 
+                basicProperties.Headers = messageHeaders; 
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
-                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, envelope.Body),
+                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, message),
                          ex => RetryConnection(),
                          new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
-        private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
+        private Dictionary<string, object> GetHeaders(string type, Dictionary<string, string> headers, string queueName, string messageType)
         {
             if (headers == null)
             {
@@ -253,8 +211,8 @@ namespace R.MessageBus.Client.RabbitMQ
             headers["SourceAddress"] = _transportSettings.QueueName;
             headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
-            headers["FullTypeName"] = type.AssemblyQualifiedName;
-            headers["TypeName"] = type.Name;
+            headers["FullTypeName"] = type;
+            //headers["TypeName"] = type.Name;
             headers["ConsumerType"] = "RabbitMQ";
             headers["Language"] = "C#";
 
@@ -314,7 +272,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.SetPersistent(true);
 
-                var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
+                var messageHeaders = GetHeaders(typeof(byte[]).AssemblyQualifiedName, headers, endPoint, "ByteStream");
 
                 var envelope = new Envelope
                 {
