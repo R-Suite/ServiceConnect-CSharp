@@ -68,8 +68,8 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet1)), It.IsAny<Dictionary<string, string>>(), It.IsAny<IList<Type>>()));
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet2)), It.IsAny<Dictionary<string, string>>(), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet1)), It.IsAny<Dictionary<string, string>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => CompareByteArrays(y, packet2)), It.IsAny<Dictionary<string, string>>()));
         }
 
         public bool CompareByteArrays(byte[] b1, byte[] b2)
@@ -90,8 +90,8 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence"), It.IsAny<IList<Type>>()));
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence"), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence")));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["SequenceId"] == "TestSequence")));
         }
 
         [Fact]
@@ -107,8 +107,8 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Write(byteArray, 0, byteArray.Length);
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "1"), It.IsAny<IList<Type>>()));
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "2"), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "1")));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["PacketNumber"] == "2")));
         }
 
         [Fact]
@@ -122,7 +122,7 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Close();
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop")), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop"))));
         }
 
         [Fact]
@@ -136,7 +136,7 @@ namespace R.MessageBus.UnitTests.Stream
             stream.Dispose();
 
             // Assert
-            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop")), It.IsAny<IList<Type>>()));
+            _producer.Verify(x => x.SendBytes("TestEndpoint", It.Is<byte[]>(y => y.Length == 0), It.Is<Dictionary<string, string>>(y => y.ContainsKey("Stop"))));
         } 
     }
 }

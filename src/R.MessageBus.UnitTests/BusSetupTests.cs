@@ -441,15 +441,15 @@ namespace R.MessageBus.UnitTests
             }
 
 
-            public void Publish<T>(T message, IList<Type> filters = null, Dictionary<string, string> headers = null) where T : Message
+            public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
             {
             }
 
-            public void Send<T>(T message, IList<Type> filters = null, Dictionary<string, string> headers = null) where T : Message
+            public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
             {
             }
 
-            public void Send<T>(string endPoint, T message, IList<Type> filters = null, Dictionary<string, string> headers = null) where T : Message
+            public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
             {
             }
 
@@ -470,7 +470,7 @@ namespace R.MessageBus.UnitTests
                 set { throw new NotImplementedException(); }
             }
 
-            public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers, IList<Type> filters = null)
+            public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers)
             {
                 
             }

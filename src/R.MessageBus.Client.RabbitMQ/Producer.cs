@@ -96,19 +96,19 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
         }
 
-        public void Publish<T>(T message, IList<Type> filters = null, Dictionary<string, string> headers = null) where T : Message
+        public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
-            DoPublish(message, headers, filters);
+            DoPublish(message, headers);
         }
 
-        private void PublishBaseType<T, TB>(T message, IEnumerable<Type> filters = null, Dictionary<string, string> headers = null)
+        private void PublishBaseType<T, TB>(T message, Dictionary<string, string> headers = null)
             where T : Message
             where TB : Message
         {
-            DoPublish(message, headers, filters, typeof(TB));
+            DoPublish(message, headers, typeof(TB));
         }
 
-        private void DoPublish<T>(T message, Dictionary<string, string> headers, IEnumerable<Type> filters = null, Type baseType = null) where T : Message
+        private void DoPublish<T>(T message, Dictionary<string, string> headers, Type baseType = null) where T : Message
         {
             var serializedMessage = JsonConvert.SerializeObject(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
@@ -124,12 +124,6 @@ namespace R.MessageBus.Client.RabbitMQ
                     Body = bytes,
                     Headers = messageHeaders
                 };
-
-                var stop = ProcessFilters(filters, envelope);
-                if (stop)
-                {
-                    return;
-                }
 
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
@@ -173,7 +167,7 @@ namespace R.MessageBus.Client.RabbitMQ
             CreateConnection();
         }
 
-        public void Send<T>(T message, IList<Type> filters = null, Dictionary<string, string> headers = null) where T : Message
+        public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
             var serializedMessage = JsonConvert.SerializeObject(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
@@ -197,12 +191,6 @@ namespace R.MessageBus.Client.RabbitMQ
                         Headers = messageHeaders
                     };
 
-                    var stop = ProcessFilters(filters, envelope);
-                    if (stop)
-                    {
-                        continue;
-                    }
-
                     basicProperties.Headers = envelope.Headers;
                     basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
@@ -213,7 +201,7 @@ namespace R.MessageBus.Client.RabbitMQ
             }
         }
 
-        public void Send<T>(string endPoint, T message, IList<Type> filters = null, Dictionary<string, string> headers = null) where T : Message
+        public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
         {
             var serializedMessage = JsonConvert.SerializeObject(message);
             var bytes = Encoding.UTF8.GetBytes(serializedMessage);
@@ -230,12 +218,6 @@ namespace R.MessageBus.Client.RabbitMQ
                     Body = bytes,
                     Headers = messageHeaders
                 };
-
-                var stop = ProcessFilters(filters, envelope);
-                if (stop)
-                {
-                    return;
-                }
 
                 basicProperties.Headers = envelope.Headers; 
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
@@ -325,7 +307,7 @@ namespace R.MessageBus.Client.RabbitMQ
             get { return _maxMessageSize; }
         }
 
-        public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers, IList<Type> filters = null)
+        public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers)
         {
             lock (_lock)
             {
@@ -339,12 +321,6 @@ namespace R.MessageBus.Client.RabbitMQ
                     Body = packet,
                     Headers = messageHeaders
                 };
-
-                var stop = ProcessFilters(filters, envelope);
-                if (stop)
-                {
-                    return;
-                }
 
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
@@ -367,23 +343,6 @@ namespace R.MessageBus.Client.RabbitMQ
             }
 
             return exchangeName;
-        }
-
-        private bool ProcessFilters(IEnumerable<Type> filters, Envelope envelope)
-        {
-            if (filters != null)
-            {
-                foreach (Type filterType in filters)
-                {
-                    var filter = (IFilter)Activator.CreateInstance(filterType);
-                    var stop = !filter.Process(envelope);
-                    if (stop)
-                    {
-                        return true;
-                    }
-                }
-            }
-            return false;
         }
     }
 }
