@@ -40,12 +40,12 @@ namespace PolymorphicMessages.Producer
                 var id3 = Guid.NewGuid();
                 bus.Publish(new DerivedType(id3));
 
-                var id4 = Guid.NewGuid();
-                bus.Publish(new BaseType(id4));
+                //var id4 = Guid.NewGuid();
+                //bus.Publish(new BaseType(id4));
 
                 Console.WriteLine("Published messages");
                 Console.WriteLine("Derived: {0}", id3);
-                Console.WriteLine("Based: {0}", id4);
+                //Console.WriteLine("Based: {0}", id4);
                 Console.WriteLine("");
 
                 Console.WriteLine("");

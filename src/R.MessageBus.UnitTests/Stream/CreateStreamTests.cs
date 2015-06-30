@@ -41,7 +41,7 @@ namespace R.MessageBus.UnitTests.Stream
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings ());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(StreamResponseMessage).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             mockConfiguration.Setup(x=> x.GetMessageBusWriteStream(It.IsAny<IProducer>(), "TestEndpoint", It.IsAny<string>(), It.IsAny<IConfiguration>())).Returns(mockStream.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
@@ -51,7 +51,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(It.IsAny<string>(), message,  It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -76,7 +76,7 @@ namespace R.MessageBus.UnitTests.Stream
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(StreamResponseMessage).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
 
@@ -85,7 +85,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(It.IsAny<string>(), message,  It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -94,7 +94,7 @@ namespace R.MessageBus.UnitTests.Stream
             bus.CreateStream("TestEndpoint", message);
 
             // Assert
-            mockProducer.Verify(x => x.Send("TestEndpoint", message,  It.Is<Dictionary<string, string>>(y => y["MessageType"] == "ByteStream" && y.ContainsKey("Start"))));
+            mockProducer.Verify(x => x.Send("TestEndpoint",It.IsAny<string>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["MessageType"] == "ByteStream" && y.ContainsKey("Start"))));
         }
     }
 }

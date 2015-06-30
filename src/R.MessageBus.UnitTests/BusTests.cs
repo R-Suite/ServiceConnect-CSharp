@@ -240,7 +240,7 @@ namespace R.MessageBus.UnitTests
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
             var mockProducer = new Mock<IProducer>();
 
-            _mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.Is<Guid>(y => SetCorrelationId(y)), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            _mockConfiguration.Setup(x => x.GetRequestConfiguration(It.Is<Guid>(y => SetCorrelationId(y)))).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
 
@@ -251,7 +251,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message, It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             _mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
 
@@ -319,14 +319,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Publish(message,  null));
+            mockProducer.Setup(x => x.Publish(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Publish(message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Publish(message,  null), Times.Once);
+            mockProducer.Verify(x => x.Publish(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null), Times.Once);
         }
 
         [Fact]
@@ -392,14 +392,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message,  null));
+            mockProducer.Setup(x => x.Send(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Send(message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(message,  null), Times.Once);
+            mockProducer.Verify(x => x.Send(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null), Times.Once);
         }
 
         [Fact]
@@ -423,14 +423,14 @@ namespace R.MessageBus.UnitTests
 
             const string endPoint = "MyEndPoint";
 
-            mockProducer.Setup(x => x.Send(endPoint, message,  null));
+            mockProducer.Setup(x => x.Send(endPoint, typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Send(endPoint, message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(endPoint, message,  null), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint, typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null), Times.Once);
         }
 
         [Fact]
@@ -456,7 +456,7 @@ namespace R.MessageBus.UnitTests
 
             foreach (string endPoint in endPoints)
             {
-                mockProducer.Setup(x => x.Send(endPoint, message,  null));
+                mockProducer.Setup(x => x.Send(endPoint, typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null));
             }
 
             // Act
@@ -466,7 +466,7 @@ namespace R.MessageBus.UnitTests
             // Assert
             foreach (string endPoint in endPoints)
             {
-                mockProducer.Verify(x => x.Send(endPoint, message,  null), Times.Once);
+                mockProducer.Verify(x => x.Send(endPoint, typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), null), Times.Once);
             }
         }
 
@@ -482,7 +482,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
             
@@ -491,14 +491,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message,  It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send(message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -513,7 +513,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
 
             Action<FakeMessage2> action = null;
@@ -525,7 +525,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message,  It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(new FakeMessage2(message.CorrelationId)
                 {
@@ -557,7 +557,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
 
@@ -566,14 +566,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", message,  It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send("test", typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test", message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test", typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -588,7 +588,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
 
             Action<FakeMessage2> action = null;
@@ -600,7 +600,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", message,  It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send("test", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(new FakeMessage2(message.CorrelationId)
                 {
@@ -632,7 +632,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
 
@@ -641,14 +641,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message,  It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { }, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send(typeof(FakeMessage1).FullName, It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -663,7 +663,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
 
             bool actionCalled = false;
@@ -676,7 +676,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message,  It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -699,7 +699,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
 
@@ -708,14 +708,14 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", message,  It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, x => { }, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test", message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -730,7 +730,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
 
             bool actionCalled = false;
@@ -743,7 +743,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message,  It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -766,7 +766,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
 
             int count = 0;
@@ -791,7 +791,7 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(message,  It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -816,7 +816,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
 
@@ -825,16 +825,16 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test1", message,  It.IsAny<Dictionary<string, string>>()));
-            mockProducer.Setup(x => x.Send("test2", message,  It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test1", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test2", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>(new List<string> { "test1", "test2" }, message, x => { });
 
             // Assert
-            mockProducer.Verify(x => x.Send("test1", message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
-            mockProducer.Verify(x => x.Send("test2", message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test1", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test2", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -849,7 +849,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
 
             Action<FakeMessage2> action = null;
@@ -866,12 +866,12 @@ namespace R.MessageBus.UnitTests
             var r1 = new FakeMessage2(Guid.NewGuid());
             var r2 = new FakeMessage2(Guid.NewGuid());
 
-            mockProducer.Setup(x => x.Send("test1", message,  It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send("test1", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(r1);
             });
 
-            mockProducer.Setup(x => x.Send("test2", message,  It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Send("test2", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(r2);
                 task.Start();
@@ -899,7 +899,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
             mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
 
@@ -908,8 +908,8 @@ namespace R.MessageBus.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test1", message,  It.IsAny<Dictionary<string, string>>()));
-            mockProducer.Setup(x => x.Send("test2", message,  It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send("test1", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send("test2", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -920,8 +920,8 @@ namespace R.MessageBus.UnitTests
             }, message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test1", message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
-            mockProducer.Verify(x => x.Send("test2", message,  It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test1", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockProducer.Verify(x => x.Send("test2", It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -939,7 +939,7 @@ namespace R.MessageBus.UnitTests
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
 
-            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<ConsumerEventHandler>(), It.IsAny<Guid>(), typeof(FakeMessage2).FullName.Replace(".", string.Empty))).Returns(mockRequestConfiguration.Object);
+            mockConfiguration.Setup(x => x.GetRequestConfiguration(It.IsAny<Guid>())).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
 
             Action<FakeMessage2> action = null;
@@ -956,7 +956,7 @@ namespace R.MessageBus.UnitTests
             var r1 = new FakeMessage2(Guid.NewGuid());
             var r2 = new FakeMessage2(Guid.NewGuid());
 
-            mockProducer.Setup(x => x.Publish(message,  It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockProducer.Setup(x => x.Publish(It.IsAny<string>(), It.IsAny<byte[]>(),  It.IsAny<Dictionary<string, string>>())).Callback(() =>
             {
                 action(r1);
                 action(r2);
@@ -1041,16 +1041,16 @@ namespace R.MessageBus.UnitTests
             const string endPoint1 = "MyEndPoint1";
             const string endPoint2 = "MyEndPoint2";
 
-            mockProducer.Setup(x => x.Send(endPoint1, message,  It.IsAny<Dictionary<string, string>>()));
+            mockProducer.Setup(x => x.Send(endPoint1, It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new MessageBus.Bus(mockConfiguration.Object);
             bus.Route(message, new List<string> { endPoint1, endPoint2 });
 
             // Assert
-            mockProducer.Verify(x => x.Send(endPoint1, message,  It.Is<Dictionary<string, string>>(i => i.Count == 1)), Times.Once);
-            mockProducer.Verify(x => x.Send(endPoint1, message,  It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingSlip"))), Times.Once);
-            mockProducer.Verify(x => x.Send(endPoint1, message,  It.Is<Dictionary<string, string>>(i => i.ContainsValue("[\"MyEndPoint2\"]"))), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, It.IsAny<string>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.Count == 1)), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, It.IsAny<string>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingSlip"))), Times.Once);
+            mockProducer.Verify(x => x.Send(endPoint1, It.IsAny<string>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsValue("[\"MyEndPoint2\"]"))), Times.Once);
         }
     }
 }
