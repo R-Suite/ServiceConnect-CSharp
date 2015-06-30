@@ -16,7 +16,9 @@ namespace ScatterGather
         static void Main(string[] args)
         {
             Console.WriteLine("*********** Publisher ***********");
-            _bus = Bus.Initialize();
+            _bus = Bus.Initialize(x =>
+            {
+            });
 
             while (true)
             {

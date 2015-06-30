@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
@@ -49,7 +50,9 @@ namespace R.MessageBus.Core
 
         public void ProcessMessage(string message, string type)
         {
-            var messageObject = JsonConvert.DeserializeObject(message, Type.GetType(type));
+            var typeObject =  Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
+
+            var messageObject = JsonConvert.DeserializeObject(message, typeObject);
 
             ProcessedCount++;
 
