@@ -21,9 +21,9 @@ namespace R.MessageBus.Interfaces
 {
     public interface IProducer : IDisposable
     {
-        void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message;
-        void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message;
-        void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message;
+        void Publish(string type, byte[] message, Dictionary<string, string> headers = null);
+        void Send(string type, byte[] message, Dictionary<string, string> headers = null);
+        void Send(string endPoint, string type, byte[] message, Dictionary<string, string> headers = null);
         void Disconnect();
         string Type { get;}
         long MaximumMessageSize { get; }

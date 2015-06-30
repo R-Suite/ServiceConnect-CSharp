@@ -405,6 +405,7 @@ namespace R.MessageBus.UnitTests
         {
             public FakeConsumer(ITransportSettings transportSettings)
             {
+                
             }
 
             public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null, bool? autoDelete = null)
@@ -439,40 +440,31 @@ namespace R.MessageBus.UnitTests
             public FakePublisher(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
             {
             }
+            public void Dispose()
+            {
+                
+            }
 
-
-            public void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message
+            public void Publish(string type, byte[] message, Dictionary<string, string> headers = null)
             {
             }
 
-            public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
+            public void Send(string type, byte[] message, Dictionary<string, string> headers = null)
             {
             }
 
-            public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
+            public void Send(string endPoint, string type, byte[] message, Dictionary<string, string> headers = null)
             {
             }
 
             public void Disconnect()
             {
-                
-            }
-
-            public void Dispose()
-            {
             }
 
             public string Type { get; private set; }
-
-            public long MaximumMessageSize
-            {
-                get { throw new NotImplementedException(); }
-                set { throw new NotImplementedException(); }
-            }
-
+            public long MaximumMessageSize { get; private set; }
             public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers)
             {
-                
             }
         }
 
