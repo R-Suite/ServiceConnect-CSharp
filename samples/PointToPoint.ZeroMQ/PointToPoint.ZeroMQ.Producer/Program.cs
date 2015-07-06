@@ -17,7 +17,8 @@ namespace PointToPoint.ZeroMQ.Producer
                 config.SetProducer<R.MessageBus.Client.ZeroMQ.Producer>();
                 config.ScanForMesssageHandlers = false;
                 config.AutoStartConsuming = false;
-                config.SetHost("tcp://127.0.0.1:5555");
+                config.SetSenderHost("tcp://127.0.0.1:5555");
+                config.SetPublisherHost("tcp://127.0.0.1:5556");
             });
 
             while (true)
@@ -27,12 +28,15 @@ namespace PointToPoint.ZeroMQ.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
                 var id = Guid.NewGuid();
-                for (int i = 0; i < 1; i++)
+                for (int i = 0; i < 1000000; i++)
                 {
-                    bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id));
+                    //bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id));
+                    bus.Publish(new PointToPointMessage(id) { Count = i});
+                    Console.WriteLine("Sent message - {0}", i);
                 }
 
                 Console.WriteLine("Sent message - {0}", id);
+
                 Console.WriteLine("");
             }
         }
