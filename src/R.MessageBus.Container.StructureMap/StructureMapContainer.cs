@@ -73,7 +73,8 @@ namespace R.MessageBus.Container.StructureMap
 
         public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
         {
-            var handlers = _container.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
+            // ToList() AllInstances until this issue [https://github.com/structuremap/structuremap/issues/337] is fixed
+            var handlers = _container.Model.AllInstances.ToList().Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
             {
                 MessageType = instance.PluginType.GetGenericArguments()[0],
                 HandlerType = instance.ReturnedType
