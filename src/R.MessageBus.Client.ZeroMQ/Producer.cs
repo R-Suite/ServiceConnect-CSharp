@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
+using Common.Logging;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 using ZeroMQ;
@@ -10,25 +13,69 @@ namespace R.MessageBus.Client.ZeroMQ
     public class Producer : IProducer
     {
         private readonly ITransportSettings _transportSettings;
+        private readonly IDictionary<string, IList<string>> _queueMappings;
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        private readonly ZSocket _publisher;
+        private readonly ZContext _publishContext;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
             _transportSettings = transportSettings;
+            _queueMappings = queueMappings;
+
+            if (_transportSettings.ClientSettings.ContainsKey("PublisherHost"))
+            {
+                _publishContext = new ZContext();
+                _publisher = new ZSocket(_publishContext, ZSocketType.PUB);
+                _publisher.Bind(_transportSettings.ClientSettings["PublisherHost"].ToString());
+            }
         }
 
         public void Dispose()
         {
-            throw new NotImplementedException();
+            _publisher.Dispose();
+            _publishContext.Dispose();
         }
 
         public void Publish(string type, byte[] message, Dictionary<string, string> headers = null)
         {
-            throw new NotImplementedException();
+            Dictionary<string, object> messageHeaders = GetHeaders(type, headers, _transportSettings.QueueName, "Publish");
+            var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
+
+            var msg = new ZMessage();
+            msg.Append(new ZFrame(type.Replace(".", string.Empty)));
+            msg.Append(new ZFrame(serializedHeaders));
+            msg.Append(new ZFrame(message));
+
+            _publisher.SendMessage(msg);
         }
 
         public void Send(string type, byte[] message, Dictionary<string, string> headers = null)
         {
-            throw new NotImplementedException();
+            IList<string> endPoints = _queueMappings[type];
+
+            foreach (string endPoint in endPoints)
+            {
+                Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
+                var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
+
+                //todo: we'll probably have just one instance of the sender
+                using (var context = new ZContext())
+                using (var sender = new ZSocket(context, ZSocketType.PUSH))
+                {
+                    // Connect
+                    sender.Connect(_transportSettings.ClientSettings.ContainsKey("SenderHost")
+                        ? _transportSettings.ClientSettings["SenderHost"].ToString()
+                        : _transportSettings.Host);
+
+                    var msg = new ZMessage();
+                    msg.Append(new ZFrame(serializedHeaders));
+                    msg.Append(new ZFrame(message));
+
+                    // Send
+                    sender.SendMessage(msg);
+                }
+            }
         }
 
         public void Send(string endPoint, string type, byte[] message, Dictionary<string, string> headers = null)
@@ -37,23 +84,26 @@ namespace R.MessageBus.Client.ZeroMQ
             var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
             using (var context = new ZContext())
-            using (var requester = new ZSocket(context, ZSocketType.PUSH))
+            using (var sender = new ZSocket(context, ZSocketType.PUSH))
             {
                 // Connect
-                requester.Connect(_transportSettings.Host);
+                sender.Connect(_transportSettings.ClientSettings.ContainsKey("SenderHost")
+                    ? _transportSettings.ClientSettings["SenderHost"].ToString()
+                    : _transportSettings.Host);
 
                 var msg = new ZMessage();
                 msg.Append(new ZFrame(serializedHeaders));
                 msg.Append(new ZFrame(message));
 
                 // Send
-                requester.SendMessage(msg);
+                sender.SendMessage(msg);
             }
         }
 
         public void Disconnect()
         {
-            throw new NotImplementedException();
+            _publisher.Dispose();
+            _publishContext.Dispose();
         }
 
         public string Type { get; private set; }

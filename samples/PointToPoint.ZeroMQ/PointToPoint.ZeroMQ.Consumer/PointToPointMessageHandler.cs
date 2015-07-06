@@ -12,7 +12,7 @@ namespace PointToPoint.ZeroMQ.Consumer
     {
         public void Execute(PointToPointMessage command)
         {
-            Console.WriteLine("Received message - {0} {1}", command.CorrelationId, DateTime.Now);
+            Console.WriteLine("Received message - {0} {1}", command.Count, DateTime.Now);
         }
 
         public IConsumeContext Context { get; set; }
