@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 using Common.Logging;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
@@ -17,6 +16,8 @@ namespace R.MessageBus.Client.ZeroMQ
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ZSocket _publisher;
         private readonly ZContext _publishContext;
+        private readonly ZSocket _sender;
+        private readonly ZContext _senderContext;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
@@ -27,14 +28,31 @@ namespace R.MessageBus.Client.ZeroMQ
             {
                 _publishContext = new ZContext();
                 _publisher = new ZSocket(_publishContext, ZSocketType.PUB);
+                _publisher.Linger = TimeSpan.Zero;
                 _publisher.Bind(_transportSettings.ClientSettings["PublisherHost"].ToString());
+            }
+
+            if (_transportSettings.ClientSettings.ContainsKey("SenderHost"))
+            {
+                _senderContext = new ZContext();
+                _sender = new ZSocket(_senderContext, ZSocketType.PAIR);
+                _sender.Bind(_transportSettings.ClientSettings["SenderHost"].ToString());
             }
         }
 
         public void Dispose()
         {
-            _publisher.Dispose();
-            _publishContext.Dispose();
+            if (null != _publisher)
+            {
+                _publisher.Dispose();
+                _publishContext.Dispose();
+            }
+
+            if (null != _sender)
+            {
+                _sender.Dispose();
+                _senderContext.Dispose();
+            }
         }
 
         public void Publish(string type, byte[] message, Dictionary<string, string> headers = null)
@@ -59,22 +77,12 @@ namespace R.MessageBus.Client.ZeroMQ
                 Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
                 var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
-                //todo: we'll probably have just one instance of the sender
-                using (var context = new ZContext())
-                using (var sender = new ZSocket(context, ZSocketType.PUSH))
-                {
-                    // Connect
-                    sender.Connect(_transportSettings.ClientSettings.ContainsKey("SenderHost")
-                        ? _transportSettings.ClientSettings["SenderHost"].ToString()
-                        : _transportSettings.Host);
+                var msg = new ZMessage();
+                msg.Append(new ZFrame(serializedHeaders));
+                msg.Append(new ZFrame(message));
 
-                    var msg = new ZMessage();
-                    msg.Append(new ZFrame(serializedHeaders));
-                    msg.Append(new ZFrame(message));
-
-                    // Send
-                    sender.SendMessage(msg);
-                }
+                // Send
+                _sender.SendMessage(msg);
             }
         }
 
@@ -83,27 +91,19 @@ namespace R.MessageBus.Client.ZeroMQ
             Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
             var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
-            using (var context = new ZContext())
-            using (var sender = new ZSocket(context, ZSocketType.PUSH))
-            {
-                // Connect
-                sender.Connect(_transportSettings.ClientSettings.ContainsKey("SenderHost")
-                    ? _transportSettings.ClientSettings["SenderHost"].ToString()
-                    : _transportSettings.Host);
+            var msg = new ZMessage();
+            msg.Append(new ZFrame(serializedHeaders));
+            msg.Append(new ZFrame(message));
 
-                var msg = new ZMessage();
-                msg.Append(new ZFrame(serializedHeaders));
-                msg.Append(new ZFrame(message));
-
-                // Send
-                sender.SendMessage(msg);
-            }
+            // Send
+            _sender.SendMessage(msg);
         }
 
         public void Disconnect()
         {
-            _publisher.Dispose();
-            _publishContext.Dispose();
+            Logger.Debug("In ZeroMQ.Producer.Disconnect()");
+
+            this.Dispose();
         }
 
         public string Type { get; private set; }
