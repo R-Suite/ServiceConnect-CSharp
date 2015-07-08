@@ -18,9 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using Common.Logging;
-using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
 using RabbitMQ.Client;
 
@@ -96,12 +94,12 @@ namespace R.MessageBus.Client.RabbitMQ
             _model = _connection.CreateModel();
         }
 
-        public void Publish(string type, byte[] message, Dictionary<string, string> headers = null)
+        public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
             DoPublish(type, message, headers);
         }
 
-        private void DoPublish(string type, byte[] message, Dictionary<string, string> headers)
+        private void DoPublish(Type type, byte[] message, Dictionary<string, string> headers)
         {
             lock (_lock)
             {
@@ -119,7 +117,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
                 
                 basicProperties.SetPersistent(true);
-                var exchangeName = ConfigureExchange(type.Replace(".", string.Empty));
+                var exchangeName = ConfigureExchange(type.FullName.Replace(".", string.Empty));
 
                 Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.QueueName, basicProperties, envelope.Body),
                     ex => RetryConnection(),
@@ -145,14 +143,14 @@ namespace R.MessageBus.Client.RabbitMQ
             CreateConnection();
         }
 
-        public void Send(string type, byte[] message, Dictionary<string, string> headers = null)
+        public void Send(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
                 basicProperties.SetPersistent(true);
-                IList<string> endPoints = _queueMappings[type];
+                IList<string> endPoints = _queueMappings[type.FullName];
 
                 foreach (string endPoint in endPoints)
                 {
@@ -168,7 +166,7 @@ namespace R.MessageBus.Client.RabbitMQ
             }
         }
 
-        public void Send(string endPoint, string type, byte[] message, Dictionary<string, string> headers = null)
+        public void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null)
         {
             lock (_lock)
             {
@@ -186,7 +184,7 @@ namespace R.MessageBus.Client.RabbitMQ
             }
         }
 
-        private Dictionary<string, object> GetHeaders(string type, Dictionary<string, string> headers, string queueName, string messageType)
+        private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
         {
             if (headers == null)
             {
@@ -211,8 +209,8 @@ namespace R.MessageBus.Client.RabbitMQ
             headers["SourceAddress"] = _transportSettings.QueueName;
             headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
-            headers["FullTypeName"] = type;
-            //headers["TypeName"] = type.Name;
+            headers["TypeName"] = type.FullName;
+            headers["FullTypeName"] = type.AssemblyQualifiedName;
             headers["ConsumerType"] = "RabbitMQ";
             headers["Language"] = "C#";
 
@@ -272,7 +270,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.SetPersistent(true);
 
-                var messageHeaders = GetHeaders(typeof(byte[]).AssemblyQualifiedName, headers, endPoint, "ByteStream");
+                var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
 
                 var envelope = new Envelope
                 {

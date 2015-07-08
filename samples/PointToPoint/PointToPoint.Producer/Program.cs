@@ -11,7 +11,7 @@ namespace PointToPoint.Producer
             Console.WriteLine("*********** Producer ***********");
             var bus = Bus.Initialize(config =>
             {
-                config.AddQueueMapping(typeof (PointToPointMessage), "PointToPoint2");
+                config.AddQueueMapping(typeof(PointToPointMessage), "rmessagebus.stomp.pointtopoint.consumer");
                 config.SetThreads(10);
                 config.SetHost("lonappdev04");
             });
