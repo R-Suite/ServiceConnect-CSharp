@@ -11,7 +11,6 @@ namespace R.MessageBus.Client.ZeroMQ
             {
                 configuration.TransportSettings.ClientSettings = new Dictionary<string, object>();
             }
-            //todo: once we add defaults, check for existing key
             configuration.TransportSettings.ClientSettings.Add("PublisherHost", host);
         }
 
