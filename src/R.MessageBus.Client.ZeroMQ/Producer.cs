@@ -55,22 +55,22 @@ namespace R.MessageBus.Client.ZeroMQ
             }
         }
 
-        public void Publish(string type, byte[] message, Dictionary<string, string> headers = null)
+        public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
             Dictionary<string, object> messageHeaders = GetHeaders(type, headers, _transportSettings.QueueName, "Publish");
             var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
             var msg = new ZMessage();
-            msg.Append(new ZFrame(type.Replace(".", string.Empty)));
+            msg.Append(new ZFrame(type.FullName.Replace(".", string.Empty)));
             msg.Append(new ZFrame(serializedHeaders));
             msg.Append(new ZFrame(message));
 
             _publisher.SendMessage(msg);
         }
 
-        public void Send(string type, byte[] message, Dictionary<string, string> headers = null)
+        public void Send(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
-            IList<string> endPoints = _queueMappings[type];
+            IList<string> endPoints = _queueMappings[type.FullName];
 
             foreach (string endPoint in endPoints)
             {
@@ -86,7 +86,7 @@ namespace R.MessageBus.Client.ZeroMQ
             }
         }
 
-        public void Send(string endPoint, string type, byte[] message, Dictionary<string, string> headers = null)
+        public void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null)
         {
             Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
             var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
@@ -115,7 +115,7 @@ namespace R.MessageBus.Client.ZeroMQ
             throw new NotImplementedException();
         }
 
-        private Dictionary<string, object> GetHeaders(string type, Dictionary<string, string> headers, string queueName, string messageType)
+        private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
         {
             if (headers == null)
             {
@@ -140,7 +140,8 @@ namespace R.MessageBus.Client.ZeroMQ
             headers["SourceAddress"] = _transportSettings.QueueName;
             headers["TimeSent"] = DateTime.UtcNow.ToString("O");
             headers["SourceMachine"] = _transportSettings.MachineName;
-            headers["FullTypeName"] = type;
+            headers["FullTypeName"] = type.AssemblyQualifiedName;
+            headers["TypeName"] = type.FullName;
             headers["ConsumerType"] = "ZeroMQ";
             headers["Language"] = "C#";
 

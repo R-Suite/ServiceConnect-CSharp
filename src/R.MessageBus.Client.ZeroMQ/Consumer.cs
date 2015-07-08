@@ -59,7 +59,7 @@ namespace R.MessageBus.Client.ZeroMQ
 
                                 IDictionary<string, object> headers =
                                     JsonConvert.DeserializeObject<Dictionary<string, object>>(incoming[0].ReadString());
-                                var typeName = headers["FullTypeName"].ToString();
+                                var typeName = (headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]).ToString();
                                 headers = headers.ToDictionary(k => k.Key, v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
 
                                 messageReceived(msg, typeName, headers);
