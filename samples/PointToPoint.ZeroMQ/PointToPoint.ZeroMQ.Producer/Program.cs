@@ -28,11 +28,11 @@ namespace PointToPoint.ZeroMQ.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
                 var id = Guid.NewGuid();
-                for (int i = 0; i < 1000000; i++)
+                for (int i = 0; i < 100000; i++)
                 {
-                    //bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id));
-                    bus.Publish(new PointToPointMessage(id) { Count = i});
-                    Console.WriteLine("Sent message - {0}", i);
+                    bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id) { Count = i });
+                    //bus.Publish(new PointToPointMessage(id) { Count = i});
+                    //Console.WriteLine("Sent message - {0}", i);
                 }
 
                 Console.WriteLine("Sent message - {0}", id);
