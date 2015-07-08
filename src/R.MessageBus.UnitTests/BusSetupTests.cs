@@ -445,15 +445,15 @@ namespace R.MessageBus.UnitTests
                 
             }
 
-            public void Publish(string type, byte[] message, Dictionary<string, string> headers = null)
+            public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
             {
             }
 
-            public void Send(string type, byte[] message, Dictionary<string, string> headers = null)
+            public void Send(Type type, byte[] message, Dictionary<string, string> headers = null)
             {
             }
 
-            public void Send(string endPoint, string type, byte[] message, Dictionary<string, string> headers = null)
+            public void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null)
             {
             }
 
