@@ -100,12 +100,7 @@ namespace R.MessageBus
 
         private void StartHeartbeatTimer()
         {
-            var state = new HeartbeatTimerState
-            {
-                CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName),
-                RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName)
-            };
-
+            var state = new HeartbeatTimerState();
             var timerDelegate = new TimerCallback(CheckStatus);
             _timer = new Timer(timerDelegate, state, new TimeSpan(0, 0, 0), new TimeSpan(0, 0, 30));
         }
@@ -113,6 +108,16 @@ namespace R.MessageBus
         private void CheckStatus(object state)
         {
             var heartbeatState = (HeartbeatTimerState) state;
+
+            if (heartbeatState.CpuCounter == null)
+            {
+                heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
+            }
+
+            if (heartbeatState.RamCounter == null)
+            {
+                heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
+            }
 
             var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
             {
@@ -126,7 +131,7 @@ namespace R.MessageBus
             });
             var messageBytes = Encoding.UTF8.GetBytes(messageString);
 
-            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage).FullName, messageBytes);
+            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
         }
 
         /// <summary>
@@ -205,7 +210,7 @@ namespace R.MessageBus
                 messageBytes = envelope.Body;
             }
 
-            _producer.Publish(typeof(T).FullName, messageBytes, headers);
+            _producer.Publish(typeof(T), messageBytes, headers);
 
             Type newBaseType = typeof(T).BaseType;
             if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
@@ -259,7 +264,7 @@ namespace R.MessageBus
                 messageBytes = envelope.Body;
             }
 
-            _producer.Publish(typeof(TRequest).FullName, messageBytes, headers);
+            _producer.Publish(typeof(TRequest), messageBytes, headers);
 
             Task.WaitAll(new[] { task }, timeout);
 
@@ -288,7 +293,7 @@ namespace R.MessageBus
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(typeof(T).FullName, messageBytes, headers);
+            _producer.Send(typeof(T), messageBytes, headers);
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message
@@ -313,7 +318,7 @@ namespace R.MessageBus
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(endPoint, typeof(T).FullName, messageBytes, headers);
+            _producer.Send(endPoint, typeof(T), messageBytes, headers);
         }
         
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers) where T : Message
@@ -340,7 +345,7 @@ namespace R.MessageBus
             }
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(T).FullName, messageBytes, headers);
+                _producer.Send(endPoint, typeof(T), messageBytes, headers);
             }
         }
 
@@ -403,7 +408,7 @@ namespace R.MessageBus
 
             foreach (string endPoint in endPoints)
             {
-                producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
+                producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
             }
             producer.Disconnect();
         }
@@ -452,11 +457,11 @@ namespace R.MessageBus
             IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(typeof(TRequest).FullName, messageBytes, headers);
+                producer.Send(typeof(TRequest), messageBytes, headers);
             }
             else
             {
-                producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
+                producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
             }
             producer.Disconnect();
         }
@@ -513,11 +518,11 @@ namespace R.MessageBus
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(typeof(TRequest).FullName, messageBytes, headers);
+                _producer.Send(typeof(TRequest), messageBytes, headers);
             }
             else
             {
-                _producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
+                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
             }
 
             Task.WaitAll(new[]{ task }, timeout);
@@ -575,7 +580,7 @@ namespace R.MessageBus
             
             foreach (var endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(TRequest).FullName, messageBytes, headers);
+                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
             }
 
             Task.WaitAll(new[] { task }, timeout);
@@ -612,7 +617,7 @@ namespace R.MessageBus
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(nextDestination, typeof(T).FullName, messageBytes, headers);
+            _producer.Send(nextDestination, typeof(T), messageBytes, headers);
         }
 
         public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
@@ -657,7 +662,7 @@ namespace R.MessageBus
                 {
                     return result;
                 }
-
+                
                 if (Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
                     ProcessStream(envelope.Body, typeObject, headers);
@@ -797,7 +802,7 @@ namespace R.MessageBus
                     return;
                 }
                 
-                string messageId = Encoding.ASCII.GetString((byte[])context.Headers["ResponseMessageId"]);
+                string messageId = Encoding.UTF8.GetString((byte[])context.Headers["ResponseMessageId"]);
                 if (!_requestConfigurations.ContainsKey(messageId))
                 {
                     return;
