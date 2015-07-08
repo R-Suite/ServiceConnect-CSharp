@@ -34,15 +34,16 @@ namespace R.MessageBus.Client.ZeroMQ
                 {
                     Thread.CurrentThread.IsBackground = true;
                     using (var context = new ZContext())
-                    using (var receiver = new ZSocket(context, ZSocketType.PULL))
+                    using (var receiver = new ZSocket(context, ZSocketType.PAIR))
                     {
                         // Bind
-                        receiver.Bind(_transportSettings.ClientSettings["ReceiverHost"].ToString());
+                        receiver.Connect(_transportSettings.ClientSettings["ReceiverHost"].ToString());
 
                         while (true)
                         {
                             // Receive
                             ZError error;
+
                             ZMessage incoming;
                             if (null == (incoming = receiver.ReceiveMessage(out error)))
                             {
@@ -84,8 +85,6 @@ namespace R.MessageBus.Client.ZeroMQ
                     using (var subscriber = new ZSocket(context, ZSocketType.SUB))
                     {
                         subscriber.Connect(_transportSettings.ClientSettings["SubscriberHost"].ToString());
-
-                        // Subscribe to messageTypeName
                         subscriber.Subscribe(messageTypeName);
 
                         while (true)
