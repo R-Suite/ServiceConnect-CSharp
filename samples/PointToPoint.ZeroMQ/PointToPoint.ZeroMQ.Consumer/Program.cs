@@ -1,7 +1,6 @@
 ﻿using System;
 using R.MessageBus;
 using R.MessageBus.Client.ZeroMQ;
-using R.MessageBus.Core;
 
 namespace PointToPoint.ZeroMQ.Consumer
 {
