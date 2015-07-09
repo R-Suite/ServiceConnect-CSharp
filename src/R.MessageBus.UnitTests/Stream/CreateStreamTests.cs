@@ -51,7 +51,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -85,7 +85,7 @@ namespace R.MessageBus.UnitTests.Stream
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -94,7 +94,7 @@ namespace R.MessageBus.UnitTests.Stream
             bus.CreateStream("TestEndpoint", message);
 
             // Assert
-            mockProducer.Verify(x => x.Send("TestEndpoint",It.IsAny<string>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["MessageType"] == "ByteStream" && y.ContainsKey("Start"))));
+            mockProducer.Verify(x => x.Send("TestEndpoint",It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["MessageType"] == "ByteStream" && y.ContainsKey("Start"))));
         }
     }
 }
