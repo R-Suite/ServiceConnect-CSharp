@@ -30,8 +30,8 @@ namespace PointToPoint.ZeroMQ.Producer
                 var id = Guid.NewGuid();
                 for (int i = 0; i < 100000; i++)
                 {
-                    bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id) { Count = i });
-                    //bus.Publish(new PointToPointMessage(id) { Count = i});
+                    //bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id) { Count = i });
+                    bus.Publish(new PointToPointMessage(id) { Count = i});
                     //Console.WriteLine("Sent message - {0}", i);
                 }
 
