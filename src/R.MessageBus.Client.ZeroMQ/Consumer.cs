@@ -109,7 +109,15 @@ namespace R.MessageBus.Client.ZeroMQ
                                 var typeName = headers["FullTypeName"].ToString();
                                 headers = headers.ToDictionary(k => k.Key, v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
 
-                                _consumerEventHandler(msg, typeName, headers);
+                                SetHeader(headers, "TimeReceived", DateTime.UtcNow.ToString("O"));
+                                SetHeader(headers, "DestinationMachine", Environment.MachineName);
+                                SetHeader(headers, "DestinationAddress", _transportSettings.ClientSettings["SubscriberHost"].ToString());
+
+                                ConsumeEventResult result = _consumerEventHandler(msg, typeName, headers);
+
+                                if (!result.Success)
+                                {
+                                }
                             }
                         }
                     }
@@ -118,5 +126,17 @@ namespace R.MessageBus.Client.ZeroMQ
         }
 
         public string Type { get; private set; }
+
+        private static void SetHeader<T>(IDictionary<string, object> headers, string key, T value)
+        {
+            if (Equals(value, default(T)))
+            {
+                headers.Remove(key);
+            }
+            else
+            {
+                headers[key] = value;
+            }
+        }
     }
 }
