@@ -28,7 +28,7 @@ namespace R.MessageBus.Client.ZeroMQ
             {
                 _publishContext = new ZContext();
                 _publisher = new ZSocket(_publishContext, ZSocketType.PUB);
-                _publisher.Linger = TimeSpan.Zero;
+                _publisher.Linger = TimeSpan.FromMilliseconds(1);
                 _publisher.Bind(_transportSettings.ClientSettings["PublisherHost"].ToString());
             }
 
