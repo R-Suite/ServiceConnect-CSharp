@@ -376,7 +376,7 @@ namespace R.MessageBus
 
         public IConsumerPool GetConsumerPool()
         {
-            return ConsumerPool ?? (IConsumerPool)Activator.CreateInstance(ConsumerPoolType);
+            return ConsumerPool ?? (ConsumerPool = (IConsumerPool)Activator.CreateInstance(ConsumerPoolType));
         }
 
         #region Private Methods
