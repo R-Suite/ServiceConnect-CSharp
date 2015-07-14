@@ -28,7 +28,7 @@ namespace PointToPoint.ZeroMQ.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
                 var id = Guid.NewGuid();
-                for (int i = 0; i < 10; i++)
+                for (int i = 0; i < 1; i++)
                 {
                     bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id) { Count = i });
                     //bus.Publish(new PointToPointMessage(id) { Count = i});
