@@ -1,6 +1,7 @@
 ﻿using System;
 using R.MessageBus;
 using R.MessageBus.Client.ZeroMQ;
+using R.MessageBus.Container.StructureMap;
 
 namespace PointToPoint.ZeroMQ.Consumer
 {
@@ -15,6 +16,7 @@ namespace PointToPoint.ZeroMQ.Consumer
                 config.SetProducer<R.MessageBus.Client.ZeroMQ.Producer>();
                 config.SetReceiverHost("tcp://127.0.0.1:5555");
                 config.SetSubscriberHost("tcp://127.0.0.1:5556");
+                config.SetContainerType<StructureMapContainer>();
             });
 
             Console.ReadLine();
