@@ -164,14 +164,6 @@ namespace R.MessageBus
         }
 
         /// <summary>
-        /// Sets the container.
-        /// </summary>
-        public void SetContainer(IBusContainer container)
-        {
-            _busContainer = container;
-        }
-
-        /// <summary>
         /// Sets the container type.
         /// </summary>
         /// <typeparam name="T"></typeparam>

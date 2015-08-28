@@ -185,20 +185,6 @@ namespace R.MessageBus.UnitTests
         }
 
         [Fact]
-        public void ShouldGetDefaultContainer()
-        {
-            // Arrange
-            var configuration = new Configuration();
-            configuration.SetContainer(null);
-
-            // Act
-            var result = configuration.GetContainer();
-
-            // Assert
-            Assert.NotNull(result);
-        }
-
-        [Fact]
         public void ShouldGetContainerOfSpecifiedType()
         {
             // Arrange
