@@ -1,5 +1,6 @@
 ﻿using System;
 using R.MessageBus;
+using R.MessageBus.Container.Default;
 using R.MessageBus.Container.Ninject;
 using R.MessageBus.Container.StructureMap;
 
@@ -14,7 +15,8 @@ namespace PointToPoint.Consumer
             {
                 config.SetQueueName("PointToPoint2");
                 config.SetThreads(2);
-                config.SetContainerType<NinjectContainer>();
+                //config.SetContainerType<NinjectContainer>();
+                config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("lonappdev04");
             });
            

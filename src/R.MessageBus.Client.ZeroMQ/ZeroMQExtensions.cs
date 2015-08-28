@@ -23,15 +23,6 @@ namespace R.MessageBus.Client.ZeroMQ
             configuration.TransportSettings.ClientSettings.Add("SubscriberHost", host);
         }
 
-        public static void SetSenderHost(this IConfiguration configuration, string host)
-        {
-            if (configuration.TransportSettings.ClientSettings == null)
-            {
-                configuration.TransportSettings.ClientSettings = new Dictionary<string, object>();
-            }
-            configuration.TransportSettings.ClientSettings.Add("SenderHost", host);
-        }
-
         public static void SetReceiverHost(this IConfiguration configuration, string host)
         {
             if (configuration.TransportSettings.ClientSettings == null)
