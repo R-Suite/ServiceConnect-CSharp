@@ -8,7 +8,7 @@ namespace PointToPoint.ZeroMQ.Consumer2
     {
         public void Execute(PointToPointMessage command)
         {
-            throw new Exception("test2");
+            //throw new Exception("test2");
             Console.WriteLine("Received message - {0} {1}", command.Count, DateTime.Now);
         }
 

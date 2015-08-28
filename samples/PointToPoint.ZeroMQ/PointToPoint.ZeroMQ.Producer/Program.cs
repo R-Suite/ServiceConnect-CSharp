@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using PointToPoint.ZeroMQ.Messages;
 using R.MessageBus;
 using R.MessageBus.Client.ZeroMQ;
@@ -17,7 +18,6 @@ namespace PointToPoint.ZeroMQ.Producer
                 config.SetProducer<R.MessageBus.Client.ZeroMQ.Producer>();
                 config.ScanForMesssageHandlers = false;
                 config.AutoStartConsuming = false;
-                config.SetSenderHost("tcp://127.0.0.1:5555");
                 config.SetPublisherHost("tcp://127.0.0.1:5556");
             });
 
@@ -28,14 +28,16 @@ namespace PointToPoint.ZeroMQ.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
                 var id = Guid.NewGuid();
-                for (int i = 0; i < 1; i++)
+                for (int i = 0; i < 10000; i++)
                 {
-                    bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id) { Count = i });
+                    //bus.Send("PointToPoint.ZeroMQ.Consumer", new PointToPointMessage(id) { Count = i });
+                    bus.Send("tcp://127.0.0.1:5555", new PointToPointMessage(id) { Count = i });
+                    
                     //bus.Publish(new PointToPointMessage(id) { Count = i});
                     //Console.WriteLine("Sent message - {0}", i);
                 }
 
-                Console.WriteLine("Sent message - {0}", id);
+                Console.WriteLine("End: {0}", DateTime.Now);
 
                 Console.WriteLine("");
             }
