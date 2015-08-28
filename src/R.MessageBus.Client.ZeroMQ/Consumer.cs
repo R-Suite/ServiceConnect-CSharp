@@ -10,6 +10,11 @@ using ZeroMQ;
 
 namespace R.MessageBus.Client.ZeroMQ
 {
+    /// <summary>
+    /// ***************
+    /// Experimental - NOT for production use
+    /// ***************
+    /// </summary>
     public class Consumer : IConsumer
     {
         private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
@@ -21,6 +26,7 @@ namespace R.MessageBus.Client.ZeroMQ
         private readonly ZSocket _errorPublisher;
         private readonly ZContext _auditPublishContext;
         private readonly ZSocket _auditPublisher;
+        private readonly Object _lock = new Object();
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -70,10 +76,10 @@ namespace R.MessageBus.Client.ZeroMQ
                 {
                     Thread.CurrentThread.IsBackground = true;
                     using (var context = new ZContext())
-                    using (var receiver = new ZSocket(context, ZSocketType.PAIR))
+                    using (var receiver = new ZSocket(context, ZSocketType.REP))
                     {
                         // Bind
-                        receiver.Connect(_transportSettings.ClientSettings["ReceiverHost"].ToString());
+                        receiver.Bind(_transportSettings.ClientSettings["ReceiverHost"].ToString());
 
                         while (true)
                         {
@@ -94,11 +100,19 @@ namespace R.MessageBus.Client.ZeroMQ
                                 incoming[1].Read(msgBody, 0, (int) incoming[1].Length);
 
                                 IDictionary<string, object> headers =
-                                    JsonConvert.DeserializeObject<Dictionary<string, object>>(incoming[0].ReadString());
-                                var typeName = (headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]).ToString();
-                                headers = headers.ToDictionary(k => k.Key, v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
+                                    JsonConvert.DeserializeObject<Dictionary<string, object>>(
+                                        incoming[0].ReadString());
+                                var typeName =
+                                    (headers.ContainsKey("FullTypeName")
+                                        ? headers["FullTypeName"]
+                                        : headers["TypeName"]).ToString();
+                                headers = headers.ToDictionary(k => k.Key,
+                                    v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
 
                                 ProceesMessageRec(msgBody, typeName, headers);
+
+                                // Send
+                                receiver.Send(new ZFrame("ok"));
                             }
                         }
                     }

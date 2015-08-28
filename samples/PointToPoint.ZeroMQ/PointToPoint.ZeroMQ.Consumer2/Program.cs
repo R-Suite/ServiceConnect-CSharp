@@ -8,16 +8,16 @@ namespace PointToPoint.ZeroMQ.Consumer2
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("*********** Consumer 2 ***********");
-            var bus = Bus.Initialize(config =>
-            {
-                config.SetConsumer<R.MessageBus.Client.ZeroMQ.Consumer>();
-                config.SetProducer<R.MessageBus.Client.ZeroMQ.Producer>();
-                config.SetReceiverHost("tcp://127.0.0.1:5555");
-                config.SetSubscriberHost("tcp://127.0.0.1:5556");
-            });
+            //Console.WriteLine("*********** Consumer 2 ***********");
+            //var bus = Bus.Initialize(config =>
+            //{
+            //    config.SetConsumer<R.MessageBus.Client.ZeroMQ.Consumer>();
+            //    config.SetProducer<R.MessageBus.Client.ZeroMQ.Producer>();
+            //    config.SetReceiverHost("tcp://127.0.0.1:5555");
+            //    config.SetSubscriberHost("tcp://127.0.0.1:5556");
+            //});
 
-            Console.ReadLine();
+            //Console.ReadLine();
         }
     }
 }
