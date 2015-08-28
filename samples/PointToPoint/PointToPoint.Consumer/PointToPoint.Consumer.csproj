@@ -54,6 +54,9 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Client.RabbitMQ.dll</HintPath>
     </Reference>
+    <Reference Include="R.MessageBus.Container.Default">
+      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Container.Default.dll</HintPath>
+    </Reference>
     <Reference Include="R.MessageBus.Container.Ninject">
       <HintPath>..\..\..\src\R.MessageBus.Container.Ninject\bin\Debug\R.MessageBus.Container.Ninject.dll</HintPath>
     </Reference>
