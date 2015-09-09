@@ -9,10 +9,11 @@ namespace R.MessageBus.Core
     {
         private readonly List<IConsumer> _consumers = new List<IConsumer>(); 
 
-        public void AddConsumer(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConsumer consumer)
+        public void AddConsumer(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
         {
             new Thread(() =>
             {
+                var consumer = config.GetConsumer();
                 consumer.StartConsuming(eventHandler, queueName);
                 foreach (string messageType in messageTypes)
                 {

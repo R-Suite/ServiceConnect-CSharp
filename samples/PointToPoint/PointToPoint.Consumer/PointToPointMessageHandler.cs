@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Text;
+using System.Threading;
 using PointToPoint.Messages;
 using R.MessageBus.Interfaces;
 
@@ -8,7 +10,7 @@ namespace PointToPoint.Consumer
     {
         public void Execute(PointToPointMessage command)
         {
-            Console.WriteLine("Received message - {0} {1}", command.CorrelationId, DateTime.Now);
+            Thread.Sleep(100);
         }
 
         public IConsumeContext Context { get; set; }
