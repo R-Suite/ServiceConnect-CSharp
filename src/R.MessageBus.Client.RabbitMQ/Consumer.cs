@@ -231,6 +231,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _connection = connectionFactory.CreateConnection();
 
             _model = _connection.CreateModel();
+            _model.BasicQos(0, 1, false);
 
             // WORK QUEUE
             var queueName = ConfigureQueue();
