@@ -11,8 +11,8 @@ namespace PointToPoint.Producer
             Console.WriteLine("*********** Producer ***********");
             var bus = Bus.Initialize(config =>
             {
-                config.AddQueueMapping(typeof(PointToPointMessage), "rmessagebus.stomp.pointtopoint.consumer");
-                config.SetThreads(10);
+                config.AddQueueMapping(typeof(PointToPointMessage), "PointToPoint.Consumer");
+                //config.SetThreads(10);
                 config.SetHost("lonappdev04");
             });
 
@@ -23,9 +23,13 @@ namespace PointToPoint.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
                 var id = Guid.NewGuid();
-                for (int i = 0; i < 100000; i++)
+
+                for (int i = 0; i < 10000000; i++)
                 {
-                    bus.Send(new PointToPointMessage(id));
+                    bus.Send(new PointToPointMessage(id)
+                    {
+                        Data = new byte[10000]
+                    });
                     //Console.ReadLine();
                 }
 
