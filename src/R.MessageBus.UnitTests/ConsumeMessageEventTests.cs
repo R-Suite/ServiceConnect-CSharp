@@ -64,7 +64,7 @@ namespace R.MessageBus.UnitTests.Aggregator
             
             var bus = new Bus(_mockConfiguration.Object);
 
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockProcessor = new Mock<IAggregatorProcessor>();
             var fakeAggregator = new FakeAggregator();
@@ -111,13 +111,13 @@ namespace R.MessageBus.UnitTests.Aggregator
             _mockConfiguration.SetupGet(x => x.ScanForMesssageHandlers).Returns(false);
             _mockConfiguration.Setup(x => x.SetAuditingEnabled(false));
             _mockConfiguration.Setup(x => x.Threads).Returns(1);
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConsumer>()));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()));
 
             // Act
             var bus = new Bus(_mockConfiguration.Object);
 
             // Assert
-            _mockConsumerPool.Verify(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConsumer>()), Times.Once);
+            _mockConsumerPool.Verify(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()), Times.Once);
         }
     }
 }
