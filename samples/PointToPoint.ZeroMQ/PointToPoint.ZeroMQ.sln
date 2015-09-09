@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.ZeroMQ.Consume
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.ZeroMQ.Messages", "PointToPoint.ZeroMQ.Messages\PointToPoint.ZeroMQ.Messages.csproj", "{D69F73CB-EA30-4978-880D-38E9C9DC86A3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.ZeroMQ.Consumer2", "PointToPoint.ZeroMQ.Consumer2\PointToPoint.ZeroMQ.Consumer2.csproj", "{E3EB18B3-5F6E-4BBE-8B3C-475250573714}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{D69F73CB-EA30-4978-880D-38E9C9DC86A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D69F73CB-EA30-4978-880D-38E9C9DC86A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D69F73CB-EA30-4978-880D-38E9C9DC86A3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E3EB18B3-5F6E-4BBE-8B3C-475250573714}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3EB18B3-5F6E-4BBE-8B3C-475250573714}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3EB18B3-5F6E-4BBE-8B3C-475250573714}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3EB18B3-5F6E-4BBE-8B3C-475250573714}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

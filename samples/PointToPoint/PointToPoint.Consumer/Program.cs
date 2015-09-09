@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using R.MessageBus;
+using R.MessageBus.Container.Default;
 
 namespace PointToPoint.Consumer
 {
@@ -13,6 +14,8 @@ namespace PointToPoint.Consumer
             var bus = Bus.Initialize(config =>
             {
                 config.SetQueueName("PointToPoint.Consumer");
+                config.SetThreads(2);
+                config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("lonappdev04");
                 config.SetThreads(10);
                 

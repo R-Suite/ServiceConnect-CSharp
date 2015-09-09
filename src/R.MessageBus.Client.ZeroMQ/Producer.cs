@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 using Common.Logging;
 using Newtonsoft.Json;
 using R.MessageBus.Interfaces;
@@ -9,15 +10,22 @@ using ZeroMQ;
 
 namespace R.MessageBus.Client.ZeroMQ
 {
+    /// <summary>
+    /// ***************
+    /// Experimental - NOT for production use
+    /// ***************
+    /// </summary>
     public class Producer : IProducer
     {
         private readonly ITransportSettings _transportSettings;
         private readonly IDictionary<string, IList<string>> _queueMappings;
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        private readonly Object _lock = new Object();
         private readonly ZSocket _publisher;
         private readonly ZContext _publishContext;
-        private readonly ZSocket _sender;
-        private readonly ZContext _senderContext;
+        private ZSocket _sender;
+        private ZContext _senderContext;
+        private string _senderEndpoint;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
@@ -28,15 +36,8 @@ namespace R.MessageBus.Client.ZeroMQ
             {
                 _publishContext = new ZContext();
                 _publisher = new ZSocket(_publishContext, ZSocketType.PUB);
-                _publisher.Linger = TimeSpan.Zero;
+                _publisher.Linger = TimeSpan.FromMilliseconds(1);
                 _publisher.Bind(_transportSettings.ClientSettings["PublisherHost"].ToString());
-            }
-
-            if (_transportSettings.ClientSettings.ContainsKey("SenderHost"))
-            {
-                _senderContext = new ZContext();
-                _sender = new ZSocket(_senderContext, ZSocketType.PAIR);
-                _sender.Bind(_transportSettings.ClientSettings["SenderHost"].ToString());
             }
         }
 
@@ -88,15 +89,93 @@ namespace R.MessageBus.Client.ZeroMQ
 
         public void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null)
         {
-            Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-            var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
+            lock (_lock)
+            {
+                Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
+                var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
-            var msg = new ZMessage();
-            msg.Append(new ZFrame(serializedHeaders));
-            msg.Append(new ZFrame(message));
+                var msg = new ZMessage();
+                msg.Append(new ZFrame(serializedHeaders));
+                msg.Append(new ZFrame(message));
 
-            // Send
-            _sender.SendMessage(msg);
+                // Reconnect if enpoint changed since the last message was sent.
+                //if (_senderEndpoint != endPoint)
+                //{
+                    _senderEndpoint = endPoint;
+                    _senderContext = new ZContext();
+                    _sender = new ZSocket(_senderContext, ZSocketType.REQ);
+                    
+                    _sender.Connect(endPoint);
+                //}
+
+                // Send
+                var poll = ZPollItem.CreateReceiver();
+                var timeout = TimeSpan.FromMilliseconds(1);
+                ZError error;
+                int retriesLeft = 3;
+
+                while (retriesLeft > 0)
+                {
+                    // Outgoing
+                    if (!_sender.SendMessage(msg, out error))
+                    {
+                        if (error == ZError.ETERM)
+                            return;    // Interrupted
+                        throw new ZException(error);
+                    }
+
+                    // Incoming
+                    ZMessage incoming;
+                    while (true)
+                    {
+                        if (_sender.PollIn(poll, out incoming, out error, timeout))
+                        {
+                            using (incoming)
+                            {
+                                retriesLeft = 0;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            if (error == ZError.EAGAIN)
+                            {
+                                if (--retriesLeft == 0)
+                                {
+                                    Logger.Error("Server seems to be offline, abandoning");
+                                    break;
+                                }
+
+                                Logger.Warn("No response from server, retrying…");
+
+                                // Old socket is confused; close it and open a new one
+                                _sender.Dispose();
+                                _sender = new ZSocket(_senderContext, ZSocketType.REQ);
+                                _sender.Connect(endPoint);
+
+                                Logger.Info("I: reconnected");
+
+                                // Send request again, on new socket
+                                if (!_sender.SendMessage(msg, out error))
+                                {
+                                    if (error == ZError.ETERM)
+                                        return;    // Interrupted
+                                    throw new ZException(error);
+                                }
+ 
+                                continue;
+                            }
+
+                            if (error == ZError.ETERM)
+                                return;    // Interrupted
+                            throw new ZException(error);
+                        }
+                    }
+                }
+
+                _sender.Dispose();
+                _senderContext.Dispose();
+            }            
         }
 
         public void Disconnect()
