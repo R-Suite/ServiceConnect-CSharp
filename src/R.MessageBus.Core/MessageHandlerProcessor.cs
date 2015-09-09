@@ -95,6 +95,7 @@ namespace R.MessageBus.Core
         {
             try
             {
+                ;
                 var handler = (IMessageHandler<T>)_container.GetInstance(handlerType);
                 handler.Context = context;
                 handler.Execute(message);
