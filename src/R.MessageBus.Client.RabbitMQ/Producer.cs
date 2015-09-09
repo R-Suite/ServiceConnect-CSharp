@@ -73,7 +73,9 @@ namespace R.MessageBus.Client.RabbitMQ
                     CertPassphrase = transportSettings.CertPassphrase,
                     CertPath = transportSettings.CertPath,
                     Certs = transportSettings.Certs,
-                    Version = transportSettings.Version
+                    Version = transportSettings.Version,
+                    CertificateSelectionCallback = transportSettings.CertificateSelectionCallback,
+                    CertificateValidationCallback = transportSettings.CertificateValidationCallback
                 };
                 _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
             }
@@ -113,7 +115,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
-                
+
                 basicProperties.SetPersistent(true);
                 var exchangeName = ConfigureExchange(type.FullName.Replace(".", string.Empty));
 
@@ -153,7 +155,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 foreach (string endPoint in endPoints)
                 {
                     Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-                    
+
                     basicProperties.Headers = messageHeaders;
                     basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
@@ -173,7 +175,7 @@ namespace R.MessageBus.Client.RabbitMQ
 
                 var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
-                basicProperties.Headers = messageHeaders; 
+                basicProperties.Headers = messageHeaders;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, message),

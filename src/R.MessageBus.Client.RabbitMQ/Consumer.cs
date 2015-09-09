@@ -94,7 +94,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 }
 
                 var typeName = Encoding.UTF8.GetString((byte[])(headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]));
-                
+
                 result = _consumerEventHandler(args.Body, typeName, headers);
                 _model.BasicAck(args.DeliveryTag, false);
 
@@ -219,7 +219,9 @@ namespace R.MessageBus.Client.RabbitMQ
                     CertPassphrase = _transportSettings.CertPassphrase,
                     CertPath = _transportSettings.CertPath,
                     Certs = _transportSettings.Certs,
-                    Version = _transportSettings.Version
+                    Version = _transportSettings.Version,
+                    CertificateSelectionCallback = _transportSettings.CertificateSelectionCallback,
+                    CertificateValidationCallback = _transportSettings.CertificateValidationCallback
                 };
                 connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
             }
