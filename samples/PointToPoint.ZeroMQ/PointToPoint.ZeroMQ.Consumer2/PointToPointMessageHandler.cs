@@ -1,18 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using PointToPoint.ZeroMQ.Messages;
 using R.MessageBus.Interfaces;
 
-namespace PointToPoint.ZeroMQ.Consumer
+namespace PointToPoint.ZeroMQ.Consumer2
 {
     public class PointToPointMessageHandler : IMessageHandler<PointToPointMessage>
     {
         public void Execute(PointToPointMessage command)
         {
-            //throw new Exception("test");
+            //throw new Exception("test2");
             Console.WriteLine("Received message - {0} {1}", command.Count, DateTime.Now);
         }
 
