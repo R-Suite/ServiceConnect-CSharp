@@ -95,15 +95,14 @@ namespace R.MessageBus.UnitTests
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
 
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.Is<IList<string>>(m => m.Contains(typeof(FakeMessage1).FullName.Replace(".", string.Empty)) && m.Contains(typeof(FakeMessage2).FullName.Replace(".", string.Empty))), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConsumer>()));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.Is<IList<string>>(m => m.Contains(typeof(FakeMessage1).FullName.Replace(".", string.Empty)) && m.Contains(typeof(FakeMessage2).FullName.Replace(".", string.Empty))), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()));
 
             // Act
             bus.StartConsuming();
 
             // Assert
-            _mockConfiguration.Verify(x => x.GetConsumer(), Times.Exactly(1));
             _mockContainer.VerifyAll();
-            _mockConsumerPool.Verify(x => x.AddConsumer(It.IsAny<string>(), It.Is<IList<string>>(m => m.Contains(typeof(FakeMessage1).FullName.Replace(".", string.Empty)) && m.Contains(typeof(FakeMessage2).FullName.Replace(".", string.Empty))), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConsumer>()), Times.Once);
+            _mockConsumerPool.Verify(x => x.AddConsumer(It.IsAny<string>(), It.Is<IList<string>>(m => m.Contains(typeof(FakeMessage1).FullName.Replace(".", string.Empty)) && m.Contains(typeof(FakeMessage2).FullName.Replace(".", string.Empty))), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()), Times.Once);
         }
         
         [Fact]
@@ -132,7 +131,7 @@ namespace R.MessageBus.UnitTests
             };
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
             mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
@@ -182,7 +181,7 @@ namespace R.MessageBus.UnitTests
                 { "MessageType", Encoding.ASCII.GetBytes("Send") }
             };
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
             var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object &&
                                                                                                                      y["processManagerFinder"] == mockProcessManagerFinder.Object))).Returns(mockProcessManagerProcessor.Object);
@@ -229,7 +228,7 @@ namespace R.MessageBus.UnitTests
                 { "MessageType", Encoding.ASCII.GetBytes("Send") }
             };
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
             mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage2>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
@@ -1001,7 +1000,7 @@ namespace R.MessageBus.UnitTests
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
 
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConsumer>()));
+            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
 
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);

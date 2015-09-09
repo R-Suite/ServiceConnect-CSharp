@@ -266,7 +266,7 @@ namespace R.MessageBus.Client.RabbitMQ
                 }
             }
 
-            var consumer = new EventingBasicConsumer();
+            var consumer = new EventingBasicConsumer(_model);
             consumer.Received += Event;
             if (_heartbeatEnabled)
             {
