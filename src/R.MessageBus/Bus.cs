@@ -182,9 +182,9 @@ namespace R.MessageBus
 
         private void AddConsumer(string queueName, IList<string> messageTypes)
         {
-            var consumer = Configuration.GetConsumer();
+            //var consumer = Configuration.GetConsumer();
             var consumerPool = Configuration.GetConsumerPool();
-            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, consumer);
+            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, Configuration);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
