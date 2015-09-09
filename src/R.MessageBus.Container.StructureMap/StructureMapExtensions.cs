@@ -32,14 +32,3 @@ namespace R.MessageBus.Container.StructureMap
         }
     }
 }
-
-
-// Setup container
-_container.configure(x => {
-    //Setup container
-})
-
-
-StructureMapExtensions.ConfigureContainer(c => {
-    return _continer;
-})
