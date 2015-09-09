@@ -1,21 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Ninject;
-using Ninject.Activation;
 using Ninject.Components;
 using Ninject.Infrastructure;
 using Ninject.Planning.Bindings;
 using Ninject.Planning.Bindings.Resolvers;
 using R.MessageBus;
 using R.MessageBus.Container.Ninject;
-using R.MessageBus.Container.StructureMap;
-using R.MessageBus.Core.Container;
 using R.MessageBus.Interfaces;
-using R.MessageBus.Interfaces.Container;
-using StructureMap;
-using Ninject.Extensions.Conventions;
 
 namespace CustomIoCContainer
 {
@@ -69,11 +62,11 @@ namespace CustomIoCContainer
             var bus = Bus.Initialize(config =>
             {
                 config.ScanForMesssageHandlers = true;
-                config.SetContainerType<NinjectContainer>();
-                //config.InitializeContainer(myContainer);
+                config.SetHost("localhost");
+                config.ConfigureExistingContainer(i => i.Bind(typeof(IMessageHandler<MyMessage>)).To(typeof(MyMessageHandler)));
+                //config.SetContainerType<NinjectContainer>();
+                //config.SetContainer(myContainer);
             });
-
-            bus.Configuration.InitializeContainer(myContainer);
 
             bus.Publish(new MyMessage(Guid.NewGuid()));
         }

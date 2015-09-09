@@ -4,28 +4,13 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{05512AA9-5C7C-4750-805C-54D5BFAB7CA2}</ProjectGuid>
+    <ProjectGuid>{E3EB18B3-5F6E-4BBE-8B3C-475250573714}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>PointToPoint.ZeroMQ.Consumer</RootNamespace>
-    <AssemblyName>PointToPoint.ZeroMQ.Consumer</AssemblyName>
+    <RootNamespace>PointToPoint.ZeroMQ.Consumer2</RootNamespace>
+    <AssemblyName>PointToPoint.ZeroMQ.Consumer2</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <PublishUrl>publish\</PublishUrl>
-    <Install>true</Install>
-    <InstallFrom>Disk</InstallFrom>
-    <UpdateEnabled>false</UpdateEnabled>
-    <UpdateMode>Foreground</UpdateMode>
-    <UpdateInterval>7</UpdateInterval>
-    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
-    <UpdatePeriodically>false</UpdatePeriodically>
-    <UpdateRequired>false</UpdateRequired>
-    <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
-    <IsWebBootstrapper>false</IsWebBootstrapper>
-    <UseApplicationTrust>false</UseApplicationTrust>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -53,7 +38,8 @@
     <Reference Include="Common.Logging.Core">
       <HintPath>..\packages\Common.Logging.Core.3.0.0\lib\net40\Common.Logging.Core.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus">
@@ -63,10 +49,7 @@
       <HintPath>..\..\..\src\R.MessageBus.Client.ZeroMQ\bin\Debug\R.MessageBus.Client.ZeroMQ.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Container.Default">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Container.Default.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Container.StructureMap">
-      <HintPath>..\..\..\src\R.MessageBus.Container.StructureMap\bin\Debug\R.MessageBus.Container.StructureMap.dll</HintPath>
+      <HintPath>..\..\..\src\R.MessageBus.Container.Default\bin\Debug\R.MessageBus.Container.Default.dll</HintPath>
     </Reference>
     <Reference Include="R.MessageBus.Core">
       <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Core.dll</HintPath>
@@ -82,14 +65,12 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
-    <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Xml" />
-    <Reference Include="ZeroMQ, Version=4.1.0.3848, Culture=neutral, PublicKeyToken=4a9630883fd6c563, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
+    <Reference Include="ZeroMQ">
       <HintPath>..\packages\ZeroMQ.4.1.0.15\lib\net40\ZeroMQ.dll</HintPath>
     </Reference>
   </ItemGroup>
@@ -113,23 +94,6 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <BootstrapperPackage Include=".NETFramework,Version=v4.5">
-      <Visible>False</Visible>
-      <ProductName>Microsoft .NET Framework 4.5 %28x86 and x64%29</ProductName>
-      <Install>true</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
-      <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1 Client Profile</ProductName>
-      <Install>false</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
-      <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1</ProductName>
-      <Install>false</Install>
-    </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
     <Content Include="amd64\libsodium.dll">
