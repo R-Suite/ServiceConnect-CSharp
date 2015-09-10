@@ -12,8 +12,7 @@ namespace PointToPoint.Producer
             var bus = Bus.Initialize(config =>
             {
                 config.AddQueueMapping(typeof(PointToPointMessage), "PointToPoint.Consumer");
-                //config.SetThreads(10);
-                config.SetHost("lonappdev04");
+                config.SetHost("localhost");
             });
 
             while (true)
@@ -24,7 +23,7 @@ namespace PointToPoint.Producer
                 Console.WriteLine("Start: {0}", DateTime.Now);
                 var id = Guid.NewGuid();
 
-                for (int i = 0; i < 10000000; i++)
+                for (int i = 0; i < 10000; i++)
                 {
                     bus.Send(new PointToPointMessage(id)
                     {
