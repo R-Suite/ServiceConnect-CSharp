@@ -17,15 +17,15 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading;
 using Moq;
 using Newtonsoft.Json;
 using R.MessageBus.Core;
 using R.MessageBus.Interfaces;
+using R.MessageBus.UnitTests.Aggregator;
 using R.MessageBus.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace R.MessageBus.UnitTests.Aggregator
+namespace R.MessageBus.UnitTests
 {
     public class ConsumeMessageEventTests
     {
