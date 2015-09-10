@@ -50,6 +50,7 @@ namespace R.MessageBus.Client.RabbitMQ
         private readonly bool _purgeQueuesOnStartup;
         private readonly IDictionary<string, object> _queueArguments;
         private readonly bool _durable;
+        private readonly ushort _prefetchCount;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -68,6 +69,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _heartbeatEnabled = !transportSettings.ClientSettings.ContainsKey("HeartbeatEnabled") || (bool)transportSettings.ClientSettings["HeartbeatEnabled"];
             _heartbeatTime = transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
             _purgeQueuesOnStartup = transportSettings.PurgeQueueOnStartup;
+            _prefetchCount = transportSettings.ClientSettings.ContainsKey("PrefetchCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["PrefetchCount"]) : Convert.ToUInt16(20);
         }
 
         /// <summary>
@@ -233,7 +235,7 @@ namespace R.MessageBus.Client.RabbitMQ
             _connection = connectionFactory.CreateConnection();
 
             _model = _connection.CreateModel();
-            _model.BasicQos(0, 1, false);
+            _model.BasicQos(0, _prefetchCount, false);
 
             // WORK QUEUE
             var queueName = ConfigureQueue();
