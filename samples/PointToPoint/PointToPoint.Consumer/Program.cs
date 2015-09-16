@@ -18,6 +18,7 @@ namespace PointToPoint.Consumer
                 config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("localhost");
                 config.TransportSettings.ClientSettings.Add("PrefetchCount", 100);
+                //config.TransportSettings.ClientSettings.Add("DisablePrefetch", true);
             });
             bus.StartConsuming();
             
