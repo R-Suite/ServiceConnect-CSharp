@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using GzipCompression.Messages;
-using R.MessageBus;
-using R.MessageBus.Filters.GzipCompression;
+using ServiceConnect;
+using ServiceConnect.Filters.GzipCompression;
 
 namespace GzipCompression
 {

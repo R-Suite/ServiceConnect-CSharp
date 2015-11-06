@@ -1,6 +1,6 @@
 ﻿using System;
 using PolymorphicMessages.Messages;
-using R.MessageBus;
+using ServiceConnect;
 
 namespace PolymorphicMessages.Producer
 {

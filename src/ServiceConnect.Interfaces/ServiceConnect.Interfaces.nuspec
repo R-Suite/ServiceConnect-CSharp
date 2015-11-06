@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package>
+  <metadata>
+    <id>ServiceConnect.Interfaces</id>
+    <version>2.1.3-beta</version>
+    <title>ServiceConnect.Interfaces</title>
+    <authors>Jakub Pachansky,Tim Watson</authors>
+    <owners>Jakub Pachansky,Tim Watson</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>R MessageBus Interfaces</description>
+    <language>en-GB</language>
+    <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
+    <copyright>Copyright 2015 ServiceConnect. All rights reserved</copyright>
+    <tags>MessageBus Interfaces,MessageBus.Interfaces,ServiceConnect,R MessageBus,MessageBus</tags>
+  </metadata>
+  <files>
+    <file src="bin\Release\ServiceConnect.Interfaces.dll" target="lib\net40\ServiceConnect.Interfaces.dll" />
+  </files>
+</package>

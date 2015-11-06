@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using R.MessageBus;
-using R.MessageBus.Persistance.MongoDb;
+using ServiceConnect;
+using ServiceConnect.Persistance.MongoDb;
 
 namespace Aggregator.Consumer
 {

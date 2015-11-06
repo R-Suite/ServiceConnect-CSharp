@@ -1,6 +1,6 @@
 ﻿using System;
 using PointToPoint.Messages;
-using R.MessageBus;
+using ServiceConnect;
 
 namespace PointToPoint.Producer
 {

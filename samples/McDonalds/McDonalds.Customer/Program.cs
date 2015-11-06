@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using McDonalds.Messages;
-using R.MessageBus;
-using R.MessageBus.Interfaces;
+using ServiceConnect;
+using ServiceConnect.Interfaces;
 
 namespace McDonalds.Customer
 {

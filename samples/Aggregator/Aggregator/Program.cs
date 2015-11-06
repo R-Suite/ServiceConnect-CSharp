@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
 using Aggregator.Messages;
-using R.MessageBus;
+using ServiceConnect;
 
 namespace Aggregator
 {

@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using PointToPoint.ZeroMQ.Messages;
-using R.MessageBus;
-using R.MessageBus.Client.ZeroMQ;
+using ServiceConnect;
+using ServiceConnect.Client.ZeroMQ;
 
 namespace PointToPoint.ZeroMQ.Producer
 {
@@ -14,8 +14,8 @@ namespace PointToPoint.ZeroMQ.Producer
             var bus = Bus.Initialize(config =>
             {
                 //config.AddQueueMapping(typeof(PointToPointMessage), "PointToPoint2");
-                config.SetConsumer<R.MessageBus.Client.ZeroMQ.Consumer>();
-                config.SetProducer<R.MessageBus.Client.ZeroMQ.Producer>();
+                config.SetConsumer<ServiceConnect.Client.ZeroMQ.Consumer>();
+                config.SetProducer<ServiceConnect.Client.ZeroMQ.Producer>();
                 config.ScanForMesssageHandlers = false;
                 config.AutoStartConsuming = false;
                 config.SetPublisherHost("tcp://127.0.0.1:5556");

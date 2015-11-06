@@ -1,5 +1,5 @@
 ﻿using System;
-using R.MessageBus;
+using ServiceConnect;
 using Ssl.Messages;
 
 namespace Ssl.Producer

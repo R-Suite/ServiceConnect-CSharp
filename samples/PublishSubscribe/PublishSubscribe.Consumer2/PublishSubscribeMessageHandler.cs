@@ -1,6 +1,6 @@
 ﻿using System;
 using PublishSubscribe.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace PublishSubscribe.Consumer2
 {
