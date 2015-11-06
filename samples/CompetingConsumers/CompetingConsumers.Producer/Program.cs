@@ -1,6 +1,6 @@
 ﻿using System;
 using CompetingConsumers.Messages;
-using R.MessageBus;
+using ServiceConnect;
 
 namespace CompetingConsumers.Producer
 {

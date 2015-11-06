@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using R.MessageBus;
+using ServiceConnect;
 using RoutingSlip.Messages;
 
 namespace RoutingSlip.Producer

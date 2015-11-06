@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using R.MessageBus;
-using R.MessageBus.Filters.GzipCompression;
+using ServiceConnect;
+using ServiceConnect.Filters.GzipCompression;
 
 namespace GzipCompression.Consumer
 {

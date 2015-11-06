@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Threading;
-using R.MessageBus;
-using R.MessageBus.Container.Default;
+using ServiceConnect;
+using ServiceConnect.Container.Default;
 
 namespace PointToPoint.Consumer
 {

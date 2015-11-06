@@ -2,7 +2,7 @@
 using System.Text;
 using Filters.Messages;
 using Newtonsoft.Json;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace Filters.Consumer
 {

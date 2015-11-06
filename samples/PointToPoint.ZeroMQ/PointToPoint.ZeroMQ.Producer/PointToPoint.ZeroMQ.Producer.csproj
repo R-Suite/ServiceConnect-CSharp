@@ -56,26 +56,26 @@
     <Reference Include="Newtonsoft.Json">
       <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.dll</HintPath>
+    <Reference Include="ServiceConnect">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Client.ZeroMQ">
-      <HintPath>..\..\..\src\R.MessageBus.Client.ZeroMQ\bin\Debug\R.MessageBus.Client.ZeroMQ.dll</HintPath>
+    <Reference Include="ServiceConnect.Client.ZeroMQ">
+      <HintPath>..\..\..\src\ServiceConnect.Client.ZeroMQ\bin\Debug\ServiceConnect.Client.ZeroMQ.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Container.Default">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Container.Default.dll</HintPath>
+    <Reference Include="ServiceConnect.Container.Default">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Container.Default.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Core">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Core.dll</HintPath>
+    <Reference Include="ServiceConnect.Core">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Core.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Interfaces.dll</HintPath>
+    <Reference Include="ServiceConnect.Interfaces">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.InMemory">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.InMemory.dll</HintPath>
+    <Reference Include="ServiceConnect.Persistance.InMemory">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.InMemory.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.SqlServer">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.SqlServer.dll</HintPath>
+    <Reference Include="ServiceConnect.Persistance.SqlServer">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

@@ -1,6 +1,6 @@
 ﻿using System;
 using System.IO;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 using Streaming.Messages;
 
 namespace Streaming.Consumer

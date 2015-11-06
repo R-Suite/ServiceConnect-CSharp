@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using R.MessageBus;
+using ServiceConnect;
 using Streaming.Messages;
 
 namespace Streaming

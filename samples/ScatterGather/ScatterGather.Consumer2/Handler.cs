@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Threading;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 using ScatterGather.Messages;
 
 namespace ScatterGather.Consumer2

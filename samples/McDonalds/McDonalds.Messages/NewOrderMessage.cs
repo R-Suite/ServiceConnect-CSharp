@@ -1,5 +1,5 @@
 ﻿using System;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace McDonalds.Messages
 {
