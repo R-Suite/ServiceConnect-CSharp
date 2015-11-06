@@ -1,5 +1,5 @@
 ﻿using System;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 using RecipientList.Messages;
 
 namespace RecipientList.Consumer2

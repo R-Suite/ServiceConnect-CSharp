@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using R.MessageBus;
+using ServiceConnect;
 
 namespace PublishSubscribe.Consumer1
 {

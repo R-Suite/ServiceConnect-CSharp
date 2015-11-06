@@ -31,43 +31,43 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Common.Logging">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Common.Logging.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Common.Logging.dll</HintPath>
     </Reference>
     <Reference Include="Common.Logging.Core">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Common.Logging.Core.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Common.Logging.Core.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.dll</HintPath>
+    <Reference Include="ServiceConnect">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Client.RabbitMQ">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+    <Reference Include="ServiceConnect.Client.RabbitMQ">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Container">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Container.dll</HintPath>
+    <Reference Include="ServiceConnect.Container">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Container.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Core">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Core.dll</HintPath>
+    <Reference Include="ServiceConnect.Core">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Core.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Interfaces.dll</HintPath>
+    <Reference Include="ServiceConnect.Interfaces">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.InMemory">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.InMemory.dll</HintPath>
+    <Reference Include="ServiceConnect.Persistance.InMemory">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.InMemory.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.SqlServer">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.SqlServer.dll</HintPath>
+    <Reference Include="ServiceConnect.Persistance.SqlServer">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Settings">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Settings.dll</HintPath>
+    <Reference Include="ServiceConnect.Settings">
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Settings.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\RabbitMQ.Client.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\RabbitMQ.Client.dll</HintPath>
     </Reference>
     <Reference Include="StructureMap">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\StructureMap.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

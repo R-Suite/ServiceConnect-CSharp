@@ -1,6 +1,6 @@
 ﻿using System;
 using Filters.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace Filters.Consumer
 {

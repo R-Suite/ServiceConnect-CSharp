@@ -1,5 +1,5 @@
 ﻿using System;
-using R.MessageBus;
+using ServiceConnect;
 
 namespace PublishSubscribe.Consumer2
 {

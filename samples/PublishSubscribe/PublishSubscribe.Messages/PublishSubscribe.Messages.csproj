@@ -40,37 +40,37 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.1.1.7-beta\lib\net40\R.MessageBus.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.1.1.7-beta\lib\net40\ServiceConnect.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.Client.RabbitMQ.1.1.7-beta\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.Client.RabbitMQ.1.1.7-beta\lib\net40\ServiceConnect.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.1.1.7-beta\lib\net40\R.MessageBus.Container.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.1.1.7-beta\lib\net40\ServiceConnect.Container.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.1.1.7-beta\lib\net40\R.MessageBus.Core.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.1.1.7-beta\lib\net40\ServiceConnect.Core.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.Interfaces.1.1.7-beta\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.Interfaces.1.1.7-beta\lib\net40\ServiceConnect.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.1.1.7-beta\lib\net40\R.MessageBus.Persistance.InMemory.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.1.1.7-beta\lib\net40\ServiceConnect.Persistance.InMemory.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.1.1.7-beta\lib\net40\R.MessageBus.Persistance.SqlServer.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.1.1.7-beta\lib\net40\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\R.MessageBus.1.1.7-beta\lib\net40\R.MessageBus.Settings.dll</HintPath>
+      <HintPath>..\packages\ServiceConnect.1.1.7-beta\lib\net40\ServiceConnect.Settings.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client, Version=3.2.4.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>

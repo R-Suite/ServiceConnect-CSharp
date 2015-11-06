@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using R.MessageBus;
+using ServiceConnect;
 using Streaming.Messages;
 
 namespace Streaming.Consumer

@@ -1,8 +1,8 @@
 ﻿using System;
-using R.MessageBus;
-using R.MessageBus.Container.Ninject;
-using R.MessageBus.Container.StructureMap;
-using R.MessageBus.Persistance.InMemory;
+using ServiceConnect;
+using ServiceConnect.Container.Ninject;
+using ServiceConnect.Container.StructureMap;
+using ServiceConnect.Persistance.InMemory;
 
 namespace McDonalds.Cashier
 {

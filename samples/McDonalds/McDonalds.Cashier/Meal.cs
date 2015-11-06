@@ -1,7 +1,7 @@
 ﻿using System;
 using McDonalds.Messages;
-using R.MessageBus.Core;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Core;
+using ServiceConnect.Interfaces;
 
 namespace McDonalds.Cashier
 {

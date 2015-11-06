@@ -1,8 +1,8 @@
 ﻿using System.IO;
 using System.IO.Compression;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
-namespace R.MessageBus.Filters.GzipCompression
+namespace ServiceConnect.Filters.GzipCompression
 {
     public class OutgoingGzipCompressionFilter : IFilter
     {

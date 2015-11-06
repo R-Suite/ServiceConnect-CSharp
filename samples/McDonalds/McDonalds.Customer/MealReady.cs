@@ -1,6 +1,6 @@
 ﻿using System;
 using McDonalds.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace McDonalds.Customer
 {

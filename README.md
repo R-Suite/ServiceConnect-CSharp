@@ -1,16 +1,16 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/0098e0imahh66eb7/branch/master?svg=true)](https://ci.appveyor.com/project/twatson83/r-messagebus/branch/master)
-[![Join the chat at https://gitter.im/R-Suite/R.MessageBus](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/R.MessageBus?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-**_R.MessageBus 2.1.0-beta is available at [https://www.nuget.org/packages/R.MessageBus] (https://www.nuget.org/packages/R.MessageBus/)_**
-* **New in R.MessageBus 2.1.0-beta**
+**_ServiceConnect 2.1.0-beta is available at [https://www.nuget.org/packages/ServiceConnect] (https://www.nuget.org/packages/ServiceConnect/)_**
+* **New in ServiceConnect 2.1.0-beta**
     - Support for multi-threaded consumers
     - SSL support
-    - Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/R.MessageBus/tree/master/samples/Filters) sample application for a complete example.
-    - Removed dependency on StructureMap. (To use StructureMap, pull down _R.MessageBus.Container.StructureMap_ nuget and set
+    - Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/ServiceConnect/tree/master/samples/Filters) sample application for a complete example.
+    - Removed dependency on StructureMap. (To use StructureMap, pull down _ServiceConnect.Container.StructureMap_ nuget and set
      ```Bus.Initialize(config =>config.SetContainerType<StructureMapContainer>());``` when initializing the bus. You can also initialize the bus with your own container by specifying ```config.InitializeContainer(myStructureMapContainer)```)
     - Ninject container support ```Bus.Initialize(config =>config.SetContainerType<NinjectContainer>());```
 
-<img src="https://raw.githubusercontent.com/R-Suite/R.MessageBus/master/logo/logo.png" height="150">
+<img src="https://raw.githubusercontent.com/R-Suite/ServiceConnect/master/logo/logo.png" height="150">
 
 A simple, easy to use asynchronous messaging framework for .NET.
 
@@ -32,18 +32,18 @@ In order to get started, have a look at the documentation at [http://rmessagebus
 * SSL Support
 
 ## Project Maturity
-R.MessageBus has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.
+ServiceConnect has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.
 
 
 ## Simple example
 
 In this example we simply send a message from one endpoint and consume the same message on another endpoint.
-See [Point To Point](https://github.com/R-Suite/R.MessageBus/tree/master/samples/PointToPoint) sample application for a complete example.
+See [Point To Point](https://github.com/R-Suite/ServiceConnect/tree/master/samples/PointToPoint) sample application for a complete example.
 
 ##### 1. Define your message
 
 ```YourMessage``` is a .Net class that inherits from
-```R.MessageBus.Interfaces.Message``` base class
+```ServiceConnect.Interfaces.Message``` base class
 
 ```c#
 public class YourMessage : Message
@@ -82,7 +82,7 @@ public class Program
 }
 ```
 
-Finally, we define a "handler" that will receive the message. The handler is a .NET class that implements ```R.MessageBus.Interfaces.IMessageHandler<T>``` where the generic parameter ```T``` is the type of the message being consumed.
+Finally, we define a "handler" that will receive the message. The handler is a .NET class that implements ```ServiceConnect.Interfaces.IMessageHandler<T>``` where the generic parameter ```T``` is the type of the message being consumed.
 
 ```c#
 public class YourMessageHandler : IMessageHandler<YourMessage>
