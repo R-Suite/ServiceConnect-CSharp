@@ -10,7 +10,7 @@
      ```Bus.Initialize(config =>config.SetContainerType<StructureMapContainer>());``` when initializing the bus. You can also initialize the bus with your own container by specifying ```config.InitializeContainer(myStructureMapContainer)```)
     - Ninject container support ```Bus.Initialize(config =>config.SetContainerType<NinjectContainer>());```
 
-<img src="https://raw.githubusercontent.com/R-Suite/ServiceConnect/master/logo/logo.png" height="150">
+<img src="https://raw.githubusercontent.com/R-Suite/ServiceConnect-CSharp/master/logo/logo.png" height="150">
 
 A simple, easy to use asynchronous messaging framework for .NET.
 
@@ -38,7 +38,7 @@ ServiceConnect has been first released in May 2014. The current version is used 
 ## Simple example
 
 In this example we simply send a message from one endpoint and consume the same message on another endpoint.
-See [Point To Point](https://github.com/R-Suite/ServiceConnect/tree/master/samples/PointToPoint) sample application for a complete example.
+See [Point To Point](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/samples/PointToPoint) sample application for a complete example.
 
 ##### 1. Define your message
 
