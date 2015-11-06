@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("R.MessageBus.Filters.GzipCompression")]
+[assembly: AssemblyTitle("ServiceConnect.Filters.GzipCompression")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Ruffer PLC")]
-[assembly: AssemblyProduct("R.MessageBus.Filters.GzipCompression")]
+[assembly: AssemblyProduct("ServiceConnect.Filters.GzipCompression")]
 [assembly: AssemblyCopyright("Copyright © Ruffer PLC 2015")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

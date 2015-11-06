@@ -1,6 +1,6 @@
 ﻿using System;
 using CompetingConsumers.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace CompetingConsumers.Consumer2
 {

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using PointToPoint.ZeroMQ.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace PointToPoint.ZeroMQ.Consumer
 {

@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Threading;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 using RecipientList.Messages;
 
 namespace RecipientList.Consumer1

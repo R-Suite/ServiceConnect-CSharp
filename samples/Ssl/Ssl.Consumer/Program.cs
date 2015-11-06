@@ -4,7 +4,7 @@ using System.Linq;
 using System.Net.Security;
 using System.Text;
 using System.Threading.Tasks;
-using R.MessageBus;
+using ServiceConnect;
 using Ssl.Messages;
 
 namespace Ssl.Consumer

@@ -1,5 +1,5 @@
 ﻿using System;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 using RoutingSlip.Messages;
 
 namespace RoutingSlip.Endpoint1

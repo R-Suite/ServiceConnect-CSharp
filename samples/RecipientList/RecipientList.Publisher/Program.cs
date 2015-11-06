@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using R.MessageBus;
-using R.MessageBus.Interfaces;
+using ServiceConnect;
+using ServiceConnect.Interfaces;
 using RecipientList.Messages;
 
 namespace RecipientList.Publisher

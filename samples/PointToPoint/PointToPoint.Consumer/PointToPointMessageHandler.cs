@@ -2,7 +2,7 @@
 using System.Text;
 using System.Threading;
 using PointToPoint.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace PointToPoint.Consumer
 {

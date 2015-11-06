@@ -1,5 +1,5 @@
 ﻿using System;
-using R.MessageBus;
+using ServiceConnect;
 using Retries.Messages;
 
 namespace Retries.Producer

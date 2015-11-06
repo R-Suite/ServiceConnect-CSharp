@@ -33,60 +33,60 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Common.Logging">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Common.Logging.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Common.Logging.dll</HintPath>
     </Reference>
     <Reference Include="Common.Logging.Core">
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Common.Logging.Core.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Common.Logging.Core.dll</HintPath>
     </Reference>
     <Reference Include="MongoDB.Bson">
-      <HintPath>..\..\..\src\R.MessageBus.Persistance.MongoDb\bin\Debug\MongoDB.Bson.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDb\bin\Debug\MongoDB.Bson.dll</HintPath>
     </Reference>
     <Reference Include="MongoDB.Driver">
-      <HintPath>..\..\..\src\R.MessageBus.Persistance.MongoDb\bin\Debug\MongoDB.Driver.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDb\bin\Debug\MongoDB.Driver.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Newtonsoft.Json.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Container.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Container.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Core.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Core.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Interfaces.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.InMemory.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.InMemory.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Persistance.SqlServer.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="R.MessageBus.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\R.MessageBus.Settings.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Settings.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client, Version=3.2.1.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\RabbitMQ.Client.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\RabbitMQ.Client.dll</HintPath>
     </Reference>
     <Reference Include="StructureMap, Version=2.6.4.0, Culture=neutral, PublicKeyToken=e60ad81abae3c223, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\R.MessageBus\bin\Debug\StructureMap.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
