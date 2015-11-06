@@ -6,9 +6,9 @@ using Ninject.Components;
 using Ninject.Infrastructure;
 using Ninject.Planning.Bindings;
 using Ninject.Planning.Bindings.Resolvers;
-using R.MessageBus;
-using R.MessageBus.Container.Ninject;
-using R.MessageBus.Interfaces;
+using ServiceConnect;
+using ServiceConnect.Container.Ninject;
+using ServiceConnect.Interfaces;
 
 namespace CustomIoCContainer
 {

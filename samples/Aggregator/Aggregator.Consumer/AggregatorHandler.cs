@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Aggregator.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace Aggregator.Consumer
 {

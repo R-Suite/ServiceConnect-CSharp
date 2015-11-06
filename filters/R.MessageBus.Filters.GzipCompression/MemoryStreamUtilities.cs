@@ -1,6 +1,6 @@
 ﻿using System.IO;
 
-namespace R.MessageBus.Filters.GzipCompression
+namespace ServiceConnect.Filters.GzipCompression
 {
     public static class MemoryStreamUtilities
     {

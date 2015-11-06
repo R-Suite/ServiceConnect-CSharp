@@ -1,0 +1,136 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{ADEAF945-97EF-4506-9982-4797EEDD24F4}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>ServiceConnect.UnitTests</RootNamespace>
+    <AssemblyName>ServiceConnect.UnitTests</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
+    <RestorePackages>true</RestorePackages>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Moq">
+      <HintPath>..\packages\Moq.4.2.1402.2112\lib\net40\Moq.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Ninject, Version=3.2.0.0, Culture=neutral, PublicKeyToken=c7192dc5380945e7, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Ninject.3.2.0.0\lib\net45-full\Ninject.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+    <Reference Include="xunit">
+      <HintPath>..\packages\xunit.1.9.2\lib\net20\xunit.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Aggregator\AggregatorTimerTests.cs" />
+    <Compile Include="Aggregator\AggregatorProcessorTests.cs" />
+    <Compile Include="ConsumeMessageEventTests.cs" />
+    <Compile Include="BusSetupTests.cs" />
+    <Compile Include="Container\NinjectBusContainerTests.cs" />
+    <Compile Include="Container\DefaultContainerTests.cs" />
+    <Compile Include="Container\DefaultBusContainerTests.cs" />
+    <Compile Include="FilterTests.cs" />
+    <Compile Include="MessageHandlerProcessorTest.cs" />
+    <Compile Include="ConfigurationTests.cs" />
+    <Compile Include="BusTests.cs" />
+    <Compile Include="Fakes\FakePersistanceData.cs" />
+    <Compile Include="Fakes\Handlers\FakeHandler1.cs" />
+    <Compile Include="Fakes\Handlers\FakeHandler2.cs" />
+    <Compile Include="Fakes\Messages\FakeMessage1.cs" />
+    <Compile Include="Fakes\Messages\FakeMessage2.cs" />
+    <Compile Include="Fakes\ProcessManagers\FakeProcessManager1.cs" />
+    <Compile Include="Fakes\ProcessManagers\FakeProcessManagerData.cs" />
+    <Compile Include="InMemoryProcessManagerFinderTests.cs" />
+    <Compile Include="ProcessManagerProcessorTest.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Stream\ProcessStreamMessageTests.cs" />
+    <Compile Include="Stream\ReadStreamTests.cs" />
+    <Compile Include="Stream\CreateStreamTests.cs" />
+    <Compile Include="Stream\WriteStreamTests.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj">
+      <Project>{69846fe1-24d2-48f5-8e7b-9dba042a767a}</Project>
+      <Name>ServiceConnect.Client.RabbitMQ</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Container.Ninject\ServiceConnect.Container.Ninject.csproj">
+      <Project>{62aeeb53-ee09-496d-885c-d2ebcb82fa59}</Project>
+      <Name>ServiceConnect.Container.Ninject</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Container.Default\ServiceConnect.Container.Default.csproj">
+      <Project>{5ecfb9e6-3824-4a00-83da-0490f036df3f}</Project>
+      <Name>ServiceConnect.Container.Default</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Core\ServiceConnect.Core.csproj">
+      <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
+      <Name>ServiceConnect.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj">
+      <Project>{3bb7d53a-080f-492c-86a4-4f33fcd7ff7f}</Project>
+      <Name>ServiceConnect.Interfaces</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Persistance.InMemory\ServiceConnect.Persistance.InMemory.csproj">
+      <Project>{6801518D-B5E1-4555-8AB9-073F028467B4}</Project>
+      <Name>ServiceConnect.Persistance.InMemory</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Persistance.SqlServer\ServiceConnect.Persistance.SqlServer.csproj">
+      <Project>{48272709-228F-4C56-AA52-0C0D1F8B818A}</Project>
+      <Name>ServiceConnect.Persistance.SqlServer</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Container.StructureMap\ServiceConnect.Container.StructureMap.csproj">
+      <Project>{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}</Project>
+      <Name>ServiceConnect.Container.StructureMap</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj">
+      <Project>{6911293D-3B22-4D8A-9B23-25EC4FAD1742}</Project>
+      <Name>ServiceConnect</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

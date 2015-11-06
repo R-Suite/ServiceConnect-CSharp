@@ -1,6 +1,6 @@
 ﻿using System;
 using ProcessManager.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace ProcessManager.Process2
 {

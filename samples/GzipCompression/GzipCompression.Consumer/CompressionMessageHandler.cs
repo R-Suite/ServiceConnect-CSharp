@@ -1,6 +1,6 @@
 ﻿using System;
 using GzipCompression.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace GzipCompression.Consumer
 {

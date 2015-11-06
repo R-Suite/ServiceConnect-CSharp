@@ -1,6 +1,6 @@
 ﻿using System;
 using ProcessManager.Messages;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace ProcessManager.Host
 {
@@ -22,7 +22,7 @@ namespace ProcessManager.Host
         public PmWidget PmWidget { get; set; }
     }
 
-    public class MyProcessManager : R.MessageBus.Core.ProcessManager<MyProcessManagerData>,
+    public class MyProcessManager : ServiceConnect.Core.ProcessManager<MyProcessManagerData>,
         IStartProcessManager<StartProcessManagerMessage>,
         IStartProcessManager<Process1ResponseMessage>,
         IMessageHandler<Process2ResponseMessage>

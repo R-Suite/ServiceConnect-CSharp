@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Security.Cryptography.X509Certificates;
-using R.MessageBus.Interfaces;
+using ServiceConnect.Interfaces;
 
 namespace Streaming.Messages
 {
