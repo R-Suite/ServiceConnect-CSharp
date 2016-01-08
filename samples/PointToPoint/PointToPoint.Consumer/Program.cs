@@ -16,13 +16,15 @@ namespace PointToPoint.Consumer
                 config.SetQueueName("PointToPoint.Consumer");
                 config.SetThreads(2);
                 config.SetContainerType<DefaultBusContainer>();
-                config.SetHost("localhost");
+                config.SetHost("lonappdev01");
                 config.TransportSettings.ClientSettings.Add("PrefetchCount", 100);
                 //config.TransportSettings.ClientSettings.Add("DisablePrefetch", true);
             });
             bus.StartConsuming();
             
             Console.ReadLine();
+
+            bus.Dispose();
         }
     }
 }
