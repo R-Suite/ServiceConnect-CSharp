@@ -14,7 +14,7 @@
 
 A simple, easy to use asynchronous messaging framework for .NET.
 
-In order to get started, have a look at the documentation at [http://rmessagebus.com/guides](http://rmessagebus.com/guides)
+In order to get started, have a look at the documentation at [http://serviceconnect.io/guides](http://serviceconnect.io/guides)
 
 ## Features
 
