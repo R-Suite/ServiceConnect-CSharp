@@ -1,7 +1,5 @@
 ﻿using System;
 using ServiceConnect;
-using ServiceConnect.Container.Ninject;
-using ServiceConnect.Container.StructureMap;
 using ServiceConnect.Persistance.InMemory;
 
 namespace McDonalds.Cashier
@@ -15,7 +13,6 @@ namespace McDonalds.Cashier
             {
                 x.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
                 x.SetAuditingEnabled(true);
-                x.SetContainerType<StructureMapContainer>();
             });
 
             bus.StartConsuming();

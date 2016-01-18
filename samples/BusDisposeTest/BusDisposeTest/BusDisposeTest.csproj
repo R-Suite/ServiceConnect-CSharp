@@ -49,111 +49,47 @@
   <ItemGroup>
     <Reference Include="Common.Logging, Version=3.0.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Common.Logging.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Common.Logging.dll</HintPath>
     </Reference>
     <Reference Include="Common.Logging.Core, Version=3.0.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Common.Logging.Core.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Common.Logging.Core.dll</HintPath>
     </Reference>
-    <Reference Include="Dapper">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Dapper.dll</HintPath>
-    </Reference>
-    <Reference Include="DapperExtensions">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\DapperExtensions.dll</HintPath>
-    </Reference>
-    <Reference Include="Elasticsearch.Net">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Elasticsearch.Net.dll</HintPath>
-    </Reference>
-    <Reference Include="log4net, Version=1.2.13.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
+    <Reference Include="Newtonsoft.Json, Version=4.5.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\log4net.dll</HintPath>
-    </Reference>
-    <Reference Include="MongoDB.Bson">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\MongoDB.Bson.dll</HintPath>
-    </Reference>
-    <Reference Include="MongoDB.Driver">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\MongoDB.Driver.dll</HintPath>
-    </Reference>
-    <Reference Include="Nest">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Nest.dll</HintPath>
-    </Reference>
-    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Newtonsoft.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\R.MessageBus.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Client.RabbitMQ">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Container">
-      <HintPath>..\packages\R.MessageBus.2.0.0\lib\net40\R.MessageBus.Container.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Container.Default">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\R.MessageBus.Container.Default.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Core">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\R.MessageBus.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Interfaces">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Persistance.InMemory">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\R.MessageBus.Persistance.InMemory.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Persistance.SqlServer">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\R.MessageBus.Persistance.SqlServer.dll</HintPath>
-    </Reference>
-    <Reference Include="R.MessageBus.Settings">
-      <HintPath>..\packages\R.MessageBus.2.0.0\lib\net40\R.MessageBus.Settings.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client, Version=3.5.4.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\RabbitMQ.Client.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\RabbitMQ.Client.dll</HintPath>
     </Reference>
-    <Reference Include="Ruffer.DataDictionary.Repositories">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Ruffer.DataDictionary.Repositories.dll</HintPath>
-    </Reference>
-    <Reference Include="Ruffer.LoggingService.RMessageBus.Appender">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Ruffer.LoggingService.RMessageBus.Appender.dll</HintPath>
-    </Reference>
-    <Reference Include="Ruffer.LoggingService.RMessageBus.Logger">
-      <HintPath>..\packages\Ruffer.LoggingService.RMessageBus.Appender.2.0.21.23337\lib\net40\Ruffer.LoggingService.RMessageBus.Logger.dll</HintPath>
-    </Reference>
-    <Reference Include="Ruffer.Wcf.MonitorService.Contracts">
-      <HintPath>..\packages\Ruffer.Wcf.MonitorService.Contracts.1.1.17.16033\lib\net40\Ruffer.Wcf.MonitorService.Contracts\Ruffer.Wcf.MonitorService.Contracts.dll</HintPath>
-    </Reference>
-    <Reference Include="ServiceConnect">
+    <Reference Include="ServiceConnect, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Client.RabbitMQ">
+    <Reference Include="ServiceConnect.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Container.Default">
+    <Reference Include="ServiceConnect.Container.Default, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Container.Default.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Container.StructureMap">
-      <HintPath>..\..\..\src\ServiceConnect.Container.StructureMap\bin\Debug\ServiceConnect.Container.StructureMap.dll</HintPath>
-    </Reference>
-    <Reference Include="ServiceConnect.Core">
+    <Reference Include="ServiceConnect.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Core.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Interfaces">
+    <Reference Include="ServiceConnect.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Interfaces.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Persistance.InMemory">
+    <Reference Include="ServiceConnect.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.InMemory.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Persistance.SqlServer">
-      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
-    </Reference>
-    <Reference Include="StructureMap, Version=2.6.4.0, Culture=neutral, PublicKeyToken=e60ad81abae3c223, processorArchitecture=MSIL">
+    <Reference Include="ServiceConnect.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\structuremap.2.6.4.1\lib\net40\StructureMap.dll</HintPath>
-    </Reference>
-    <Reference Include="StructureMap.Net4">
-      <HintPath>..\..\..\src\ServiceConnect.Container.StructureMap\bin\Debug\StructureMap.Net4.dll</HintPath>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -167,7 +103,6 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="SmRegistry.cs" />
     <Compile Include="TestClass.cs" />
     <Compile Include="TestMsgHandler.cs" />
   </ItemGroup>
