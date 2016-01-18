@@ -1,6 +1,4 @@
-﻿using System;
-using System.Text;
-using System.Threading;
+﻿using System.Threading;
 using PointToPoint.Messages;
 using ServiceConnect.Interfaces;
 
