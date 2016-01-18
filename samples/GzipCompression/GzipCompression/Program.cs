@@ -14,7 +14,7 @@ namespace GzipCompression
             Console.WriteLine("*********** GzipCompression Producer ***********");
             var bus = Bus.Initialize(x =>
             {
-                x.SetHost("lonappdev04");
+                x.SetHost("localhost");
                 x.OutgoingFilters = new List<Type>
                 {
                     typeof(OutgoingGzipCompressionFilter)

@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using BusDisposeTest.Messages;
-using log4net;
+using Common.Logging;
 using ServiceConnect.Interfaces;
 
 namespace BusDisposeTest
@@ -19,7 +19,6 @@ namespace BusDisposeTest
         {
             Logger.Info("in here");
             string createText = "Hello and Welcome" + Environment.NewLine;
-            File.WriteAllText("C:\\GIT\\ServiceConnect\\samples\\BusDisposeTest\\BusDisposeTest\\bin\\Debug\\BusDisposeTest.txt", createText);
         }
 
         public IConsumeContext Context { get; set; }

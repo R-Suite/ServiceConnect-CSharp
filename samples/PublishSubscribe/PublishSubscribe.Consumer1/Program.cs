@@ -16,7 +16,7 @@ namespace PublishSubscribe.Consumer1
             {
                 x.ScanForMesssageHandlers = true;
                 x.SetQueueName("Consumer1");
-                x.SetHost("lonappdev04");
+                x.SetHost("localhost");
             });
 
             bus.StartConsuming();

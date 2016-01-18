@@ -12,7 +12,7 @@ namespace GzipCompression.Consumer
             Console.WriteLine("*********** GzipCompression Consumer ***********");
             Bus.Initialize(x =>
             {
-                x.SetHost("lonappdev04");
+                x.SetHost("localhost");
                 x.SetQueueName("GzipCompressionConsumer");
                 x.BeforeConsumingFilters = new List<Type>
                 {
