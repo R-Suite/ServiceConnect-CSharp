@@ -31,7 +31,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ServiceConnect.Interfaces">
-      <HintPath>..\ServiceConnect.Filters\packages\ServiceConnect.Interfaces.2.1.1-beta\lib\net40\ServiceConnect.Interfaces.dll</HintPath>
+      <HintPath>..\..\src\ServiceConnect.Interfaces\bin\Debug\ServiceConnect.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
