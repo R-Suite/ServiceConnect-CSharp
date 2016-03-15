@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Container.StructureMap</id>
-    <version>2.1.10-beta</version>
+    <version>3.0.0</version>
     <title>ServiceConnect.Container.StructureMap</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,11 +10,11 @@
     <description>A simple, easy to use asynchronous messaging framework for .NET.</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
-    <copyright>Copyright 2015 ServiceConnect. All rights reserved</copyright>
+    <copyright>Copyright 2016 ServiceConnect. All rights reserved</copyright>
     <tags>MessageBus,StructureMap,R MessageBus,ServiceConnect StructureMap,RabbitMQ MessageBus,Service.Connect StructureMap,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <dependency id="ServiceConnect.Interfaces" version="2.1.4-beta" />
-      <dependency id="ServiceConnect" version="2.1.14-beta" />
+      <dependency id="ServiceConnect.Interfaces" version="3.0.0" />
+      <dependency id="ServiceConnect" version="3.0.0" />
       <dependency id="structuremap" version="3.1.6.186" />
     </dependencies>
   </metadata>
