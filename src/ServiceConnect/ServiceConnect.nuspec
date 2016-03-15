@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect</id>
-    <version>2.1.14-beta</version>
+    <version>3.0.0</version>
     <title>ServiceConnect</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,11 +10,11 @@
     <description>A simple, easy to use asynchronous messaging framework for .NET.</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
-    <copyright>Copyright 2015 ServiceConnect. All rights reserved</copyright>
+    <copyright>Copyright 2016 ServiceConnect. All rights reserved</copyright>
     <tags>MessageBus,R MessageBus,ServiceConnect,RabbitMQ MessageBus,RMessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <dependency id="ServiceConnect.Client.RabbitMQ" version="2.1.8-beta" />
-      <dependency id="ServiceConnect.Interfaces" version="2.1.4-beta" />
+      <dependency id="ServiceConnect.Client.RabbitMQ" version="3.0.0" />
+      <dependency id="ServiceConnect.Interfaces" version="3.0.0" />
       <dependency id="Common.Logging" version="3.0.0" />
       <dependency id="Newtonsoft.Json" version="6.0.1" />
     </dependencies>
