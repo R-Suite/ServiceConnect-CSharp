@@ -1,4 +1,4 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/0098e0imahh66eb7/branch/master?svg=true)](https://ci.appveyor.com/project/twatson83/r-messagebus/branch/master)
+[![Build status](https://ci.appveyor.com/api/projects/status/1bj54lpa7e0j8djg?svg=true)](https://ci.appveyor.com/project/jpachansky/serviceconnect-csharp)
 [![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 **In the 3.0 release version, R.MessageBus has been renamed to ServiceConnect**
