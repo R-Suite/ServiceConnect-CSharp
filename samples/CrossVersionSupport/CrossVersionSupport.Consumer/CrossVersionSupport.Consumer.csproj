@@ -1,0 +1,139 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A72936A4-D054-4AF3-8832-23420201A726}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>CrossVersionSupport.Consumer</RootNamespace>
+    <AssemblyName>CrossVersionSupport.Consumer</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Common.Logging, Version=3.0.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\Common.Logging.3.0.0\lib\net40\Common.Logging.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Common.Logging.Core, Version=3.0.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\Common.Logging.Core.3.0.0\lib\net40\Common.Logging.Core.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\Newtonsoft.Json.6.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="R.MessageBus, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\R.MessageBus.2.1.13-beta\lib\net40\R.MessageBus.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="R.MessageBus.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\R.MessageBus.Client.RabbitMQ.2.1.7-beta\lib\net40\R.MessageBus.Client.RabbitMQ.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="R.MessageBus.Container.Default, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\R.MessageBus.2.1.13-beta\lib\net40\R.MessageBus.Container.Default.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="R.MessageBus.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\R.MessageBus.2.1.13-beta\lib\net40\R.MessageBus.Core.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="R.MessageBus.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\R.MessageBus.Interfaces.2.1.3-beta\lib\net40\R.MessageBus.Interfaces.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="R.MessageBus.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\R.MessageBus.2.1.13-beta\lib\net40\R.MessageBus.Persistance.InMemory.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="R.MessageBus.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\R.MessageBus.2.1.13-beta\lib\net40\R.MessageBus.Persistance.SqlServer.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="RabbitMQ.Client, Version=3.5.4.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\RabbitMQ.Client.3.5.4\lib\net40\RabbitMQ.Client.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="ServiceConnect, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\ServiceConnect.2.1.14-beta\lib\net40\ServiceConnect.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="ServiceConnect.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\ServiceConnect.Client.RabbitMQ.2.1.8-beta\lib\net40\ServiceConnect.Client.RabbitMQ.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="ServiceConnect.Container.Default, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\ServiceConnect.2.1.14-beta\lib\net40\ServiceConnect.Container.Default.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="ServiceConnect.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\ServiceConnect.2.1.14-beta\lib\net40\ServiceConnect.Core.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="ServiceConnect.Interfaces, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\ServiceConnect.Interfaces.2.1.4-beta\lib\net40\ServiceConnect.Interfaces.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="ServiceConnect.Persistance.InMemory, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\ServiceConnect.2.1.14-beta\lib\net40\ServiceConnect.Persistance.InMemory.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="ServiceConnect.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\CrossVersionSupport\packages\ServiceConnect.2.1.14-beta\lib\net40\ServiceConnect.Persistance.SqlServer.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ServiceConnectMessageHandler.cs" />
+    <Compile Include="RMessageBusMessageHandler.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CrossVersionSupport.Messages\CrossVersionSupport.Messages.csproj">
+      <Project>{9C4D16C8-B956-4133-8AA7-1B15581E4A0C}</Project>
+      <Name>CrossVersionSupport.Messages</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>
