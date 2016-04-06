@@ -223,7 +223,6 @@ namespace ServiceConnect.Client.RabbitMQ
                     CertPassphrase = _transportSettings.CertPassphrase,
                     CertPath = _transportSettings.CertPath,
                     Certs = _transportSettings.Certs,
-                    Version = _transportSettings.Version,
                     CertificateSelectionCallback = _transportSettings.CertificateSelectionCallback,
                     CertificateValidationCallback = _transportSettings.CertificateValidationCallback
                 };
