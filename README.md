@@ -1,10 +1,10 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/0098e0imahh66eb7/branch/master?svg=true)](https://ci.appveyor.com/project/twatson83/r-messagebus/branch/master)
+[![Build status](https://ci.appveyor.com/api/projects/status/1bj54lpa7e0j8djg?svg=true)](https://ci.appveyor.com/project/jpachansky/serviceconnect-csharp)
 [![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-**In preparation for the version 3.0 release, R.MessageBus has been renamed to ServiceConnect**
+**In the 3.0 release version, R.MessageBus has been renamed to ServiceConnect**
 
-**_ServiceConnect 2.1.14-beta is available at [https://www.nuget.org/packages/ServiceConnect] (https://www.nuget.org/packages/ServiceConnect/)_**
-* **New in ServiceConnect 2.1.14-beta**
+**_ServiceConnect 3.0.0 is available at [https://www.nuget.org/packages/ServiceConnect] (https://www.nuget.org/packages/ServiceConnect/)_**
+* **New in ServiceConnect 3.0.0**
     - Support for multi-threaded consumers
     - SSL support
     - Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/ServiceConnect/tree/master/samples/Filters) sample application for a complete example.
