@@ -32,16 +32,23 @@ namespace ServiceConnect.Core
 
         public IDictionary<string, object> Headers { get; set; }
 
-        public void Reply<TReply>(TReply message)  where TReply : Message
+        public void Reply<TReply>(TReply message, Dictionary<string, string> headers) where TReply : Message
         {
+            headers["ResponseMessageId"] = Encoding.ASCII.GetString((byte[]) Headers["RequestMessageId"]);
+
             if (Headers.ContainsKey("SourceAddress"))
             {
-                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["SourceAddress"]), message, new Dictionary<string, string>{ { "ResponseMessageId", Encoding.ASCII.GetString((byte[])Headers["RequestMessageId"])} });
+                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["SourceAddress"]), message, headers);
             }
             else
             {
                 throw new ArgumentException("SourceAddress not found in message headers.");
             }
+        }
+
+        public void Reply<TReply>(TReply message) where TReply : Message
+        {
+            Reply(message, new Dictionary<string, string>());
         }
     }
 }
