@@ -23,5 +23,6 @@ namespace ServiceConnect.Interfaces
         IBus Bus { set; }
         IDictionary<string, object> Headers { get; set; }
         void Reply<TReply>(TReply message)  where TReply : Message;
+        void Reply<TReply>(TReply message, Dictionary<string, string> headers) where TReply : Message;
     }
 }
