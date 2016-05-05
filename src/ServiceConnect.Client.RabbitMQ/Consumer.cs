@@ -52,6 +52,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly bool _durable;
         private readonly ushort _prefetchCount;
         private readonly bool _disablePrefetch;
+        private string[] _serverNames;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -184,9 +185,25 @@ namespace ServiceConnect.Client.RabbitMQ
             if (autoDelete.HasValue)
                 _autoDelete = autoDelete.Value;
 
-            CreateConsumer();
-        }
+            Retry.Do(CreateConsumer, ex =>
+            {
+                Logger.Error("Error creating consumer - {0}", ex);
 
+                if (_hosts.Length > 1)
+                {
+                    if (_activeHost < _hosts.Length - 1)
+                    {
+                        _activeHost++;
+                    }
+                    else
+                    {
+                        _activeHost = 0;
+                    }
+                }
+
+            }, new TimeSpan(0, 0, 0, 10));
+        }
+        
         private void CreateConsumer()
         {
             Logger.DebugFormat("Creating consumer on queue {0}", _queueName);
@@ -215,11 +232,13 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (_transportSettings.SslEnabled)
             {
+                _serverNames = _transportSettings.ServerName.Split(',');
+                
                 connectionFactory.Ssl = new SslOption
                 {
                     Enabled = true,
                     AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
-                    ServerName = _transportSettings.ServerName,
+                    ServerName = _serverNames[_activeHost],
                     CertPassphrase = _transportSettings.CertPassphrase,
                     CertPath = _transportSettings.CertPath,
                     Certs = _transportSettings.Certs,
