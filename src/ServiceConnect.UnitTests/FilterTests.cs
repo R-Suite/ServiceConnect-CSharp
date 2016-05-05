@@ -28,6 +28,8 @@ namespace ServiceConnect.UnitTests
 
         public class BeforeFilter1 : IFilter
         {
+            public IBus Bus { get; set; }
+
             public bool Process(Envelope envelope)
             {
                 var json = Encoding.UTF8.GetString(envelope.Body);
@@ -41,8 +43,15 @@ namespace ServiceConnect.UnitTests
 
         public class BeforeFilter2 : IFilter
         {
+            public IBus Bus { get; set; }
+
             public bool Process(Envelope envelope)
             {
+                if (Bus == null)
+                {
+                    throw new Exception("Bus is null");
+                }
+
                 _beforeFilter2Ran = true;
                 return true;
             }
@@ -50,16 +59,30 @@ namespace ServiceConnect.UnitTests
 
         public class BeforeFilter3 : IFilter
         {
+            public IBus Bus { get; set; }
+
             public bool Process(Envelope envelope)
             {
+                if (Bus == null)
+                {
+                    throw new Exception("Bus is null");
+                }
+
                 return false;
             }
         }
 
         public class AfterFilter1 : IFilter
         {
+            public IBus Bus { get; set; }
+
             public bool Process(Envelope envelope)
             {
+                if (Bus == null)
+                {
+                    throw new Exception("Bus is null");
+                }
+
                 _afterFilter1Ran = true;
                 return true;
             }
@@ -67,8 +90,15 @@ namespace ServiceConnect.UnitTests
 
         public class AfterFilter2 : IFilter
         {
+            public IBus Bus { get; set; }
+
             public bool Process(Envelope envelope)
             {
+                if (Bus == null)
+                {
+                    throw new Exception("Bus is null");
+                }
+
                 _afterFilter2Ran = true;
                 return true;
             }
@@ -76,8 +106,15 @@ namespace ServiceConnect.UnitTests
 
         public class AfterFilter3 : IFilter
         {
+            public IBus Bus { get; set; }
+
             public bool Process(Envelope envelope)
             {
+                if (Bus == null)
+                {
+                    throw new Exception("Bus is null");
+                }
+
                 return false;
             }
         }
