@@ -32,10 +32,11 @@ namespace ServiceConnect.Client.RabbitMQ
         private IConnection _connection;
         private readonly Object _lock = new Object();
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        private readonly ConnectionFactory _connectionFactory;
+        private ConnectionFactory _connectionFactory;
         private readonly string[] _hosts;
         private int _activeHost;
         private readonly long _maxMessageSize;
+        private string[] _serverNames;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
@@ -45,6 +46,27 @@ namespace ServiceConnect.Client.RabbitMQ
             _hosts = transportSettings.Host.Split(',');
             _activeHost = 0;
 
+            Retry.Do(CreateConnection, ex =>
+            {
+                Logger.Error("Error creating producer - {0}", ex);
+
+                if (_hosts.Length > 1)
+                {
+                    if (_activeHost < _hosts.Length - 1)
+                    {
+                        _activeHost++;
+                    }
+                    else
+                    {
+                        _activeHost = 0;
+                    }
+                }
+
+            }, new TimeSpan(0, 0, 0, 10));
+        }
+
+        private void CreateConnection()
+        {
             _connectionFactory = new ConnectionFactory
             {
                 HostName = _hosts[_activeHost],
@@ -53,42 +75,39 @@ namespace ServiceConnect.Client.RabbitMQ
                 Port = AmqpTcpEndpoint.UseDefaultPort
             };
 
-            if (!string.IsNullOrEmpty(transportSettings.Username))
+            if (!string.IsNullOrEmpty(_transportSettings.Username))
             {
-                _connectionFactory.UserName = transportSettings.Username;
+                _connectionFactory.UserName = _transportSettings.Username;
             }
 
-            if (!string.IsNullOrEmpty(transportSettings.Password))
+            if (!string.IsNullOrEmpty(_transportSettings.Password))
             {
-                _connectionFactory.Password = transportSettings.Password;
+                _connectionFactory.Password = _transportSettings.Password;
             }
 
             if (_transportSettings.SslEnabled)
             {
+                _serverNames = _transportSettings.ServerName.Split(',');
+
                 _connectionFactory.Ssl = new SslOption
                 {
                     Enabled = true,
-                    AcceptablePolicyErrors = transportSettings.AcceptablePolicyErrors,
-                    ServerName = transportSettings.ServerName,
-                    CertPassphrase = transportSettings.CertPassphrase,
-                    CertPath = transportSettings.CertPath,
-                    Certs = transportSettings.Certs,
-                    CertificateSelectionCallback = transportSettings.CertificateSelectionCallback,
-                    CertificateValidationCallback = transportSettings.CertificateValidationCallback
+                    AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
+                    ServerName = _serverNames[_activeHost],
+                    CertPassphrase = _transportSettings.CertPassphrase,
+                    CertPath = _transportSettings.CertPath,
+                    Certs = _transportSettings.Certs,
+                    CertificateSelectionCallback = _transportSettings.CertificateSelectionCallback,
+                    CertificateValidationCallback = _transportSettings.CertificateValidationCallback
                 };
                 _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
             }
 
-            if (!string.IsNullOrEmpty(transportSettings.VirtualHost))
+            if (!string.IsNullOrEmpty(_transportSettings.VirtualHost))
             {
-                _connectionFactory.VirtualHost = transportSettings.VirtualHost;
+                _connectionFactory.VirtualHost = _transportSettings.VirtualHost;
             }
 
-            CreateConnection();
-        }
-
-        private void CreateConnection()
-        {
             _connection = _connectionFactory.CreateConnection();
             _model = _connection.CreateModel();
         }
