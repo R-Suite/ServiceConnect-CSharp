@@ -702,6 +702,8 @@ namespace ServiceConnect
                 foreach (Type filterType in filters)
                 {
                     var filter = (IFilter)Activator.CreateInstance(filterType);
+                    filter.Bus = this;
+
                     var stop = !filter.Process(envelope);
                     if (stop)
                     {
