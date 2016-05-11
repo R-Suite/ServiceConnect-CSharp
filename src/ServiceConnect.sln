@@ -44,6 +44,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Container.De
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Client.ZeroMQ", "ServiceConnect.Client.ZeroMQ\ServiceConnect.Client.ZeroMQ.csproj", "{CEA37287-B664-4A97-86F5-45CE948BD22E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Persistance.MongoDbSsl", "ServiceConnect.Persistance.MongoDbSsl\ServiceConnect.Persistance.MongoDbSsl.csproj", "{77B99949-2FD7-404D-BA4B-555D169E55A4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -185,6 +187,16 @@ Global
 		{CEA37287-B664-4A97-86F5-45CE948BD22E}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{CEA37287-B664-4A97-86F5-45CE948BD22E}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{CEA37287-B664-4A97-86F5-45CE948BD22E}.Release|x86.ActiveCfg = Release|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -200,5 +212,6 @@ Global
 		{62AEEB53-EE09-496D-885C-D2EBCB82FA59} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
 		{5ECFB9E6-3824-4A00-83DA-0490F036DF3F} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
 		{CEA37287-B664-4A97-86F5-45CE948BD22E} = {3055CCE6-1EF9-49D4-A3E8-39E4F6D6E135}
+		{77B99949-2FD7-404D-BA4B-555D169E55A4} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
 	EndGlobalSection
 EndGlobal
