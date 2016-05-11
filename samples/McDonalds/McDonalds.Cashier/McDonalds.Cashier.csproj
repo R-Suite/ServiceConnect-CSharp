@@ -42,6 +42,18 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Common.Logging.Core.dll</HintPath>
     </Reference>
+    <Reference Include="MongoDB.Bson">
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDbSsl\bin\Debug\MongoDB.Bson.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Driver">
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDbSsl\bin\Debug\MongoDB.Driver.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Driver.Core">
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDbSsl\bin\Debug\MongoDB.Driver.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="MongoDB.Driver.Legacy">
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDbSsl\bin\Debug\MongoDB.Driver.Legacy.dll</HintPath>
+    </Reference>
     <Reference Include="Newtonsoft.Json, Version=4.5.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\Newtonsoft.Json.dll</HintPath>
@@ -67,6 +79,9 @@
     </Reference>
     <Reference Include="ServiceConnect.Persistance.InMemory">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.InMemory.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Persistance.MongoDbSsl">
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDbSsl\bin\Debug\ServiceConnect.Persistance.MongoDbSsl.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Persistance.SqlServer">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
