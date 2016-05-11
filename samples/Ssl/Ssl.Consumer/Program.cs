@@ -16,12 +16,6 @@ namespace Ssl.Consumer
             var bus = Bus.Initialize(config =>
             {
                 config.TransportSettings.SslEnabled = true;
-                config.TransportSettings.Password = "";
-                config.TransportSettings.Username = "admin";
-                config.TransportSettings.ServerName = "";
-                config.TransportSettings.CertPassphrase = "";
-                config.TransportSettings.CertPath = "";
-                config.SetHost("");
                 config.SetQueueName("Ssl.Consumer");
                 config.ScanForMesssageHandlers = true;
             });

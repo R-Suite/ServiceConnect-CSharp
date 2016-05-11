@@ -11,16 +11,15 @@ namespace Ssl.Producer
             var bus = Bus.Initialize(config =>
             {
                 config.TransportSettings.SslEnabled = true;
-                config.TransportSettings.Password = "";
-                config.TransportSettings.Username = "admin";
-                config.TransportSettings.ServerName = "";
-                config.TransportSettings.CertPassphrase = "";
-                config.TransportSettings.CertPath = "";
-                config.SetHost("");
-                config.SetQueueName("Ssl.Consumer");
+                config.SetQueueName("Ssl.Producer");
                 config.ScanForMesssageHandlers = true;
-
             });
+            
+            while (true)
+            {
+                bus.Send("Ssl.Consumer", new SslMessage(Guid.NewGuid()));
+                Console.ReadLine();
+            }
         }
     }
 }
