@@ -1,6 +1,7 @@
 ﻿using System;
+using System.Security.Authentication;
 using ServiceConnect;
-using ServiceConnect.Persistance.InMemory;
+using ServiceConnect.Persistance.MongoDbSsl;
 
 namespace McDonalds.Cashier
 {
@@ -11,8 +12,16 @@ namespace McDonalds.Cashier
             Console.WriteLine("*********** Cashier ***********");
             var bus = Bus.Initialize(x =>
             {
-                x.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
-                x.SetAuditingEnabled(true);
+                x.SetProcessManagerFinder<MongoDbSslProcessManagerFinder>();
+                x.TransportSettings.SslEnabled = true;
+                x.TransportSettings.CertPassphrase = "secret";
+                x.TransportSettings.CertPath = "path";
+                x.TransportSettings.Username = "admin";
+                x.TransportSettings.Password = "password";
+                x.TransportSettings.ServerName = "node1,node2,node3";
+                x.TransportSettings.Version = SslProtocols.Default;
+                x.SetHost("node1,node2,node3");
+                x.PersistenceStoreConnectionString = @"nodes=node1;node2;node3,username=admin,password=secret,certpath=path";
             });
 
             bus.StartConsuming();
