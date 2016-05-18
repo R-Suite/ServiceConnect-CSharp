@@ -41,6 +41,8 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             string password = string.Empty;
             string certPath = string.Empty;
             string userdb = string.Empty;
+            string cert = string.Empty;
+            string certPassword = string.Empty;
 
             foreach (string connectionPart in connectionParts)
             {
@@ -62,6 +64,12 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                     case "certpath":
                         certPath = nameValue[1];
                         break;
+                    case "cert":
+                        cert = nameValue[1];
+                        break;
+                    case "certpassword":
+                        certPassword = nameValue[1];
+                        break;
                 }
             }
 
@@ -70,10 +78,39 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             List<X509Certificate> certs = null;
             if (!string.IsNullOrEmpty(certPath))
             {
-                certs = new List<X509Certificate>
+                if (string.IsNullOrEmpty(certPassword))
                 {
-                    new X509Certificate2(certPath)
-                };
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(certPath)
+                    };
+                }
+                else
+                {
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(certPath, certPassword)
+                    };
+                }
+                
+            }
+
+            if (!string.IsNullOrEmpty(cert))
+            {
+                if (string.IsNullOrEmpty(certPassword))
+                {
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(Convert.FromBase64String(cert))
+                    };
+                }
+                else
+                {
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(Convert.FromBase64String(cert), certPassword)
+                    };
+                }
             }
 
             List<MongoCredential> credentials = null;
