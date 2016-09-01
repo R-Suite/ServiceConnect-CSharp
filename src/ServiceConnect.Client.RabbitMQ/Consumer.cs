@@ -91,7 +91,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 SetHeader(args, "DestinationMachine", Environment.MachineName);
                 SetHeader(args, "DestinationAddress", _transportSettings.QueueName);
 
-                if (!headers.ContainsKey("TypeName") || !headers.ContainsKey("FullTypeName"))
+                if (!headers.ContainsKey("TypeName") && !headers.ContainsKey("FullTypeName"))
                 {
                     const string errMsg = "Error processing message, Message headers must contain type name.";
                     Logger.Error(errMsg);
