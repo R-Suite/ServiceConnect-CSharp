@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect</id>
-    <version>3.0.0</version>
+    <version>3.0.2</version>
     <title>ServiceConnect</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -13,8 +13,8 @@
     <copyright>Copyright 2016 ServiceConnect. All rights reserved</copyright>
     <tags>MessageBus,R MessageBus,ServiceConnect,RabbitMQ MessageBus,RMessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <dependency id="ServiceConnect.Client.RabbitMQ" version="3.0.0" />
-      <dependency id="ServiceConnect.Interfaces" version="3.0.0" />
+      <dependency id="ServiceConnect.Client.RabbitMQ" version="3.0.2" />
+      <dependency id="ServiceConnect.Interfaces" version="3.0.2" />
       <dependency id="Common.Logging" version="3.0.0" />
       <dependency id="Newtonsoft.Json" version="6.0.1" />
     </dependencies>
