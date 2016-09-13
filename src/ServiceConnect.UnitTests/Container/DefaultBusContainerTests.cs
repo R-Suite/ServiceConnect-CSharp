@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using ServiceConnect.Container.Default;
+using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using Xunit;
 
@@ -36,6 +37,18 @@ namespace ServiceConnect.UnitTests.Container
             }
         }
 
+        [RoutingKey("key1")]
+        public class MyMessageHandler3 : IMessageHandler<MyMessage>
+        {
+            public MyMessageHandler3(string name)
+            { }
+            public IConsumeContext Context { get; set; }
+            public void Execute(MyMessage message)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
         [Fact]
         public void ShouldGetAllHandlerReferences()
         {
@@ -53,6 +66,26 @@ namespace ServiceConnect.UnitTests.Container
             Assert.Equal(1, result.Count());
             Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
             Assert.Equal("MyMessageHandler", result.ToList()[0].HandlerType.Name);
+        }
+
+        [Fact]
+        public void ShouldGetAllHandlerReferencesWithRoutingKeys()
+        {
+            // Arrange
+            var services = new ServiceConnect.Container.Default.Container();
+            services.RegisterForAll(typeof(MyMessageHandler3));
+            var busContainer = new DefaultBusContainer();
+            busContainer.Initialize(services);
+
+            // Act
+            var result = busContainer.GetHandlerTypes();
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(1, result.Count());
+            Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
+            Assert.Equal("MyMessageHandler3", result.ToList()[0].HandlerType.Name);
+            Assert.Equal("key1", result.ToList()[0].RoutingKeys[0]);
         }
 
         [Fact]
