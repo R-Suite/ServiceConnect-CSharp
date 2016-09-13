@@ -43,14 +43,21 @@ namespace ServiceConnect.Container.Default
                     i.Key.Name == typeof (IStartProcessManager<>).Name ||
                     i.Key.Name == typeof (Aggregator<>).Name);
 
+            var retval = new List<HandlerReference>();
+            foreach (var instance in instances)
+            {
+                IEnumerable<object> attrs = instance.Value.ServiceType.GetCustomAttributes(false);
+                IList<string> routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
-            return instances.Where(
-                instance => instance.Value.ServiceType != null && !string.IsNullOrEmpty(instance.Value.ServiceType.Name))
-                .Select(instance => new HandlerReference
+                retval.Add(new HandlerReference
                 {
                     MessageType = instance.Key.GetGenericArguments()[0],
-                    HandlerType = instance.Value.ServiceType
+                    HandlerType = instance.Value.ServiceType,
+                    RoutingKeys = routingKeys
                 });
+            }
+
+            return retval;
         }
 
         /// <summary>
