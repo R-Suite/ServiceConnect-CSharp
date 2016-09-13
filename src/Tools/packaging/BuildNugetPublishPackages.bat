@@ -18,7 +18,7 @@ NuGet pack "%OUTDIR%ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitM
 
 
 ::nuget push ServiceConnect.3.0.2.nupkg -Source https://www.nuget.org/api/v2/package
-nuget push ServiceConnect.Client.RabbitMQ.3.0.4.nupkg -Source https://www.nuget.org/api/v2/package
+nuget push ServiceConnect.Client.RabbitMQ.3.0.5.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Interfaces.3.0.2.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Container.StructureMap.3.0.0.nupkg
 ::nuget push ServiceConnect.Persistance.MongoDb.3.0.0.nupkg
