@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
@@ -22,5 +23,6 @@ namespace ServiceConnect.Interfaces
     {
         public Type MessageType { get; set; }
         public Type HandlerType { get; set; }
+        public IList<string> RoutingKeys { get; set; }
     }
 }

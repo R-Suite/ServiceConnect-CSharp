@@ -308,6 +308,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void ConsumeMessageType(string messageTypeName)
         {
+            //todo: configure topic queue if routing key passed
             string exchange = ConfigureExchange(messageTypeName);
 
             if (!string.IsNullOrEmpty(exchange))

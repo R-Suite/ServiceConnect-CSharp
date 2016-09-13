@@ -17,6 +17,7 @@ namespace ServiceConnect.Core
                 consumer.StartConsuming(eventHandler, queueName);
                 foreach (string messageType in messageTypes)
                 {
+                    //todo: pass message type and routing key
                     consumer.ConsumeMessageType(messageType);
                 }
                 _consumers.Add(consumer);
