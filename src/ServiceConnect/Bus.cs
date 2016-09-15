@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -168,35 +169,45 @@ namespace ServiceConnect
             string queueName = Configuration.TransportSettings.QueueName;
 
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
-            IList<string> messageTypes = instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName))
-                                                        .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
-                                                        .ToList();
+
+            IDictionary<string, IList<string>> msgRoutingKeysDict = new Dictionary<string, IList<string>>();
+            foreach (var instance in instances)
+            {
+                if (!String.IsNullOrEmpty(instance.MessageType.FullName))
+                {
+                    msgRoutingKeysDict.Add(instance.MessageType.FullName.Replace(".", string.Empty), instance.RoutingKeys);
+                }
+            }
 
             for (int i = 0; i < Configuration.Threads; i++)
             {
-                AddConsumer(queueName, messageTypes);
+                AddConsumer(queueName, msgRoutingKeysDict);
             }
 
             _startedConsuming = true;
         }
 
-        private void AddConsumer(string queueName, IList<string> messageTypes)
+        private void AddConsumer(string queueName, IDictionary<string, IList<string>> msgRoutingKeysDict)
         {
-            //var consumer = Configuration.GetConsumer();
             var consumerPool = Configuration.GetConsumerPool();
-            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, Configuration);
+            consumerPool.AddConsumer(queueName, msgRoutingKeysDict, ConsumeMessageEvent, Configuration);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
         {
+            Publish(message, null, headers);
+        }
+
+        public void Publish<T>(T message, string routingKey, Dictionary<string, string> headers = null) where T : Message
+        {
             var messageString = JsonConvert.SerializeObject(message);
             var messageBytes = Encoding.UTF8.GetBytes(messageString);
-            
+
             if (Configuration.OutgoingFilters != null && Configuration.OutgoingFilters.Count > 0)
             {
                 var envelope = new Envelope
                 {
-                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object) x.Value),
+                    Headers = headers == null ? new Dictionary<string, object>() : headers.ToDictionary(x => x.Key, x => (object)x.Value),
                     Body = messageBytes
                 };
 
@@ -210,14 +221,14 @@ namespace ServiceConnect
                 messageBytes = envelope.Body;
             }
 
-            _producer.Publish(typeof(T), messageBytes, headers);
+            _producer.Publish(typeof(T), messageBytes, routingKey, headers);
 
             Type newBaseType = typeof(T).BaseType;
             if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
             {
-                MethodInfo publish = GetType().GetMethod("Publish", BindingFlags.Public | BindingFlags.Instance);
+                MethodInfo publish = GetType().GetMethods().First(m => m.Name == "Publish" && m.GetParameters()[1].Name == "routingKey");
                 MethodInfo genericPublish = publish.MakeGenericMethod(newBaseType);
-                genericPublish.Invoke(this, new object[] { message, headers == null ? null : new Dictionary<string, string>(headers) });
+                genericPublish.Invoke(this, new object[] { message, routingKey, headers == null ? null : new Dictionary<string, string>(headers) });
             }
         }
 

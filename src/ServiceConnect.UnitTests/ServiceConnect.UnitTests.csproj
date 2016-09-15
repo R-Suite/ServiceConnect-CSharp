@@ -63,6 +63,7 @@
     <Compile Include="Container\NinjectBusContainerTests.cs" />
     <Compile Include="Container\DefaultContainerTests.cs" />
     <Compile Include="Container\DefaultBusContainerTests.cs" />
+    <Compile Include="Container\StructureMapContainerTests.cs" />
     <Compile Include="FilterTests.cs" />
     <Compile Include="MessageHandlerProcessorTest.cs" />
     <Compile Include="ConfigurationTests.cs" />
