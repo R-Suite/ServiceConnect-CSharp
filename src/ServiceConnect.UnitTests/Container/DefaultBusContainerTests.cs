@@ -69,7 +69,7 @@ namespace ServiceConnect.UnitTests.Container
         }
 
         [Fact]
-        public void ShouldGetAllHandlerReferencesWithRoutingKeys()
+        public void ShouldGetAllHandlerReferencesWithRoutingKey()
         {
             // Arrange
             var services = new ServiceConnect.Container.Default.Container();
@@ -105,6 +105,26 @@ namespace ServiceConnect.UnitTests.Container
             Assert.Equal(1, result.Count());
             Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
             Assert.Equal("MyMessageHandler", result.ToList()[0].HandlerType.Name);
+        }
+
+        [Fact]
+        public void ShouldGetAllHandlerReferencesForMessageHandlerTypeWithRoutingKey()
+        {
+            // Arrange
+            var services = new ServiceConnect.Container.Default.Container();
+            services.RegisterForAll(typeof(MyMessageHandler3));
+            var busContainer = new DefaultBusContainer();
+            busContainer.Initialize(services);
+
+            // Act
+            var result = busContainer.GetHandlerTypes(typeof(IMessageHandler<MyMessage>));
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(1, result.Count());
+            Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
+            Assert.Equal("MyMessageHandler3", result.ToList()[0].HandlerType.Name);
+            Assert.Equal("key1", result.ToList()[0].RoutingKeys[0]);
         }
 
         [Fact]

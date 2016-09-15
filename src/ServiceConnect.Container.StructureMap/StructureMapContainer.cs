@@ -59,26 +59,49 @@ namespace ServiceConnect.Container.StructureMap
 
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
-            IEnumerable<InstanceRef> instances = _container.Model.AllInstances.Where(i => i.PluginType.Name == typeof(IMessageHandler<>).Name ||
-                                                                                                       i.PluginType.Name == typeof(IStartProcessManager<>).Name ||
-                                                                                                       i.PluginType.Name == typeof(Aggregator<>).Name);
+            IEnumerable<InstanceRef> instances = _container.Model.AllInstances.Where(
+                i =>
+                    i.PluginType.Name == typeof (IMessageHandler<>).Name ||
+                    i.PluginType.Name == typeof (IStartProcessManager<>).Name ||
+                    i.PluginType.Name == typeof (Aggregator<>).Name);
 
-            return instances.Where(instance => instance.ReturnedType != null && !string.IsNullOrEmpty(instance.ReturnedType.Name))
-                            .Select(instance => new HandlerReference
-                            {
-                                MessageType = instance.PluginType.GetGenericArguments()[0],
-                                HandlerType = instance.ReturnedType
-                            });
+            var retval = new List<HandlerReference>();
+            foreach (var instance in instances)
+            {
+                IEnumerable<object> attrs = instance.ReturnedType.GetCustomAttributes(false);
+                var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
+
+                retval.Add(new HandlerReference
+                {
+                    MessageType = instance.PluginType.GetGenericArguments()[0],
+                    HandlerType = instance.ReturnedType,
+                    RoutingKeys = routingKeys
+                });
+            }
+
+            return retval;
         }
 
         public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
         {
-            var handlers = _container.Model.AllInstances.Where(i => i.PluginType == messageHandler).Select(instance => new HandlerReference
+            var instances = _container.Model.AllInstances.Where(i => i.PluginType == messageHandler);
+
+            var retval = new List<HandlerReference>();
+
+            foreach (var instance in instances)
             {
-                MessageType = instance.PluginType.GetGenericArguments()[0],
-                HandlerType = instance.ReturnedType
-            });
-            return handlers;
+                IEnumerable<object> attrs = instance.ReturnedType.GetCustomAttributes(false);
+                var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
+
+                retval.Add(new HandlerReference
+                {
+                    MessageType = instance.PluginType.GetGenericArguments()[0],
+                    HandlerType = instance.ReturnedType,
+                    RoutingKeys = routingKeys
+                });
+            }
+
+            return retval;
         }
 
         public object GetInstance(Type handlerType)

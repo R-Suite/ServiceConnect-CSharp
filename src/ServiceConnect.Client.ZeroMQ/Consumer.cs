@@ -125,7 +125,7 @@ namespace ServiceConnect.Client.ZeroMQ
             throw new NotImplementedException();
         }
 
-        public void ConsumeMessageType(string messageTypeName)
+        public void ConsumeMessageType(KeyValuePair<string, IList<string>> messageTypeName)
         {
             if (_transportSettings.ClientSettings.ContainsKey("SubscriberHost"))
             {
@@ -135,7 +135,7 @@ namespace ServiceConnect.Client.ZeroMQ
                     using (var subscriber = new ZSocket(context, ZSocketType.SUB))
                     {
                         subscriber.Connect(_transportSettings.ClientSettings["SubscriberHost"].ToString());
-                        subscriber.Subscribe(messageTypeName);
+                        subscriber.Subscribe(messageTypeName.Key);
 
                         while (true)
                         {

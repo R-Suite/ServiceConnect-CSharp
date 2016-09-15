@@ -65,7 +65,6 @@ namespace ServiceConnect.Core
                 genericexecuteHandler.Invoke(this, new[] {messageObject, handlerReference.HandlerType, context});
             }
 
-            // This is used when processing Sent (rather than Published) messages
             // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
             Type newBaseType = (null != baseType) ? baseType.BaseType : typeof(T).BaseType;
             if (newBaseType != null && newBaseType.Name != typeof(object).Name)

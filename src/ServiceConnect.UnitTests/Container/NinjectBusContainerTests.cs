@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Ninject;
 using ServiceConnect.Container.Ninject;
+using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using Xunit;
 
@@ -30,6 +31,18 @@ namespace ServiceConnect.UnitTests.Container
         public class MyMessageHandler2 : IMessageHandler<MyMessage>
         {
             public MyMessageHandler2(string name)
+            { }
+            public IConsumeContext Context { get; set; }
+            public void Execute(MyMessage message)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        [RoutingKey("key1")]
+        public class MyMessageHandler3 : IMessageHandler<MyMessage>
+        {
+            public MyMessageHandler3()
             { }
             public IConsumeContext Context { get; set; }
             public void Execute(MyMessage message)
@@ -76,6 +89,26 @@ namespace ServiceConnect.UnitTests.Container
         }
 
         [Fact]
+        public void ShouldGetAllHandlerReferencesWithRoutingKey()
+        {
+            // Arrange
+            var kernel = new StandardKernel();
+            kernel.Bind<IMessageHandler<MyMessage>>().To(typeof(MyMessageHandler3));
+            var busContainer = new NinjectContainer();
+            busContainer.Initialize(kernel);
+
+            // Act
+            var result = busContainer.GetHandlerTypes();
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(1, result.Count());
+            Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
+            Assert.Equal("MyMessageHandler3", result.ToList()[0].HandlerType.Name);
+            Assert.Equal("key1", result.ToList()[0].RoutingKeys[0]);
+        }
+
+        [Fact]
         public void ShouldGetAllHandlerReferencesForMessageHandlerType()
         {
             // Arrange
@@ -92,6 +125,26 @@ namespace ServiceConnect.UnitTests.Container
             Assert.Equal(1, result.Count());
             Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
             Assert.Equal("MyMessageHandler", result.ToList()[0].HandlerType.Name);
+        }
+
+        [Fact]
+        public void ShouldGetAllHandlerReferencesForMessageHandlerTypeWithRoutingKey()
+        {
+            // Arrange
+            var kernel = new StandardKernel();
+            kernel.Bind<IMessageHandler<MyMessage>>().To(typeof(MyMessageHandler3));
+            var busContainer = new NinjectContainer();
+            busContainer.Initialize(kernel);
+
+            // Act
+            var result = busContainer.GetHandlerTypes(typeof(IMessageHandler<MyMessage>));
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(1, result.Count());
+            Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
+            Assert.Equal("MyMessageHandler3", result.ToList()[0].HandlerType.Name);
+            Assert.Equal("key1", result.ToList()[0].RoutingKeys[0]);
         }
 
         [Fact]
