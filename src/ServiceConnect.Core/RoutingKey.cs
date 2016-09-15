@@ -1,5 +1,8 @@
+using System;
+
 namespace ServiceConnect.Core
 {
+    [AttributeUsage(AttributeTargets.All, AllowMultiple = true)]
     public class RoutingKey : System.Attribute
     {
         string value;

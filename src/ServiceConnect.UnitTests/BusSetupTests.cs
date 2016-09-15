@@ -423,13 +423,14 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
-            public void Dispose()
+            public void ConsumeMessageType(KeyValuePair<string, IList<string>> msgTypeNameRoutingKeyDict)
             {
                 throw new NotImplementedException();
             }
 
-            public void ConsumeMessageType(string messageTypeName)
+            public void Dispose()
             {
+                throw new NotImplementedException();
             }
 
             public string Type { get; private set; }
@@ -446,6 +447,10 @@ namespace ServiceConnect.UnitTests
             }
 
             public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
+            {
+            }
+
+            public void Publish(Type type, byte[] message, string routingKey, Dictionary<string, string> headers = null)
             {
             }
 

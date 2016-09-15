@@ -47,7 +47,7 @@ namespace ServiceConnect.Container.Default
             foreach (var instance in instances)
             {
                 IEnumerable<object> attrs = instance.Value.ServiceType.GetCustomAttributes(false);
-                IList<string> routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
+                var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
@@ -67,13 +67,25 @@ namespace ServiceConnect.Container.Default
         /// <returns></returns>
         public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
         {
-            var handlers = _container.AllInstances.Where(i => i.Key == messageHandler).Select(instance => new HandlerReference
-            {
-                MessageType = instance.Key.GetGenericArguments()[0],
-                HandlerType = instance.Value.ServiceType
-            });
+            IEnumerable<KeyValuePair<Type, ServiceDescriptor>> instances =
+                _container.AllInstances.Where(i => i.Key == messageHandler);
 
-            return handlers;
+            var retval = new List<HandlerReference>();
+
+            foreach (var instance in instances)
+            {
+                IEnumerable<object> attrs = instance.Value.ServiceType.GetCustomAttributes(false);
+                var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
+
+                retval.Add(new HandlerReference
+                {
+                    MessageType = instance.Key.GetGenericArguments()[0],
+                    HandlerType = instance.Value.ServiceType,
+                    RoutingKeys = routingKeys
+                });
+            }
+
+            return retval;
         }
 
         /// <summary>
