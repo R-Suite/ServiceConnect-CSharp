@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.Container.Default;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistance.SqlServer;
 using Xunit;
@@ -26,19 +27,17 @@ namespace ServiceConnect.IntegrationTests.Bus
         [Fact]
         public void ShouldSetupBusWithDefaultConfiguration()
         {
-            // Arrange
+            // Arrange / Act
             IBus bus = ServiceConnect.Bus.Initialize();
 
-            // Act
-            IConfiguration configuration = bus.Configuration;
-            bus.Dispose();
-
             // Assert
-            Assert.Equal(typeof(Consumer), configuration.ConsumerType);
-            Assert.Equal(typeof(Producer), configuration.ProducerType);
-            //Assert.Equal(typeof(StructureMapContainer), configuration.ContainerType);
-            Assert.Equal(typeof(SqlServerProcessManagerFinder), configuration.ProcessManagerFinder);
-        }
+            Assert.Equal(typeof(Consumer), bus.Configuration.ConsumerType);
+            Assert.Equal(typeof(Producer), bus.Configuration.ProducerType);
+            Assert.Same(typeof(DefaultBusContainer), bus.Configuration.GetContainer().GetType());
+            Assert.Equal(typeof(SqlServerProcessManagerFinder), bus.Configuration.ProcessManagerFinder);
 
+            bus.StopConsuming();
+            bus.Dispose();
+        }
     }
 }

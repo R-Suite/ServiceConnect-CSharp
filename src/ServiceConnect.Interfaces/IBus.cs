@@ -45,6 +45,15 @@ namespace ServiceConnect.Interfaces
         void Publish<T>(T message, Dictionary<string, string> headers = null) where T : Message;
 
         /// <summary>
+        /// Publish message with a routing key.
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="message"></param>
+        /// <param name="routingKey"></param>
+        /// <param name="headers">Custom headers</param>
+        void Publish<T>(T message, string routingKey, Dictionary<string, string> headers = null) where T : Message;
+
+        /// <summary>
         /// Publishes an event and wait for replies.
         /// </summary>
         /// <typeparam name="TRequest">The type of the request object.  Must be a message</typeparam>

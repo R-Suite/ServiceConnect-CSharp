@@ -54,6 +54,9 @@ namespace ServiceConnect.Container.Ninject
 
             foreach (var handlerType in handlerTypes)
             {
+                IEnumerable<object> attrs = handlerType.GetType().GetCustomAttributes(false);
+                var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
+
                 Type messageType = null;
                 foreach (Type intType in handlerType.GetType().GetInterfaces())
                 {
@@ -71,7 +74,8 @@ namespace ServiceConnect.Container.Ninject
                 retval.Add(new HandlerReference
                 {
                     MessageType = messageType,
-                    HandlerType = handlerType.GetType()
+                    HandlerType = handlerType.GetType(),
+                    RoutingKeys = routingKeys
                 });
             }
 
@@ -86,6 +90,9 @@ namespace ServiceConnect.Container.Ninject
 
             foreach (var handlerType in handlerTypes)
             {
+                IEnumerable<object> attrs = handlerType.GetType().GetCustomAttributes(false);
+                var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
+
                 Type messageType = null;
                 foreach (Type intType in handlerType.GetType().GetInterfaces())
                 {
@@ -103,7 +110,8 @@ namespace ServiceConnect.Container.Ninject
                 retval.Add(new HandlerReference
                 {
                     MessageType = messageType,
-                    HandlerType = handlerType.GetType()
+                    HandlerType = handlerType.GetType(),
+                    RoutingKeys = routingKeys
                 });
             }
 

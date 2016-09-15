@@ -275,13 +275,14 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
-            public void Dispose()
+            public void ConsumeMessageType(KeyValuePair<string, IList<string>> msgTypeNameRoutingKeyDict)
             {
                 throw new NotImplementedException();
             }
 
-            public void ConsumeMessageType(string messageTypeName)
+            public void Dispose()
             {
+                throw new NotImplementedException();
             }
 
             public string Type { get; private set; }

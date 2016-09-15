@@ -58,6 +58,11 @@ namespace ServiceConnect.Client.ZeroMQ
 
         public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
+            Publish(type, message, null, headers);
+        }
+
+        public void Publish(Type type, byte[] message, string routingKey, Dictionary<string, string> headers = null)
+        {
             Dictionary<string, object> messageHeaders = GetHeaders(type, headers, _transportSettings.QueueName, "Publish");
             var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
