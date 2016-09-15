@@ -114,10 +114,15 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
-            DoPublish(type, message, headers);
+            DoPublish(type, message, headers, null);
         }
 
-        private void DoPublish(Type type, byte[] message, Dictionary<string, string> headers)
+        public void Publish(Type type, byte[] message, string routingKey, Dictionary<string, string> headers = null)
+        {
+            DoPublish(type, message, headers, routingKey);
+        }
+
+        private void DoPublish(Type type, byte[] message, Dictionary<string, string> headers, string routingKey)
         {
             lock (_lock)
             {
@@ -135,11 +140,21 @@ namespace ServiceConnect.Client.RabbitMQ
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 basicProperties.SetPersistent(true);
-                var exchangeName = ConfigureExchange(type.FullName.Replace(".", string.Empty));
 
-                Retry.Do(() => _model.BasicPublish(exchangeName, _transportSettings.QueueName, basicProperties, envelope.Body),
-                    ex => RetryConnection(),
-                    new TimeSpan(0, 0, 0, 6), 10);
+                string exchName = type.FullName.Replace(".", string.Empty);
+                string exchType = "fanout";
+                string rk = string.Empty;
+                if (!string.IsNullOrEmpty(routingKey))
+                {
+                    exchName = type.FullName.Replace(".", string.Empty) + "_WithRoutingKey";
+                    exchType = "topic";
+                    rk = routingKey;
+                }
+
+                var exchangeName = ConfigureExchange(exchName, exchType);
+
+                Retry.Do(() => _model.BasicPublish(exchangeName, rk, basicProperties, envelope.Body),
+                    ex => RetryConnection(), new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
@@ -305,11 +320,11 @@ namespace ServiceConnect.Client.RabbitMQ
             }
         }
 
-        private string ConfigureExchange(string exchangeName)
+        private string ConfigureExchange(string exchangeName, string type)
         {
             try
             {
-                _model.ExchangeDeclare(exchangeName, "fanout", true, false, null);
+                _model.ExchangeDeclare(exchangeName, type, true, false, null);
             }
             catch (Exception ex)
             {

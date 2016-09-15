@@ -94,6 +94,10 @@
       <Project>{69846FE1-24D2-48F5-8E7B-9DBA042A767A}</Project>
       <Name>ServiceConnect.Client.RabbitMQ</Name>
     </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Container.Default\ServiceConnect.Container.Default.csproj">
+      <Project>{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}</Project>
+      <Name>ServiceConnect.Container.Default</Name>
+    </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Core\ServiceConnect.Core.csproj">
       <Project>{3a8569fd-0779-48a7-9400-2f0e39186436}</Project>
       <Name>ServiceConnect.Core</Name>
@@ -101,6 +105,10 @@
     <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj">
       <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
       <Name>ServiceConnect.Interfaces</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceConnect.Persistance.InMemory\ServiceConnect.Persistance.InMemory.csproj">
+      <Project>{6801518D-B5E1-4555-8AB9-073F028467B4}</Project>
+      <Name>ServiceConnect.Persistance.InMemory</Name>
     </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Persistance.MongoDb\ServiceConnect.Persistance.MongoDb.csproj">
       <Project>{567327E9-63AA-4729-A4D0-90B627226C68}</Project>

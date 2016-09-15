@@ -306,14 +306,38 @@ namespace ServiceConnect.Client.RabbitMQ
             Logger.Debug("Started consuming");
         }
 
-        public void ConsumeMessageType(string messageTypeName)
+        public void ConsumeMessageType(KeyValuePair<string, IList<string>> msgTypeNameRoutingKeyPair)
         {
-            //todo: configure topic queue if routing key passed
-            string exchange = ConfigureExchange(messageTypeName);
-
-            if (!string.IsNullOrEmpty(exchange))
+            var routingKeys = msgTypeNameRoutingKeyPair.Value;
+            
+            if (null != routingKeys && routingKeys.Count > 0)
             {
-                _model.QueueBind(_queueName, messageTypeName, string.Empty);
+                /*  
+                    Cannot directly remove all bindings for a queue.
+                    Using an intermediate exchange.... 
+                    Each client declares its own fanout exchange and a queue. It then binds the queue to the fanout
+                    exchange, and the fanout exchange to the exchange with whatever bindings it wants.
+                  
+                    It's just the same as binding directly to the exchange.
+                    Except that if the client deletes the intermediate exchange and recreates it, 
+                    everything is effectively unbound.
+                */
+                var cid = _queueName;
+                string clientExchange = msgTypeNameRoutingKeyPair.Key + cid;
+                _model.ExchangeDelete(clientExchange);
+                _model.ExchangeDeclare(clientExchange, "fanout", true, false, null);
+
+                string exchange = ConfigureExchange(msgTypeNameRoutingKeyPair.Key + "_WithRoutingKey", "topic");
+                foreach (var routingKey in routingKeys)
+                {
+                    _model.ExchangeBind(clientExchange, exchange, routingKey);
+                    _model.QueueBind(_queueName, clientExchange, string.Empty);
+                }
+            }
+            else
+            {
+                string exchange = ConfigureExchange(msgTypeNameRoutingKeyPair.Key, "fanout");
+                _model.QueueBind(_queueName, exchange, string.Empty);
             }
         }
 
@@ -378,7 +402,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private string ConfigureQueue()
         {
-            Logger.Debug("Configuring queue");
+            Logger.DebugFormat("Configuring queue - {0}", _queueName);
 
             try
             {
@@ -398,7 +422,7 @@ namespace ServiceConnect.Client.RabbitMQ
             _retryQueueName = _queueName + ".Retries";
             string retryDeadLetterExchangeName = _queueName + ".Retries.DeadLetter";
 
-            Logger.Debug("Configuring retry exchange");
+            Logger.DebugFormat("Configuring retry exchange - {0}", retryDeadLetterExchangeName);
 
             try
             {
@@ -439,7 +463,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private string ConfigureErrorQueue()
         {
-            Logger.Debug("Configuring error queue");
+            Logger.DebugFormat("Configuring error queue {0}", _transportSettings.ErrorQueueName);
 
             try
             {
@@ -454,7 +478,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private string ConfigureAuditQueue()
         {
-            Logger.Debug("Configuring audit queue");
+            Logger.DebugFormat("Configuring audit queue - {0}", _transportSettings.AuditQueueName);
 
             try
             {
@@ -467,14 +491,14 @@ namespace ServiceConnect.Client.RabbitMQ
             return _transportSettings.AuditQueueName;
         }
 
-        private string ConfigureExchange(string exchangeName)
+        private string ConfigureExchange(string exchangeName, string type)
         {
-            Logger.Debug("Configuring exchange");
+            Logger.DebugFormat("Configuring exchange - {0}", exchangeName);
 
             try
             {
                 // Hard code auto delete and durable to sensible defaults so that producers and consumers dont try to declare exchanges with different settings.
-                _model.ExchangeDeclare(exchangeName, "fanout", true, false, null);
+                _model.ExchangeDeclare(exchangeName, type, true, false, null);
             }
             catch (Exception ex)
             {
@@ -486,11 +510,11 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private string ConfigureErrorExchange()
         {
-            Logger.Debug("Configuring error exchange");
+            Logger.DebugFormat("Configuring error exchange - {0}", _transportSettings.ErrorQueueName);
 
             try
             {
-                _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct");
+                _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct", true);
             }
             catch (Exception ex)
             {
@@ -502,11 +526,11 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private string ConfigureAuditExchange()
         {
-            Logger.Debug("Configuring audit exchange");
+            Logger.DebugFormat("Configuring audit exchange - {0}", _transportSettings.AuditQueueName);
 
             try
             {
-                _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct");
+                _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct", true);
             }
             catch (Exception ex)
             {

@@ -7,18 +7,17 @@ namespace ServiceConnect.Core
 {
     public class ConsumerPool : IConsumerPool
     {
-        private readonly List<IConsumer> _consumers = new List<IConsumer>(); 
+        private readonly List<IConsumer> _consumers = new List<IConsumer>();
 
-        public void AddConsumer(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
+        public void AddConsumer(string queueName, IDictionary<string, IList<string>> msgRoutingKeysDict, ConsumerEventHandler eventHandler, IConfiguration config)
         {
             new Thread(() =>
             {
                 var consumer = config.GetConsumer();
                 consumer.StartConsuming(eventHandler, queueName);
-                foreach (string messageType in messageTypes)
+                foreach (var msgRoutingKeys in msgRoutingKeysDict)
                 {
-                    //todo: pass message type and routing key
-                    consumer.ConsumeMessageType(messageType);
+                    consumer.ConsumeMessageType(msgRoutingKeys);
                 }
                 _consumers.Add(consumer);
             }).Start();
