@@ -16,14 +16,7 @@ namespace ContentRouting.Consumer1
         public IConsumeContext Context { get; set; }
     }
 
-    /*
-     * !!!
-     * If a derived message handler exists, the base message handler will inherit its routing keys from it 
-     * and the base message handler's routing key will be ignored
-     * !!!
-     */
-    //[RoutingKey("ThisRoutingKeyWillBeIgnored")]
-    [RoutingKey("routingkey0.*")]
+    [RoutingKey("*.test3")]
     public class MyBaseMessageMessageHandler : IMessageHandler<MyBaseMessage>
     {
         public void Execute(MyBaseMessage message)
