@@ -82,28 +82,38 @@ namespace ServiceConnect.Client.RabbitMQ
         /// <param name="args"></param>
         public void Event(object consumer, BasicDeliverEventArgs args)
         {
+            try
+            {
+                if (!args.BasicProperties.Headers.ContainsKey("TypeName") && !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
+                {
+                    const string errMsg = "Error processing message, Message headers must contain type name.";
+                    Logger.Error(errMsg);
+                }
+
+                ProcessMessage(args);
+            }
+            finally
+            {
+                _model.BasicAck(args.DeliveryTag, false);
+            }
+        }
+
+        private void ProcessMessage(BasicDeliverEventArgs args)
+        {
             ConsumeEventResult result;
             IDictionary<string, object> headers = args.BasicProperties.Headers;
 
             try
             {
-                SetHeader(args, "TimeReceived", DateTime.UtcNow.ToString("O"));
-                SetHeader(args, "DestinationMachine", Environment.MachineName);
-                SetHeader(args, "DestinationAddress", _transportSettings.QueueName);
-
-                if (!headers.ContainsKey("TypeName") && !headers.ContainsKey("FullTypeName"))
-                {
-                    const string errMsg = "Error processing message, Message headers must contain type name.";
-                    Logger.Error(errMsg);
-                    throw new Exception(errMsg);
-                }
+                SetHeader(args.BasicProperties.Headers, "TimeReceived", DateTime.UtcNow.ToString("O"));
+                SetHeader(args.BasicProperties.Headers, "DestinationMachine", Environment.MachineName);
+                SetHeader(args.BasicProperties.Headers, "DestinationAddress", _transportSettings.QueueName);
 
                 var typeName = Encoding.UTF8.GetString((byte[])(headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]));
 
                 result = _consumerEventHandler(args.Body, typeName, headers);
-                _model.BasicAck(args.DeliveryTag, false);
 
-                SetHeader(args, "TimeProcessed", DateTime.UtcNow.ToString("O"));
+                SetHeader(args.BasicProperties.Headers, "TimeProcessed", DateTime.UtcNow.ToString("O"));
             }
             catch (Exception ex)
             {
@@ -126,7 +136,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 if (retryCount < _maxRetries)
                 {
                     retryCount++;
-                    SetHeader(args, "RetryCount", retryCount);
+                    SetHeader(args.BasicProperties.Headers, "RetryCount", retryCount);
 
                     _model.BasicPublish(string.Empty, _retryQueueName, args.BasicProperties, args.Body);
                 }
@@ -144,7 +154,7 @@ namespace ServiceConnect.Client.RabbitMQ
                             Logger.Warn("Error serializing exception", ex);
                         }
 
-                        SetHeader(args, "Exception", JsonConvert.SerializeObject(new
+                        SetHeader(args.BasicProperties.Headers, "Exception", JsonConvert.SerializeObject(new
                         {
                             TimeStamp = DateTime.Now,
                             ExceptionType = result.Exception.GetType().FullName,
@@ -388,15 +398,15 @@ namespace ServiceConnect.Client.RabbitMQ
             return sbMessage.ToString();
         }
 
-        private static void SetHeader<T>(BasicDeliverEventArgs args, string key, T value)
+        private static void SetHeader<T>(IDictionary<string, object> headers, string key, T value)
         {
             if (Equals(value, default(T)))
             {
-                args.BasicProperties.Headers.Remove(key);
+                headers.Remove(key);
             }
             else
             {
-                args.BasicProperties.Headers[key] = value;
+                headers[key] = value;
             }
         }
 
@@ -514,7 +524,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             try
             {
-                _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct", true);
+                _model.ExchangeDeclare(_transportSettings.ErrorQueueName, "direct");
             }
             catch (Exception ex)
             {
@@ -530,7 +540,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             try
             {
-                _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct", true);
+                _model.ExchangeDeclare(_transportSettings.AuditQueueName, "direct");
             }
             catch (Exception ex)
             {
