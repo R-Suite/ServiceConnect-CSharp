@@ -655,7 +655,7 @@ namespace ServiceConnect
             var context = new ConsumeContext
             {
                 Bus = this,
-                Headers = headers
+                Headers = headers,
             };
 
             Type typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);

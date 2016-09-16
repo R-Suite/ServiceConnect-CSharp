@@ -187,7 +187,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             Retry.Do(CreateConsumer, ex =>
             {
-                Logger.Error("Error creating consumer - {0}", ex);
+                Logger.Error(string.Format("Error creating consumer - queueName: {0}", queueName), ex);
 
                 if (_hosts.Length > 1)
                 {
