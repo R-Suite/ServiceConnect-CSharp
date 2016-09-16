@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -65,13 +66,24 @@ namespace ServiceConnect.Core
                 genericexecuteHandler.Invoke(this, new[] {messageObject, handlerReference.HandlerType, context});
             }
 
-            // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
-            Type newBaseType = (null != baseType) ? baseType.BaseType : typeof(T).BaseType;
-            if (newBaseType != null && newBaseType.Name != typeof(object).Name)
+            string messageType = string.Empty;
+            if (null != context && null != context.Headers && context.Headers.ContainsKey("MessageType"))
             {
-                MethodInfo processMessage = GetType().GetMethod("ProcessMessageBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
-                MethodInfo genericProcessMessage = processMessage.MakeGenericMethod(typeof(T), newBaseType);
-                genericProcessMessage.Invoke(this, new object[] {message, context});
+                messageType = Encoding.UTF8.GetString((byte[]) context.Headers["MessageType"]);
+            }
+
+            // If the message was published (rather than sent), no need to scan for handlers interested in the BaseType messages...
+            // The Publisher (owner of the contract) will explicitely publish all of the message's base types (if any).
+            if (messageType != "Publish")
+            {
+                // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
+                Type newBaseType = (null != baseType) ? baseType.BaseType : typeof (T).BaseType;
+                if (newBaseType != null && newBaseType.Name != typeof (object).Name)
+                {
+                    MethodInfo processMessage = GetType().GetMethod("ProcessMessageBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
+                    MethodInfo genericProcessMessage = processMessage.MakeGenericMethod(typeof (T), newBaseType);
+                    genericProcessMessage.Invoke(this, new object[] {message, context});
+                }
             }
         }
 
