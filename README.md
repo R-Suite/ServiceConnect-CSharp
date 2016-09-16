@@ -20,16 +20,18 @@ In order to get started, have a look at the documentation at [http://serviceconn
 
 * Support for many well-known Enterprise Integration Patterns
     - Point to Point
-    - Publish/Subcribe
+    - Publish/Subscribe
     - Process Manager
     - Recipient List
     - Scatter Gather
     - Routing Slip
     - Message Aggregation
+    - Content-Based Router
 * Streaming
 * Retries
 * Auditing
 * SSL Support
+* Polymorphic message dispatch
 
 ## Project Maturity
 ServiceConnect (recently renamed from R.MessageBus) has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.
