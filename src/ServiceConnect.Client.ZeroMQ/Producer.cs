@@ -2,11 +2,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
 using Common.Logging;
+using NetMQ.Sockets;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
-using ZeroMQ;
+using NetMQ;
 
 namespace ServiceConnect.Client.ZeroMQ
 {
@@ -17,15 +17,15 @@ namespace ServiceConnect.Client.ZeroMQ
     /// </summary>
     public class Producer : IProducer
     {
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ITransportSettings _transportSettings;
         private readonly IDictionary<string, IList<string>> _queueMappings;
-        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly Object _lock = new Object();
-        private readonly ZSocket _publisher;
-        private readonly ZContext _publishContext;
-        private ZSocket _sender;
-        private ZContext _senderContext;
-        private string _senderEndpoint;
+        private const int RequestTimeout = 2500;
+        private const int RequestRetries = 3;
+        private RequestSocket _sender;
+        private static bool _expectReply = true;
+        private static int _retriesLeft = RequestRetries;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
@@ -34,25 +34,18 @@ namespace ServiceConnect.Client.ZeroMQ
 
             if (_transportSettings.ClientSettings.ContainsKey("PublisherHost"))
             {
-                _publishContext = new ZContext();
-                _publisher = new ZSocket(_publishContext, ZSocketType.PUB);
-                _publisher.Linger = TimeSpan.FromMilliseconds(1);
-                _publisher.Bind(_transportSettings.ClientSettings["PublisherHost"].ToString());
+                //_publishContext = new ZContext();
+                //_publisher = new ZSocket(_publishContext, ZSocketType.PUB);
+                //_publisher.Linger = TimeSpan.FromMilliseconds(1);
+                //_publisher.Bind(_transportSettings.ClientSettings["PublisherHost"].ToString());
             }
         }
 
         public void Dispose()
         {
-            if (null != _publisher)
-            {
-                _publisher.Dispose();
-                _publishContext.Dispose();
-            }
-
             if (null != _sender)
             {
                 _sender.Dispose();
-                _senderContext.Dispose();
             }
         }
 
@@ -66,12 +59,7 @@ namespace ServiceConnect.Client.ZeroMQ
             Dictionary<string, object> messageHeaders = GetHeaders(type, headers, _transportSettings.QueueName, "Publish");
             var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
-            var msg = new ZMessage();
-            msg.Append(new ZFrame(type.FullName.Replace(".", string.Empty)));
-            msg.Append(new ZFrame(serializedHeaders));
-            msg.Append(new ZFrame(message));
-
-            _publisher.SendMessage(msg);
+            throw new NotImplementedException();
         }
 
         public void Send(Type type, byte[] message, Dictionary<string, string> headers = null)
@@ -80,15 +68,7 @@ namespace ServiceConnect.Client.ZeroMQ
 
             foreach (string endPoint in endPoints)
             {
-                Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-                var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
-
-                var msg = new ZMessage();
-                msg.Append(new ZFrame(serializedHeaders));
-                msg.Append(new ZFrame(message));
-
-                // Send
-                _sender.SendMessage(msg);
+                Send(endPoint, type, message, headers);
             }
         }
 
@@ -99,87 +79,38 @@ namespace ServiceConnect.Client.ZeroMQ
                 Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
                 var serializedHeaders = JsonConvert.SerializeObject(messageHeaders);
 
-                var msg = new ZMessage();
-                msg.Append(new ZFrame(serializedHeaders));
-                msg.Append(new ZFrame(message));
+                var msg = new NetMQMessage();
+                msg.Append(new NetMQFrame(serializedHeaders));
+                msg.Append(new NetMQFrame(message));
 
-                // Reconnect if enpoint changed since the last message was sent.
-                //if (_senderEndpoint != endPoint)
-                //{
-                    _senderEndpoint = endPoint;
-                    _senderContext = new ZContext();
-                    _sender = new ZSocket(_senderContext, ZSocketType.REQ);
-                    
-                    _sender.Connect(endPoint);
-                //}
+                _sender = CreateServerSocket(endPoint);
+                _sender.SendMultipartMessage(msg);
+                _expectReply = true;
 
-                // Send
-                var poll = ZPollItem.CreateReceiver();
-                var timeout = TimeSpan.FromMilliseconds(1);
-                ZError error;
-                int retriesLeft = 3;
-
-                while (retriesLeft > 0)
+                while (_expectReply)
                 {
-                    // Outgoing
-                    if (!_sender.SendMessage(msg, out error))
+                    bool result = _sender.Poll(TimeSpan.FromMilliseconds(RequestTimeout));
+
+                    if (result)
+                        continue;
+
+                    _retriesLeft--;
+
+                    if (_retriesLeft == 0)
                     {
-                        if (error == ZError.ETERM)
-                            return;    // Interrupted
-                        throw new ZException(error);
+                        Logger.Error("Sender: Server seems to be offline, abandoning");
+                        break;
                     }
 
-                    // Incoming
-                    ZMessage incoming;
-                    while (true)
-                    {
-                        if (_sender.PollIn(poll, out incoming, out error, timeout))
-                        {
-                            using (incoming)
-                            {
-                                retriesLeft = 0;
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            if (error == ZError.EAGAIN)
-                            {
-                                if (--retriesLeft == 0)
-                                {
-                                    Logger.Error("Server seems to be offline, abandoning");
-                                    break;
-                                }
+                    Logger.Warn("Sender: No response from server, retrying...");
 
-                                Logger.Warn("No response from server, retrying…");
+                    TerminateClient(_sender, endPoint);
 
-                                // Old socket is confused; close it and open a new one
-                                _sender.Dispose();
-                                _sender = new ZSocket(_senderContext, ZSocketType.REQ);
-                                _sender.Connect(endPoint);
-
-                                Logger.Info("I: reconnected");
-
-                                // Send request again, on new socket
-                                if (!_sender.SendMessage(msg, out error))
-                                {
-                                    if (error == ZError.ETERM)
-                                        return;    // Interrupted
-                                    throw new ZException(error);
-                                }
- 
-                                continue;
-                            }
-
-                            if (error == ZError.ETERM)
-                                return;    // Interrupted
-                            throw new ZException(error);
-                        }
-                    }
+                    _sender = CreateServerSocket(endPoint);
+                    _sender.SendMultipartMessage(msg);
                 }
 
-                _sender.Dispose();
-                _senderContext.Dispose();
+                TerminateClient(_sender, endPoint);
             }            
         }
 
@@ -230,6 +161,40 @@ namespace ServiceConnect.Client.ZeroMQ
             headers["Language"] = "C#";
 
             return headers.ToDictionary(x => x.Key, x => (object)x.Value);
+        }
+
+        private static void TerminateClient(NetMQSocket client, string serverEndpoint)
+        {
+            client.Disconnect(serverEndpoint);
+            client.Close();
+        }
+
+        private static RequestSocket CreateServerSocket(string serverEndpoint)
+        {
+            Logger.Debug("Sender: Connecting to server...");
+
+            var client = new RequestSocket();
+            client.Connect(serverEndpoint);
+            client.Options.Linger = TimeSpan.Zero;
+            client.ReceiveReady += ClientOnReceiveReady;
+
+            return client;
+        }
+
+        private static void ClientOnReceiveReady(object sender, NetMQSocketEventArgs args)
+        {
+            var strReply = args.Socket.ReceiveFrameString();
+
+            if (strReply == "ok")
+            {
+                Logger.DebugFormat("Sender: Server replied OK ({0})", strReply);
+                _retriesLeft = RequestRetries;
+                _expectReply = false;
+            }
+            else
+            {
+                Logger.ErrorFormat("Sender: Malformed reply from server: {0}", strReply);
+            }
         }
     }
 }
