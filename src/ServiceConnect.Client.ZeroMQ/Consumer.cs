@@ -4,9 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Common.Logging;
+using NetMQ.Sockets;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
-using ZeroMQ;
+using NetMQ;
 
 namespace ServiceConnect.Client.ZeroMQ
 {
@@ -22,10 +23,10 @@ namespace ServiceConnect.Client.ZeroMQ
         private ConsumerEventHandler _consumerEventHandler;
         private readonly int _maxRetries;
         private readonly bool _errorsDisabled;
-        private readonly ZContext _errorPublishContext;
-        private readonly ZSocket _errorPublisher;
-        private readonly ZContext _auditPublishContext;
-        private readonly ZSocket _auditPublisher;
+        //private readonly ZContext _errorPublishContext;
+        //private readonly ZSocket _errorPublisher;
+        //private readonly ZContext _auditPublishContext;
+        //private readonly ZSocket _auditPublisher;
         private readonly Object _lock = new Object();
 
         public Consumer(ITransportSettings transportSettings)
@@ -34,36 +35,36 @@ namespace ServiceConnect.Client.ZeroMQ
             _maxRetries = transportSettings.MaxRetries;
             _errorsDisabled = transportSettings.DisableErrors;
 
-            if (_transportSettings.ClientSettings.ContainsKey("ErrorPublisherHost"))
-            {
-                _errorPublishContext = new ZContext();
-                _errorPublisher = new ZSocket(_errorPublishContext, ZSocketType.PUB);
-                _errorPublisher.Linger = TimeSpan.FromMilliseconds(1);
-                _errorPublisher.Bind(_transportSettings.ClientSettings["ErrorPublisherHost"].ToString());
-            }
+            //if (_transportSettings.ClientSettings.ContainsKey("ErrorPublisherHost"))
+            //{
+            //    _errorPublishContext = new ZContext();
+            //    _errorPublisher = new ZSocket(_errorPublishContext, ZSocketType.PUB);
+            //    _errorPublisher.Linger = TimeSpan.FromMilliseconds(1);
+            //    _errorPublisher.Bind(_transportSettings.ClientSettings["ErrorPublisherHost"].ToString());
+            //}
 
-            if (_transportSettings.ClientSettings.ContainsKey("AuditPublisherHost"))
-            {
-                _auditPublishContext = new ZContext();
-                _auditPublisher = new ZSocket(_auditPublishContext, ZSocketType.PUB);
-                _auditPublisher.Linger = TimeSpan.FromMilliseconds(1);
-                _auditPublisher.Bind(_transportSettings.ClientSettings["AuditPublisherHost"].ToString());
-            }
+            //if (_transportSettings.ClientSettings.ContainsKey("AuditPublisherHost"))
+            //{
+            //    _auditPublishContext = new ZContext();
+            //    _auditPublisher = new ZSocket(_auditPublishContext, ZSocketType.PUB);
+            //    _auditPublisher.Linger = TimeSpan.FromMilliseconds(1);
+            //    _auditPublisher.Bind(_transportSettings.ClientSettings["AuditPublisherHost"].ToString());
+            //}
         }
 
         public void Dispose()
         {
-            if (null != _errorPublisher)
-            {
-                _errorPublisher.Dispose();
-                _errorPublishContext.Dispose();
-            }
+            //if (null != _errorPublisher)
+            //{
+            //    _errorPublisher.Dispose();
+            //    _errorPublishContext.Dispose();
+            //}
 
-            if (null != _auditPublisher)
-            {
-                _auditPublisher.Dispose();
-                _auditPublishContext.Dispose();
-            }
+            //if (null != _auditPublisher)
+            //{
+            //    _auditPublisher.Dispose();
+            //    _auditPublishContext.Dispose();
+            //}
         }
 
         public void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null)
@@ -72,51 +73,47 @@ namespace ServiceConnect.Client.ZeroMQ
 
             if (_transportSettings.ClientSettings.ContainsKey("ReceiverHost"))
             {
-                new Thread(() =>
+                    //var random = new Random();
+                using (var receiver = new ResponseSocket())
                 {
-                    Thread.CurrentThread.IsBackground = true;
-                    using (var context = new ZContext())
-                    using (var receiver = new ZSocket(context, ZSocketType.REP))
+                    // Bind
+                    receiver.Bind(_transportSettings.ClientSettings["ReceiverHost"].ToString());
+
+                    var cycles = 0;
+
+                    while (true)
                     {
-                        // Bind
-                        receiver.Bind(_transportSettings.ClientSettings["ReceiverHost"].ToString());
+                        NetMQMessage request = receiver.ReceiveMultipartMessage();
+                        cycles++;
 
-                        while (true)
-                        {
-                            // Receive
-                            ZError error;
+                        //if (cycles > 3 && random.Next(0, 10) == 0)
+                        //{
+                        //    Console.WriteLine("S: Simulating a crash");
+                        //    Thread.Sleep(5000);
+                        //}
+                        //else if (cycles > 3 && random.Next(0, 10) == 0)
+                        //{
+                        //    Console.WriteLine("S: Simulating CPU overload");
+                        //    Thread.Sleep(1000);
+                        //}
 
-                            ZMessage incoming;
-                            if (null == (incoming = receiver.ReceiveMessage(out error)))
-                            {
-                                if (error == ZError.ETERM)
-                                    return; // Interrupted
-                                throw new ZException(error);
-                            }
+                        var msgBody = request[1].ToByteArray();
 
-                            using (incoming)
-                            {
-                                var msgBody = new byte[incoming[1].Length];
-                                incoming[1].Read(msgBody, 0, (int) incoming[1].Length);
+                        IDictionary<string, object> headers =
+                            JsonConvert.DeserializeObject<Dictionary<string, object>>(request[0].ConvertToString());
 
-                                IDictionary<string, object> headers =
-                                    JsonConvert.DeserializeObject<Dictionary<string, object>>(
-                                        incoming[0].ReadString());
-                                var typeName =
-                                    (headers.ContainsKey("FullTypeName")
-                                        ? headers["FullTypeName"]
-                                        : headers["TypeName"]).ToString();
-                                headers = headers.ToDictionary(k => k.Key,
-                                    v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
+                        var typeName = (headers.ContainsKey("FullTypeName")
+                            ? headers["FullTypeName"]
+                            : headers["TypeName"]).ToString();
 
-                                ProceesMessageRec(msgBody, typeName, headers);
+                        headers = headers.ToDictionary(k => k.Key,
+                            v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
 
-                                // Send
-                                receiver.Send(new ZFrame("ok"));
-                            }
-                        }
+                        ProceesMessageRec(msgBody, typeName, headers);
+
+                        receiver.SendFrame("ok");
                     }
-                }).Start();
+                }
             }
         }
 
@@ -127,48 +124,48 @@ namespace ServiceConnect.Client.ZeroMQ
 
         public void ConsumeMessageType(KeyValuePair<string, IList<string>> messageTypeName)
         {
-            if (_transportSettings.ClientSettings.ContainsKey("SubscriberHost"))
-            {
-                new Thread(() =>
-                {
-                    using (var context = new ZContext())
-                    using (var subscriber = new ZSocket(context, ZSocketType.SUB))
-                    {
-                        subscriber.Connect(_transportSettings.ClientSettings["SubscriberHost"].ToString());
-                        subscriber.Subscribe(messageTypeName.Key);
+            //if (_transportSettings.ClientSettings.ContainsKey("SubscriberHost"))
+            //{
+            //    new Thread(() =>
+            //    {
+            //        using (var context = new ZContext())
+            //        using (var subscriber = new ZSocket(context, ZSocketType.SUB))
+            //        {
+            //            subscriber.Connect(_transportSettings.ClientSettings["SubscriberHost"].ToString());
+            //            subscriber.Subscribe(messageTypeName.Key);
 
-                        while (true)
-                        {
-                            // Receive
-                            ZError error;
-                            ZMessage incoming;
-                            if (null == (incoming = subscriber.ReceiveMessage(out error)))
-                            {
-                                if (error == ZError.ETERM)
-                                    return; // Interrupted
-                                throw new ZException(error);
-                            }
+            //            while (true)
+            //            {
+            //                // Receive
+            //                ZError error;
+            //                ZMessage incoming;
+            //                if (null == (incoming = subscriber.ReceiveMessage(out error)))
+            //                {
+            //                    if (error == ZError.ETERM)
+            //                        return; // Interrupted
+            //                    throw new ZException(error);
+            //                }
 
-                            using (incoming)
-                            {
-                                var msgBody = new byte[incoming[2].Length];
-                                incoming[2].Read(msgBody, 0, (int)incoming[2].Length);
+            //                using (incoming)
+            //                {
+            //                    var msgBody = new byte[incoming[2].Length];
+            //                    incoming[2].Read(msgBody, 0, (int)incoming[2].Length);
 
-                                IDictionary<string, object> headers =
-                                    JsonConvert.DeserializeObject<Dictionary<string, object>>(incoming[1].ReadString());
-                                var typeName = headers["FullTypeName"].ToString();
-                                headers = headers.ToDictionary(k => k.Key, v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
+            //                    IDictionary<string, object> headers =
+            //                        JsonConvert.DeserializeObject<Dictionary<string, object>>(incoming[1].ReadString());
+            //                    var typeName = headers["FullTypeName"].ToString();
+            //                    headers = headers.ToDictionary(k => k.Key, v => (object) Encoding.UTF8.GetBytes(v.Value.ToString()));
 
-                                SetHeader(headers, "TimeReceived", DateTime.UtcNow.ToString("O"));
-                                SetHeader(headers, "DestinationMachine", Environment.MachineName);
-                                SetHeader(headers, "DestinationAddress", _transportSettings.ClientSettings["SubscriberHost"].ToString());
+            //                    SetHeader(headers, "TimeReceived", DateTime.UtcNow.ToString("O"));
+            //                    SetHeader(headers, "DestinationMachine", Environment.MachineName);
+            //                    SetHeader(headers, "DestinationAddress", _transportSettings.ClientSettings["SubscriberHost"].ToString());
 
-                                ProceesMessageRec(msgBody, typeName, headers);
-                            }
-                        }
-                    }
-                }).Start();
-            }
+            //                    ProceesMessageRec(msgBody, typeName, headers);
+            //                }
+            //            }
+            //        }
+            //    }).Start();
+            //}
         }
 
         public string Type { get; private set; }
@@ -237,17 +234,17 @@ namespace ServiceConnect.Client.ZeroMQ
                             Exception = jsonException
                         }));
 
-                        if (null != _errorPublisher)
-                        {
-                            var serializedHeaders = JsonConvert.SerializeObject(headers);
+                        //if (null != _errorPublisher)
+                        //{
+                        //    var serializedHeaders = JsonConvert.SerializeObject(headers);
 
-                            var msg = new ZMessage();
-                            msg.Append(new ZFrame(_transportSettings.ErrorQueueName));
-                            msg.Append(new ZFrame(serializedHeaders));
-                            msg.Append(new ZFrame(msgBody));
+                        //    var msg = new ZMessage();
+                        //    msg.Append(new ZFrame(_transportSettings.ErrorQueueName));
+                        //    msg.Append(new ZFrame(serializedHeaders));
+                        //    msg.Append(new ZFrame(msgBody));
 
-                            _auditPublisher.SendMessage(msg);
-                        }
+                        //    _auditPublisher.SendMessage(msg);
+                        //}
                     }
 
                     Logger.ErrorFormat("Max number of retries exceeded. MessageId: {0}", headers["MessageId"]);
@@ -261,17 +258,17 @@ namespace ServiceConnect.Client.ZeroMQ
                     messageType = Encoding.UTF8.GetString((byte[])headers["MessageType"]);
                 }
 
-                if (_transportSettings.AuditingEnabled && messageType != "ByteStream" && null != _auditPublisher)
-                {
-                    var serializedHeaders = JsonConvert.SerializeObject(headers);
+                //if (_transportSettings.AuditingEnabled && messageType != "ByteStream" && null != _auditPublisher)
+                //{
+                //    var serializedHeaders = JsonConvert.SerializeObject(headers);
 
-                    var msg = new ZMessage();
-                    msg.Append(new ZFrame(_transportSettings.AuditQueueName));
-                    msg.Append(new ZFrame(serializedHeaders));
-                    msg.Append(new ZFrame(msgBody));
+                //    var msg = new ZMessage();
+                //    msg.Append(new ZFrame(_transportSettings.AuditQueueName));
+                //    msg.Append(new ZFrame(serializedHeaders));
+                //    msg.Append(new ZFrame(msgBody));
 
-                    _auditPublisher.SendMessage(msg);
-                }
+                //    _auditPublisher.SendMessage(msg);
+                //}
             }
         }
     }
