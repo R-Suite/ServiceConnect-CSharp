@@ -224,7 +224,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 Protocol = Protocols.DefaultProtocol,
                 Port = AmqpTcpEndpoint.UseDefaultPort
             };
-
+            
             if (_heartbeatEnabled)
             {
                 connectionFactory.RequestedHeartbeat = _heartbeatTime;
@@ -309,7 +309,7 @@ namespace ServiceConnect.Client.RabbitMQ
             consumer.Received += Event;
             if (_heartbeatEnabled)
             {
-                consumer.Shutdown += ConsumerShutdown;
+                _connection.ConnectionShutdown += ConnectionShutdown;
             }
             _model.BasicConsume(queueName, false, consumer);
 
@@ -359,7 +359,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
         }
 
-        private void ConsumerShutdown(object sender, ShutdownEventArgs e)
+        private void ConnectionShutdown(object sender, ShutdownEventArgs e)
         {
             if (_connectionClosed)
             {
@@ -577,9 +577,13 @@ namespace ServiceConnect.Client.RabbitMQ
                 try
                 {
                     Logger.Debug("Disposing connection");
-                    _connection.Dispose();
+
+                    if (_connection.IsOpen)
+                    {
+                        _connection.Close();
+                    }
                 }
-                catch (System.IO.EndOfStreamException ex)
+                catch (Exception ex)
                 {
                     Logger.Warn("Error disposing connection", ex);
                 }
