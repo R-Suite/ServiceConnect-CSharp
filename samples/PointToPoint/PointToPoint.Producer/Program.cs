@@ -21,18 +21,19 @@ namespace PointToPoint.Producer
                 Console.ReadLine();
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
-                var id = Guid.NewGuid();
 
-                for (int i = 0; i < 10000; i++)
+                for (int i = 0; i < 300; i++)
                 {
+                    var id = Guid.NewGuid();
                     bus.Send(new PointToPointMessage(id)
                     {
-                        Data = new byte[10000]
+                        Data = new byte[10000],
+                        SerialNumber = i
                     });
                     //Console.ReadLine();
                 }
 
-                Console.WriteLine("Sent message - {0}", id);
+                Console.WriteLine("Sent messages");
                 Console.WriteLine("");
             }
         }
