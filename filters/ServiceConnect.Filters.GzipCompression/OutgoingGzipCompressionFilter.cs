@@ -20,5 +20,7 @@ namespace ServiceConnect.Filters.GzipCompression
             }
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 }

@@ -415,13 +415,10 @@ namespace ServiceConnect
                 messageBytes = envelope.Body;
             }
 
-            IProducer producer = Configuration.GetProducer();
-
             foreach (string endPoint in endPoints)
             {
-                producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
             }
-            producer.Disconnect();
         }
 
         public void SendRequest<TRequest, TReply>(string endPoint, TRequest message, Action<TReply> callback, Dictionary<string, string> headers) where TRequest : Message where TReply : Message
@@ -465,16 +462,14 @@ namespace ServiceConnect
                 messageBytes = envelope.Body;
             }
 
-            IProducer producer = Configuration.GetProducer();
             if (string.IsNullOrEmpty(endPoint))
             {
-                producer.Send(typeof(TRequest), messageBytes, headers);
+                _producer.Send(typeof(TRequest), messageBytes, headers);
             }
             else
             {
-                producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
             }
-            producer.Disconnect();
         }
 
         public TReply SendRequest<TRequest, TReply>(TRequest message, Dictionary<string, string> headers, int timeout) where TRequest : Message where TReply : Message
