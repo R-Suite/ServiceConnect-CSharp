@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using ServiceConnect;
 using RequestRepsonse.Messages;
 using ServiceConnect.Interfaces;
@@ -18,6 +17,8 @@ namespace RequestResponse.Requestor
             Console.WriteLine("not authenticated");
             return false;
         }
+
+        public IBus Bus { get; set; }
     }
 
     class Program
