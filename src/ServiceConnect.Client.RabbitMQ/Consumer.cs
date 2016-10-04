@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Timers;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -88,6 +89,11 @@ namespace ServiceConnect.Client.RabbitMQ
                 {
                     const string errMsg = "Error processing message, Message headers must contain type name.";
                     Logger.Error(errMsg);
+                }
+
+                if (args.Redelivered)
+                {
+                    SetHeader(args.BasicProperties.Headers, "Redelivered", true);
                 }
 
                 ProcessMessage(args);

@@ -48,9 +48,6 @@
     <Reference Include="ServiceConnect.Client.RabbitMQ">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Container">
-      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Container.dll</HintPath>
-    </Reference>
     <Reference Include="ServiceConnect.Core">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Core.dll</HintPath>
     </Reference>
@@ -63,14 +60,8 @@
     <Reference Include="ServiceConnect.Persistance.SqlServer">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Settings">
-      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Settings.dll</HintPath>
-    </Reference>
     <Reference Include="RabbitMQ.Client">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\RabbitMQ.Client.dll</HintPath>
-    </Reference>
-    <Reference Include="StructureMap">
-      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

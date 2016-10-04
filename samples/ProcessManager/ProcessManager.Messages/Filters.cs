@@ -10,6 +10,8 @@ namespace ProcessManager.Messages
             Console.WriteLine("Filter1");
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 
     public class Filter2 : IFilter
@@ -19,5 +21,7 @@ namespace ProcessManager.Messages
             Console.WriteLine("Filter2");
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 }
