@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Container.Ninject</id>
-    <version>3.1.0-pre</version>
+    <version>3.1.1-pre</version>
     <title>ServiceConnect.Container.Ninject</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -14,7 +14,7 @@
     <tags>MessageBus,Ninject,R MessageBus,ServiceConnect Ninject,RabbitMQ MessageBus,RMessageBus Ninject,Messaging,Message,Bus,Service</tags>
     <dependencies>
       <dependency id="ServiceConnect.Interfaces" version="3.1.0-pre" />
-      <dependency id="ServiceConnect" version="3.1.0-pre" />
+      <dependency id="ServiceConnect" version="3.1.3-pre" />
       <dependency id="Ninject.Extensions.Conventions" version="3.2.0.0" />
     </dependencies>
   </metadata>

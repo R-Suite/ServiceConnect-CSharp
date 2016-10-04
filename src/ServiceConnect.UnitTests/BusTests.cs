@@ -207,6 +207,10 @@ namespace ServiceConnect.UnitTests
         public void ConsumeMessageEventShouldProcessResponseMessage()
         {
             // Arrange
+            var mockProducer = new Mock<IProducer>();
+            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
+            _mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
+
             var bus = new Bus(_mockConfiguration.Object);
 
             var handlerReferences = new List<HandlerReference>
@@ -236,8 +240,6 @@ namespace ServiceConnect.UnitTests
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
             mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage2>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
 
-            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-            var mockProducer = new Mock<IProducer>();
 
             _mockConfiguration.Setup(x => x.GetRequestConfiguration(It.Is<Guid>(y => SetCorrelationId(y)))).Returns(mockRequestConfiguration.Object);
             var task = new Task(() => { });
@@ -252,7 +254,6 @@ namespace ServiceConnect.UnitTests
 
             mockProducer.Setup(x => x.Send(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
-            _mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
 
             bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { }, null);
             bus.StartConsuming();
