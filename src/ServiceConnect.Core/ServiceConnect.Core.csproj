@@ -55,6 +55,7 @@
     <Compile Include="ConfigurationManagerWrapper.cs" />
     <Compile Include="ConsumeContext.cs" />
     <Compile Include="ConsumerPool.cs" />
+    <Compile Include="ExpiredTimeoutsPoller.cs" />
     <Compile Include="RoutingKey.cs" />
     <Compile Include="StreamProcessor.cs" />
     <Compile Include="StreamResponseMessage.cs" />
