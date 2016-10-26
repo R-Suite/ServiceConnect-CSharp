@@ -16,7 +16,7 @@ namespace PointToPoint.Consumer
             Console.WriteLine("*********** Consumer ***********");
 
             var deduplicationSettings = DeduplicationFilterSettings.Instance;
-            deduplicationSettings.MsgCleanupIntervalMinutes = 2;
+            deduplicationSettings.MsgCleanupIntervalMinutes = 12;
             deduplicationSettings.MsgExpiryHours = 2;
 
             var bus = Bus.Initialize(config =>
@@ -30,7 +30,7 @@ namespace PointToPoint.Consumer
                     typeof(OutgoingDeduplicationFilterMongoDb)
                 };
                 config.SetQueueName("MessageDeduplication.Consumer");
-                config.SetThreads(4);
+                config.SetThreads(1);
                 config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("localhost");
                 config.TransportSettings.ClientSettings.Add("PrefetchCount", 7);

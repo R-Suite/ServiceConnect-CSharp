@@ -64,6 +64,7 @@
     <Compile Include="Container\DefaultContainerTests.cs" />
     <Compile Include="Container\DefaultBusContainerTests.cs" />
     <Compile Include="Container\StructureMapContainerTests.cs" />
+    <Compile Include="ExpiredTimeoutsPollerTest.cs" />
     <Compile Include="FilterTests.cs" />
     <Compile Include="MessageHandlerProcessorTest.cs" />
     <Compile Include="ConfigurationTests.cs" />

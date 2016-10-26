@@ -103,13 +103,16 @@ namespace ServiceConnect.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             processManagerFinder.InsertData(data1);
 
-            var foundData1 = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
-            var foundData2 = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
+            var foundData1 = (MemoryData<TestData>) processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
+            var foundData2 = (MemoryData<TestData>) processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
 
-            processManagerFinder.UpdateData(foundData1); // first update should be fine
+            var foundData1Temp = new MemoryData<IProcessManagerData> { Data = foundData1.Data, Version = foundData1.Version};
+            var foundData2Temp = new MemoryData<IProcessManagerData> { Data = foundData2.Data, Version = foundData2.Version };
+
+            processManagerFinder.UpdateData(foundData1Temp); // first update should be fine
 
             // Act / Assert
-            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(foundData2)); // second update should fail
+            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(foundData2Temp)); // second update should fail
         }
 
         [Fact]

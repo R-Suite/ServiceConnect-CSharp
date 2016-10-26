@@ -14,6 +14,8 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+using System;
+using System.ComponentModel;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Core
@@ -46,6 +48,20 @@ namespace ServiceConnect.Core
         }
 
         public bool Complete { get; set; }
+
+        protected virtual void RequestTimeout(TimeSpan timeout)
+        {
+            var timeoutData = new TimeoutData
+            {
+                Destination = Context.Headers["DestinationAddress"].ToString(),
+                ProcessManagerId = Data.CorrelationId,
+                Headers = Context.Headers,
+                Id = Guid.NewGuid(),
+                Time = DateTime.UtcNow.Add(timeout)
+            };
+
+            ProcessManagerFinder.InsertTimeout(timeoutData);
+        }
 
         /// <summary>
         /// Configure mapper and finds process manager data using configured ProcessManagerFinder

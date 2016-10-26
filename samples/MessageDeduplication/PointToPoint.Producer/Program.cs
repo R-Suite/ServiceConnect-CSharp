@@ -23,7 +23,7 @@ namespace PointToPoint.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
 
-                for (int i = 0; i < 300; i++)
+                for (int i = 0; i < 20000; i++)
                 {
                     var id = Guid.NewGuid();
                     bus.Send(new PointToPointMessage(id)
@@ -33,6 +33,8 @@ namespace PointToPoint.Producer
                     });
                     //Console.ReadLine();
                 }
+
+                Console.WriteLine("End: {0}", DateTime.Now);
 
                 Console.WriteLine("Sent messages");
                 Console.WriteLine("");

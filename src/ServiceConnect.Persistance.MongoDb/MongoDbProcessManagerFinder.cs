@@ -15,8 +15,10 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
@@ -29,6 +31,9 @@ namespace ServiceConnect.Persistance.MongoDb
     public class MongoDbProcessManagerFinder : IProcessManagerFinder
     {
         private readonly MongoDatabase _mongoDatabase;
+        private const string TimeoutsCollectionName = "Timeouts";
+
+        public event TimeoutInsertedDelegate TimeoutInserted;
 
         public MongoDbProcessManagerFinder(string connectionString, string databaseName)
         {
@@ -145,6 +150,83 @@ namespace ServiceConnect.Persistance.MongoDb
             collection.CreateIndex("CorrelationId");
 
             collection.Remove(Query.EQ("Data.CorrelationId", persistanceData.Data.CorrelationId));
+        }
+
+        public void InsertTimeout(TimeoutData timeoutData)
+        {
+            MongoCollection collection = _mongoDatabase.GetCollection(TimeoutsCollectionName);
+            collection.CreateIndex("Id");
+
+            collection.Insert(timeoutData);
+
+            if (TimeoutInserted != null)
+            {
+                TimeoutInserted(timeoutData.Time);
+            }
+        }
+
+        public TimeoutsBatch GetTimeoutsBatch()
+        {
+            var retval = new TimeoutsBatch {DueTimeouts = new List<TimeoutData>()};
+
+            MongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+
+            DateTime utcNow = DateTime.UtcNow;
+
+            // Find all the due timeouts and put a lock on each one to prevent multiple threads/processes getting hold of the same data.
+            bool doQuery = true;
+            while (doQuery)
+            {
+                var args = new FindAndModifyArgs
+                {
+                    Query = Query.And(Query.EQ("Locked", false), Query.LTE("Time", utcNow)),
+                    Update = Update<TimeoutData>.Set(c => c.Locked, true),
+                    Upsert = false,
+                    VersionReturned = FindAndModifyDocumentVersion.Original
+                };
+                FindAndModifyResult result = collection.FindAndModify(args);
+
+                if (result.ModifiedDocument == null)
+                {
+                    doQuery = false;
+                }
+                else
+                {
+                    retval.DueTimeouts.Add(result.GetModifiedDocumentAs<TimeoutData>());
+                }
+            }
+
+            // Get next query time
+            var nextQueryTime = DateTime.MaxValue;
+            var upcomingTimeoutsRes = collection.Find(Query.GT("Time", utcNow));
+            foreach (TimeoutData upcomingTimeout in upcomingTimeoutsRes)
+            {
+                if (upcomingTimeout.Time < nextQueryTime)
+                {
+                    nextQueryTime = upcomingTimeout.Time;
+                }
+            }
+
+            if (nextQueryTime == DateTime.MaxValue)
+            {
+                nextQueryTime = utcNow.AddMinutes(1);
+            }
+
+            retval.NextQueryTime = nextQueryTime;
+
+            return retval;
+        }
+
+        public void RemoveDispatchedTimeout(Guid id)
+        {
+            MongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+
+            var args = new FindAndRemoveArgs
+            {
+                Query = Query.And(Query.EQ("Locked", true), Query.EQ("_id", id))
+            };
+
+            collection.FindAndRemove(args);
         }
 
         private static string GetCollectionName<T>(T data) where T : class, IProcessManagerData

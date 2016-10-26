@@ -40,6 +40,7 @@ namespace ServiceConnect
         private readonly IProducer _producer;
         private Timer _timer;
         private bool _startedConsuming;
+        private ExpiredTimeoutsPoller _expiredTimeoutsPoller;
 
         public IConfiguration Configuration { get; set; }
 
@@ -70,6 +71,12 @@ namespace ServiceConnect
             if (configuration.AutoStartConsuming)
             {
                 StartConsuming();
+            }
+
+            if (configuration.EnableTimeouts)
+            {
+                _expiredTimeoutsPoller = new ExpiredTimeoutsPoller(Configuration.GetProcessManagerFinder(), this);
+                _expiredTimeoutsPoller.Start();
             }
         }
 
@@ -887,6 +894,11 @@ namespace ServiceConnect
             foreach (var aggregatorProcessor in _aggregatorProcessors.Values)
             {
                 aggregatorProcessor.Dispose();
+            }
+
+            if (null != _expiredTimeoutsPoller)
+            {
+                _expiredTimeoutsPoller.Stop();
             }
         }
     }
