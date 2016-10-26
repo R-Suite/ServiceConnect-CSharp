@@ -90,7 +90,6 @@ namespace ServiceConnect.IntegrationTests
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
-            //var result = processManagerFinder.FindData<TestData>(_correlationId);
             var result = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
 
             // Assert

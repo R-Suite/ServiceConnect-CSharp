@@ -15,9 +15,13 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.Caching;
+using System.Text;
+using System.Threading;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistance.InMemory
@@ -30,6 +34,7 @@ namespace ServiceConnect.Persistance.InMemory
         private static readonly ObjectCache Cache = MemoryCache.Default;
         readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
         private readonly object _memoryCacheLock = new object();
+        ReaderWriterLockSlim _readerWriterLock = new ReaderWriterLockSlim();
 
         /// <summary>
         /// Constructor (parameters not used but needed)
@@ -38,6 +43,8 @@ namespace ServiceConnect.Persistance.InMemory
         /// <param name="databaseName"></param>
         public InMemoryProcessManagerFinder(string connectionString, string databaseName)
         { }
+
+        public event TimeoutInsertedDelegate TimeoutInserted;
 
         public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
         {
@@ -77,8 +84,11 @@ namespace ServiceConnect.Persistance.InMemory
 
                 Expression<Func<MemoryData<T>, bool>> lambda = Expression.Lambda<Func<MemoryData<T>, bool>>(expression, pe);
 
-                var cacheItems = (from n in Cache.AsParallel() select n.Value);
+                // get all the relevant cache items
+                var cacheItems = (from n in Cache.AsParallel() where n.Value.GetType() == typeof(MemoryData<IProcessManagerData>) select n.Value);
+                // convert to correct generic type
                 var newCacheItems = Enumerable.ToList((from dynamic cacheItem in cacheItems select new MemoryData<T> { Data = cacheItem.Data, Version = cacheItem.Version }));
+                // filter based of mapping criteria
                 MemoryData<T> retval = newCacheItems.FirstOrDefault(lambda.Compile());
 
                 return retval;
@@ -87,13 +97,15 @@ namespace ServiceConnect.Persistance.InMemory
 
         public void InsertData(IProcessManagerData data)
         {
+            Type typeParameterType = data.GetType();
+
+            MethodInfo md = GetType().GetMethods().First(m => m.Name == "GetMemoryData" && m.GetParameters()[0].Name == "data");
+            //MethodInfo genericMd = md.MakeGenericMethod(typeParameterType);
+            MethodInfo genericMd = md.MakeGenericMethod(typeof(IProcessManagerData));
+
             lock (_memoryCacheLock)
             {
-                var memoryData = new MemoryData<IProcessManagerData>
-                {
-                    Data = data,
-                    Version = 1
-                };
+                var memoryData = genericMd.Invoke(this, new object[] {data});
 
                 string key = data.CorrelationId.ToString();
             
@@ -108,8 +120,20 @@ namespace ServiceConnect.Persistance.InMemory
             }
         }
 
-        public void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
+        public MemoryData<DT> GetMemoryData<DT>(DT data)
         {
+            var memoryData = new MemoryData<DT>
+            {
+                Data = data,
+                Version = 1,
+                Id = Guid.NewGuid()
+            };
+
+            return memoryData;
+        }
+
+        public void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData
+        { 
             lock (_memoryCacheLock)
             {
                 string error = null;
@@ -118,9 +142,9 @@ namespace ServiceConnect.Persistance.InMemory
 
                 if (Cache.Contains(key))
                 {
-                    var currentVersion = ((MemoryData<IProcessManagerData>) (Cache.Get(key))).Version;
+                    var currentVersion = ((MemoryData<T>)(Cache.Get(key))).Version;
 
-                    var updatedData = new MemoryData<IProcessManagerData>
+                    var updatedData = new MemoryData<T>
                     {
                         Data = data.Data,
                         Version = newData.Version + 1
@@ -155,6 +179,70 @@ namespace ServiceConnect.Persistance.InMemory
 
                 Cache.Remove(key);
             }
+        }
+
+        public void InsertTimeout(TimeoutData timeoutData)
+        {
+            lock (_memoryCacheLock)
+            {
+                string key = timeoutData.Id.ToString();
+
+                if (!Cache.Contains(key))
+                {
+                    Cache.Set(key, timeoutData, _policy);
+                }
+                else
+                {
+                    throw new ArgumentException(string.Format("TimeoutData with Id {0} already exists in the cache.", key));
+                }
+            }
+
+            if (TimeoutInserted != null)
+            {
+                TimeoutInserted(timeoutData.Time);
+            }
+        }
+
+        public TimeoutsBatch GetTimeoutsBatch()
+        {
+            var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
+
+            DateTime utcNow = DateTime.UtcNow;
+
+            var nextQueryTime = DateTime.MaxValue;
+
+            lock (_memoryCacheLock)
+            {
+                var cacheItems = (from n in Cache.AsParallel() where n.Value.GetType() == typeof (TimeoutData) select new { n.Value, n.Key });
+
+                foreach (var data in cacheItems)
+                {
+                    var timeoutData = (TimeoutData)data.Value;
+                    if (timeoutData.Time <= utcNow)
+                    {
+                        retval.DueTimeouts.Add(timeoutData);
+                    }
+
+                    if (timeoutData.Time > utcNow && timeoutData.Time < nextQueryTime)
+                    {
+                        nextQueryTime = timeoutData.Time;
+                    }
+                }
+            }
+
+            if (nextQueryTime == DateTime.MaxValue)
+            {
+                nextQueryTime = utcNow.AddMinutes(1);
+            }
+
+            retval.NextQueryTime = nextQueryTime;
+
+            return retval;
+        }
+
+        public void RemoveDispatchedTimeout(Guid id)
+        {
+            Cache.Remove(id.ToString());
         }
     }
 }

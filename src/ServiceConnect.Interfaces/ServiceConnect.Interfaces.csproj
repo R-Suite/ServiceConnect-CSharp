@@ -80,6 +80,9 @@
     <Compile Include="Message.cs" />
     <Compile Include="ProcessManagerToMessageMap.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TimeoutMessage.cs" />
+    <Compile Include="TimeoutsBatch.cs" />
+    <Compile Include="TimeoutData.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ServiceConnect.Interfaces.nuspec">

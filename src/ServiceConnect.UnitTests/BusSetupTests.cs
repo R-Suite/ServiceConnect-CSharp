@@ -483,6 +483,8 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
+            public event TimeoutInsertedDelegate TimeoutInserted;
+
             public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
             {
                 throw new NotImplementedException();
@@ -502,7 +504,21 @@ namespace ServiceConnect.UnitTests
             {
                
             }
-        }
 
+            public void InsertTimeout(TimeoutData timeoutData)
+            {
+                throw new NotImplementedException();
+            }
+
+            public TimeoutsBatch GetTimeoutsBatch()
+            {
+                throw new NotImplementedException();
+            }
+
+            public void RemoveDispatchedTimeout(Guid id)
+            {
+                throw new NotImplementedException();
+            }
+        }
     }
 }
