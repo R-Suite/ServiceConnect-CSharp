@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -76,18 +77,18 @@ namespace ServiceConnect.Core
 
                     // Execute FindProcessManagerData - see if already exists
                     object persistanceData = processManagerInstance.HandlerType.GetMethod("FindProcessManagerData").Invoke(processManager, new[] { messageObject });
-                    
+
                     // Get Data Type
                     Type dataType = processManagerInstance.HandlerType.BaseType.GetGenericArguments()[0];
 
                     bool processManagerAlreadyExists = true;
                     object data;
 
-                    // Process Mnager Data does not exist, create new instance 
+                    // Process Manager Data does not exist, create new instance 
                     if (null == persistanceData)
                     {
                         processManagerAlreadyExists = false;
-                        data = (IProcessManagerData) Activator.CreateInstance(dataType);
+                        data = (IProcessManagerData)Activator.CreateInstance(dataType);
                     }
                     else
                     {

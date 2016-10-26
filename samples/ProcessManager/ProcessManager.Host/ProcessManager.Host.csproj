@@ -56,10 +56,6 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Client.RabbitMQ.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Container, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Container.dll</HintPath>
-    </Reference>
     <Reference Include="ServiceConnect.Core, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Core.dll</HintPath>
@@ -72,21 +68,16 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.InMemory.dll</HintPath>
     </Reference>
+    <Reference Include="ServiceConnect.Persistance.MongoDb">
+      <HintPath>..\..\..\src\ServiceConnect.Persistance.MongoDb\bin\Debug\ServiceConnect.Persistance.MongoDb.dll</HintPath>
+    </Reference>
     <Reference Include="ServiceConnect.Persistance.SqlServer, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
-    <Reference Include="ServiceConnect.Settings, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Settings.dll</HintPath>
-    </Reference>
     <Reference Include="RabbitMQ.Client, Version=3.2.1.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\RabbitMQ.Client.dll</HintPath>
-    </Reference>
-    <Reference Include="StructureMap, Version=2.6.4.0, Culture=neutral, PublicKeyToken=e60ad81abae3c223, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
