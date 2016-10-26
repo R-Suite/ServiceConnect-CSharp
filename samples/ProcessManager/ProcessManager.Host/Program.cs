@@ -1,8 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using ProcessManager.Messages;
 using ServiceConnect;
 using ServiceConnect.Persistance.InMemory;
+using ServiceConnect.Persistance.MongoDb;
 
 namespace ProcessManager.Host
 {
@@ -13,7 +12,10 @@ namespace ProcessManager.Host
             Console.WriteLine("*********** ProcessManager.Host ***********");
             Bus.Initialize(config =>
             {
-                config.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
+                //config.SetProcessManagerFinder<MongoDbProcessManagerFinder>();
+                //config.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
+                config.EnableTimeouts = true;
+                config.PersistenceStoreConnectionString = "Server=RUFFER-F330852;Database=ServiceConnect;Trusted_Connection=True;";
             });
 
             Console.ReadLine();

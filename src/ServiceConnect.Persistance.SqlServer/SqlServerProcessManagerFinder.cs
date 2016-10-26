@@ -15,17 +15,21 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Transactions;
 using System.Xml;
 using System.Xml.Serialization;
 using System.Xml.XPath;
 using Common.Logging;
+using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
+using IsolationLevel = System.Data.IsolationLevel;
 
 namespace ServiceConnect.Persistance.SqlServer
 {
@@ -37,6 +41,7 @@ namespace ServiceConnect.Persistance.SqlServer
         private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly string _connectionString;
         private readonly int _commandTimeout = 30;
+        private const string TimeoutsTableName = "Timeouts";
 
         /// <summary>
         /// Default constructor
@@ -60,6 +65,8 @@ namespace ServiceConnect.Persistance.SqlServer
             _connectionString = connectionString;
             _commandTimeout = commandTimeout;
         }
+
+        public event TimeoutInsertedDelegate TimeoutInserted;
 
         /// <summary>
         /// Find existing instance of ProcessManager
@@ -300,6 +307,148 @@ namespace ServiceConnect.Persistance.SqlServer
                         sqlConnection.Close();
                     }
                 }
+            }
+        }
+
+        public void InsertTimeout(TimeoutData timeoutData)
+        {
+            using (var sqlConnection = new SqlConnection(_connectionString))
+            {
+                sqlConnection.Open();
+
+                using (var cmd = new SqlCommand())
+                {
+                    cmd.Connection = sqlConnection;
+                    cmd.CommandText = string.Format("IF NOT EXISTS( SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{0}') ", TimeoutsTableName) +
+                        string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, ProcessManagerId uniqueidentifier NOT NULL, Destination varchar(250) NOT NULL, Time DateTime NOT NULL, Locked bit, Headers text);", TimeoutsTableName);
+                    cmd.ExecuteNonQuery();
+                }
+
+                using (var dbTran = sqlConnection.BeginTransaction(IsolationLevel.Serializable))
+                {
+                    // Insert if doesn't exist, else update (only the first one is allowed)
+                    string sql = string.Format(@"INSERT {0} (Id, ProcessManagerId, Destination, Time, Locked, Headers)
+                                                 VALUES (@Id, @ProcessManagerId, @Destination, @Time, @Locked, @Headers)", TimeoutsTableName);
+
+                    using (var cmd = new SqlCommand(sql))
+                    {
+                        cmd.Connection = sqlConnection;
+                        cmd.Transaction = dbTran;
+                        cmd.Parameters.Add("@Id", SqlDbType.UniqueIdentifier).Value = timeoutData.Id;
+                        cmd.Parameters.Add("@ProcessManagerId", SqlDbType.UniqueIdentifier).Value = timeoutData.ProcessManagerId;
+                        cmd.Parameters.Add("@Destination", SqlDbType.VarChar).Value = timeoutData.Destination;
+                        cmd.Parameters.Add("@Time", SqlDbType.DateTime).Value = timeoutData.Time;
+                        cmd.Parameters.Add("@Locked", SqlDbType.Bit).Value = timeoutData.Locked;
+                        cmd.Parameters.Add("@Headers", SqlDbType.Text).Value = JsonConvert.SerializeObject(timeoutData.Headers);
+
+                        cmd.ExecuteNonQuery();
+                        dbTran.Commit();
+                    }
+                }
+            }
+
+            if (TimeoutInserted != null)
+            {
+                TimeoutInserted(timeoutData.Time);
+            }
+        }
+
+        public TimeoutsBatch GetTimeoutsBatch()
+        {
+            var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
+
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                connection.Open();
+
+                // Make sure table exists
+                using (var cmd = new SqlCommand())
+                {
+                    cmd.Connection = connection;
+                    cmd.CommandText = string.Format("IF NOT EXISTS( SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{0}') ", TimeoutsTableName) +
+                        string.Format("CREATE TABLE {0} (Id uniqueidentifier NOT NULL, ProcessManagerId uniqueidentifier NOT NULL, Destination varchar(250) NOT NULL, Time DateTime NOT NULL, Locked bit, Headers text);", TimeoutsTableName);
+                    cmd.ExecuteNonQuery();
+                }
+
+                using (var dbTran = connection.BeginTransaction(IsolationLevel.Serializable))
+                {
+                    var utcNow = DateTime.UtcNow;
+
+                    // Get timeouts due
+                    string querySql = string.Format("SELECT Id, ProcessManagerId, Destination, Time, Locked, Headers  FROM  [dbo].[{0}] WHERE Locked = 0 AND Time <= @Time",TimeoutsTableName);
+                    using (var cmd = new SqlCommand(querySql, connection, dbTran))
+                    {
+                        cmd.Parameters.AddWithValue("@Time", utcNow);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var td = new TimeoutData
+                                {
+                                    Destination = reader["Destination"].ToString(),
+                                    Id = Guid.Parse(reader["Id"].ToString()),
+                                    Headers = JsonConvert.DeserializeObject<IDictionary<string, object>>(reader["Headers"].ToString()),
+                                    ProcessManagerId = Guid.Parse(reader["ProcessManagerId"].ToString()),
+                                    Time = (DateTime) reader["Time"]
+                                };
+                                retval.DueTimeouts.Add(td);
+                            }
+                        }
+                    }
+
+                    // Lock records with timout due
+                    string updateSql = string.Format("UPDATE  [dbo].[{0}] SET Locked = 1  WHERE Locked = 0 AND Time <= @Time", TimeoutsTableName);
+                    using (var cmd = new SqlCommand(updateSql, connection, dbTran))
+                    {
+                        cmd.Parameters.AddWithValue("@Time", utcNow);
+                        cmd.ExecuteNonQuery();
+                    }
+
+                    // Get next query time
+                    var nextQueryTime = DateTime.MaxValue;
+                    string nextQueryTimeSql = string.Format("SELECT Time  FROM  [dbo].[{0}] WHERE Time > @Time", TimeoutsTableName);
+                    using (var cmd = new SqlCommand(nextQueryTimeSql, connection, dbTran))
+                    {
+                        cmd.Parameters.AddWithValue("@Time", utcNow);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                if ((DateTime)reader["Time"] < nextQueryTime)
+                                {
+                                    nextQueryTime = (DateTime)reader["Time"];
+                                }
+                            }
+                        }
+                    }
+
+                    if (nextQueryTime == DateTime.MaxValue)
+                    {
+                        nextQueryTime = utcNow.AddMinutes(1);
+                    }
+
+                    retval.NextQueryTime = nextQueryTime;
+
+                    dbTran.Commit();
+                }
+            }
+
+            return retval;
+        }
+
+        public void RemoveDispatchedTimeout(Guid id)
+        {
+            string sql = string.Format("DELETE FROM  [dbo].[{0}] WHERE Locked = 1 AND Id = @Id", TimeoutsTableName);
+
+            using (var connection = new SqlConnection(_connectionString))
+            {
+                connection.Open();
+                var cmd = new SqlCommand(sql, connection);
+                cmd.Parameters.AddWithValue("@Id", id);
+                cmd.CommandType = CommandType.Text;
+                cmd.ExecuteNonQuery();
             }
         }
 

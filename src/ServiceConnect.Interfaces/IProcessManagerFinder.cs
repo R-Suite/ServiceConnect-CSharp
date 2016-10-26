@@ -14,14 +14,24 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+using System;
+
 namespace ServiceConnect.Interfaces
 {
+    public delegate void TimeoutInsertedDelegate(DateTime timeoutTime);
+
     public interface IProcessManagerFinder
     {
+        event TimeoutInsertedDelegate TimeoutInserted;
+
         IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData;
 
         void InsertData(IProcessManagerData data);
         void UpdateData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData;
         void DeleteData<T>(IPersistanceData<T> data) where T : class, IProcessManagerData;
+
+        void InsertTimeout(TimeoutData timeoutData);
+        TimeoutsBatch GetTimeoutsBatch();
+        void RemoveDispatchedTimeout(Guid id);
     }
 }
