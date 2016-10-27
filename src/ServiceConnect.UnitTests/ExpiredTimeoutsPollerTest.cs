@@ -11,16 +11,23 @@ namespace ServiceConnect.UnitTests
     public class ExpiredTimeoutsPollerTest
     {
         readonly Mock<IProcessManagerFinder> _mockProcessManagerFinder = new Mock<IProcessManagerFinder>();
+        readonly Mock<IConfiguration> _mockConfiguration = new Mock<IConfiguration>();
         readonly Mock<IBus> _mockBus = new Mock<IBus>();
         private readonly Guid _tdId = Guid.NewGuid();
         private readonly Guid _pmId = Guid.NewGuid();
+
+        public ExpiredTimeoutsPollerTest()
+        {
+            _mockConfiguration.Setup(c => c.GetProcessManagerFinder()).Returns(_mockProcessManagerFinder.Object);
+            _mockBus.SetupGet(c => c.Configuration).Returns(_mockConfiguration.Object);
+        }
 
         [Fact]
         public void TestTimeoutMessageIsDispatched()
         {
             // Arrange
             SetupProcessManagerFinderMock(DateTime.UtcNow.AddSeconds(30));
-            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockProcessManagerFinder.Object, _mockBus.Object);
+            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockBus.Object);
 
             // Act
             expiredTimeoutsPoller.InnerPoll(new CancellationToken(false));
@@ -34,7 +41,7 @@ namespace ServiceConnect.UnitTests
         {
             // Arrange
             SetupProcessManagerFinderMock(DateTime.UtcNow.AddSeconds(30));
-            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockProcessManagerFinder.Object, _mockBus.Object);
+            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockBus.Object);
 
             // Act
             expiredTimeoutsPoller.InnerPoll(new CancellationToken(false));
@@ -49,7 +56,7 @@ namespace ServiceConnect.UnitTests
             // Arrange
             var nextTimeoutQueryTime = DateTime.UtcNow.AddSeconds(30);
             SetupProcessManagerFinderMock(nextTimeoutQueryTime);
-            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockProcessManagerFinder.Object, _mockBus.Object);
+            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockBus.Object);
 
             // Act
             expiredTimeoutsPoller.InnerPoll(new CancellationToken(false));
@@ -64,7 +71,7 @@ namespace ServiceConnect.UnitTests
             // Arrange
             var nextTimeoutQueryTime = DateTime.UtcNow.AddDays(1);
             SetupProcessManagerFinderMock(nextTimeoutQueryTime);
-            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockProcessManagerFinder.Object, _mockBus.Object);
+            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockBus.Object);
 
             // Act
             expiredTimeoutsPoller.InnerPoll(new CancellationToken(false));
@@ -77,7 +84,7 @@ namespace ServiceConnect.UnitTests
         public void TestNextQueryTimeIsResetWhenNewTimeoutIsInserted()
         {
             // Arrange
-            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockProcessManagerFinder.Object, _mockBus.Object);// todo: pass time provider to make testing easier
+            var expiredTimeoutsPoller = new ExpiredTimeoutsPoller(_mockBus.Object);// todo: pass time provider to make testing easier
             var nextTimeoutQueryTime = DateTime.UtcNow.AddSeconds(-10);
 
             // Act
