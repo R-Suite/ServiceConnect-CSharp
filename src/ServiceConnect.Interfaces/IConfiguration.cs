@@ -41,7 +41,7 @@ namespace ServiceConnect.Interfaces
         IList<Type> AfterConsumingFilters { get; set; }
         IList<Type> OutgoingFilters { get; set; }
         IConsumerPool ConsumerPool { get; set; }
-        bool EnableTimeouts { get; set; }
+        bool EnableProcessManagerTimeouts { get; set; }
 
         /// <summary>
         /// Adds a message queue mapping. 

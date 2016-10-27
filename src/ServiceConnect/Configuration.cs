@@ -76,7 +76,7 @@ namespace ServiceConnect
         public IList<Type> AfterConsumingFilters { get; set; }
         public IList<Type> OutgoingFilters { get; set; }
         public IConsumerPool ConsumerPool { get; set; }
-        public bool EnableTimeouts { get; set; }
+        public bool EnableProcessManagerTimeouts { get; set; }
 
         #endregion
 

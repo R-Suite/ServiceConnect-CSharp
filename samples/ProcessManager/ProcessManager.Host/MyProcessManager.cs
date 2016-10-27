@@ -37,9 +37,6 @@ namespace ProcessManager.Host
 
         protected override void ConfigureHowToFindProcessManager(IProcessManagerPropertyMapper mapper)
         {
-            //mapper.ConfigureMapping<MyProcessManagerData, Process1ResponseMessage>(m=>m.PmWidget.Size.Width, pm=>pm.Widget.Size);
-            //mapper.ConfigureMapping<MyProcessManagerData, Process1ResponseMessage>(m => m.ProcessId, pm => pm.ProcessId);
-
             mapper.ConfigureMapping<MyProcessManagerData, Process1ResponseMessage>(m => m.Name, pm => pm.Name);
             mapper.ConfigureMapping<MyProcessManagerData, Process2ResponseMessage>(m => m.PmWidget.Size.Width, pm => pm.Widget.Size);
         }
@@ -51,14 +48,13 @@ namespace ProcessManager.Host
             Data.ProcessId = message.ProcessId;
             Data.PmWidget = new PmWidget { Size = new PmWidgetSize { Width = message.ProcessId } };
 
-            //Console.WriteLine("MyProcessManager started - {0} ({1})", message.ProcessId, message.CorrelationId);
             Console.WriteLine("MyProcessManager started - {0} ({1})", message.ProcessId, DateTime.UtcNow);
 
             _bus.Send("ProcessManager.Process1", new Process1RequestMessage(message.CorrelationId) { ProcessId = message.ProcessId });
 
             var utcNow = DateTime.UtcNow;
-            base.RequestTimeout(new TimeSpan(0, 0, 0, 10));
-            Console.WriteLine("First Requested Timeout at: {0} for {1}", utcNow, utcNow.AddSeconds(30));
+            base.RequestTimeout(new TimeSpan(0, 0, 1, 0)); // trigger timout out message in one minute
+            Console.WriteLine("Requested Timeout at: {0} for {1}", utcNow, utcNow.AddSeconds(30));
         }
 
         public void Execute(Process1ResponseMessage message)
@@ -74,19 +70,14 @@ namespace ProcessManager.Host
         {
             Console.WriteLine("Received Process2ResponseMessage: {0} {1}", message.ProcessId, message.Name);
 
-            Complete = true;
+            Console.WriteLine("Waiting for timeout");
         }
 
         public void Execute(TimeoutMessage message)
         {
-            //Console.WriteLine("Received TimeoutMessage: {0}", message.CorrelationId);
+            Console.WriteLine("Received TimeoutMessage: {0}", message.CorrelationId);
 
-            var utcNow = DateTime.UtcNow;
-            base.RequestTimeout(new TimeSpan(0, 0, 0, 1));
-
-            Console.WriteLine("Requested Timeout at: {0} for {1}", utcNow, utcNow.AddSeconds(1));
-
-            //Complete = true;
+            Complete = true;
         }
     }
 }
