@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Common.Logging;
@@ -18,10 +15,10 @@ namespace ServiceConnect.Core
         readonly object _locker = new object();
         CancellationTokenSource _tokenSource;
 
-        public ExpiredTimeoutsPoller(IProcessManagerFinder processManagerFinder, IBus bus)
+        public ExpiredTimeoutsPoller(IBus bus)
         {
-            _processManagerFinder = processManagerFinder;
             _bus = bus;
+            _processManagerFinder = bus.Configuration.GetProcessManagerFinder();
 
             _processManagerFinder.TimeoutInserted += _processManagerFinder_TimeoutInserted;
 
