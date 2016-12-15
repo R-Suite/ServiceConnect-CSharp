@@ -2,7 +2,7 @@
 <package xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
     <id>ServiceConnect.Client.RabbitMQ</id>
-    <version>3.1.3-pre</version>
+    <version>3.1.6-pre</version>
     <title>ServiceConnect.Client.RabbitMQ</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -14,7 +14,7 @@
     <tags>ServiceConnect,RMessageBus,R,MessageBus,MessageBus Client,Client.RabbitMQ,R RabbitMQ,R RabbitMQ Client,RabbitMQ, MessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
       <dependency id="RabbitMQ.Client" version="[3.5.4]" />
-      <dependency id="ServiceConnect.Interfaces" version="3.1.0-pre" />
+      <dependency id="ServiceConnect.Interfaces" version="3.1.1-pre" />
     </dependencies>
   </metadata>
   <files>

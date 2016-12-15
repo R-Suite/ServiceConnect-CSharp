@@ -16,6 +16,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Moq;
 using Newtonsoft.Json;
 using ServiceConnect.Core;
@@ -63,7 +64,6 @@ namespace ServiceConnect.UnitTests
                 MessageType = typeof (FakeMessage1)
             };
 
-
             _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
             {
                 message1HandlerReference
@@ -90,6 +90,110 @@ namespace ServiceConnect.UnitTests
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
             Assert.Equal(message1.Username, fakeHandler.Command.Username);
             _mockContainer.Verify(x => x.GetInstance(typeof (FakeHandler2)), Times.Never);
+        }
+
+        [Fact]
+        public void ShouldExecuteTheCorrectBaseMessageHandlers()
+        {
+            // Arrange
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+
+            var message1HandlerReference = new HandlerReference
+            {
+                HandlerType = typeof(FakeBaseMessageHandler1),
+                MessageType = typeof(FakeBaseMessage1)
+            };
+
+            _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeBaseMessage1>))).Returns(new List<HandlerReference>
+            {
+                message1HandlerReference
+            });
+
+            var fakeHandler = new FakeBaseMessageHandler1();
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeBaseMessageHandler1))).Returns(fakeHandler);
+
+            // Act
+            var message = new FakeDerivedMessage1(Guid.NewGuid())
+            {
+                Status = "Test"
+            };
+
+            messageProcessor.ProcessMessage<FakeDerivedMessage1>(JsonConvert.SerializeObject(message), null);
+
+            // Assert
+            Assert.Equal(message.CorrelationId, fakeHandler.Command.CorrelationId);
+            Assert.Equal(message.Username, fakeHandler.Command.Username);
+            _mockContainer.Verify(x => x.GetInstance(typeof(FakeBaseMessageHandler1)), Times.Once);
+        }
+
+        [Fact]
+        public void ShouldExecuteTheCorrectHandlerWithRoutingKeyAttribute()
+        {
+            // Arrange
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+
+            var message1HandlerReference = new HandlerReference
+            {
+                HandlerType = typeof(FakeHandlerWithAttr1),
+                MessageType = typeof(FakeMessage1),
+                RoutingKeys = new List<string> { "Test"}
+            };
+
+            _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
+            {
+                message1HandlerReference
+            });
+
+            var fakeHandler = new FakeHandlerWithAttr1();
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeHandlerWithAttr1))).Returns(fakeHandler);
+
+            // Act
+            var message1 = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Jakub Pachansky"
+            };
+            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
+                new ConsumeContext {Headers = new Dictionary<string, object> {{"RoutingKey", Encoding.ASCII.GetBytes("Test") }}});
+
+            // Assert
+            Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
+            Assert.Equal(message1.Username, fakeHandler.Command.Username);
+            _mockContainer.Verify(x => x.GetInstance(typeof(FakeHandlerWithAttr1)), Times.Once);
+        }
+
+        [Fact]
+        public void ShouldExecuteTheCorrectHandlerWithMultipleRoutingKeyAttributes()
+        {
+            // Arrange
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+
+            var message1HandlerReference = new HandlerReference
+            {
+                HandlerType = typeof(FakeHandlerWithAttr2),
+                MessageType = typeof(FakeMessage1),
+                RoutingKeys = new List<string> { "Test1", "Test2" }
+            };
+
+            _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
+            {
+                message1HandlerReference
+            });
+
+            var fakeHandler = new FakeHandlerWithAttr2();
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeHandlerWithAttr2))).Returns(fakeHandler);
+
+            // Act
+            var message1 = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Jakub Pachansky"
+            };
+            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
+                new ConsumeContext { Headers = new Dictionary<string, object> {{"RoutingKey", Encoding.ASCII.GetBytes("Test2")}}});
+
+            // Assert
+            Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
+            Assert.Equal(message1.Username, fakeHandler.Command.Username);
+            _mockContainer.Verify(x => x.GetInstance(typeof(FakeHandlerWithAttr2)), Times.Once);
         }
     }
 }
