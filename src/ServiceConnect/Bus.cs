@@ -50,7 +50,7 @@ namespace ServiceConnect
 
             _container = configuration.GetContainer();
             _producer = configuration.GetProducer();
-            
+          
             _container.Initialize();
 
             if (configuration.AddBusToContainer)
@@ -70,6 +70,7 @@ namespace ServiceConnect
 
             if (configuration.AutoStartConsuming)
             {
+
                 StartConsuming();
             }
 
@@ -178,11 +179,23 @@ namespace ServiceConnect
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
 
             IDictionary<string, IList<string>> msgRoutingKeysDict = new Dictionary<string, IList<string>>();
+
             foreach (var instance in instances)
             {
                 if (!String.IsNullOrEmpty(instance.MessageType.FullName))
                 {
-                    msgRoutingKeysDict.Add(instance.MessageType.FullName.Replace(".", string.Empty), instance.RoutingKeys);
+                    var keyMsgType = instance.MessageType.FullName.Replace(".", string.Empty);
+                    if (!msgRoutingKeysDict.ContainsKey(keyMsgType))
+                    {
+                        msgRoutingKeysDict.Add(keyMsgType, instance.RoutingKeys);
+                    }
+                    else
+                    {
+                        foreach (var routingKey in instance.RoutingKeys)
+                        {
+                            msgRoutingKeysDict[keyMsgType].Add(routingKey);
+                        }
+                    }
                 }
             }
 
@@ -228,6 +241,22 @@ namespace ServiceConnect
                 messageBytes = envelope.Body;
             }
 
+            // Add routing key to the message header
+            if (!string.IsNullOrEmpty(routingKey))
+            {
+                if (null != headers)
+                {
+                    if (!headers.ContainsKey("RoutingKey"))
+                    {
+                        headers["RoutingKey"] = routingKey;
+                    }
+                }
+                else
+                {
+                    headers = new Dictionary<string, string> {{"RoutingKey", routingKey}};
+                }
+            }
+
             _producer.Publish(typeof(T), messageBytes, routingKey, headers);
 
             Type newBaseType = typeof(T).BaseType;
@@ -235,7 +264,7 @@ namespace ServiceConnect
             {
                 MethodInfo publish = GetType().GetMethods().First(m => m.Name == "Publish" && m.GetParameters()[1].Name == "routingKey");
                 MethodInfo genericPublish = publish.MakeGenericMethod(newBaseType);
-                genericPublish.Invoke(this, new object[] { message, routingKey, headers == null ? null : new Dictionary<string, string>(headers) });
+                genericPublish.Invoke(this, new object[] { message, routingKey, new Dictionary<string, string>(headers) });
             }
         }
 
