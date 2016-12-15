@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Container.StructureMap</id>
-    <version>3.1.1-pre</version>
+    <version>3.1.4-pre</version>
     <title>ServiceConnect.Container.StructureMap</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -13,8 +13,8 @@
     <copyright>Copyright 2016 ServiceConnect. All rights reserved</copyright>
     <tags>MessageBus,StructureMap,R MessageBus,ServiceConnect StructureMap,RabbitMQ MessageBus,Service.Connect StructureMap,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <dependency id="ServiceConnect.Interfaces" version="3.1.0-pre" />
-      <dependency id="ServiceConnect" version="3.1.3-pre" />
+      <dependency id="ServiceConnect.Interfaces" version="3.1.1-pre" />
+      <dependency id="ServiceConnect" version="3.1.6-pre" />
       <dependency id="structuremap" version="3.1.6.186" />
     </dependencies>
   </metadata>

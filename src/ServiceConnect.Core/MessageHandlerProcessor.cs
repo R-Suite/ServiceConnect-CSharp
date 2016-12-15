@@ -41,7 +41,6 @@ namespace ServiceConnect.Core
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
                                                                         .Where(h => h.HandlerType.BaseType == null || 
                                                                                     h.HandlerType.BaseType.Name != typeof(ProcessManager<>).Name);
-
             InitHandlers<T>(message, context, handlerReferences);
         }
 
@@ -56,14 +55,13 @@ namespace ServiceConnect.Core
         
         private void InitHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> handlerReferences, Type baseType = null) where T : Message
         {
-            string executeHandlerMethodName = (null != baseType) ? "ExecuteHandlerBaseType" : "ExecuteHandler";
-            MethodInfo executeHandler = GetType().GetMethod(executeHandlerMethodName, BindingFlags.NonPublic | BindingFlags.Instance);
-            MethodInfo genericexecuteHandler = (null != baseType) ? executeHandler.MakeGenericMethod(typeof(T), baseType) : executeHandler.MakeGenericMethod(typeof(T));
+            MethodInfo executeHandler = GetType().GetMethod("ExecuteHandler", BindingFlags.NonPublic | BindingFlags.Instance);
+            MethodInfo genericexecuteHandler = (null != baseType) ? executeHandler.MakeGenericMethod(baseType) : executeHandler.MakeGenericMethod(typeof(T));
 
             foreach (HandlerReference handlerReference in handlerReferences)
             {
                 object messageObject = JsonConvert.DeserializeObject(message, typeof (T));
-                genericexecuteHandler.Invoke(this, new[] {messageObject, handlerReference.HandlerType, context});
+                genericexecuteHandler.Invoke(this, new[] {messageObject, handlerReference.HandlerType, handlerReference.RoutingKeys, context});
             }
 
             string messageType = string.Empty;
@@ -87,34 +85,37 @@ namespace ServiceConnect.Core
             }
         }
 
-        private void ExecuteHandlerBaseType<T, TB>(T message, Type handlerType, IConsumeContext context) where TB : Message where T : TB
+        private void ExecuteHandler<T>(T message, Type handlerType, IList<string> routingKeys, IConsumeContext context) where T : Message
         {
-            try
+            // Ignore irelevant handlers
+            if (null != context && null != context.Headers && context.Headers.ContainsKey("RoutingKey"))
             {
-                var handler = (IMessageHandler<TB>)_container.GetInstance(handlerType);
-                handler.Context = context;
-                handler.Execute(message);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(string.Format("Error executing handler. {0}", handlerType.FullName), ex);
-                throw;
-            }
-        }
+                string msgRoutingKey = Encoding.UTF8.GetString((byte[])context.Headers["RoutingKey"]);
 
-        private void ExecuteHandler<T>(T message, Type handlerType, IConsumeContext context) where T : Message
-        {
+                if (!routingKeys.Contains(msgRoutingKey))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                if (null != routingKeys && routingKeys.Any())
+                {
+                    return;
+                }
+            }
+                
+            // Execute handler
             try
             {
-                ;
-                var handler = (IMessageHandler<T>)_container.GetInstance(handlerType);
+                var handler = (IMessageHandler<T>) _container.GetInstance(handlerType);
                 handler.Context = context;
+
                 handler.Execute(message);
             }
             catch (Exception ex)
             {
                 Logger.Error(string.Format("Error executing handler. {0}", handlerType.FullName), ex);
-                
                 throw;
             }
         }
