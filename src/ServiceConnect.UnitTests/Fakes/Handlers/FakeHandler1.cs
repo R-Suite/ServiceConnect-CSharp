@@ -14,12 +14,52 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using ServiceConnect.UnitTests.Fakes.Messages;
 
 namespace ServiceConnect.UnitTests.Fakes.Handlers
 {
     public class FakeHandler1 : IMessageHandler<FakeMessage1>
+    {
+        public IConsumeContext Context { get; set; }
+
+        public void Execute(FakeMessage1 command)
+        {
+            Command = command;
+        }
+
+        public FakeMessage1 Command { get; set; }
+    }
+
+    public class FakeBaseMessageHandler1 : IMessageHandler<FakeBaseMessage1>
+    {
+        public IConsumeContext Context { get; set; }
+
+        public void Execute(FakeBaseMessage1 command)
+        {
+            Command = command;
+        }
+
+        public FakeBaseMessage1 Command { get; set; }
+    }
+
+    [RoutingKey("Test")]
+    public class FakeHandlerWithAttr1 : IMessageHandler<FakeMessage1>
+    {
+        public IConsumeContext Context { get; set; }
+
+        public void Execute(FakeMessage1 command)
+        {
+            Command = command;
+        }
+
+        public FakeMessage1 Command { get; set; }
+    }
+
+    [RoutingKey("Test1")]
+    [RoutingKey("Test2")]
+    public class FakeHandlerWithAttr2 : IMessageHandler<FakeMessage1>
     {
         public IConsumeContext Context { get; set; }
 
