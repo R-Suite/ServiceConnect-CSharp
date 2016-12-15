@@ -340,6 +340,8 @@ namespace ServiceConnect.Client.RabbitMQ
                 */
                 var cid = _queueName;
                 string clientExchange = msgTypeNameRoutingKeyPair.Key + cid;
+                // Declare the exchange first in case it doesn't exists
+                _model.ExchangeDeclare(clientExchange, "fanout", true, false, null);
                 _model.ExchangeDelete(clientExchange);
                 _model.ExchangeDeclare(clientExchange, "fanout", true, false, null);
 

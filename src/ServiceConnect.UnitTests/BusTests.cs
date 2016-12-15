@@ -355,7 +355,7 @@ namespace ServiceConnect.UnitTests
             bus.Publish(message, "routingkey1");
 
             // Assert
-            mockProducer.Verify(x => x.Publish(typeof(FakeMessage1), It.IsAny<byte[]>(), "routingkey1", null), Times.Once);
+            mockProducer.Verify(x => x.Publish(typeof(FakeMessage1), It.IsAny<byte[]>(), "routingkey1", It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingKey"))), Times.Once);
         }
 
         [Fact]
