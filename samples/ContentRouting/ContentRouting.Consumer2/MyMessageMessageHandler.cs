@@ -5,12 +5,12 @@ using ServiceConnect.Interfaces;
 
 namespace ContentRouting.Consumer2
 {
-    [RoutingKey("#.test1"), RoutingKey("*.test4")]
+    [RoutingKey("#")]
     public class MyMessageMessageHandler : IMessageHandler<MyMessage>
     {
         public void Execute(MyMessage message)
         {
-            Console.WriteLine("Consumer 2 Received Message - {0}", message.CorrelationId);
+            Console.WriteLine("Consumer 2 (catch all) Received Message - {0}", message.CorrelationId);
         }
 
         public IConsumeContext Context { get; set; }

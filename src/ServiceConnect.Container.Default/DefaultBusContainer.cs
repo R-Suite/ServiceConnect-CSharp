@@ -37,22 +37,22 @@ namespace ServiceConnect.Container.Default
         /// <returns></returns>
         public IEnumerable<HandlerReference> GetHandlerTypes()
         {
-            IEnumerable<KeyValuePair<Type, ServiceDescriptor>> instances = _container.AllInstances.Where(
+            IEnumerable<KeyValuePair<ServiceDescriptor, Type>> instances = _container.AllInstances.Where(
                 i =>
-                    i.Key.Name == typeof (IMessageHandler<>).Name ||
-                    i.Key.Name == typeof (IStartProcessManager<>).Name ||
-                    i.Key.Name == typeof (Aggregator<>).Name);
+                    i.Value.Name == typeof (IMessageHandler<>).Name ||
+                    i.Value.Name == typeof(IStartProcessManager<>).Name ||
+                    i.Value.Name == typeof(Aggregator<>).Name);
 
             var retval = new List<HandlerReference>();
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.Value.ServiceType.GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.Key.ServiceType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
-                    MessageType = instance.Key.GetGenericArguments()[0],
-                    HandlerType = instance.Value.ServiceType,
+                    MessageType = instance.Value.GetGenericArguments()[0],
+                    HandlerType = instance.Key.ServiceType,
                     RoutingKeys = routingKeys
                 });
             }
@@ -67,20 +67,19 @@ namespace ServiceConnect.Container.Default
         /// <returns></returns>
         public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
         {
-            IEnumerable<KeyValuePair<Type, ServiceDescriptor>> instances =
-                _container.AllInstances.Where(i => i.Key == messageHandler);
+            IEnumerable<KeyValuePair<ServiceDescriptor, Type>> instances = _container.AllInstances.Where(i => i.Value == messageHandler);
 
             var retval = new List<HandlerReference>();
 
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.Value.ServiceType.GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.Key.ServiceType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
-                    MessageType = instance.Key.GetGenericArguments()[0],
-                    HandlerType = instance.Value.ServiceType,
+                    MessageType = instance.Value.GetGenericArguments()[0],
+                    HandlerType = instance.Key.ServiceType,
                     RoutingKeys = routingKeys
                 });
             }

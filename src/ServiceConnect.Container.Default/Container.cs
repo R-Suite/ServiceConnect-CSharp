@@ -13,13 +13,13 @@ namespace ServiceConnect.Container.Default
     {
         #region Fields
 
-        private readonly IDictionary<Type, ServiceDescriptor> _services = new Dictionary<Type, ServiceDescriptor>();
+        private readonly IDictionary<ServiceDescriptor, Type> _services = new Dictionary<ServiceDescriptor, Type>();
 
         #endregion
 
         #region Public Properties
 
-        public IDictionary<Type, ServiceDescriptor> AllInstances
+        public IDictionary<ServiceDescriptor, Type> AllInstances
         {
             get { return _services; }
         }
@@ -45,9 +45,9 @@ namespace ServiceConnect.Container.Default
         /// <inheritdoc/>
         public object Resolve(Type tService, IDictionary<string, object> arguments)
         {
-            if (_services.ContainsKey(tService))
+            if (_services.Values.Any(v => v == tService))
             {
-                var ctor = _services[tService].ServiceType.GetConstructors().First();
+                ConstructorInfo ctor = _services.First(s => s.Value == tService).Key.ServiceType.GetConstructors().First();
 
                 IList<object> dependecies = new List<object>();
                 ParameterInfo[] ctorParams = ctor.GetParameters();
@@ -65,23 +65,22 @@ namespace ServiceConnect.Container.Default
 
         private object GetInstance(Type tService)
         {
-            if (_services.ContainsKey(tService))
+            if (_services.Values.Any(v => v == tService))
             {
-                return GetInstance(_services[tService]);
+                return GetInstance(_services.First(s => s.Value == tService).Key);
             }
 
-            if (_services.Values.Any(v => v.ServiceType == tService))
+            if (_services.Keys.Any(k=>k.ServiceType == tService))
             {
-                var serviceDesc = _services.Values.First(v => v.ServiceType == tService);
+                var serviceDesc = _services.Keys.First(v => v.ServiceType == tService);
                 var instance = serviceDesc.Instance;
                 return instance ?? CreateInstance(serviceDesc.ServiceType);
             }
 
             var genericDefinition = tService.GetGenericTypeDefinition();
-            if (genericDefinition != null && _services.ContainsKey(genericDefinition))
+            if (genericDefinition != null && _services.Values.Any(v => v == genericDefinition))
             {
-                return GetGenericInstance(tService, _services[genericDefinition]
-                    .ServiceType);
+                return GetGenericInstance(tService, _services.First(s => s.Value == genericDefinition).Key.ServiceType);
             }
 
             throw new Exception("Type not registered" + tService);
@@ -99,11 +98,13 @@ namespace ServiceConnect.Container.Default
             var actualType = genericDefinition.MakeGenericType(genericArguments);
             var result = CreateInstance(actualType);
 
-            _services[tService] = new ServiceDescriptor
+            var serDes = new ServiceDescriptor
             {
                 ServiceType = actualType,
                 Instance = result
             };
+
+            _services.Add(serDes, tService);
 
             return result;
         }
@@ -153,7 +154,7 @@ namespace ServiceConnect.Container.Default
                 {
                     ServiceType = implementation
                 };
-                _services[GetRegistrableType(@interface)] = descriptor;
+                _services[descriptor] = GetRegistrableType(@interface);
             }
 
             return this;
@@ -168,7 +169,7 @@ namespace ServiceConnect.Container.Default
                     ServiceType = instance.GetType(),
                     Instance = instance
                 };
-                _services[GetRegistrableType(@interface)] = descriptor;
+                _services[descriptor] = GetRegistrableType(@interface);
             }
 
             return this;
