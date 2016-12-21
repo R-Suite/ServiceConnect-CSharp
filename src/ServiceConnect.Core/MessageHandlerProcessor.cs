@@ -87,20 +87,28 @@ namespace ServiceConnect.Core
 
         private void ExecuteHandler<T>(T message, Type handlerType, IList<string> routingKeys, IConsumeContext context) where T : Message
         {
+            Logger.DebugFormat("Handler = {0}. Handler RoutingKeys = {1}, Message = {2}", handlerType.Name, JsonConvert.SerializeObject(routingKeys), typeof(T).Name);
+
             // Ignore irelevant handlers
             if (null != context && null != context.Headers && context.Headers.ContainsKey("RoutingKey"))
             {
                 string msgRoutingKey = Encoding.UTF8.GetString((byte[])context.Headers["RoutingKey"]);
 
-                if (!routingKeys.Contains(msgRoutingKey))
+                Logger.DebugFormat("Msg RoutingKey = {0}.", msgRoutingKey);
+
+                if (!routingKeys.Contains(msgRoutingKey) && !routingKeys.Contains("#"))
                 {
+                    Logger.Debug("Ignoring handler execution.");
                     return;
                 }
             }
             else
             {
+                Logger.Debug("Msg with no RoutingKeys.");
+
                 if (null != routingKeys && routingKeys.Any())
                 {
+                    Logger.Debug("Ignoring handler execution.");
                     return;
                 }
             }
@@ -110,6 +118,8 @@ namespace ServiceConnect.Core
             {
                 var handler = (IMessageHandler<T>) _container.GetInstance(handlerType);
                 handler.Context = context;
+
+                Logger.DebugFormat("Executing {0}.", handlerType.Name);
 
                 handler.Execute(message);
             }

@@ -275,7 +275,7 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
-            public void ConsumeMessageType(KeyValuePair<string, IList<string>> msgTypeNameRoutingKeyDict)
+            public void ConsumeMessageType(string messageTypeName)
             {
                 throw new NotImplementedException();
             }

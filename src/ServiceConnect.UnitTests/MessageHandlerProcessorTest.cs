@@ -162,6 +162,41 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void ShouldExecuteTheCorrectHandlerWithCatchAllRoutingKeyAttribute()
+        {
+            // Arrange
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+
+            var message1HandlerReference = new HandlerReference
+            {
+                HandlerType = typeof(FakeHandlerWithAttr1),
+                MessageType = typeof(FakeMessage1),
+                RoutingKeys = new List<string> { "#" } // matches any routing key
+            };
+
+            _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
+            {
+                message1HandlerReference
+            });
+
+            var fakeHandler = new FakeHandlerWithAttr1();
+            _mockContainer.Setup(x => x.GetInstance(typeof(FakeHandlerWithAttr1))).Returns(fakeHandler);
+
+            // Act
+            var message1 = new FakeMessage1(Guid.NewGuid())
+            {
+                Username = "Jakub Pachansky"
+            };
+            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
+                new ConsumeContext { Headers = new Dictionary<string, object> { { "RoutingKey", Encoding.ASCII.GetBytes("SomeRandomRoutingKey") } } });
+
+            // Assert
+            Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
+            Assert.Equal(message1.Username, fakeHandler.Command.Username);
+            _mockContainer.Verify(x => x.GetInstance(typeof(FakeHandlerWithAttr1)), Times.Once);
+        }
+
+        [Fact]
         public void ShouldExecuteTheCorrectHandlerWithMultipleRoutingKeyAttributes()
         {
             // Arrange
