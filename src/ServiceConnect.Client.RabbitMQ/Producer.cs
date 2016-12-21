@@ -115,15 +115,10 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
-            DoPublish(type, message, headers, null);
+            DoPublish(type, message, headers);
         }
 
-        public void Publish(Type type, byte[] message, string routingKey, Dictionary<string, string> headers = null)
-        {
-            DoPublish(type, message, headers, routingKey);
-        }
-
-        private void DoPublish(Type type, byte[] message, Dictionary<string, string> headers, string routingKey)
+        private void DoPublish(Type type, byte[] message, Dictionary<string, string> headers)
         {
             lock (_lock)
             {
@@ -143,19 +138,14 @@ namespace ServiceConnect.Client.RabbitMQ
                 basicProperties.SetPersistent(true);
 
                 string exchName = type.FullName.Replace(".", string.Empty);
-                string exchType = "fanout";
-                string rk = string.Empty;
-                if (!string.IsNullOrEmpty(routingKey))
-                {
-                    exchName = type.FullName.Replace(".", string.Empty) + "_WithRoutingKey";
-                    exchType = "topic";
-                    rk = routingKey;
-                }
+                var exchangeName = ConfigureExchange(exchName, "fanout");
 
-                var exchangeName = ConfigureExchange(exchName, exchType);
-
-                Retry.Do(() => _model.BasicPublish(exchangeName, rk, basicProperties, envelope.Body),
-                    ex => RetryConnection(), new TimeSpan(0, 0, 0, 6), 10);
+                Retry.Do(() => _model.BasicPublish(exchangeName, "", basicProperties, envelope.Body),
+                    ex =>
+                    {
+                        Logger.Error("Error publishing message", ex);
+                        RetryConnection();
+                    }, new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
