@@ -21,7 +21,7 @@ namespace ContentRouting.Publisher
                 for (int i = 0; i < 1; i++)
                 {
                     var id = Guid.NewGuid();
-                    bus.Publish(new MyMessage(id), "routingkey0.test3");
+                    bus.Publish(new MyMessage(id), "routingkey0");
                 }
 
                 bus.Dispose();
