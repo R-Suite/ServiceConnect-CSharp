@@ -177,40 +177,22 @@ namespace ServiceConnect
             string queueName = Configuration.TransportSettings.QueueName;
 
             IEnumerable<HandlerReference> instances = _container.GetHandlerTypes();
-
-            IDictionary<string, IList<string>> msgRoutingKeysDict = new Dictionary<string, IList<string>>();
-
-            foreach (var instance in instances)
-            {
-                if (!String.IsNullOrEmpty(instance.MessageType.FullName))
-                {
-                    var keyMsgType = instance.MessageType.FullName.Replace(".", string.Empty);
-                    if (!msgRoutingKeysDict.ContainsKey(keyMsgType))
-                    {
-                        msgRoutingKeysDict.Add(keyMsgType, instance.RoutingKeys);
-                    }
-                    else
-                    {
-                        foreach (var routingKey in instance.RoutingKeys)
-                        {
-                            msgRoutingKeysDict[keyMsgType].Add(routingKey);
-                        }
-                    }
-                }
-            }
+            IList<string> messageTypes = instances.Where(x => !String.IsNullOrEmpty(x.MessageType.FullName))
+                                                        .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
+                                                        .ToList();
 
             for (int i = 0; i < Configuration.Threads; i++)
             {
-                AddConsumer(queueName, msgRoutingKeysDict);
+                AddConsumer(queueName, messageTypes);
             }
 
             _startedConsuming = true;
         }
 
-        private void AddConsumer(string queueName, IDictionary<string, IList<string>> msgRoutingKeysDict)
+        private void AddConsumer(string queueName, IList<string> messageTypes)
         {
             var consumerPool = Configuration.GetConsumerPool();
-            consumerPool.AddConsumer(queueName, msgRoutingKeysDict, ConsumeMessageEvent, Configuration);
+            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, Configuration);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
@@ -257,7 +239,7 @@ namespace ServiceConnect
                 }
             }
 
-            _producer.Publish(typeof(T), messageBytes, routingKey, headers);
+            _producer.Publish(typeof(T), messageBytes, headers);
 
             Type newBaseType = typeof(T).BaseType;
             if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
