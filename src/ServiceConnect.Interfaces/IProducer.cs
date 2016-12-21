@@ -22,7 +22,6 @@ namespace ServiceConnect.Interfaces
     public interface IProducer : IDisposable
     {
         void Publish(Type type, byte[] message, Dictionary<string, string> headers = null);
-        void Publish(Type type, byte[] message, string routingKey, Dictionary<string, string> headers = null);
         void Send(Type type, byte[] message, Dictionary<string, string> headers = null);
         void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null);
         void Disconnect();

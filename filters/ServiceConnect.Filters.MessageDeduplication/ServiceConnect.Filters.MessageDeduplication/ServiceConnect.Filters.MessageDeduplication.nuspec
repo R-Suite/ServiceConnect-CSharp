@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Filters.MessageDeduplication</id>
-    <version>1.0.2-pre</version>
+    <version>1.0.3-pre</version>
     <title>ServiceConnect.Filters.MessageDeduplication</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -13,9 +13,9 @@
     <copyright>Copyright 2016 ServiceConnect. All rights reserved</copyright>
     <tags>MessageBus filters,ServiceConnect filters, deduplication, idempotent,R MessageBus,message idempotence,RabbitMQ MessageBus,RMessageBus,Messaging,message deduplication,Bus,Service</tags>
     <dependencies>
-      <dependency id="ServiceConnect" version="3.1.6-pre" />
-      <dependency id="ServiceConnect.Client.RabbitMQ" version="3.1.6-pre" />
-      <dependency id="ServiceConnect.Interfaces" version="3.1.1-pre" />
+      <dependency id="ServiceConnect" version="3.1.9-pre" />
+      <dependency id="ServiceConnect.Client.RabbitMQ" version="3.1.7-pre" />
+      <dependency id="ServiceConnect.Interfaces" version="3.1.2-pre" />
       <dependency id="mongocsharpdriver" version="2.3.0" />
       <dependency id="MongoDB.Bson" version="2.3.0" />
       <dependency id="MongoDB.Driver" version="2.3.0" />
