@@ -322,40 +322,13 @@ namespace ServiceConnect.Client.RabbitMQ
             Logger.Debug("Started consuming");
         }
 
-        public void ConsumeMessageType(KeyValuePair<string, IList<string>> msgTypeNameRoutingKeyPair)
+        public void ConsumeMessageType(string messageTypeName)
         {
-            var routingKeys = msgTypeNameRoutingKeyPair.Value;
-            
-            if (null != routingKeys && routingKeys.Count > 0)
-            {
-                /*  
-                    Cannot directly remove all bindings for a queue.
-                    Using an intermediate exchange.... 
-                    Each client declares its own fanout exchange and a queue. It then binds the queue to the fanout
-                    exchange, and the fanout exchange to the exchange with whatever bindings it wants.
-                  
-                    It's just the same as binding directly to the exchange.
-                    Except that if the client deletes the intermediate exchange and recreates it, 
-                    everything is effectively unbound.
-                */
-                var cid = _queueName;
-                string clientExchange = msgTypeNameRoutingKeyPair.Key + cid;
-                // Declare the exchange first in case it doesn't exists
-                _model.ExchangeDeclare(clientExchange, "fanout", true, false, null);
-                _model.ExchangeDelete(clientExchange);
-                _model.ExchangeDeclare(clientExchange, "fanout", true, false, null);
+            string exchange = ConfigureExchange(messageTypeName, "fanout");
 
-                string exchange = ConfigureExchange(msgTypeNameRoutingKeyPair.Key + "_WithRoutingKey", "topic");
-                foreach (var routingKey in routingKeys)
-                {
-                    _model.ExchangeBind(clientExchange, exchange, routingKey);
-                    _model.QueueBind(_queueName, clientExchange, string.Empty);
-                }
-            }
-            else
+            if (!string.IsNullOrEmpty(exchange))
             {
-                string exchange = ConfigureExchange(msgTypeNameRoutingKeyPair.Key, "fanout");
-                _model.QueueBind(_queueName, exchange, string.Empty);
+                _model.QueueBind(_queueName, messageTypeName, string.Empty);
             }
         }
 

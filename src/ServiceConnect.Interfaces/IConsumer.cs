@@ -15,7 +15,6 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
-using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
@@ -23,7 +22,7 @@ namespace ServiceConnect.Interfaces
     {
         void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null);
         void StopConsuming();
-        void ConsumeMessageType(KeyValuePair<string, IList<string>> msgTypeNameRoutingKeysDict);
+        void ConsumeMessageType(string messageTypeName);
         string Type { get; }
     }
 }
