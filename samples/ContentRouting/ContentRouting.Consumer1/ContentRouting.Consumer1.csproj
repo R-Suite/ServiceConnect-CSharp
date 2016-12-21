@@ -35,11 +35,17 @@
     <Reference Include="ServiceConnect">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.dll</HintPath>
     </Reference>
+    <Reference Include="ServiceConnect.Container.StructureMap">
+      <HintPath>..\..\..\src\ServiceConnect.Container.StructureMap\bin\Debug\ServiceConnect.Container.StructureMap.dll</HintPath>
+    </Reference>
     <Reference Include="ServiceConnect.Core">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Core.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Interfaces">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\ServiceConnect.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="StructureMap">
+      <HintPath>..\..\..\src\ServiceConnect.Container.StructureMap\bin\Debug\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
