@@ -18,12 +18,9 @@ using System;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public class ConsumeEventResult
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        public bool Success { get; set; }
+        public Exception Exception { get; set; }
     }
 }

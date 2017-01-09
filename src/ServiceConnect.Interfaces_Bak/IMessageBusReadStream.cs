@@ -1,4 +1,4 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
+//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
 
 //This program is free software; you can redistribute it and/or
 //modify it under the terms of the GNU General Public License
@@ -18,12 +18,16 @@ using System;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public delegate void MessageBusStreamComplete(string sequenceId);
+
+    public interface IMessageBusReadStream
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        void Write(byte[] data, Int64 packetNumber);
+        byte[] Read();
+        bool IsComplete();
+        Int64 LastPacketNumber { get; set; }
+        MessageBusStreamComplete CompleteEventHandler { get; set; }
+        string SequenceId { get; set; }
+        int HandlerCount { get; set; }
     }
 }

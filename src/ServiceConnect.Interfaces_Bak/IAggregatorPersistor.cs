@@ -15,15 +15,15 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IAggregatorPersistor
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        void InsertData(object data, string name);
+        IList<object> GetData(string name);
+        void RemoveData(string name, Guid correlationsId);
+        int Count(string name);
     }
 }

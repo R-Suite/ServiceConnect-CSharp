@@ -18,12 +18,14 @@ using System;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    /// <summary>
+    /// Aggregate messages into batches of a predefined size
+    /// and pass them to relevant handlers
+    /// </summary>
+    public interface IAggregatorProcessor : IDisposable
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        void ProcessMessage<T>(string message) where T : Message;
+        void StartTimer<T>(TimeSpan timeout);
+        void ResetTimer();
     }
 }

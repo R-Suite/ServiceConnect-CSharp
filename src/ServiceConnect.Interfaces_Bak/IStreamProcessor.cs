@@ -1,4 +1,4 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
+//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
 
 //This program is free software; you can redistribute it and/or
 //modify it under the terms of the GNU General Public License
@@ -14,16 +14,10 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System;
-
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IStreamProcessor
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        void ProcessMessage<T>(T message, IMessageBusReadStream stream) where T : Message;
     }
 }
