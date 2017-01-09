@@ -14,16 +14,19 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System;
+using System.Configuration;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IConfigurationManager
     {
-        public Message(Guid correlationId)
+        KeyValueConfigurationCollection AppSettings
         {
-            CorrelationId = correlationId;
+            get;
         }
-        public Guid CorrelationId { get; private set; }
+
+        string ConnectionStrings(string name);
+
+        T GetSection<T>(string sectionName) where T : ConfigurationSection;
     }
 }

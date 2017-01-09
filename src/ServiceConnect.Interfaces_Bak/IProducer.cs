@@ -1,4 +1,4 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
+//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
 
 //This program is free software; you can redistribute it and/or
 //modify it under the terms of the GNU General Public License
@@ -15,15 +15,18 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IProducer : IDisposable
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        void Publish(Type type, byte[] message, Dictionary<string, string> headers = null);
+        void Send(Type type, byte[] message, Dictionary<string, string> headers = null);
+        void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null);
+        void Disconnect();
+        string Type { get;}
+        long MaximumMessageSize { get; }
+        void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers);
     }
 }

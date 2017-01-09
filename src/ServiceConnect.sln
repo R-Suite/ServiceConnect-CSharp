@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.30723.0
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{F6AA773B-5C5E-4EAA-AF50-3579298ECC5C}"
 	ProjectSection(SolutionItems) = preProject
@@ -13,8 +13,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect", "ServiceConnect\ServiceConnect.csproj", "{6911293D-3B22-4D8A-9B23-25EC4FAD1742}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Client.RabbitMQ", "ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj", "{69846FE1-24D2-48F5-8E7B-9DBA042A767A}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Interfaces", "ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj", "{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{AAED4869-7897-4FB4-B55C-8903D0EB321F}"
 EndProject
@@ -43,6 +41,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Container.Default", "ServiceConnect.Container.Default\ServiceConnect.Container.Default.csproj", "{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Persistance.MongoDbSsl", "ServiceConnect.Persistance.MongoDbSsl\ServiceConnect.Persistance.MongoDbSsl.csproj", "{77B99949-2FD7-404D-BA4B-555D169E55A4}"
+EndProject
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ServiceConnect.Interfaces", "ServiceConnect.Interfaces\ServiceConnect.Interfaces.xproj", "{58F9FD7A-3951-4778-8146-456C3F60C6DC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -75,16 +75,6 @@ Global
 		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|Mixed Platforms.Build.0 = Release|x86
 		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|x86.ActiveCfg = Release|x86
 		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|x86.Build.0 = Release|x86
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|Mixed Platforms.Build.0 = Release|Any CPU
-		{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}.Release|x86.ActiveCfg = Release|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
@@ -185,6 +175,18 @@ Global
 		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
 		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{77B99949-2FD7-404D-BA4B-555D169E55A4}.Release|x86.ActiveCfg = Release|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Debug|x86.Build.0 = Debug|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Release|x86.ActiveCfg = Release|Any CPU
+		{58F9FD7A-3951-4778-8146-456C3F60C6DC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

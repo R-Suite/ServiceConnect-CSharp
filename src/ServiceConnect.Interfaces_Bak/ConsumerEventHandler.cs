@@ -14,16 +14,9 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
-    {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
-    }
+    public delegate ConsumeEventResult ConsumerEventHandler(byte[] message, string type, IDictionary<string, object> headers);
 }

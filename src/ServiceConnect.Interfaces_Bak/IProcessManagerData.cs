@@ -18,12 +18,8 @@ using System;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IProcessManagerData
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        Guid CorrelationId { get; set; }
     }
 }
