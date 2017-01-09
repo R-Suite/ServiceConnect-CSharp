@@ -111,10 +111,6 @@
       <Project>{3a8569fd-0779-48a7-9400-2f0e39186436}</Project>
       <Name>ServiceConnect.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj">
-      <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
-      <Name>ServiceConnect.Interfaces</Name>
-    </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Persistance.InMemory\ServiceConnect.Persistance.InMemory.csproj">
       <Project>{6801518D-B5E1-4555-8AB9-073F028467B4}</Project>
       <Name>ServiceConnect.Persistance.InMemory</Name>

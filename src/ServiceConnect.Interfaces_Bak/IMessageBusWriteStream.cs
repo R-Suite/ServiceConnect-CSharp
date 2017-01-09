@@ -1,4 +1,4 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
+//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
 
 //This program is free software; you can redistribute it and/or
 //modify it under the terms of the GNU General Public License
@@ -18,12 +18,9 @@ using System;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IMessageBusWriteStream : IDisposable
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        void Write(byte[] buffer, int offset, int count);
+        void Close();
     }
 }

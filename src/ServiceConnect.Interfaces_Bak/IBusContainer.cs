@@ -15,15 +15,22 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IBusContainer
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        IEnumerable<HandlerReference> GetHandlerTypes();
+        IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler);
+        object GetInstance(Type handlerType);
+        T GetInstance<T>(IDictionary<string, object> arguments);
+        T GetInstance<T>();
+        void ScanForHandlers();
+        void Initialize();
+        void Initialize(object container);
+        void AddHandler<T>(Type handlerType, T handler);
+        void AddBus(IBus bus);
+        object GetContainer();
     }
 }

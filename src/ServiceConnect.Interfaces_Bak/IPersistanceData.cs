@@ -14,16 +14,10 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System;
-
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IPersistanceData<T> 
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        T Data { get; set; }
     }
 }
