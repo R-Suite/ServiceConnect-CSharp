@@ -63,10 +63,6 @@
       <Project>{3a8569fd-0779-48a7-9400-2f0e39186436}</Project>
       <Name>ServiceConnect.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj">
-      <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
-      <Name>ServiceConnect.Interfaces</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />

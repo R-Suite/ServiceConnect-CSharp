@@ -18,6 +18,7 @@ using System;
 
 namespace ServiceConnect.Interfaces
 {
+    [Serializable]
     public class Message
     {
         public Message(Guid correlationId)

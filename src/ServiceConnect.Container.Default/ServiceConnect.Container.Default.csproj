@@ -50,10 +50,6 @@
       <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
       <Name>ServiceConnect.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj">
-      <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
-      <Name>ServiceConnect.Interfaces</Name>
-    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

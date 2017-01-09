@@ -15,15 +15,27 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Threading.Tasks;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IRequestConfiguration
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        /// <summary>
+        /// Keeps track of the original request message
+        /// Check this property when processing reply messages to ensure the request is not proccessed as a reply. 
+        /// </summary>
+        Guid RequestMessageId { get; }
+
+        int EndpointsCount { get; set; }
+        int ProcessedCount { get; set; }
+
+        /// <summary>
+        /// Configures a handler.
+        /// </summary>
+        /// <param name="handler">The handler to call with the response message</param>
+        Task SetHandler(Action<object> handler);
+
+        void ProcessMessage(string message, string type);
     }
 }
