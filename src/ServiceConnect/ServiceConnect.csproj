@@ -53,6 +53,7 @@
   <ItemGroup>
     <Compile Include="Bus.cs" />
     <Compile Include="Configuration.cs" />
+    <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -69,10 +70,6 @@
     <ProjectReference Include="..\ServiceConnect.Core\ServiceConnect.Core.csproj">
       <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
       <Name>ServiceConnect.Core</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj">
-      <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
-      <Name>ServiceConnect.Interfaces</Name>
     </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj">
       <Project>{69846fe1-24d2-48f5-8e7b-9dba042a767a}</Project>

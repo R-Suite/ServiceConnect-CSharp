@@ -1,4 +1,4 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
+//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
 
 //This program is free software; you can redistribute it and/or
 //modify it under the terms of the GNU General Public License
@@ -15,15 +15,14 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
+using System.Linq.Expressions;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public interface IProcessManagerPropertyMapper
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        List<ProcessManagerToMessageMap> Mappings { get; set; }
+        void ConfigureMapping<TProcessManagerData, TMessage>(Expression<Func<TProcessManagerData, object>> processManagerProperty, Expression<Func<TMessage, object>> messageExpression) where TProcessManagerData : IProcessManagerData;
     }
 }

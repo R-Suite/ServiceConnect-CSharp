@@ -45,12 +45,6 @@
     <Compile Include="MemoryData.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj">
-      <Project>{3BB7D53A-080F-492C-86A4-4F33FCD7FF7F}</Project>
-      <Name>ServiceConnect.Interfaces</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

@@ -15,15 +15,14 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
-    public class Message
+    public class HandlerReference
     {
-        public Message(Guid correlationId)
-        {
-            CorrelationId = correlationId;
-        }
-        public Guid CorrelationId { get; private set; }
+        public Type MessageType { get; set; }
+        public Type HandlerType { get; set; }
+        public IList<string> RoutingKeys { get; set; }
     }
 }
