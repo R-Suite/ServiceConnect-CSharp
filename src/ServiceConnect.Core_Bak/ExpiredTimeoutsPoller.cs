@@ -9,7 +9,7 @@ namespace ServiceConnect.Core
 {
     public class ExpiredTimeoutsPoller
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(ExpiredTimeoutsPoller));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly IProcessManagerFinder _processManagerFinder;
         private readonly IBus _bus;
         readonly object _locker = new object();

@@ -20,7 +20,7 @@ namespace ServiceConnect.Core
 {
     public class HeartbeatTimerState
     {
-        //public PerformanceCounter CpuCounter { get; set; }
-        //public PerformanceCounter RamCounter { get; set; }
+        public PerformanceCounter CpuCounter { get; set; }
+        public PerformanceCounter RamCounter { get; set; }
     }
 }

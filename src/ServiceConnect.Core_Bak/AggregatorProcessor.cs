@@ -32,7 +32,7 @@ namespace ServiceConnect.Core
     /// </summary>
     public class AggregatorProcessor : IAggregatorProcessor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(AggregatorProcessor));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly IAggregatorPersistor _aggregatorPersistor;
         private readonly IBusContainer _container;
