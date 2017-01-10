@@ -41,9 +41,9 @@ namespace ServiceConnect.Core
 
         public void Write(byte[] buffer, int offset, int count)
         {
-            var currentPacketSize = (count <= (int)_packetSize) ? count : (int)_packetSize;
+            var currentPacketSize = (count <= _packetSize) ? count : _packetSize;
 
-            for (int i = offset; i < count; i += currentPacketSize)
+            for (Int64 i = offset; i < count; i += currentPacketSize)
             {
                 var subArray = SubArray(buffer, i, currentPacketSize);
 
@@ -56,7 +56,7 @@ namespace ServiceConnect.Core
             }
         }
 
-        private static byte[] SubArray(byte[] data, int index, int length)
+        private static byte[] SubArray(byte[] data, Int64 index, Int64 length)
         {
             if (data.Length < index + length)
             {

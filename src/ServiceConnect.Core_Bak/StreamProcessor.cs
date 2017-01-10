@@ -27,7 +27,7 @@ namespace ServiceConnect.Core
 {
     public class StreamProcessor : IStreamProcessor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(StreamProcessor));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly IBusContainer _container;
 

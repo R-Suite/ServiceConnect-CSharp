@@ -45,12 +45,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ServiceDescriptor.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ServiceConnect.Core\ServiceConnect.Core.csproj">
-      <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
-      <Name>ServiceConnect.Core</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
