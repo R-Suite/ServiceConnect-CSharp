@@ -14,13 +14,16 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System.Diagnostics;
+using System;
+using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Core
 {
-    public class HeartbeatTimerState
+    public class StreamResponseMessage : Message
     {
-        //public PerformanceCounter CpuCounter { get; set; }
-        //public PerformanceCounter RamCounter { get; set; }
+        public StreamResponseMessage(Guid correlationId)
+            : base(correlationId)
+        {
+        }
     }
 }

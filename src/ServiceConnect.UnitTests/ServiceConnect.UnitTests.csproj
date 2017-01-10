@@ -100,10 +100,6 @@
       <Project>{5ecfb9e6-3824-4a00-83da-0490f036df3f}</Project>
       <Name>ServiceConnect.Container.Default</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Core\ServiceConnect.Core.csproj">
-      <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
-      <Name>ServiceConnect.Core</Name>
-    </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Persistance.InMemory\ServiceConnect.Persistance.InMemory.csproj">
       <Project>{6801518D-B5E1-4555-8AB9-073F028467B4}</Project>
       <Name>ServiceConnect.Persistance.InMemory</Name>
