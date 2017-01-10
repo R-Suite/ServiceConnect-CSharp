@@ -54,12 +54,6 @@
     <Compile Include="StructureMapExtensions.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ServiceConnect.Core\ServiceConnect.Core.csproj">
-      <Project>{3A8569FD-0779-48A7-9400-2F0E39186436}</Project>
-      <Name>ServiceConnect.Core</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="packages.config" />
     <None Include="ServiceConnect.Container.StructureMap.nuspec">
       <SubType>Designer</SubType>

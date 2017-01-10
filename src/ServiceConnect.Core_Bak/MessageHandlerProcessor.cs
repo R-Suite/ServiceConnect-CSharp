@@ -27,7 +27,7 @@ namespace ServiceConnect.Core
 {
     public class MessageHandlerProcessor : IMessageHandlerProcessor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(MessageHandlerProcessor));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
         private readonly IBusContainer _container;
 
@@ -39,16 +39,16 @@ namespace ServiceConnect.Core
         public void ProcessMessage<T>(string message, IConsumeContext context) where T : Message
         {
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
-                                                                        .Where(h => h.HandlerType.GetTypeInfo().BaseType == null || 
-                                                                                    h.HandlerType.GetTypeInfo().BaseType.Name != typeof(ProcessManager<>).Name);
+                                                                        .Where(h => h.HandlerType.BaseType == null || 
+                                                                                    h.HandlerType.BaseType.Name != typeof(ProcessManager<>).Name);
             InitHandlers<T>(message, context, handlerReferences);
         }
 
         private void ProcessMessageBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
         {
             IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<TB>))
-                                                                        .Where(h => h.HandlerType.GetTypeInfo().BaseType == null ||
-                                                                                    h.HandlerType.GetTypeInfo().BaseType.Name != typeof(ProcessManager<>).Name);
+                                                                        .Where(h => h.HandlerType.BaseType == null ||
+                                                                                    h.HandlerType.BaseType.Name != typeof(ProcessManager<>).Name);
 
             InitHandlers<T>(message, context, handlerReferences, typeof(TB));
         }        
@@ -75,7 +75,7 @@ namespace ServiceConnect.Core
             if (messageType != "Publish")
             {
                 // Get message BaseType and call ProcessMessage recursively to see if there are any handlers interested in the BaseType
-                Type newBaseType = (null != baseType) ? baseType.GetTypeInfo().BaseType : typeof (T).GetTypeInfo().BaseType;
+                Type newBaseType = (null != baseType) ? baseType.BaseType : typeof (T).BaseType;
                 if (newBaseType != null && newBaseType.Name != typeof (object).Name)
                 {
                     MethodInfo processMessage = GetType().GetMethod("ProcessMessageBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
