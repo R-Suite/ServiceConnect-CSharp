@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0-*",
+
+  "dependencies": {
+    "Microsoft.Extensions.DependencyModel": "1.1.0",
+    "NETStandard.Library": "1.6.0",
+    "ServiceConnect.Core": "1.0.0-*",
+    "ServiceConnect.Interfaces": "1.0.0-*"
+  },
+
+  "frameworks": {
+    "netstandard1.6": {
+      "imports": "dnxcore50"
+    }
+  }
+}
