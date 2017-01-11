@@ -20,7 +20,9 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
+using System.Transactions;
 using System.Xml;
 using System.Xml.Serialization;
 using System.Xml.XPath;
@@ -36,7 +38,7 @@ namespace ServiceConnect.Persistance.SqlServer
     /// </summary>
     public class SqlServerProcessManagerFinder : IProcessManagerFinder
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(SqlServerProcessManagerFinder));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly string _connectionString;
         private readonly int _commandTimeout = 30;
         private const string TimeoutsTableName = "Timeouts";
@@ -142,7 +144,7 @@ namespace ServiceConnect.Persistance.SqlServer
                             };
                         }
 
-                        reader.Dispose();
+                        reader.Close();
                     }
                     finally
                     {
