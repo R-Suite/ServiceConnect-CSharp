@@ -20,8 +20,6 @@ using System.Linq;
 using System.Reflection;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
-using Microsoft.DotNet.InternalAbstractions;
-using Microsoft.Extensions.DependencyModel;
 
 namespace ServiceConnect.Container.Default
 {
@@ -48,7 +46,7 @@ namespace ServiceConnect.Container.Default
             var retval = new List<HandlerReference>();
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.Key.ServiceType.GetTypeInfo().GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.Key.ServiceType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
@@ -75,7 +73,7 @@ namespace ServiceConnect.Container.Default
 
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.Key.ServiceType.GetTypeInfo().GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.Key.ServiceType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
@@ -125,12 +123,8 @@ namespace ServiceConnect.Container.Default
         /// </summary>
         public void ScanForHandlers()
         {
-            var runtimeId = RuntimeEnvironment.GetRuntimeIdentifier();
-            var assemblies = DependencyContext.Default.GetRuntimeAssemblyNames(runtimeId);
-            //foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
-            foreach (var asmName in assemblies)
+            foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                var asm = Assembly.Load(asmName);
                 var pluginTypes = asm != null ? asm.GetTypes().Where(IsHandler).ToList() : null;
 
                 if (null != pluginTypes && pluginTypes.Count > 0)
@@ -199,7 +193,7 @@ namespace ServiceConnect.Container.Default
             var isHandler = t.GetInterfaces().Any(i => i.Name == typeof(IMessageHandler<>).Name) ||
                             t.GetInterfaces().Any(i => i.Name == typeof(IStartProcessManager<>).Name) ||
                             t.GetInterfaces().Any(i => i.Name == typeof(IStreamHandler<>).Name) ||
-                            (t.GetTypeInfo().BaseType != null && t.GetTypeInfo().BaseType.Name == typeof(Aggregator<>).Name);
+                            (t.BaseType != null && t.BaseType.Name == typeof(Aggregator<>).Name);
 
             return isHandler;
         }
