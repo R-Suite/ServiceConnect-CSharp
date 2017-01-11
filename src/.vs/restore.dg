@@ -1,4 +1,9 @@
-#:C:\GIT\ServiceConnect\src\ServiceConnect.UnitTests\ServiceConnect.UnitTests.xproj
-C:\GIT\ServiceConnect\src\ServiceConnect.UnitTests\ServiceConnect.UnitTests.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Core\ServiceConnect.Core.xproj
-C:\GIT\ServiceConnect\src\ServiceConnect.UnitTests\ServiceConnect.UnitTests.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Interfaces\ServiceConnect.Interfaces.xproj
+#:C:\GIT\ServiceConnect\src\ServiceConnect\ServiceConnect.xproj
+C:\GIT\ServiceConnect\src\ServiceConnect\ServiceConnect.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Core\ServiceConnect.Core.xproj
+C:\GIT\ServiceConnect\src\ServiceConnect\ServiceConnect.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Interfaces\ServiceConnect.Interfaces.xproj
+C:\GIT\ServiceConnect\src\ServiceConnect\ServiceConnect.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Persistance.SqlServer\ServiceConnect.Persistance.SqlServer.xproj
+C:\GIT\ServiceConnect\src\ServiceConnect\ServiceConnect.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Container.Default\ServiceConnect.Container.Default.xproj
 C:\GIT\ServiceConnect\src\ServiceConnect.Core\ServiceConnect.Core.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Interfaces\ServiceConnect.Interfaces.xproj
+C:\GIT\ServiceConnect\src\ServiceConnect.Persistance.SqlServer\ServiceConnect.Persistance.SqlServer.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Interfaces\ServiceConnect.Interfaces.xproj
+C:\GIT\ServiceConnect\src\ServiceConnect.Container.Default\ServiceConnect.Container.Default.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Core\ServiceConnect.Core.xproj
+C:\GIT\ServiceConnect\src\ServiceConnect.Container.Default\ServiceConnect.Container.Default.xproj|C:\GIT\ServiceConnect\src\ServiceConnect.Interfaces\ServiceConnect.Interfaces.xproj
