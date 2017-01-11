@@ -47,7 +47,7 @@ namespace ServiceConnect.Container.Default
         {
             if (_services.Values.Any(v => v == tService))
             {
-                ConstructorInfo ctor = _services.First(s => s.Value == tService).Key.ServiceType.GetTypeInfo().GetConstructors().First();
+                ConstructorInfo ctor = _services.First(s => s.Value == tService).Key.ServiceType.GetConstructors().First();
 
                 IList<object> dependecies = new List<object>();
                 ParameterInfo[] ctorParams = ctor.GetParameters();
@@ -94,7 +94,7 @@ namespace ServiceConnect.Container.Default
 
         private object GetGenericInstance(Type tService, Type genericDefinition)
         {
-            var genericArguments = tService.GetTypeInfo().GetGenericArguments();
+            var genericArguments = tService.GetGenericArguments();
             var actualType = genericDefinition.MakeGenericType(genericArguments);
             var result = CreateInstance(actualType);
 
@@ -111,7 +111,7 @@ namespace ServiceConnect.Container.Default
 
         private object CreateInstance(Type serviceType)
         {
-            var ctor = serviceType.GetTypeInfo().GetConstructors().First();
+            var ctor = serviceType.GetConstructors().First();
             var dependecies = ctor.GetParameters().Select(p => Resolve(p.ParameterType)).ToArray();
 
             return ctor.Invoke(dependecies);
@@ -130,10 +130,10 @@ namespace ServiceConnect.Container.Default
         {
             foreach (var impl in implementations)
             {
-                var types = impl.GetTypeInfo().GetInterfaces().ToList();
-                if (impl.GetTypeInfo().BaseType != null && impl.GetTypeInfo().BaseType != typeof(object))
+                var types = impl.GetInterfaces().ToList();
+                if (impl.BaseType != null && impl.BaseType != typeof(object))
                 {
-                    types.Add(impl.GetTypeInfo().BaseType);
+                    types.Add(impl.BaseType);
                 }
                 RegisterFor(impl, types.ToArray());
             }
@@ -177,7 +177,7 @@ namespace ServiceConnect.Container.Default
 
         private static Type GetRegistrableType(Type type)
         {
-            return type.GetTypeInfo().IsGenericType && type.GetTypeInfo().ContainsGenericParameters
+            return type.IsGenericType && type.ContainsGenericParameters
                 ? type.GetGenericTypeDefinition()
                 : type;
         }

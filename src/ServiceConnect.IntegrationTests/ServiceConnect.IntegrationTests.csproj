@@ -103,29 +103,13 @@
       <Project>{69846FE1-24D2-48F5-8E7B-9DBA042A767A}</Project>
       <Name>ServiceConnect.Client.RabbitMQ</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Container.Default\ServiceConnect.Container.Default.csproj">
-      <Project>{5ECFB9E6-3824-4A00-83DA-0490F036DF3F}</Project>
-      <Name>ServiceConnect.Container.Default</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Persistance.InMemory\ServiceConnect.Persistance.InMemory.csproj">
-      <Project>{6801518D-B5E1-4555-8AB9-073F028467B4}</Project>
-      <Name>ServiceConnect.Persistance.InMemory</Name>
-    </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Persistance.MongoDb\ServiceConnect.Persistance.MongoDb.csproj">
       <Project>{567327E9-63AA-4729-A4D0-90B627226C68}</Project>
       <Name>ServiceConnect.Persistance.MongoDb</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Persistance.SqlServer\ServiceConnect.Persistance.SqlServer.csproj">
-      <Project>{48272709-228F-4C56-AA52-0C0D1F8B818A}</Project>
-      <Name>ServiceConnect.Persistance.SqlServer</Name>
-    </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Container.StructureMap\ServiceConnect.Container.StructureMap.csproj">
       <Project>{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}</Project>
       <Name>ServiceConnect.Container.StructureMap</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj">
-      <Project>{6911293d-3b22-4d8a-9b23-25ec4fad1742}</Project>
-      <Name>ServiceConnect</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
