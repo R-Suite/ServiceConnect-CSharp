@@ -103,10 +103,6 @@
       <Project>{567327E9-63AA-4729-A4D0-90B627226C68}</Project>
       <Name>ServiceConnect.Persistance.MongoDb</Name>
     </ProjectReference>
-    <ProjectReference Include="..\ServiceConnect.Container.StructureMap\ServiceConnect.Container.StructureMap.csproj">
-      <Project>{82958C9D-A9D7-4484-8A6C-2D00EDB5858B}</Project>
-      <Name>ServiceConnect.Container.StructureMap</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="Bus\TestConfiguration.xml">

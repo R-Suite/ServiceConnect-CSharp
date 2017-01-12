@@ -19,21 +19,18 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.UnitTests.Fakes.Messages
 {
-    [Serializable]
     public class FakeMessage1 : Message
     {
         public FakeMessage1(Guid correlationId) : base(correlationId) { }
         public string Username { get; set; }
     }
 
-    [Serializable]
     public class FakeBaseMessage1 : Message
     {
         public FakeBaseMessage1(Guid correlationId) : base(correlationId) { }
         public string Username { get; set; }
     }
 
-    [Serializable]
     public class FakeDerivedMessage1 : FakeBaseMessage1
     {
         public FakeDerivedMessage1(Guid correlationId) : base(correlationId) { }
