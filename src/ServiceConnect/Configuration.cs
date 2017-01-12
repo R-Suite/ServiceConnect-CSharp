@@ -41,7 +41,7 @@ namespace ServiceConnect
 
         #region Private Fields
 
-        private string _configurationPath;
+        //private string _configurationPath;
         private string _endPoint;
         private string _queueName;
         private string _errorQueueName;
@@ -94,7 +94,7 @@ namespace ServiceConnect
                 ClientSettings = new Dictionary<string, object>()
             };
 
-            _configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
+            //_configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
 
             SetTransportSettings();
             SetPersistanceSettings();
