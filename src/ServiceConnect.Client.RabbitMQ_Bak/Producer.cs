@@ -32,7 +32,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private IModel _model;
         private IConnection _connection;
         private readonly Object _lock = new Object();
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Producer));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private ConnectionFactory _connectionFactory;
         private readonly string[] _hosts;
         private int _activeHost;

@@ -26,6 +26,8 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
+using Microsoft.DotNet.InternalAbstractions;
+using Microsoft.Extensions.DependencyModel;
 
 namespace ServiceConnect
 {
@@ -83,9 +85,9 @@ namespace ServiceConnect
 
         private void StartAggregatorTimers()
         {
-            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes().Where(x => x.HandlerType.BaseType != null && 
-                                                                                              x.HandlerType.BaseType.IsGenericType && 
-                                                                                              x.HandlerType.BaseType.GetGenericTypeDefinition() == typeof(Aggregator<>));
+            IEnumerable<HandlerReference> instances = _container.GetHandlerTypes().Where(x => x.HandlerType.GetTypeInfo().BaseType != null && 
+                                                                                              x.HandlerType.GetTypeInfo().BaseType.GetTypeInfo().IsGenericType && 
+                                                                                              x.HandlerType.GetTypeInfo().BaseType.GetGenericTypeDefinition() == typeof(Aggregator<>));
             foreach (HandlerReference handlerReference in instances)
             {
                 object aggregator = _container.GetInstance(handlerReference.HandlerType);
@@ -116,31 +118,31 @@ namespace ServiceConnect
 
         private void CheckStatus(object state)
         {
-            var heartbeatState = (HeartbeatTimerState) state;
+            //var heartbeatState = (HeartbeatTimerState) state;
 
-            if (heartbeatState.CpuCounter == null)
-            {
-                heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
-            }
+            //if (heartbeatState.CpuCounter == null)
+            //{
+            //    heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
+            //}
 
-            if (heartbeatState.RamCounter == null)
-            {
-                heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
-            }
+            //if (heartbeatState.RamCounter == null)
+            //{
+            //    heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
+            //}
 
-            var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
-            {
-                Timestamp = DateTime.UtcNow,
-                Location = Configuration.TransportSettings.MachineName,
-                Name = Configuration.TransportSettings.QueueName,
-                LatestCpu = heartbeatState.CpuCounter.NextValue(),
-                LatestMemory = heartbeatState.RamCounter.NextValue(),
-                Language = "C#",
-                ConsumerType = _producer.Type
-            });
-            var messageBytes = Encoding.UTF8.GetBytes(messageString);
+            //var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
+            //{
+            //    Timestamp = DateTime.UtcNow,
+            //    Location = Configuration.TransportSettings.MachineName,
+            //    Name = Configuration.TransportSettings.QueueName,
+            //    LatestCpu = heartbeatState.CpuCounter.NextValue(),
+            //    LatestMemory = heartbeatState.RamCounter.NextValue(),
+            //    Language = "C#",
+            //    ConsumerType = _producer.Type
+            //});
+            //var messageBytes = Encoding.UTF8.GetBytes(messageString);
 
-            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
+            //_producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
         }
 
         /// <summary>
@@ -241,7 +243,7 @@ namespace ServiceConnect
 
             _producer.Publish(typeof(T), messageBytes, headers);
 
-            Type newBaseType = typeof(T).BaseType;
+            Type newBaseType = typeof(T).GetTypeInfo().BaseType;
             if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
             {
                 MethodInfo publish = GetType().GetMethods().First(m => m.Name == "Publish" && m.GetParameters()[1].Name == "routingKey");
@@ -671,7 +673,20 @@ namespace ServiceConnect
                 Headers = headers,
             };
 
-            Type typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
+            //Type typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
+
+            Type typeObject = null;
+            var runtimeId = RuntimeEnvironment.GetRuntimeIdentifier();
+            var assemblies = DependencyContext.Default.GetRuntimeAssemblyNames(runtimeId);
+            //foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var asmName in assemblies)
+            {
+                var ass = Assembly.Load(asmName);
+                typeObject = ass.GetType(type);
+
+                if (null != typeObject)
+                    break;
+            }
 
             try
             {

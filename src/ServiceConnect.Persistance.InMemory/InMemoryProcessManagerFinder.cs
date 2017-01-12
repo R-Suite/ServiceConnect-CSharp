@@ -19,10 +19,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.Caching;
-using System.Text;
 using System.Threading;
 using ServiceConnect.Interfaces;
+using Satao;
 
 namespace ServiceConnect.Persistance.InMemory
 {
@@ -31,10 +30,13 @@ namespace ServiceConnect.Persistance.InMemory
     /// </summary>
     public class InMemoryProcessManagerFinder : IProcessManagerFinder
     {
-        private static readonly ObjectCache Cache = MemoryCache.Default;
-        readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
+        //private static readonly ObjectCache Cache = MemoryCache.Default;
+        //readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
         private readonly object _memoryCacheLock = new object();
         ReaderWriterLockSlim _readerWriterLock = new ReaderWriterLockSlim();
+
+        private ICacheProvider _provider = new CacheProvider();
+        private DateTime _absoluteExpiry = DateTime.Now.AddDays(2);
 
         /// <summary>
         /// Constructor (parameters not used but needed)
@@ -62,7 +64,7 @@ namespace ServiceConnect.Persistance.InMemory
 
                 //Left
                 ParameterExpression pe = Expression.Parameter(typeof(MemoryData<T>), "t");
-                Expression left = Expression.Property(pe, typeof(MemoryData<T>).GetProperty("Data"));
+                Expression left = Expression.Property(pe, typeof(MemoryData<T>).GetTypeInfo().GetProperty("Data"));
                 foreach (var prop in mapping.PropertiesHierarchy.Reverse())
                 {
                     left = Expression.Property(left, left.Type, prop.Key);
@@ -85,8 +87,21 @@ namespace ServiceConnect.Persistance.InMemory
                 Expression<Func<MemoryData<T>, bool>> lambda = Expression.Lambda<Func<MemoryData<T>, bool>>(expression, pe);
 
                 // get all the relevant cache items
-                var cacheItems = (from n in Cache.AsParallel() where n.Value.GetType() == typeof(MemoryData<IProcessManagerData>) select n.Value);
+                //var cacheItems = (from n in Cache.AsParallel() where n.Value.GetType() == typeof(MemoryData<IProcessManagerData>) select n.Value);
+
+                IList<object> cacheItems = new List<object>();
+
+                foreach (var key in _provider.Keys())
+                {
+                    var value = _provider.Get<string, object>(key.ToString());
+                    if (value.GetType() == typeof(MemoryData<IProcessManagerData>))
+                    {
+                        cacheItems.Add(value);
+                    }
+                }
+
                 // convert to correct generic type
+                //var newCacheItems = Enumerable.ToList((from dynamic cacheItem in cacheItems select new MemoryData<T> { Data = cacheItem.Data, Version = cacheItem.Version }));
                 var newCacheItems = Enumerable.ToList((from dynamic cacheItem in cacheItems select new MemoryData<T> { Data = cacheItem.Data, Version = cacheItem.Version }));
                 // filter based of mapping criteria
                 MemoryData<T> retval = newCacheItems.FirstOrDefault(lambda.Compile());
@@ -99,7 +114,7 @@ namespace ServiceConnect.Persistance.InMemory
         {
             Type typeParameterType = data.GetType();
 
-            MethodInfo md = GetType().GetMethods().First(m => m.Name == "GetMemoryData" && m.GetParameters()[0].Name == "data");
+            MethodInfo md = GetType().GetTypeInfo().GetMethods().First(m => m.Name == "GetMemoryData" && m.GetParameters()[0].Name == "data");
             //MethodInfo genericMd = md.MakeGenericMethod(typeParameterType);
             MethodInfo genericMd = md.MakeGenericMethod(typeof(IProcessManagerData));
 
@@ -108,10 +123,19 @@ namespace ServiceConnect.Persistance.InMemory
                 var memoryData = genericMd.Invoke(this, new object[] {data});
 
                 string key = data.CorrelationId.ToString();
-            
-                if (!Cache.Contains(key))
+
+                //if (!Cache.Contains(key))
+                //{
+                //    Cache.Set(key, memoryData, _policy);
+                //}
+                //else
+                //{
+                //    throw new ArgumentException(string.Format("ProcessManagerData with CorrelationId {0} already exists in the cache.", key));
+                //}
+
+                if (!_provider.Contains(key))
                 {
-                    Cache.Set(key, memoryData, _policy);
+                    _provider.Add(key, memoryData, _absoluteExpiry);
                 }
                 else
                 {
@@ -140,9 +164,11 @@ namespace ServiceConnect.Persistance.InMemory
                 var newData = (MemoryData<T>) data;
                 string key = data.Data.CorrelationId.ToString();
 
-                if (Cache.Contains(key))
+                //if (Cache.Contains(key))
+                if (!_provider.Contains(key))
                 {
-                    var currentVersion = ((MemoryData<T>)(Cache.Get(key))).Version;
+                    //var currentVersion = ((MemoryData<T>)(Cache.Get(key))).Version;
+                    var currentVersion = ((MemoryData<T>)(_provider.Get<string, object>(key))).Version;
 
                     var updatedData = new MemoryData<T>
                     {
@@ -152,7 +178,8 @@ namespace ServiceConnect.Persistance.InMemory
 
                     if (currentVersion == newData.Version)
                     {
-                        Cache.Set(key, updatedData, _policy);
+                        //Cache.Set(key, updatedData, _policy);
+                        _provider.Add(key, updatedData, _absoluteExpiry);
                     }
                     else
                     {
@@ -177,7 +204,8 @@ namespace ServiceConnect.Persistance.InMemory
             {
                 string key = persistanceData.Data.CorrelationId.ToString();
 
-                Cache.Remove(key);
+                //Cache.Remove(key);
+                _provider.Remove(key);
             }
         }
 
@@ -187,9 +215,11 @@ namespace ServiceConnect.Persistance.InMemory
             {
                 string key = timeoutData.Id.ToString();
 
-                if (!Cache.Contains(key))
+                //if (!Cache.Contains(key))
+                if (!_provider.Contains(key))
                 {
-                    Cache.Set(key, timeoutData, _policy);
+                    //Cache.Set(key, timeoutData, _policy);
+                    _provider.Add(key, timeoutData, _absoluteExpiry);
                 }
                 else
                 {
@@ -213,7 +243,18 @@ namespace ServiceConnect.Persistance.InMemory
 
             lock (_memoryCacheLock)
             {
-                var cacheItems = (from n in Cache.AsParallel() where n.Value.GetType() == typeof (TimeoutData) select new { n.Value, n.Key });
+                //var cacheItems = (from n in Cache.AsParallel() where n.Value.GetType() == typeof (TimeoutData) select new { n.Value, n.Key });
+
+                IDictionary<string, object> cacheItems = new Dictionary<string, object>();
+
+                foreach (var key in _provider.Keys())
+                {
+                    var value = _provider.Get<string, object>(key.ToString());
+                    if (value.GetType() == typeof(MemoryData<IProcessManagerData>))
+                    {
+                        cacheItems.Add(key.ToString(), value);
+                    }
+                }
 
                 foreach (var data in cacheItems)
                 {
@@ -242,7 +283,8 @@ namespace ServiceConnect.Persistance.InMemory
 
         public void RemoveDispatchedTimeout(Guid id)
         {
-            Cache.Remove(id.ToString());
+            //Cache.Remove(id.ToString());
+            _provider.Remove(id.ToString());
         }
     }
 }
