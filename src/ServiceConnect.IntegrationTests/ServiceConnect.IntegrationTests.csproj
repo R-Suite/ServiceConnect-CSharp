@@ -99,10 +99,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj">
-      <Project>{69846FE1-24D2-48F5-8E7B-9DBA042A767A}</Project>
-      <Name>ServiceConnect.Client.RabbitMQ</Name>
-    </ProjectReference>
     <ProjectReference Include="..\ServiceConnect.Persistance.MongoDb\ServiceConnect.Persistance.MongoDb.csproj">
       <Project>{567327E9-63AA-4729-A4D0-90B627226C68}</Project>
       <Name>ServiceConnect.Persistance.MongoDb</Name>

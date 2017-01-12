@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Timers;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -28,7 +29,7 @@ namespace ServiceConnect.Client.RabbitMQ
 {
     public class Consumer : IConsumer
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Consumer));
+        private static readonly ILog Logger = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private readonly ITransportSettings _transportSettings;
         private IConnection _connection;
         private IModel _model;
