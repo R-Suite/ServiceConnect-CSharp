@@ -62,7 +62,7 @@ namespace ServiceConnect.Core
             }
         }
 
-        internal void InnerPoll(CancellationToken cancellationToken)
+        public void InnerPoll(CancellationToken cancellationToken)
         {
             var utcNow = DateTime.UtcNow;
 

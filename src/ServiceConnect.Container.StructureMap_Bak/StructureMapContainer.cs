@@ -7,7 +7,6 @@ using StructureMap;
 using StructureMap.Graph;
 using StructureMap.Pipeline;
 using StructureMap.Query;
-using System.Reflection;
 
 namespace ServiceConnect.Container.StructureMap
 {
@@ -69,7 +68,7 @@ namespace ServiceConnect.Container.StructureMap
             var retval = new List<HandlerReference>();
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.ReturnedType.GetTypeInfo().GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.ReturnedType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
@@ -91,12 +90,12 @@ namespace ServiceConnect.Container.StructureMap
 
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.ReturnedType.GetTypeInfo().GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.ReturnedType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
-                    MessageType = instance.PluginType.GetTypeInfo().GetGenericArguments()[0],
+                    MessageType = instance.PluginType.GetGenericArguments()[0],
                     HandlerType = instance.ReturnedType,
                     RoutingKeys = routingKeys
                 });
