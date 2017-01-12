@@ -1,8 +1,8 @@
 {
   "version": "1.0.0-*",
-  "testRunner": "xunit",
   "dependencies": {
     "Moq": "4.6.38-alpha",
+    "ServiceConnect": "1.0.0-*",
     "ServiceConnect.Core": "1.0.0-*",
     "ServiceConnect.Interfaces": "1.0.0-*",
     "xunit": "2.2.0-beta4-build3444"
