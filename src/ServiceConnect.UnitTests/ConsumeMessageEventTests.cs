@@ -62,7 +62,7 @@ namespace ServiceConnect.UnitTests
         {
             // Arrange
             
-            var bus = new Bus(_mockConfiguration.Object);
+            var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
 
             _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
             var mockPersistor = new Mock<IAggregatorPersistor>();
@@ -114,7 +114,7 @@ namespace ServiceConnect.UnitTests
             _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()));
 
             // Act
-            var bus = new Bus(_mockConfiguration.Object);
+            var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
 
             // Assert
             _mockConsumerPool.Verify(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()), Times.Once);
