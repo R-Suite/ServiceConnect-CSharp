@@ -31,7 +31,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupBusWithCorrectCustomDatabaseNameAndConnectionString()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = ServiceConnect.Bus.Initialize(config =>
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainerType<FakeContainer>();
@@ -54,7 +54,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupBusWithCorrectDefaultDatabaseNameAndConnectionString()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = ServiceConnect.Bus.Initialize(config =>
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainerType<FakeContainer>();
@@ -75,7 +75,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupBusToScanForAllHandlers()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = ServiceConnect.Bus.Initialize(config =>
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainerType<FakeContainer>();
@@ -114,7 +114,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupBusWithCustomConsumer()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = ServiceConnect.Bus.Initialize(config =>
             {
                 config.SetConsumer<FakeConsumer>();
                 config.SetProducer<FakePublisher>();
@@ -133,7 +133,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupBusWithCustomPublisher()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = ServiceConnect.Bus.Initialize(config =>
             {
                 config.SetProducer<FakePublisher>();
                 config.SetContainerType<FakeContainer>();
@@ -152,7 +152,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupBusWithCustomProcessManagerFinder()
         {
             // Arrange
-            IBus bus = Bus.Initialize(config =>
+            IBus bus = ServiceConnect.Bus.Initialize(config =>
             {
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainerType<FakeContainer>();
@@ -179,7 +179,7 @@ namespace ServiceConnect.UnitTests
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings {});
 
             // Act
-            new Bus(mockConfiguration.Object);
+            new ServiceConnect.Bus(mockConfiguration.Object);
 
             // Assert
             mockContainer.Verify(x => x.Initialize(), Times.Once);
@@ -189,7 +189,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldAddMessageMappingsToConfiguration()
         {
             // Arrange
-            var bus = Bus.Initialize(conf =>
+            var bus = ServiceConnect.Bus.Initialize(conf =>
             {
                 conf.AddQueueMapping(typeof(FakeMessage1), "MyEndPoint1");
                 conf.AddQueueMapping(typeof(FakeMessage2), "MyEndPoint2");
@@ -211,7 +211,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupQueueName()
         {
             // Arrange
-            var bus = Bus.Initialize(c =>
+            var bus = ServiceConnect.Bus.Initialize(c =>
             {
                 c.SetQueueName("TestQueue");
                 c.SetContainerType<FakeContainer>();
@@ -231,7 +231,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupErrorQueueName()
         {
             // Arrange
-            var bus = Bus.Initialize(c =>
+            var bus = ServiceConnect.Bus.Initialize(c =>
             {
                 c.SetErrorQueueName("TestErrorQueue");
                 c.SetContainerType<FakeContainer>();
@@ -251,7 +251,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupAuditQueueName()
         {
             // Arrange
-            var bus = Bus.Initialize(c =>
+            var bus = ServiceConnect.Bus.Initialize(c =>
             {
                 c.SetAuditQueueName("TestAuditQueue");
                 c.SetContainerType<FakeContainer>();
@@ -271,7 +271,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupHeartbeatQueueName()
         {
             // Arrange
-            var bus = Bus.Initialize(c =>
+            var bus = ServiceConnect.Bus.Initialize(c =>
             {
                 c.SetHeartbeatQueueName("TestHeartbeatQueue");
                 c.SetContainerType<FakeContainer>();
@@ -291,7 +291,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldSetupAuditingEnabled()
         {
             // Arrange
-            var bus = Bus.Initialize(c =>
+            var bus = ServiceConnect.Bus.Initialize(c =>
             {
                 c.SetAuditingEnabled(true);
                 c.SetContainerType<FakeContainer>();
@@ -311,7 +311,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldPurgeQueuesOnStartup()
         {
             // Arrange
-            var bus = Bus.Initialize(c =>
+            var bus = ServiceConnect.Bus.Initialize(c =>
             {
                 c.SetContainerType<FakeContainer>();
                 c.SetProducer<FakePublisher>();
@@ -330,7 +330,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldScanForMessageHandlersByDefault()
         {
             // Arrange
-            var bus = Bus.Initialize(c =>
+            var bus = ServiceConnect.Bus.Initialize(c =>
             {
                 c.SetContainerType<FakeContainer>();
                 c.SetProducer<FakePublisher>();
