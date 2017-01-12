@@ -17,16 +17,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.Caching;
 using ServiceConnect.Interfaces;
+using Satao;
 
 namespace ServiceConnect.Persistance.InMemory
 {
     public class InMemoryAggregatorPersistor : IAggregatorPersistor
     {
-        private static readonly ObjectCache Cache = MemoryCache.Default;
-        readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
+        //private static readonly ObjectCache Cache = MemoryCache.Default;
+        //readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
         private readonly object _memoryCacheLock = new object();
+
+        private ICacheProvider _provider = new CacheProvider();
+        private DateTime _absoluteExpiry = DateTime.Now.AddDays(2);
 
         /// <summary>
         /// Constructor (parameters not used but needed)
@@ -40,22 +43,32 @@ namespace ServiceConnect.Persistance.InMemory
         {
             lock (_memoryCacheLock)
             {
-                if (Cache.Contains(name))
+                //if (Cache.Contains(name))
+                if (!_provider.Contains(name))
                 {
-                    var cacheItem = Cache.GetCacheItem(name);
-                    ((IList<MemoryData<object>>)cacheItem.Value).Add(new MemoryData<object>
+                    //var cacheItem = Cache.GetCacheItem(name);
+                    var cacheItem = _provider.Get<string, object>(name);
+                    //((IList<MemoryData<object>>)cacheItem.Value).Add(new MemoryData<object>
+                    ((IList<MemoryData<object>>)cacheItem).Add(new MemoryData<object>
                     {
                         Data = data
                     });
                 }
                 else
                 {
-                    Cache.Add(new CacheItem(name, new List<MemoryData<object>> { 
+                    //Cache.Add(new CacheItem(name, new List<MemoryData<object>> { 
+                    //    new MemoryData<object>
+                    //    {
+                    //        Data = data
+                    //    } 
+                    //}), _policy);
+                    _provider.Add(name, new List<MemoryData<object>>
+                    {
                         new MemoryData<object>
                         {
                             Data = data
-                        } 
-                    }), _policy);
+                        }
+                    }, _absoluteExpiry);
                 }
             }
         }
@@ -64,10 +77,13 @@ namespace ServiceConnect.Persistance.InMemory
         {
             lock (_memoryCacheLock)
             {
-                if (Cache.Contains(name))
+                //if (Cache.Contains(name))
+                if (!_provider.Contains(name))
                 {
-                    var cacheItem = Cache.GetCacheItem(name);
-                    return ((List<MemoryData<object>>)cacheItem.Value).Select(x => x.Data).ToList();
+                    //var cacheItem = Cache.GetCacheItem(name);
+                    var cacheItem = _provider.Get<string, object>(name);
+                    //return ((List<MemoryData<object>>)cacheItem.Value).Select(x => x.Data).ToList();
+                    return ((List<MemoryData<object>>)cacheItem).Select(x => x.Data).ToList();
                 }
                 return new List<object>();
             }
@@ -77,9 +93,11 @@ namespace ServiceConnect.Persistance.InMemory
         {
             lock (_memoryCacheLock)
             {
-                if (Cache.Contains(name))
+                //if (Cache.Contains(name))
+                if (!_provider.Contains(name))
                 {
-                    var cacheItem = ((List<MemoryData<object>>)Cache.GetCacheItem(name).Value);
+                    //var cacheItem = ((List<MemoryData<object>>)Cache.GetCacheItem(name).Value);
+                    var cacheItem = (List<MemoryData<object>>)_provider.Get<string, object>(name);
                     var message = cacheItem.FirstOrDefault(x => ((Message)x.Data).CorrelationId == correlationsId);
                     cacheItem.Remove(message);
                 }
@@ -90,9 +108,11 @@ namespace ServiceConnect.Persistance.InMemory
         {
             lock (_memoryCacheLock)
             {
-                if (Cache.Contains(name))
+                //if (Cache.Contains(name))
+                if (!_provider.Contains(name))
                 {
-                    Cache.Remove(name);
+                    //Cache.Remove(name);
+                    _provider.Remove(name);
                 }
             }
         }
@@ -101,10 +121,13 @@ namespace ServiceConnect.Persistance.InMemory
         {
             lock (_memoryCacheLock)
             {
-                if (Cache.Contains(name))
+                //if (Cache.Contains(name))
+                if (!_provider.Contains(name))
                 {
-                    var cacheItem = Cache.GetCacheItem(name);
-                    return ((List<MemoryData<object>>)cacheItem.Value).Count;
+                    //var cacheItem = Cache.GetCacheItem(name);
+                    var cacheItem = (List<MemoryData<object>>)_provider.Get<string, object>(name);
+                    //return ((List<MemoryData<object>>)cacheItem.Value).Count;
+                    return cacheItem.Count;
                 }
                 return 0;
             }

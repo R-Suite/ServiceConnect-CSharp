@@ -10,8 +10,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{F6AA77
 		.nuget\NuGet.targets = .nuget\NuGet.targets
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Client.RabbitMQ", "ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj", "{69846FE1-24D2-48F5-8E7B-9DBA042A767A}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{AAED4869-7897-4FB4-B55C-8903D0EB321F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.IntegrationTests", "ServiceConnect.IntegrationTests\ServiceConnect.IntegrationTests.csproj", "{3A2C68E8-7F11-461A-AC51-603148AAEC72}"
@@ -44,6 +42,8 @@ Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ServiceConnect.Persistance.
 EndProject
 Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ServiceConnect.Container.Default", "ServiceConnect.Container.Default\ServiceConnect.Container.Default.xproj", "{94129B84-1471-4956-9DB5-461B1D93DE79}"
 EndProject
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ServiceConnect.Client.RabbitMQ", "ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.xproj", "{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -54,17 +54,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Debug|Mixed Platforms.ActiveCfg = Debug|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Debug|Mixed Platforms.Build.0 = Debug|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Debug|x86.ActiveCfg = Debug|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Debug|x86.Build.0 = Debug|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|Any CPU.ActiveCfg = Release|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|Mixed Platforms.ActiveCfg = Release|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|Mixed Platforms.Build.0 = Release|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|x86.ActiveCfg = Release|x86
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A}.Release|x86.Build.0 = Release|x86
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
@@ -199,12 +188,23 @@ Global
 		{94129B84-1471-4956-9DB5-461B1D93DE79}.Release|Mixed Platforms.Build.0 = Release|Any CPU
 		{94129B84-1471-4956-9DB5-461B1D93DE79}.Release|x86.ActiveCfg = Release|Any CPU
 		{94129B84-1471-4956-9DB5-461B1D93DE79}.Release|x86.Build.0 = Release|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Debug|x86.Build.0 = Debug|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|x86.ActiveCfg = Release|Any CPU
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{69846FE1-24D2-48F5-8E7B-9DBA042A767A} = {3055CCE6-1EF9-49D4-A3E8-39E4F6D6E135}
 		{3A2C68E8-7F11-461A-AC51-603148AAEC72} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
 		{567327E9-63AA-4729-A4D0-90B627226C68} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
 		{82958C9D-A9D7-4484-8A6C-2D00EDB5858B} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
@@ -214,5 +214,6 @@ Global
 		{88ED4E66-4F8F-4567-A0DC-2B02B0C45952} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
 		{DD2DEE20-F9C3-4826-8A7E-5741B555BE59} = {B90F74F8-9C19-4A56-A9E5-871B5AD44BFA}
 		{94129B84-1471-4956-9DB5-461B1D93DE79} = {17D69048-F5BF-481B-8ACF-32787BBF61B5}
+		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F} = {3055CCE6-1EF9-49D4-A3E8-39E4F6D6E135}
 	EndGlobalSection
 EndGlobal
