@@ -682,7 +682,7 @@ namespace ServiceConnect
             foreach (var asmName in assemblies)
             {
                 var ass = Assembly.Load(asmName);
-                typeObject = ass.GetType(type);
+                typeObject = ass.GetTypes().Where(t=>t.AssemblyQualifiedName == type).FirstOrDefault();
 
                 if (null != typeObject)
                     break;

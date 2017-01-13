@@ -1,17 +1,24 @@
 {
   "version": "1.0.0-*",
+  "testRunner": "xunit",
   "dependencies": {
     "Moq": "4.6.38-alpha",
     "ServiceConnect": "1.0.0-*",
     "ServiceConnect.Container.StructureMap": "1.0.0-*",
     "ServiceConnect.Core": "1.0.0-*",
     "ServiceConnect.Interfaces": "1.0.0-*",
-    "xunit": "2.2.0-beta4-build3444"
+    "xunit": "2.2.0-beta4-build3444",
+    "dotnet-test-xunit": "2.2.0-preview2-build1029"
   },
 
   "frameworks": {
-    "netstandard1.6": {
-      "imports": "dnxcore50"
+    "netcoreapp1.0": {
+      "dependencies": {
+        "Microsoft.NETCore.App": {
+          "type": "platform",
+          "version": "1.0.0"
+        }
+      }
     }
   }
 }
