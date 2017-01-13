@@ -1543,6 +1543,7 @@
           "NETStandard.Library": "1.6.0",
           "Newtonsoft.Json": "9.0.1",
           "ServiceConnect.Interfaces": "1.0.0",
+          "System.Reflection": "4.3.0",
           "System.Threading.Thread": "4.3.0"
         },
         "compile": {

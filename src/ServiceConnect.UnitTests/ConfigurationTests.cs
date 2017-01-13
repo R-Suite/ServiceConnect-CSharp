@@ -54,7 +54,8 @@ namespace ServiceConnect.UnitTests
             Assert.Equal(3000, configuration.TransportSettings.RetryDelay);
             Assert.Null(configuration.TransportSettings.Username);
             Assert.Null(configuration.TransportSettings.Password);
-            Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().ProcessName, configuration.TransportSettings.QueueName);
+            //Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().ProcessName, configuration.TransportSettings.QueueName);
+            Assert.Equal("dotnet-test-xunit", configuration.TransportSettings.QueueName);
             Assert.False(configuration.TransportSettings.AuditingEnabled);
             Assert.Equal("errors", configuration.TransportSettings.ErrorQueueName);
             Assert.Equal("audit", configuration.TransportSettings.AuditQueueName);
