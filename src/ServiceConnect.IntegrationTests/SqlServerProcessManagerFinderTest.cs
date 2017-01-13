@@ -26,6 +26,7 @@ using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistance.SqlServer;
 using Xunit;
+using Microsoft.Extensions.PlatformAbstractions;
 
 namespace ServiceConnect.IntegrationTests
 {
@@ -53,7 +54,9 @@ namespace ServiceConnect.IntegrationTests
 
         public SqlServerProcessManagerFinderTest()
         {
-            _connectionString = @"Data Source=(LocalDB)\v11.0;AttachDbFilename=|DataDirectory|\MyLocalDb.mdf;Integrated Security=True";
+            var appBasePath = PlatformServices.Default.Application.ApplicationBasePath;
+            //_connectionString = @"Data Source=(LocalDB)\v11.0;AttachDbFilename=|DataDirectory|\MyLocalDb.mdf;Integrated Security=True";
+            _connectionString = string.Format(@"Data Source=(LocalDB)\v11.0;AttachDbFilename={0};Integrated Security=True", Path.Combine(appBasePath, "MyLocalDb.mdf"));
 
             // DROP TABLE before each test
             using (var connection = new SqlConnection(_connectionString))
