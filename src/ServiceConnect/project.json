@@ -12,7 +12,8 @@
     "ServiceConnect.Interfaces": "1.0.0-*",
     "ServiceConnect.Persistance.InMemory": "1.0.0-*",
     "ServiceConnect.Persistance.SqlServer": "1.0.0-*",
-    "System.Diagnostics.Process": "4.3.0"
+    "System.Diagnostics.Process": "4.3.0",
+    "System.Reflection.Extensions": "4.3.0"
   },
 
   "frameworks": {
