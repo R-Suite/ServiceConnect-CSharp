@@ -165,7 +165,7 @@ namespace ServiceConnect.Persistance.InMemory
                 string key = data.Data.CorrelationId.ToString();
 
                 //if (Cache.Contains(key))
-                if (!_provider.Contains(key))
+                if (_provider.Contains(key))
                 {
                     //var currentVersion = ((MemoryData<T>)(Cache.Get(key))).Version;
                     var currentVersion = ((MemoryData<T>)(_provider.Get<string, object>(key))).Version;
@@ -179,6 +179,7 @@ namespace ServiceConnect.Persistance.InMemory
                     if (currentVersion == newData.Version)
                     {
                         //Cache.Set(key, updatedData, _policy);
+                        _provider.Remove(key);
                         _provider.Add(key, updatedData, _absoluteExpiry);
                     }
                     else

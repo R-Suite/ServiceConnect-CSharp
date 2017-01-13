@@ -22,6 +22,7 @@ using System.Security.Cryptography.X509Certificates;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
+using System.Reflection;
 
 namespace ServiceConnect.Persistance.MongoDbSsl
 {
@@ -174,7 +175,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
             //Left
             ParameterExpression pe = Expression.Parameter(typeof(MongoDbSslData<T>), "t");
-            Expression left = Expression.Property(pe, typeof(MongoDbSslData<T>).GetProperty("Data"));
+            Expression left = Expression.Property(pe, typeof(MongoDbSslData<T>).GetTypeInfo().GetProperty("Data"));
             foreach (var prop in mapping.PropertiesHierarchy.Reverse())
             {
                 left = Expression.Property(left, left.Type, prop.Key);
