@@ -21,7 +21,6 @@ using System.Linq.Expressions;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
-using System.Reflection;
 
 namespace ServiceConnect.Persistance.MongoDb
 {
@@ -66,7 +65,7 @@ namespace ServiceConnect.Persistance.MongoDb
 
             //Left
             ParameterExpression pe = Expression.Parameter(typeof(MongoDbData<T>), "t");
-            Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetTypeInfo().GetProperty("Data"));
+            Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetProperty("Data"));
             foreach (var prop in mapping.PropertiesHierarchy.Reverse())
             {
                 left = Expression.Property(left, left.Type, prop.Key);

@@ -18,29 +18,137 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Security.Cryptography.X509Certificates;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
-using System.Reflection;
 
-namespace ServiceConnect.Persistance.MongoDb
+namespace ServiceConnect.Persistance.MongoDbSsl
 {
     /// <summary>
     /// MonoDb implementation of IProcessManagerFinder.
     /// </summary>
-    public class MongoDbProcessManagerFinder : IProcessManagerFinder
+    public class MongoDbSslProcessManagerFinder : IProcessManagerFinder
     {
         private readonly MongoDatabase _mongoDatabase;
         private const string TimeoutsCollectionName = "Timeouts";
 
-        public event TimeoutInsertedDelegate TimeoutInserted;
-
-        public MongoDbProcessManagerFinder(string connectionString, string databaseName)
+        public MongoDbSslProcessManagerFinder(string connectionString, string databaseName)
         {
-            var mongoClient = new MongoClient(connectionString);
-            MongoServer server = mongoClient.GetServer();
+            var connectionParts = connectionString.Split(',');
+            string nodes = string.Empty;
+            string username = string.Empty;
+            string password = string.Empty;
+            string certPath = string.Empty;
+            string userdb = string.Empty;
+            string cert = string.Empty;
+            string certPassword = string.Empty;
+
+            foreach (string connectionPart in connectionParts)
+            {
+                var nameValue = connectionPart.Split('=');
+                switch (nameValue[0].ToLower())
+                {
+                    case "nodes":
+                        nodes = nameValue[1];
+                        break;
+                    case "userdb":
+                        userdb = nameValue[1];
+                        break;
+                    case "username":
+                        username = nameValue[1];
+                        break;
+                    case "password":
+                        password = nameValue[1];
+                        break;
+                    case "certpath":
+                        certPath = nameValue[1];
+                        break;
+                    case "cert":
+                        cert = nameValue[1];
+                        break;
+                    case "certpassword":
+                        certPassword = nameValue[1];
+                        break;
+                }
+            }
+
+            var mongoNodes = nodes.Split(';');
+
+            List<X509Certificate> certs = null;
+            if (!string.IsNullOrEmpty(certPath))
+            {
+                if (string.IsNullOrEmpty(certPassword))
+                {
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(certPath)
+                    };
+                }
+                else
+                {
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(certPath, certPassword)
+                    };
+                }
+
+            }
+
+            if (!string.IsNullOrEmpty(cert))
+            {
+                if (string.IsNullOrEmpty(certPassword))
+                {
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(Convert.FromBase64String(cert))
+                    };
+                }
+                else
+                {
+                    certs = new List<X509Certificate>
+                    {
+                        new X509Certificate2(Convert.FromBase64String(cert), certPassword)
+                    };
+                }
+            }
+
+            List<MongoCredential> credentials = null;
+            if (!string.IsNullOrEmpty(username))
+            {
+                string db = "admin";
+
+                if (!string.IsNullOrEmpty(userdb))
+                {
+                    db = userdb;
+                }
+
+                credentials = new List<MongoCredential>
+                {
+                    MongoCredential.CreateCredential(db, username, password)
+                };
+            }
+
+            var settings = new MongoClientSettings
+            {
+                UseSsl = true,
+                Credentials = credentials,
+                ConnectionMode = ConnectionMode.Automatic,
+                Servers = mongoNodes.Select(x => new MongoServerAddress(x)),
+                SslSettings = new SslSettings
+                {
+                    ClientCertificates = certs,
+                    ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
+                    CheckCertificateRevocation = false
+                }
+            };
+
+            var client = new MongoClient(settings);
+            MongoServer server = client.GetServer();
             _mongoDatabase = server.GetDatabase(databaseName);
         }
+
+        public event TimeoutInsertedDelegate TimeoutInserted;
 
         /// <summary>
         /// Find existing instance of ProcessManager
@@ -65,8 +173,8 @@ namespace ServiceConnect.Persistance.MongoDb
             }
 
             //Left
-            ParameterExpression pe = Expression.Parameter(typeof(MongoDbData<T>), "t");
-            Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetTypeInfo().GetProperty("Data"));
+            ParameterExpression pe = Expression.Parameter(typeof(MongoDbSslData<T>), "t");
+            Expression left = Expression.Property(pe, typeof(MongoDbSslData<T>).GetProperty("Data"));
             foreach (var prop in mapping.PropertiesHierarchy.Reverse())
             {
                 left = Expression.Property(left, left.Type, prop.Key);
@@ -86,10 +194,10 @@ namespace ServiceConnect.Persistance.MongoDb
                 throw new Exception("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
             }
 
-            var lambda = Expression.Lambda<Func<MongoDbData<T>, bool>>(expression, pe);
-            IMongoQuery query = Query<MongoDbData<T>>.Where(lambda);
+            var lambda = Expression.Lambda<Func<MongoDbSslData<T>, bool>>(expression, pe);
+            IMongoQuery query = Query<MongoDbSslData<T>>.Where(lambda);
             
-            return collection.FindOneAs<MongoDbData<T>>(query);
+            return collection.FindOneAs<MongoDbSslData<T>>(query);
         }
 
         /// <summary>
@@ -105,7 +213,7 @@ namespace ServiceConnect.Persistance.MongoDb
             MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
             collection.CreateIndex("CorrelationId");
 
-            var mongoDbData = new MongoDbData<IProcessManagerData>
+            var mongoDbData = new MongoDbSslData<IProcessManagerData>
             {
                 Data = data,
                 Version = 1,
@@ -127,7 +235,7 @@ namespace ServiceConnect.Persistance.MongoDb
             MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
             collection.CreateIndex("CorrelationId");
 
-            var versionData = (MongoDbData<T>)persistanceData;
+            var versionData = (MongoDbSslData<T>)persistanceData;
 
             int currentVersion = versionData.Version;
             var query = Query.And(Query.EQ("Data.CorrelationId", versionData.Data.CorrelationId), Query.EQ("Version", currentVersion));
@@ -167,7 +275,7 @@ namespace ServiceConnect.Persistance.MongoDb
 
         public TimeoutsBatch GetTimeoutsBatch()
         {
-            var retval = new TimeoutsBatch {DueTimeouts = new List<TimeoutData>()};
+            var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
 
             MongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
@@ -179,7 +287,7 @@ namespace ServiceConnect.Persistance.MongoDb
             {
                 var args = new FindAndModifyArgs
                 {
-                    Query = Query.And(Query.EQ("Locked", false), Query.LTE("Time", utcNow)),
+                    Query = Query.And(Query.EQ("Dispatched", false), Query.EQ("Locked", false), Query.LTE("Time", utcNow)),
                     Update = Update<TimeoutData>.Set(c => c.Locked, true),
                     Upsert = false,
                     VersionReturned = FindAndModifyDocumentVersion.Original
