@@ -1,0 +1,36 @@
+{
+  "version": "1.0.0-*",
+  "testRunner": "xunit",
+
+  "dependencies": {
+    "NETStandard.Library": "1.6.0",
+    "ServiceConnect.Client.RabbitMQ": "1.0.0-*",
+    "ServiceConnect.Container.Default": "1.0.0-*",
+    "ServiceConnect.Interfaces": "1.0.0-*",
+    "ServiceConnect.Persistance.SqlServer": "1.0.0-*",
+    "xunit": "2.2.0-beta4-build3444",
+    "dotnet-test-xunit": "2.2.0-preview2-build1029",
+    "ServiceConnect": "1.0.0-*",
+    "Moq": "4.6.38-alpha",
+    "ServiceConnect.Persistance.MongoDb": "1.0.0-*",
+    "Microsoft.Extensions.PlatformAbstractions": "1.1.0"
+  },
+
+  "frameworks": {
+    "netcoreapp1.0": {
+      "dependencies": {
+        "Microsoft.NETCore.App": {
+          "type": "platform",
+          "version": "1.0.0"
+        }
+      }
+    }
+  },
+
+  "buildOptions": {
+    "copyToOutput": [
+      "MyLocalDb.mdf",
+      "MyLocalDb_log.ldf"
+    ]
+  }
+}
