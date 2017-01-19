@@ -269,25 +269,6 @@
           }
         }
       },
-      "Microsoft.DotNet.InternalAbstractions/1.0.0": {
-        "type": "package",
-        "dependencies": {
-          "System.AppContext": "4.1.0",
-          "System.Collections": "4.0.11",
-          "System.IO": "4.1.0",
-          "System.IO.FileSystem": "4.0.1",
-          "System.Reflection.TypeExtensions": "4.1.0",
-          "System.Runtime.Extensions": "4.1.0",
-          "System.Runtime.InteropServices": "4.1.0",
-          "System.Runtime.InteropServices.RuntimeInformation": "4.0.0"
-        },
-        "compile": {
-          "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll": {}
-        },
-        "runtime": {
-          "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll": {}
-        }
-      },
       "Microsoft.DotNet.PlatformAbstractions/1.1.0": {
         "type": "package",
         "dependencies": {
@@ -1064,25 +1045,6 @@
           }
         }
       },
-      "Satao/0.9.1": {
-        "type": "package",
-        "dependencies": {
-          "System.Collections": "4.0.11",
-          "System.Collections.Concurrent": "4.0.12",
-          "System.Linq": "4.1.0",
-          "System.Reactive.Core": "3.0.0",
-          "System.Reactive.Linq": "3.0.0",
-          "System.Resources.ResourceManager": "4.0.1",
-          "System.Runtime": "4.1.0",
-          "System.Threading": "4.0.11"
-        },
-        "compile": {
-          "lib/netstandard1.4/Satao.dll": {}
-        },
-        "runtime": {
-          "lib/netstandard1.4/Satao.dll": {}
-        }
-      },
       "System.AppContext/4.1.0": {
         "type": "package",
         "dependencies": {
@@ -1356,6 +1318,18 @@
             "assetType": "runtime",
             "rid": "win"
           }
+        }
+      },
+      "System.Diagnostics.Contracts/4.0.1": {
+        "type": "package",
+        "dependencies": {
+          "System.Runtime": "4.1.0"
+        },
+        "compile": {
+          "ref/netstandard1.0/System.Diagnostics.Contracts.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard1.0/System.Diagnostics.Contracts.dll": {}
         }
       },
       "System.Diagnostics.Debug/4.3.0": {
@@ -2119,26 +2093,15 @@
           "lib/netstandard1.3/System.ObjectModel.dll": {}
         }
       },
-      "System.Reactive.Core/3.0.0": {
+      "System.Reactive.Core/3.1.1": {
         "type": "package",
         "dependencies": {
-          "System.Collections": "4.0.11",
-          "System.Collections.Concurrent": "4.0.12",
           "System.ComponentModel": "4.0.1",
-          "System.Diagnostics.Debug": "4.0.11",
-          "System.Diagnostics.Tools": "4.0.1",
-          "System.Globalization": "4.0.11",
-          "System.Linq": "4.1.0",
-          "System.Reactive.Interfaces": "3.0.0",
-          "System.Reflection": "4.1.0",
-          "System.Resources.ResourceManager": "4.0.1",
-          "System.Runtime": "4.1.0",
-          "System.Runtime.Extensions": "4.1.0",
-          "System.Threading": "4.0.11",
-          "System.Threading.Tasks": "4.0.11",
+          "System.Diagnostics.Contracts": "4.0.1",
+          "System.Dynamic.Runtime": "4.0.11",
+          "System.Reactive.Interfaces": "3.1.1",
           "System.Threading.Thread": "4.0.0",
-          "System.Threading.ThreadPool": "4.0.10",
-          "System.Threading.Timer": "4.0.1"
+          "System.Threading.ThreadPool": "4.0.10"
         },
         "compile": {
           "lib/netcoreapp1.0/System.Reactive.Core.dll": {}
@@ -2147,12 +2110,10 @@
           "lib/netcoreapp1.0/System.Reactive.Core.dll": {}
         }
       },
-      "System.Reactive.Interfaces/3.0.0": {
+      "System.Reactive.Interfaces/3.1.1": {
         "type": "package",
         "dependencies": {
-          "System.Linq.Expressions": "4.1.0",
-          "System.Resources.ResourceManager": "4.0.1",
-          "System.Runtime": "4.1.0"
+          "NETStandard.Library": "1.6.0"
         },
         "compile": {
           "lib/netstandard1.0/System.Reactive.Interfaces.dll": {}
@@ -2161,25 +2122,11 @@
           "lib/netstandard1.0/System.Reactive.Interfaces.dll": {}
         }
       },
-      "System.Reactive.Linq/3.0.0": {
+      "System.Reactive.Linq/3.1.1": {
         "type": "package",
         "dependencies": {
-          "System.Collections": "4.0.11",
-          "System.Collections.Concurrent": "4.0.12",
-          "System.ComponentModel": "4.0.1",
-          "System.Diagnostics.Debug": "4.0.11",
-          "System.Diagnostics.Tools": "4.0.1",
-          "System.Globalization": "4.0.11",
-          "System.Linq": "4.1.0",
-          "System.Reactive.Core": "3.0.0",
-          "System.Reactive.Interfaces": "3.0.0",
-          "System.Reflection": "4.1.0",
-          "System.Resources.ResourceManager": "4.0.1",
-          "System.Runtime": "4.1.0",
-          "System.Runtime.Extensions": "4.1.0",
-          "System.Runtime.InteropServices.WindowsRuntime": "4.0.1",
-          "System.Threading": "4.0.11",
-          "System.Threading.Tasks": "4.0.11"
+          "System.Reactive.Core": "3.1.1",
+          "System.Runtime.InteropServices.WindowsRuntime": "4.0.1"
         },
         "compile": {
           "lib/netstandard1.3/System.Reactive.Linq.dll": {}
@@ -3227,20 +3174,19 @@
           "lib/netstandard1.1/xunit.runner.utility.dotnet.dll": {}
         }
       },
-      "ServiceConnect/1.0.0": {
+      "ServiceConnect/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
-          "Microsoft.DotNet.InternalAbstractions": "1.0.0",
           "Microsoft.Extensions.DependencyModel": "1.1.0",
-          "NETStandard.Library": "1.6.0",
+          "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
-          "ServiceConnect.Client.RabbitMQ": "1.0.0",
-          "ServiceConnect.Container.Default": "1.0.0",
-          "ServiceConnect.Core": "1.0.0",
-          "ServiceConnect.Interfaces": "1.0.0",
-          "ServiceConnect.Persistance.InMemory": "1.0.0",
-          "ServiceConnect.Persistance.SqlServer": "1.0.0",
+          "ServiceConnect.Client.RabbitMQ": "4.0.0-pre",
+          "ServiceConnect.Container.Default": "4.0.0-pre",
+          "ServiceConnect.Core": "4.0.0-pre",
+          "ServiceConnect.Interfaces": "4.0.0-pre",
+          "ServiceConnect.Persistance.InMemory": "4.0.0-pre",
+          "ServiceConnect.Persistance.SqlServer": "4.0.0-pre",
           "System.Diagnostics.Process": "4.3.0",
           "System.Reflection.Extensions": "4.3.0"
         },
@@ -3256,7 +3202,7 @@
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
           "Common.Logging": "3.4.0-Beta2",
-          "NETStandard.Library": "1.6.0",
+          "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
           "RabbitMQ.Client": "4.1.1",
           "ServiceConnect.Interfaces": "1.0.0"
@@ -3268,14 +3214,14 @@
           "netstandard1.6/ServiceConnect.Client.RabbitMQ.dll": {}
         }
       },
-      "ServiceConnect.Container.Default/1.0.0": {
+      "ServiceConnect.Container.Default/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
           "Microsoft.Extensions.DependencyModel": "1.1.0",
-          "NETStandard.Library": "1.6.0",
-          "ServiceConnect.Core": "1.0.0",
-          "ServiceConnect.Interfaces": "1.0.0"
+          "NETStandard.Library": "1.6.1",
+          "ServiceConnect.Core": "4.0.0-pre",
+          "ServiceConnect.Interfaces": "4.0.0-pre"
         },
         "compile": {
           "netstandard1.6/ServiceConnect.Container.Default.dll": {}
@@ -3284,17 +3230,16 @@
           "netstandard1.6/ServiceConnect.Container.Default.dll": {}
         }
       },
-      "ServiceConnect.Core/1.0.0": {
+      "ServiceConnect.Core/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
           "Common.Logging": "3.4.0-Beta2",
           "Common.Logging.Core": "3.4.0-Beta2",
-          "Microsoft.DotNet.InternalAbstractions": "1.0.0",
           "Microsoft.Extensions.DependencyModel": "1.1.0",
-          "NETStandard.Library": "1.6.0",
+          "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
-          "ServiceConnect.Interfaces": "1.0.0",
+          "ServiceConnect.Interfaces": "4.0.0-pre",
           "System.Reflection": "4.3.0",
           "System.Threading.Thread": "4.3.0"
         },
@@ -3305,11 +3250,11 @@
           "netstandard1.6/ServiceConnect.Core.dll": {}
         }
       },
-      "ServiceConnect.Interfaces/1.0.0": {
+      "ServiceConnect.Interfaces/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
-          "NETStandard.Library": "1.6.0",
+          "NETStandard.Library": "1.6.1",
           "System.Net.Security": "4.3.0"
         },
         "compile": {
@@ -3319,14 +3264,14 @@
           "netstandard1.6/ServiceConnect.Interfaces.dll": {}
         }
       },
-      "ServiceConnect.Persistance.InMemory/1.0.0": {
+      "ServiceConnect.Persistance.InMemory/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
           "Microsoft.CSharp": "4.3.0",
-          "NETStandard.Library": "1.6.0",
-          "Satao": "0.9.1",
-          "ServiceConnect.Interfaces": "1.0.0"
+          "NETStandard.Library": "1.6.1",
+          "ServiceConnect.Interfaces": "4.0.0-pre",
+          "System.Reactive.Linq": "3.1.1"
         },
         "compile": {
           "netstandard1.6/ServiceConnect.Persistance.InMemory.dll": {}
@@ -3335,12 +3280,12 @@
           "netstandard1.6/ServiceConnect.Persistance.InMemory.dll": {}
         }
       },
-      "ServiceConnect.Persistance.MongoDb/1.0.0": {
+      "ServiceConnect.Persistance.MongoDb/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
-          "NETStandard.Library": "1.6.0",
-          "ServiceConnect.Interfaces": "1.0.0",
+          "NETStandard.Library": "1.6.1",
+          "ServiceConnect.Interfaces": "4.0.0-pre",
           "mongocsharpdriver": "2.4.1"
         },
         "compile": {
@@ -3350,14 +3295,14 @@
           "netstandard1.6/ServiceConnect.Persistance.MongoDb.dll": {}
         }
       },
-      "ServiceConnect.Persistance.SqlServer/1.0.0": {
+      "ServiceConnect.Persistance.SqlServer/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
           "Common.Logging": "3.4.0-Beta2",
-          "NETStandard.Library": "1.6.0",
+          "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
-          "ServiceConnect.Interfaces": "1.0.0",
+          "ServiceConnect.Interfaces": "4.0.0-pre",
           "System.Data.SqlClient": "4.3.0",
           "System.Xml.XPath": "4.3.0",
           "System.Xml.XmlSerializer": "4.3.0"
@@ -3613,17 +3558,6 @@
         "runtimes/win/native/Microsoft.DiaSymReader.Native.arm.dll",
         "runtimes/win/native/Microsoft.DiaSymReader.Native.x86.dll",
         "runtimes/win8-arm/native/Microsoft.DiaSymReader.Native.arm.dll"
-      ]
-    },
-    "Microsoft.DotNet.InternalAbstractions/1.0.0": {
-      "sha512": "AAguUq7YyKk3yDWPoWA8DrLZvURxB/LrDdTn1h5lmPeznkFUpfC3p459w5mQYQE0qpquf/CkSQZ0etiV5vRHFA==",
-      "type": "package",
-      "path": "Microsoft.DotNet.InternalAbstractions/1.0.0",
-      "files": [
-        "Microsoft.DotNet.InternalAbstractions.1.0.0.nupkg.sha512",
-        "Microsoft.DotNet.InternalAbstractions.nuspec",
-        "lib/net451/Microsoft.DotNet.InternalAbstractions.dll",
-        "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll"
       ]
     },
     "Microsoft.DotNet.PlatformAbstractions/1.1.0": {
@@ -4364,17 +4298,6 @@
         "runtimes/win7-x86/native/sni.dll"
       ]
     },
-    "Satao/0.9.1": {
-      "sha512": "O+TmBUjEzQLGc7K4vVEbxfHRA+BfCKgUhVgblpdkc9jUPBWTRZ/OZPgko2mGMcOy9N3UjVrYjXALIFzQRh7LBQ==",
-      "type": "package",
-      "path": "Satao/0.9.1",
-      "files": [
-        "Satao.0.9.1.nupkg.sha512",
-        "Satao.nuspec",
-        "lib/netstandard1.4/Satao.dll",
-        "lib/netstandard1.4/Satao.pdb"
-      ]
-    },
     "System.AppContext/4.1.0": {
       "sha512": "3QjO4jNV7PdKkmQAVp9atA+usVnKRwI3Kx1nMwJ93T0LcQfx7pKAYk0nKz5wn1oP5iqlhZuy6RXOFdhr7rDwow==",
       "type": "package",
@@ -5020,6 +4943,64 @@
         "runtimes/win/lib/net451/System.Data.SqlClient.dll",
         "runtimes/win/lib/net46/System.Data.SqlClient.dll",
         "runtimes/win/lib/netstandard1.3/System.Data.SqlClient.dll"
+      ]
+    },
+    "System.Diagnostics.Contracts/4.0.1": {
+      "sha512": "HvQQjy712vnlpPxaloZYkuE78Gn353L0SJLJVeLcNASeg9c4qla2a1Xq8I7B3jZoDzKPtHTkyVO7AZ5tpeQGuA==",
+      "type": "package",
+      "path": "System.Diagnostics.Contracts/4.0.1",
+      "files": [
+        "System.Diagnostics.Contracts.4.0.1.nupkg.sha512",
+        "System.Diagnostics.Contracts.nuspec",
+        "ThirdPartyNotices.txt",
+        "dotnet_library_license.txt",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net45/_._",
+        "lib/netcore50/System.Diagnostics.Contracts.dll",
+        "lib/netstandard1.0/System.Diagnostics.Contracts.dll",
+        "lib/portable-net45+win8+wp8+wpa81/_._",
+        "lib/win8/_._",
+        "lib/wp80/_._",
+        "lib/wpa81/_._",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net45/_._",
+        "ref/netcore50/System.Diagnostics.Contracts.dll",
+        "ref/netcore50/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/de/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/es/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/fr/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/it/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/ja/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/ko/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/ru/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/zh-hans/System.Diagnostics.Contracts.xml",
+        "ref/netcore50/zh-hant/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/System.Diagnostics.Contracts.dll",
+        "ref/netstandard1.0/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/de/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/es/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/fr/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/it/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/ja/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/ko/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/ru/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/zh-hans/System.Diagnostics.Contracts.xml",
+        "ref/netstandard1.0/zh-hant/System.Diagnostics.Contracts.xml",
+        "ref/portable-net45+win8+wp8+wpa81/_._",
+        "ref/win8/_._",
+        "ref/wp80/_._",
+        "ref/wpa81/_._",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "runtimes/aot/lib/netcore50/System.Diagnostics.Contracts.dll"
       ]
     },
     "System.Diagnostics.Debug/4.3.0": {
@@ -6792,12 +6773,12 @@
         "ref/xamarinwatchos10/_._"
       ]
     },
-    "System.Reactive.Core/3.0.0": {
-      "sha512": "1mnBTTNzTDaKYu2fYA0fcbWmWspwXheV9eFR0ynWd0nFjBwgSW0ZUAxe7dfvU5imv+K9QlfhV+pEKGOlJVZ8+w==",
+    "System.Reactive.Core/3.1.1": {
+      "sha512": "CKWC+UP1aM75taNX+sTBn2P97uHIUjKxq+z45iy7P91QGFqNFleR2tsqIC76HMVvYl7o8oWyMiycdsc9rC1Z/g==",
       "type": "package",
-      "path": "System.Reactive.Core/3.0.0",
+      "path": "System.Reactive.Core/3.1.1",
       "files": [
-        "System.Reactive.Core.3.0.0.nupkg.sha512",
+        "System.Reactive.Core.3.1.1.nupkg.sha512",
         "System.Reactive.Core.nuspec",
         "lib/net45/System.Reactive.Core.dll",
         "lib/net45/System.Reactive.Core.xml",
@@ -6819,12 +6800,12 @@
         "lib/wpa81/System.Reactive.Core.xml"
       ]
     },
-    "System.Reactive.Interfaces/3.0.0": {
-      "sha512": "MuLvWYegIrhvUVe3MRMIBxFGx4kiz0FEzN3TTvhX+m3WmJCi5+OE4J7yPWtZjGGTUh5wysGyaF9thcnCzx/J3w==",
+    "System.Reactive.Interfaces/3.1.1": {
+      "sha512": "aNVY3QoRznGFeQ+w+bMqhD8ElNWoyYq+7XTQIoxKKjBOyTOjUqIMEf1wvSdtwC4y92zg2W9q38b4Sr6cYNHVLg==",
       "type": "package",
-      "path": "System.Reactive.Interfaces/3.0.0",
+      "path": "System.Reactive.Interfaces/3.1.1",
       "files": [
-        "System.Reactive.Interfaces.3.0.0.nupkg.sha512",
+        "System.Reactive.Interfaces.3.1.1.nupkg.sha512",
         "System.Reactive.Interfaces.nuspec",
         "lib/net45/System.Reactive.Interfaces.dll",
         "lib/net45/System.Reactive.Interfaces.xml",
@@ -6832,12 +6813,12 @@
         "lib/netstandard1.0/System.Reactive.Interfaces.xml"
       ]
     },
-    "System.Reactive.Linq/3.0.0": {
-      "sha512": "CmQ+WpeOFzwYlDKafLQLT5McvR1TWCi3UudeBnajguvi/8ZGHDoQ2MPTo401EKkSvW48uTsJyvcKXN/C7g91Qg==",
+    "System.Reactive.Linq/3.1.1": {
+      "sha512": "HwsZsoYRg51cLGBOEa0uoZ5+d4CMcHEg/KrbqePhLxoz/SLA+ULISphBtn3woABPATOQ6j5YgGZWh4jxnJ3KYQ==",
       "type": "package",
-      "path": "System.Reactive.Linq/3.0.0",
+      "path": "System.Reactive.Linq/3.1.1",
       "files": [
-        "System.Reactive.Linq.3.0.0.nupkg.sha512",
+        "System.Reactive.Linq.3.1.1.nupkg.sha512",
         "System.Reactive.Linq.nuspec",
         "lib/net45/System.Reactive.Linq.dll",
         "lib/net45/System.Reactive.Linq.xml",
@@ -9304,7 +9285,7 @@
         "xunit.runner.utility.nuspec"
       ]
     },
-    "ServiceConnect/1.0.0": {
+    "ServiceConnect/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect/project.json",
       "msbuildProject": "../ServiceConnect/ServiceConnect.xproj"
@@ -9314,32 +9295,32 @@
       "path": "../ServiceConnect.Client.RabbitMQ/project.json",
       "msbuildProject": "../ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.xproj"
     },
-    "ServiceConnect.Container.Default/1.0.0": {
+    "ServiceConnect.Container.Default/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Container.Default/project.json",
       "msbuildProject": "../ServiceConnect.Container.Default/ServiceConnect.Container.Default.xproj"
     },
-    "ServiceConnect.Core/1.0.0": {
+    "ServiceConnect.Core/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Core/project.json",
       "msbuildProject": "../ServiceConnect.Core/ServiceConnect.Core.xproj"
     },
-    "ServiceConnect.Interfaces/1.0.0": {
+    "ServiceConnect.Interfaces/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Interfaces/project.json",
       "msbuildProject": "../ServiceConnect.Interfaces/ServiceConnect.Interfaces.xproj"
     },
-    "ServiceConnect.Persistance.InMemory/1.0.0": {
+    "ServiceConnect.Persistance.InMemory/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Persistance.InMemory/project.json",
       "msbuildProject": "../ServiceConnect.Persistance.InMemory/ServiceConnect.Persistance.InMemory.xproj"
     },
-    "ServiceConnect.Persistance.MongoDb/1.0.0": {
+    "ServiceConnect.Persistance.MongoDb/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Persistance.MongoDb/project.json",
       "msbuildProject": "../ServiceConnect.Persistance.MongoDb/ServiceConnect.Persistance.MongoDb.xproj"
     },
-    "ServiceConnect.Persistance.SqlServer/1.0.0": {
+    "ServiceConnect.Persistance.SqlServer/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Persistance.SqlServer/project.json",
       "msbuildProject": "../ServiceConnect.Persistance.SqlServer/ServiceConnect.Persistance.SqlServer.xproj"

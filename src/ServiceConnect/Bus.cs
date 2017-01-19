@@ -26,8 +26,6 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
-using Microsoft.DotNet.InternalAbstractions;
-using Microsoft.Extensions.DependencyModel;
 
 namespace ServiceConnect
 {
@@ -48,7 +46,8 @@ namespace ServiceConnect
 
         public Bus(IConfiguration configuration)
         {
-            Configuration = configuration;
+            Configuration = configuration; 
+
 
             _container = configuration.GetContainer();
             _producer = configuration.GetProducer();
@@ -118,31 +117,33 @@ namespace ServiceConnect
 
         private void CheckStatus(object state)
         {
-            //var heartbeatState = (HeartbeatTimerState) state;
+#if NET451
+            var heartbeatState = (HeartbeatTimerState)state;
 
-            //if (heartbeatState.CpuCounter == null)
-            //{
-            //    heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
-            //}
+            if (heartbeatState.CpuCounter == null)
+            {
+                heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
+            }
 
-            //if (heartbeatState.RamCounter == null)
-            //{
-            //    heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
-            //}
+            if (heartbeatState.RamCounter == null)
+            {
+                heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
+            }
 
-            //var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
-            //{
-            //    Timestamp = DateTime.UtcNow,
-            //    Location = Configuration.TransportSettings.MachineName,
-            //    Name = Configuration.TransportSettings.QueueName,
-            //    LatestCpu = heartbeatState.CpuCounter.NextValue(),
-            //    LatestMemory = heartbeatState.RamCounter.NextValue(),
-            //    Language = "C#",
-            //    ConsumerType = _producer.Type
-            //});
-            //var messageBytes = Encoding.UTF8.GetBytes(messageString);
+            var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
+            {
+                Timestamp = DateTime.UtcNow,
+                Location = Configuration.TransportSettings.MachineName,
+                Name = Configuration.TransportSettings.QueueName,
+                LatestCpu = heartbeatState.CpuCounter.NextValue(),
+                LatestMemory = heartbeatState.RamCounter.NextValue(),
+                Language = "C#",
+                ConsumerType = _producer.Type
+            });
+            var messageBytes = Encoding.UTF8.GetBytes(messageString);
 
-            //_producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
+            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
+#endif
         }
 
         /// <summary>
@@ -673,20 +674,21 @@ namespace ServiceConnect
                 Headers = headers,
             };
 
-            //Type typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
-
             Type typeObject = null;
-            var runtimeId = RuntimeEnvironment.GetRuntimeIdentifier();
-            var assemblies = DependencyContext.Default.GetRuntimeAssemblyNames(runtimeId);
-            //foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
-            foreach (var asmName in assemblies)
+
+#if NETSTANDARD1_6
+            var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
+            foreach (var assembly in assemblies)
             {
-                var ass = Assembly.Load(asmName);
-                typeObject = ass.GetTypes().Where(t=>t.AssemblyQualifiedName == type).FirstOrDefault();
+                var asm = Assembly.Load(new AssemblyName(assembly.Name));
+                typeObject = asm.GetTypes().Where(t => t.AssemblyQualifiedName == type).FirstOrDefault();
 
                 if (null != typeObject)
                     break;
             }
+#else
+            typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
+#endif
 
             try
             {
