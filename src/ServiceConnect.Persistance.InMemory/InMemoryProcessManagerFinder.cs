@@ -21,7 +21,6 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading;
 using ServiceConnect.Interfaces;
-using Satao;
 
 namespace ServiceConnect.Persistance.InMemory
 {

@@ -1,16 +1,20 @@
 {
-  "version": "1.0.0-*",
+  "version": "4.0.0-pre",
 
   "dependencies": {
     "Microsoft.CSharp": "4.3.0",
-    "NETStandard.Library": "1.6.0",
-    "Satao": "0.9.1",
-    "ServiceConnect.Interfaces": "1.0.0-*"
+    "ServiceConnect.Interfaces": "4.0.0-pre",
+    "System.Reactive.Linq": "3.1.1"
   },
 
   "frameworks": {
     "netstandard1.6": {
-      "imports": "dnxcore50"
+      "imports": "dnxcore50",
+      "dependencies": {
+        "NETStandard.Library": "1.6.1"
+      }
+    },
+    "net451": {
     }
   }
 }

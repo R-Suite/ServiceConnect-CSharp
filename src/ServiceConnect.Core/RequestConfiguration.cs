@@ -19,8 +19,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
-using Microsoft.Extensions.DependencyModel;
-using Microsoft.DotNet.InternalAbstractions;
 using System.Reflection;
 
 namespace ServiceConnect.Core
@@ -53,19 +51,21 @@ namespace ServiceConnect.Core
 
         public void ProcessMessage(string message, string type)
         {
-            //var typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
-            var runtimeId = RuntimeEnvironment.GetRuntimeIdentifier();
-            var assemblies = DependencyContext.Default.GetRuntimeAssemblyNames(runtimeId);
+#if NETSTANDARD1_6
+            var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
 
             Type typeObject = null;
             foreach(var assembly in assemblies)
             {
-                var ass = Assembly.Load(assembly);
+                var ass = Assembly.Load(new AssemblyName(assembly.Name));
                 typeObject = ass.GetType(type);
 
                 if (null != typeObject)
                     break;
-            }         
+            }
+#else
+            var typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
+#endif
 
             var messageObject = JsonConvert.DeserializeObject(message, typeObject);
 

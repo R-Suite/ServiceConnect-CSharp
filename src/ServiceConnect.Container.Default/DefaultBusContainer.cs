@@ -20,8 +20,6 @@ using System.Linq;
 using System.Reflection;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
-using Microsoft.DotNet.InternalAbstractions;
-using Microsoft.Extensions.DependencyModel;
 
 namespace ServiceConnect.Container.Default
 {
@@ -125,12 +123,11 @@ namespace ServiceConnect.Container.Default
         /// </summary>
         public void ScanForHandlers()
         {
-            var runtimeId = RuntimeEnvironment.GetRuntimeIdentifier();
-            var assemblies = DependencyContext.Default.GetRuntimeAssemblyNames(runtimeId);
-            //foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
-            foreach (var asmName in assemblies)
+ #if NETSTANDARD1_6
+            var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
+            foreach (var assembly in assemblies)
             {
-                var asm = Assembly.Load(asmName);
+                var asm = Assembly.Load(new AssemblyName(assembly.Name));
                 var pluginTypes = asm != null ? asm.GetTypes().Where(IsHandler).ToList() : null;
 
                 if (null != pluginTypes && pluginTypes.Count > 0)
@@ -138,6 +135,17 @@ namespace ServiceConnect.Container.Default
                     _container.RegisterForAll(pluginTypes);
                 }
             }
+#else
+            foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var pluginTypes = asm != null ? asm.GetTypes().Where(IsHandler).ToList() : null;
+
+                if (null != pluginTypes && pluginTypes.Count > 0)
+                {
+                    _container.RegisterForAll(pluginTypes);
+                }
+            }
+#endif
         }
 
         /// <summary>
