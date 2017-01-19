@@ -18,7 +18,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ServiceConnect.Interfaces;
-using Satao;
 
 namespace ServiceConnect.Persistance.InMemory
 {
