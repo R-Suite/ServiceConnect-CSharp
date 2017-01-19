@@ -1,15 +1,19 @@
 {
-  "version": "1.0.0-*",
+  "version": "4.0.0-pre",
 
   "dependencies": {
     "mongocsharpdriver": "2.4.1",
-    "NETStandard.Library": "1.6.0",
-    "ServiceConnect.Interfaces": "1.0.0-*"
+    "ServiceConnect.Interfaces": "4.0.0-pre"
   },
 
   "frameworks": {
     "netstandard1.6": {
-      "imports": "dnxcore50"
+      "imports": "dnxcore50",
+      "dependencies": {
+        "NETStandard.Library": "1.6.1"
+      }
+    },
+    "net451": {
     }
   }
 }

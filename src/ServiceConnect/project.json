@@ -1,24 +1,46 @@
 {
-  "version": "1.0.0-*",
+  "version": "4.0.0-pre",
+
+  "packOptions": {
+    "iconUrl": "",
+    "owners": [ "Jakub Pachansky, Tim, Watson" ],
+    "projectUrl": "http://serviceconnect.io/",
+    "requireLicenseAcceptance": false,
+    "summary": "ServiceConnect simple, easy to use asynchronous messaging framework for .NET.",
+    "tags": [
+      "MessageBus",
+      "R MessageBus",
+      "ServiceConnect",
+      "RabbitMQ MessageBus",
+      "RMessageBus",
+      "Messaging",
+      "Message",
+      "Bus",
+      "Service"
+    ]
+  },
 
   "dependencies": {
-    "Microsoft.DotNet.InternalAbstractions": "1.0.0",
-    "Microsoft.Extensions.DependencyModel": "1.1.0",
-    "NETStandard.Library": "1.6.0",
     "Newtonsoft.Json": "9.0.1",
-    "ServiceConnect.Client.RabbitMQ": "1.0.0-*",
-    "ServiceConnect.Container.Default": "1.0.0-*",
-    "ServiceConnect.Core": "1.0.0-*",
-    "ServiceConnect.Interfaces": "1.0.0-*",
-    "ServiceConnect.Persistance.InMemory": "1.0.0-*",
-    "ServiceConnect.Persistance.SqlServer": "1.0.0-*",
-    "System.Diagnostics.Process": "4.3.0",
-    "System.Reflection.Extensions": "4.3.0"
+    "ServiceConnect.Client.RabbitMQ": "4.0.0-pre",
+    "ServiceConnect.Container.Default": "4.0.0-pre",
+    "ServiceConnect.Core": "4.0.0-pre",
+    "ServiceConnect.Interfaces": "4.0.0-pre",
+    "ServiceConnect.Persistance.SqlServer": "4.0.0-pre",
+    "ServiceConnect.Persistance.InMemory": "4.0.0-pre"
   },
 
   "frameworks": {
     "netstandard1.6": {
-      "imports": "dnxcore50"
+      "imports": "dnxcore50",
+      "dependencies": {
+        "NETStandard.Library": "1.6.1",
+        "Microsoft.Extensions.DependencyModel": "1.1.0",
+        "System.Diagnostics.Process": "4.3.0",
+        "System.Reflection.Extensions": "4.3.0"
+      }
+    },
+    "net451": {
     }
   }
 }
