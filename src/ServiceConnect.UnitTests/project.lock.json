@@ -269,6 +269,25 @@
           }
         }
       },
+      "Microsoft.DotNet.InternalAbstractions/1.0.500-preview2-1-003177": {
+        "type": "package",
+        "dependencies": {
+          "System.AppContext": "4.3.0",
+          "System.Collections": "4.3.0",
+          "System.IO": "4.3.0",
+          "System.IO.FileSystem": "4.3.0",
+          "System.Reflection.TypeExtensions": "4.3.0",
+          "System.Runtime.Extensions": "4.3.0",
+          "System.Runtime.InteropServices": "4.3.0",
+          "System.Runtime.InteropServices.RuntimeInformation": "4.3.0"
+        },
+        "compile": {
+          "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll": {}
+        }
+      },
       "Microsoft.DotNet.PlatformAbstractions/1.1.0": {
         "type": "package",
         "dependencies": {
@@ -2983,11 +3002,11 @@
           "lib/netstandard1.3/System.Xml.XPath.XDocument.dll": {}
         }
       },
-      "xunit/2.2.0-beta4-build3444": {
+      "xunit/2.2.0-beta5-build3474": {
         "type": "package",
         "dependencies": {
-          "xunit.assert": "[2.2.0-beta4-build3444]",
-          "xunit.core": "[2.2.0-beta4-build3444]"
+          "xunit.assert": "[2.2.0-beta5-build3474]",
+          "xunit.core": "[2.2.0-beta5-build3474]"
         }
       },
       "xunit.abstractions/2.0.1": {
@@ -3002,7 +3021,7 @@
           "lib/netstandard1.0/xunit.abstractions.dll": {}
         }
       },
-      "xunit.assert/2.2.0-beta4-build3444": {
+      "xunit.assert/2.2.0-beta5-build3474": {
         "type": "package",
         "dependencies": {
           "NETStandard.Library": "1.6.0"
@@ -3014,14 +3033,14 @@
           "lib/netstandard1.0/xunit.assert.dll": {}
         }
       },
-      "xunit.core/2.2.0-beta4-build3444": {
+      "xunit.core/2.2.0-beta5-build3474": {
         "type": "package",
         "dependencies": {
-          "xunit.extensibility.core": "[2.2.0-beta4-build3444]",
-          "xunit.extensibility.execution": "[2.2.0-beta4-build3444]"
+          "xunit.extensibility.core": "[2.2.0-beta5-build3474]",
+          "xunit.extensibility.execution": "[2.2.0-beta5-build3474]"
         }
       },
-      "xunit.extensibility.core/2.2.0-beta4-build3444": {
+      "xunit.extensibility.core/2.2.0-beta5-build3474": {
         "type": "package",
         "dependencies": {
           "NETStandard.Library": "1.6.0",
@@ -3034,11 +3053,11 @@
           "lib/netstandard1.0/xunit.core.dll": {}
         }
       },
-      "xunit.extensibility.execution/2.2.0-beta4-build3444": {
+      "xunit.extensibility.execution/2.2.0-beta5-build3474": {
         "type": "package",
         "dependencies": {
           "NETStandard.Library": "1.6.0",
-          "xunit.extensibility.core": "[2.2.0-beta4-build3444]"
+          "xunit.extensibility.core": "[2.2.0-beta5-build3474]"
         },
         "compile": {
           "lib/netstandard1.0/xunit.execution.dotnet.dll": {}
@@ -3097,7 +3116,7 @@
           "netstandard1.6/ServiceConnect.dll": {}
         }
       },
-      "ServiceConnect.Client.RabbitMQ/1.0.0": {
+      "ServiceConnect.Client.RabbitMQ/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
@@ -3105,7 +3124,7 @@
           "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
           "RabbitMQ.Client": "4.1.1",
-          "ServiceConnect.Interfaces": "1.0.0"
+          "ServiceConnect.Interfaces": "4.0.0-pre"
         },
         "compile": {
           "netstandard1.6/ServiceConnect.Client.RabbitMQ.dll": {}
@@ -3156,7 +3175,9 @@
           "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
           "ServiceConnect.Interfaces": "4.0.0-pre",
+          "System.Diagnostics.Process": "4.3.0",
           "System.Reflection": "4.3.0",
+          "System.Runtime.Loader": "4.0.0",
           "System.Threading.Thread": "4.3.0"
         },
         "compile": {
@@ -3459,6 +3480,17 @@
         "runtimes/win/native/Microsoft.DiaSymReader.Native.arm.dll",
         "runtimes/win/native/Microsoft.DiaSymReader.Native.x86.dll",
         "runtimes/win8-arm/native/Microsoft.DiaSymReader.Native.arm.dll"
+      ]
+    },
+    "Microsoft.DotNet.InternalAbstractions/1.0.500-preview2-1-003177": {
+      "sha512": "wEkDYPRP19wqmn7Q5iMTzSBmBgm+DMM9RdqAtvgeD+bMYCBfVhN2mK96vAAywfqXdx2RL4JixLU5I0joYEaciQ==",
+      "type": "package",
+      "path": "Microsoft.DotNet.InternalAbstractions/1.0.500-preview2-1-003177",
+      "files": [
+        "Microsoft.DotNet.InternalAbstractions.1.0.500-preview2-1-003177.nupkg.sha512",
+        "Microsoft.DotNet.InternalAbstractions.nuspec",
+        "lib/net451/Microsoft.DotNet.InternalAbstractions.dll",
+        "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll"
       ]
     },
     "Microsoft.DotNet.PlatformAbstractions/1.1.0": {
@@ -8965,12 +8997,12 @@
         "ref/xamarinwatchos10/_._"
       ]
     },
-    "xunit/2.2.0-beta4-build3444": {
-      "sha512": "Gd981l3FGdxwnnOrrj495BMy/zb07ZITSTnLvryaxnqTsqNXRH12fqJ4aliqc2nCFBZBstMYzLznbBy/53QEZA==",
+    "xunit/2.2.0-beta5-build3474": {
+      "sha512": "nkcTT3ClVVoSaGkbyuYDhDo+WmhvwsAQOMpk/j19YJQwe9pRPh8BeZgysdOuCyQ8eeiWEEBxHsq7A+9AklZnOA==",
       "type": "package",
-      "path": "xunit/2.2.0-beta4-build3444",
+      "path": "xunit/2.2.0-beta5-build3474",
       "files": [
-        "xunit.2.2.0-beta4-build3444.nupkg.sha512",
+        "xunit.2.2.0-beta5-build3474.nupkg.sha512",
         "xunit.nuspec"
       ]
     },
@@ -8987,36 +9019,36 @@
         "xunit.abstractions.nuspec"
       ]
     },
-    "xunit.assert/2.2.0-beta4-build3444": {
-      "sha512": "ofTB1EEXB4A5hFbmvJHnjNGeazsyOsd8C2zfh/XJrCPKjdXXq/9TSD8xJn5JFUpO6PdArlS4bNAalhhijepjsw==",
+    "xunit.assert/2.2.0-beta5-build3474": {
+      "sha512": "l4HNVTFaVfAEwAZs7VjAlxb7DW6QkoGYoh0QaCB397IYBX/vZdJ5AhqrxmtcNSFbh0RwrXrKmI48JN+LUV1rdA==",
       "type": "package",
-      "path": "xunit.assert/2.2.0-beta4-build3444",
+      "path": "xunit.assert/2.2.0-beta5-build3474",
       "files": [
         "lib/netstandard1.0/xunit.assert.dll",
         "lib/netstandard1.0/xunit.assert.pdb",
         "lib/netstandard1.0/xunit.assert.xml",
-        "xunit.assert.2.2.0-beta4-build3444.nupkg.sha512",
+        "xunit.assert.2.2.0-beta5-build3474.nupkg.sha512",
         "xunit.assert.nuspec"
       ]
     },
-    "xunit.core/2.2.0-beta4-build3444": {
-      "sha512": "yGoZJbcxG2997f6Fy+2RNTRnW0Gz0lmFUUNLoa9RaXyQz/K/OsHXbSrOGMs7cxnXDfXMwjjrvDS1U4P34sOX1w==",
+    "xunit.core/2.2.0-beta5-build3474": {
+      "sha512": "DcOHVkAwkP5jp9I60uEBOOmkJ7Aocg7TYBw8+nEgcBUoR4Smb66RaYQuzkW1BCq/5xY0kQMRiJrIzuk3XPx2XA==",
       "type": "package",
-      "path": "xunit.core/2.2.0-beta4-build3444",
+      "path": "xunit.core/2.2.0-beta5-build3474",
       "files": [
         "build/_desktop/xunit.execution.desktop.dll",
         "build/netstandard1.0/_._",
         "build/uap10.0/xunit.core.props",
         "build/win81/xunit.core.props",
         "build/wpa81/xunit.core.props",
-        "xunit.core.2.2.0-beta4-build3444.nupkg.sha512",
+        "xunit.core.2.2.0-beta5-build3474.nupkg.sha512",
         "xunit.core.nuspec"
       ]
     },
-    "xunit.extensibility.core/2.2.0-beta4-build3444": {
-      "sha512": "ISdMbAOe4SnsHMLejyZFWvTA/ZvrOxO/fo6GxCGRT6NufIUwa5K8Yinsav8pT2+c+6iWN9uNgsqnW3iR4takYg==",
+    "xunit.extensibility.core/2.2.0-beta5-build3474": {
+      "sha512": "G1s2W/DYEf2xVxItEdEL51e81Epc0TB/vAZ+9/Vp30/wUTP9Fgt9cb+DfuhGTvcppGW8uVXybpkMA9o/KI5Rrg==",
       "type": "package",
-      "path": "xunit.extensibility.core/2.2.0-beta4-build3444",
+      "path": "xunit.extensibility.core/2.2.0-beta5-build3474",
       "files": [
         "lib/net45/xunit.core.dll",
         "lib/net45/xunit.core.dll.tdnet",
@@ -9030,14 +9062,14 @@
         "lib/netstandard1.0/xunit.core.xml",
         "lib/netstandard1.0/xunit.runner.tdnet.dll",
         "lib/netstandard1.0/xunit.runner.utility.desktop.dll",
-        "xunit.extensibility.core.2.2.0-beta4-build3444.nupkg.sha512",
+        "xunit.extensibility.core.2.2.0-beta5-build3474.nupkg.sha512",
         "xunit.extensibility.core.nuspec"
       ]
     },
-    "xunit.extensibility.execution/2.2.0-beta4-build3444": {
-      "sha512": "H4elREzKuTxHF1Nha4TXdI3DI/l2IMiIeRa9BTjwpEXkJ6G1kO1QHBQ6PQvotjk727d7zctODU1BgBNlfpMi4g==",
+    "xunit.extensibility.execution/2.2.0-beta5-build3474": {
+      "sha512": "LLIrjFggA2dl7HsJqsJCRcZjrRjIYsu5dRERNqWx2J61OeKdwlIsEj1i/D7DprMJUOIS6+MqRGo5htuQKdUm2A==",
       "type": "package",
-      "path": "xunit.extensibility.execution/2.2.0-beta4-build3444",
+      "path": "xunit.extensibility.execution/2.2.0-beta5-build3474",
       "files": [
         "lib/net45/xunit.execution.desktop.dll",
         "lib/net45/xunit.execution.desktop.pdb",
@@ -9045,7 +9077,7 @@
         "lib/netstandard1.0/xunit.execution.dotnet.dll",
         "lib/netstandard1.0/xunit.execution.dotnet.pdb",
         "lib/netstandard1.0/xunit.execution.dotnet.xml",
-        "xunit.extensibility.execution.2.2.0-beta4-build3444.nupkg.sha512",
+        "xunit.extensibility.execution.2.2.0-beta5-build3474.nupkg.sha512",
         "xunit.extensibility.execution.nuspec"
       ]
     },
@@ -9083,7 +9115,7 @@
       "path": "../ServiceConnect/project.json",
       "msbuildProject": "../ServiceConnect/ServiceConnect.xproj"
     },
-    "ServiceConnect.Client.RabbitMQ/1.0.0": {
+    "ServiceConnect.Client.RabbitMQ/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Client.RabbitMQ/project.json",
       "msbuildProject": "../ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.xproj"
@@ -9121,16 +9153,17 @@
   },
   "projectFileDependencyGroups": {
     "": [
+      "Microsoft.DotNet.InternalAbstractions >= 1.0.500-preview2-1-003177",
       "Moq >= 4.6.38-alpha",
-      "ServiceConnect >= 3.5.0",
-      "ServiceConnect.Client.RabbitMQ >= 1.0.0-*",
-      "ServiceConnect.Container.StructureMap >= 1.0.0-*",
-      "ServiceConnect.Core >= 1.0.0-*",
-      "ServiceConnect.Interfaces >= 1.0.0-*",
-      "ServiceConnect.Persistance.InMemory >= 1.0.0-*",
-      "ServiceConnect.Persistance.SqlServer >= 1.0.0-*",
+      "ServiceConnect >= 4.0.0-pre",
+      "ServiceConnect.Client.RabbitMQ >= 4.0.0-pre",
+      "ServiceConnect.Container.StructureMap >= 4.0.0-pre",
+      "ServiceConnect.Core >= 4.0.0-pre",
+      "ServiceConnect.Interfaces >= 4.0.0-pre",
+      "ServiceConnect.Persistance.InMemory >= 4.0.0-pre",
+      "ServiceConnect.Persistance.SqlServer >= 4.0.0-pre",
       "dotnet-test-xunit >= 2.2.0-preview2-build1029",
-      "xunit >= 2.2.0-beta4-build3444"
+      "xunit >= 2.2.0-beta5-build3474"
     ],
     ".NETCoreApp,Version=v1.0": [
       "Microsoft.NETCore.App >= 1.0.0"

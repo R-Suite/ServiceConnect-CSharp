@@ -3,7 +3,7 @@
 
   "dependencies": {
     "mongocsharpdriver": "2.4.1",
-    "ServiceConnect.Interfaces": "1.0.0-*"
+    "ServiceConnect.Interfaces": "4.0.0-pre"
   },
 
   "frameworks": {

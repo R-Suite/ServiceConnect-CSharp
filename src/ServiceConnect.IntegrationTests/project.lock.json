@@ -269,6 +269,25 @@
           }
         }
       },
+      "Microsoft.DotNet.InternalAbstractions/1.0.500-preview2-1-003177": {
+        "type": "package",
+        "dependencies": {
+          "System.AppContext": "4.3.0",
+          "System.Collections": "4.3.0",
+          "System.IO": "4.3.0",
+          "System.IO.FileSystem": "4.3.0",
+          "System.Reflection.TypeExtensions": "4.3.0",
+          "System.Runtime.Extensions": "4.3.0",
+          "System.Runtime.InteropServices": "4.3.0",
+          "System.Runtime.InteropServices.RuntimeInformation": "4.3.0"
+        },
+        "compile": {
+          "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll": {}
+        }
+      },
       "Microsoft.DotNet.PlatformAbstractions/1.1.0": {
         "type": "package",
         "dependencies": {
@@ -1045,10 +1064,10 @@
           }
         }
       },
-      "System.AppContext/4.1.0": {
+      "System.AppContext/4.3.0": {
         "type": "package",
         "dependencies": {
-          "System.Runtime": "4.1.0"
+          "System.Runtime": "4.3.0"
         },
         "compile": {
           "ref/netstandard1.6/System.AppContext.dll": {}
@@ -3197,7 +3216,7 @@
           "netstandard1.6/ServiceConnect.dll": {}
         }
       },
-      "ServiceConnect.Client.RabbitMQ/1.0.0": {
+      "ServiceConnect.Client.RabbitMQ/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
@@ -3205,7 +3224,7 @@
           "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
           "RabbitMQ.Client": "4.1.1",
-          "ServiceConnect.Interfaces": "1.0.0"
+          "ServiceConnect.Interfaces": "4.0.0-pre"
         },
         "compile": {
           "netstandard1.6/ServiceConnect.Client.RabbitMQ.dll": {}
@@ -3240,7 +3259,9 @@
           "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
           "ServiceConnect.Interfaces": "4.0.0-pre",
+          "System.Diagnostics.Process": "4.3.0",
           "System.Reflection": "4.3.0",
+          "System.Runtime.Loader": "4.0.0",
           "System.Threading.Thread": "4.3.0"
         },
         "compile": {
@@ -3558,6 +3579,17 @@
         "runtimes/win/native/Microsoft.DiaSymReader.Native.arm.dll",
         "runtimes/win/native/Microsoft.DiaSymReader.Native.x86.dll",
         "runtimes/win8-arm/native/Microsoft.DiaSymReader.Native.arm.dll"
+      ]
+    },
+    "Microsoft.DotNet.InternalAbstractions/1.0.500-preview2-1-003177": {
+      "sha512": "wEkDYPRP19wqmn7Q5iMTzSBmBgm+DMM9RdqAtvgeD+bMYCBfVhN2mK96vAAywfqXdx2RL4JixLU5I0joYEaciQ==",
+      "type": "package",
+      "path": "Microsoft.DotNet.InternalAbstractions/1.0.500-preview2-1-003177",
+      "files": [
+        "Microsoft.DotNet.InternalAbstractions.1.0.500-preview2-1-003177.nupkg.sha512",
+        "Microsoft.DotNet.InternalAbstractions.nuspec",
+        "lib/net451/Microsoft.DotNet.InternalAbstractions.dll",
+        "lib/netstandard1.3/Microsoft.DotNet.InternalAbstractions.dll"
       ]
     },
     "Microsoft.DotNet.PlatformAbstractions/1.1.0": {
@@ -4298,12 +4330,12 @@
         "runtimes/win7-x86/native/sni.dll"
       ]
     },
-    "System.AppContext/4.1.0": {
-      "sha512": "3QjO4jNV7PdKkmQAVp9atA+usVnKRwI3Kx1nMwJ93T0LcQfx7pKAYk0nKz5wn1oP5iqlhZuy6RXOFdhr7rDwow==",
+    "System.AppContext/4.3.0": {
+      "sha512": "fKC+rmaLfeIzUhagxY17Q9siv/sPrjjKcfNg1Ic8IlQkZLipo8ljcaZQu4VtI4Jqbzjc2VTjzGLF6WmsRXAEgA==",
       "type": "package",
-      "path": "System.AppContext/4.1.0",
+      "path": "System.AppContext/4.3.0",
       "files": [
-        "System.AppContext.4.1.0.nupkg.sha512",
+        "System.AppContext.4.3.0.nupkg.sha512",
         "System.AppContext.nuspec",
         "ThirdPartyNotices.txt",
         "dotnet_library_license.txt",
@@ -9290,7 +9322,7 @@
       "path": "../ServiceConnect/project.json",
       "msbuildProject": "../ServiceConnect/ServiceConnect.xproj"
     },
-    "ServiceConnect.Client.RabbitMQ/1.0.0": {
+    "ServiceConnect.Client.RabbitMQ/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Client.RabbitMQ/project.json",
       "msbuildProject": "../ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.xproj"
@@ -9328,15 +9360,16 @@
   },
   "projectFileDependencyGroups": {
     "": [
+      "Microsoft.DotNet.InternalAbstractions >= 1.0.500-preview2-1-003177",
       "Microsoft.Extensions.PlatformAbstractions >= 1.1.0",
       "Moq >= 4.6.38-alpha",
       "NETStandard.Library >= 1.6.0",
-      "ServiceConnect >= 1.0.0-*",
-      "ServiceConnect.Client.RabbitMQ >= 1.0.0-*",
-      "ServiceConnect.Container.Default >= 1.0.0-*",
-      "ServiceConnect.Interfaces >= 1.0.0-*",
-      "ServiceConnect.Persistance.MongoDb >= 1.0.0-*",
-      "ServiceConnect.Persistance.SqlServer >= 1.0.0-*",
+      "ServiceConnect >= 4.0.0-pre",
+      "ServiceConnect.Client.RabbitMQ >= 4.0.0-pre",
+      "ServiceConnect.Container.Default >= 4.0.0-pre",
+      "ServiceConnect.Interfaces >= 4.0.0-pre",
+      "ServiceConnect.Persistance.MongoDb >= 4.0.0-pre",
+      "ServiceConnect.Persistance.SqlServer >= 4.0.0-pre",
       "dotnet-test-xunit >= 2.2.0-preview2-build1029",
       "xunit >= 2.2.0-beta4-build3444"
     ],
