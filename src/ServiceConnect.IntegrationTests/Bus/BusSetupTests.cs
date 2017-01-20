@@ -24,6 +24,15 @@ namespace ServiceConnect.IntegrationTests.Bus
 {
     public class BusSetupTests
     {
+        public class TestHandler : IMessageHandler<Message>
+        {
+            public IConsumeContext Context { get; set; }
+            public void Execute(Message message)
+            {
+                throw new System.NotImplementedException();
+            }
+        }
+
         [Fact]
         public void ShouldSetupBusWithDefaultConfiguration()
         {
@@ -35,6 +44,22 @@ namespace ServiceConnect.IntegrationTests.Bus
             Assert.Equal(typeof(Producer), bus.Configuration.ProducerType);
             Assert.Same(typeof(DefaultBusContainer), bus.Configuration.GetContainer().GetType());
             Assert.Equal(typeof(SqlServerProcessManagerFinder), bus.Configuration.ProcessManagerFinder);
+
+            bus.StopConsuming();
+            bus.Dispose();
+        }
+
+        [Fact]
+        public void ShouldResolveHandlerFromDefaultContainer()
+        {
+            // Arrange
+            IBus bus = ServiceConnect.Bus.Initialize();
+
+            // Act 
+            var result = bus.Configuration.GetContainer().GetInstance<IMessageHandler<Message>>();
+
+            // Assert
+            Assert.NotNull(result);
 
             bus.StopConsuming();
             bus.Dispose();

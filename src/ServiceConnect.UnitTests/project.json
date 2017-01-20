@@ -1,17 +1,18 @@
 {
-  "version": "1.0.0-*",
+  "version": "4.0.0-pre",
   "testRunner": "xunit",
   "dependencies": {
+    "ServiceConnect.Interfaces": "4.0.0-pre",
+    "ServiceConnect.Core": "4.0.0-pre",
+    "ServiceConnect.Persistance.InMemory": "4.0.0-pre",
+    "ServiceConnect.Client.RabbitMQ": "4.0.0-pre",
+    "ServiceConnect.Persistance.SqlServer": "4.0.0-pre",
+    "ServiceConnect": "4.0.0-pre",
+    "ServiceConnect.Container.StructureMap": "4.0.0-pre",
+    "xunit": "2.2.0-beta5-build3474",
     "Moq": "4.6.38-alpha",
-    "xunit": "2.2.0-beta4-build3444",
     "dotnet-test-xunit": "2.2.0-preview2-build1029",
-    "ServiceConnect.Interfaces": "1.0.0-*",
-    "ServiceConnect.Core": "1.0.0-*",
-    "ServiceConnect.Persistance.InMemory": "1.0.0-*",
-    "ServiceConnect.Client.RabbitMQ": "1.0.0-*",
-    "ServiceConnect.Persistance.SqlServer": "1.0.0-*",
-    "ServiceConnect": "3.5.0",
-    "ServiceConnect.Container.StructureMap": "1.0.0-*"
+    "Microsoft.DotNet.InternalAbstractions": "1.0.500-preview2-1-003177"
   },
 
   "frameworks": {
