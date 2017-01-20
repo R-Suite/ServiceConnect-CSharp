@@ -125,14 +125,14 @@
           "lib/net45/System.Reactive.Linq.dll": {}
         }
       },
-      "ServiceConnect.Client.RabbitMQ/1.0.0": {
+      "ServiceConnect.Client.RabbitMQ/4.0.0-pre": {
         "type": "project",
         "framework": ".NETFramework,Version=v4.5.1",
         "dependencies": {
           "Common.Logging": "3.4.0-Beta2",
           "Newtonsoft.Json": "9.0.1",
           "RabbitMQ.Client": "4.1.1",
-          "ServiceConnect.Interfaces": "1.0.0"
+          "ServiceConnect.Interfaces": "4.0.0-pre"
         },
         "compile": {
           "net451/ServiceConnect.Client.RabbitMQ.dll": {}
@@ -1593,6 +1593,20 @@
           "lib/netstandard1.3/System.Runtime.InteropServices.WindowsRuntime.dll": {}
         }
       },
+      "System.Runtime.Loader/4.0.0": {
+        "type": "package",
+        "dependencies": {
+          "System.IO": "4.1.0",
+          "System.Reflection": "4.1.0",
+          "System.Runtime": "4.1.0"
+        },
+        "compile": {
+          "ref/netstandard1.5/System.Runtime.Loader.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard1.5/System.Runtime.Loader.dll": {}
+        }
+      },
       "System.Runtime.Numerics/4.3.0": {
         "type": "package",
         "dependencies": {
@@ -2184,7 +2198,7 @@
           "lib/netstandard1.3/System.Xml.XPath.dll": {}
         }
       },
-      "ServiceConnect.Client.RabbitMQ/1.0.0": {
+      "ServiceConnect.Client.RabbitMQ/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
@@ -2192,7 +2206,7 @@
           "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
           "RabbitMQ.Client": "4.1.1",
-          "ServiceConnect.Interfaces": "1.0.0"
+          "ServiceConnect.Interfaces": "4.0.0-pre"
         },
         "compile": {
           "netstandard1.6/ServiceConnect.Client.RabbitMQ.dll": {}
@@ -2227,7 +2241,9 @@
           "NETStandard.Library": "1.6.1",
           "Newtonsoft.Json": "9.0.1",
           "ServiceConnect.Interfaces": "4.0.0-pre",
+          "System.Diagnostics.Process": "4.3.0",
           "System.Reflection": "4.3.0",
+          "System.Runtime.Loader": "4.0.0",
           "System.Threading.Thread": "4.3.0"
         },
         "compile": {
@@ -5358,6 +5374,30 @@
         "runtimes/aot/lib/netcore50/System.Runtime.InteropServices.WindowsRuntime.dll"
       ]
     },
+    "System.Runtime.Loader/4.0.0": {
+      "sha512": "4UN78GOVU/mbDFcXkEWtetJT/sJ0yic2gGk1HSlSpWI0TDf421xnrZTDZnwNBapk1GQeYN7U1lTj/aQB1by6ow==",
+      "type": "package",
+      "path": "System.Runtime.Loader/4.0.0",
+      "files": [
+        "System.Runtime.Loader.4.0.0.nupkg.sha512",
+        "System.Runtime.Loader.nuspec",
+        "ThirdPartyNotices.txt",
+        "dotnet_library_license.txt",
+        "lib/net462/_._",
+        "lib/netstandard1.5/System.Runtime.Loader.dll",
+        "ref/netstandard1.5/System.Runtime.Loader.dll",
+        "ref/netstandard1.5/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/de/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/es/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/fr/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/it/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/ja/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/ko/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/ru/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/zh-hans/System.Runtime.Loader.xml",
+        "ref/netstandard1.5/zh-hant/System.Runtime.Loader.xml"
+      ]
+    },
     "System.Runtime.Numerics/4.3.0": {
       "sha512": "yMH+MfdzHjy17l2KESnPiF2dwq7T+xLnSJar7slyimAkUh/gTrS9/UQOtv7xarskJ2/XDSNvfLGOBQPjL7PaHQ==",
       "type": "package",
@@ -6673,7 +6713,7 @@
         "ref/xamarinwatchos10/_._"
       ]
     },
-    "ServiceConnect.Client.RabbitMQ/1.0.0": {
+    "ServiceConnect.Client.RabbitMQ/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Client.RabbitMQ/project.json",
       "msbuildProject": "../ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.xproj"

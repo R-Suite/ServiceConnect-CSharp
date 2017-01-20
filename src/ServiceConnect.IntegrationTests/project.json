@@ -1,19 +1,20 @@
 {
-  "version": "1.0.0-*",
+  "version": "4.0.0-pre",
   "testRunner": "xunit",
 
   "dependencies": {
     "NETStandard.Library": "1.6.0",
-    "ServiceConnect.Client.RabbitMQ": "1.0.0-*",
-    "ServiceConnect.Container.Default": "1.0.0-*",
-    "ServiceConnect.Interfaces": "1.0.0-*",
-    "ServiceConnect.Persistance.SqlServer": "1.0.0-*",
+    "ServiceConnect.Client.RabbitMQ": "4.0.0-pre",
+    "ServiceConnect.Container.Default": "4.0.0-pre",
+    "ServiceConnect.Interfaces": "4.0.0-pre",
+    "ServiceConnect.Persistance.SqlServer": "4.0.0-pre",
     "xunit": "2.2.0-beta4-build3444",
     "dotnet-test-xunit": "2.2.0-preview2-build1029",
-    "ServiceConnect": "1.0.0-*",
+    "ServiceConnect": "4.0.0-pre",
     "Moq": "4.6.38-alpha",
-    "ServiceConnect.Persistance.MongoDb": "1.0.0-*",
-    "Microsoft.Extensions.PlatformAbstractions": "1.1.0"
+    "ServiceConnect.Persistance.MongoDb": "4.0.0-pre",
+    "Microsoft.Extensions.PlatformAbstractions": "1.1.0",
+    "Microsoft.DotNet.InternalAbstractions": "1.0.500-preview2-1-003177"
   },
 
   "frameworks": {
