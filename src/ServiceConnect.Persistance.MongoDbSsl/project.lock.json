@@ -71,7 +71,7 @@
           }
         }
       },
-      "ServiceConnect.Interfaces/1.0.0": {
+      "ServiceConnect.Interfaces/4.0.0-pre": {
         "type": "project",
         "framework": ".NETFramework,Version=v4.5.1",
         "frameworkAssemblies": [
@@ -1723,7 +1723,7 @@
           "lib/netstandard1.3/System.Xml.XDocument.dll": {}
         }
       },
-      "ServiceConnect.Interfaces/1.0.0": {
+      "ServiceConnect.Interfaces/4.0.0-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
@@ -5601,7 +5601,7 @@
         "ref/xamarinwatchos10/_._"
       ]
     },
-    "ServiceConnect.Interfaces/1.0.0": {
+    "ServiceConnect.Interfaces/4.0.0-pre": {
       "type": "project",
       "path": "../ServiceConnect.Interfaces/project.json",
       "msbuildProject": "../ServiceConnect.Interfaces/ServiceConnect.Interfaces.xproj"
@@ -5609,7 +5609,7 @@
   },
   "projectFileDependencyGroups": {
     "": [
-      "ServiceConnect.Interfaces >= 1.0.0-*",
+      "ServiceConnect.Interfaces >= 4.0.0-pre",
       "mongocsharpdriver >= 2.4.1"
     ],
     ".NETFramework,Version=v4.5.1": [],
