@@ -677,19 +677,23 @@ namespace ServiceConnect
             Type typeObject = null;
 
 #if NETSTANDARD1_6
-            var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
-            foreach (var assembly in assemblies)
+            typeObject = Type.GetType(type);
+            if (typeObject == null)
             {
-                try
+                var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
+                foreach (var assembly in assemblies)
                 {
-                    var asm = Assembly.Load(new AssemblyName(assembly.Name));
-                    typeObject = asm.GetTypes().Where(t => t.AssemblyQualifiedName == type).FirstOrDefault();
+                    try
+                    {
+                        var asm = Assembly.Load(new AssemblyName(assembly.Name));
+                        typeObject = asm.GetTypes().Where(t => t.AssemblyQualifiedName == type).FirstOrDefault();
 
-                    if (null != typeObject)
-                        break;
+                        if (null != typeObject)
+                            break;
+                    }
+                    catch (Exception)
+                    {}
                 }
-                catch (Exception)
-                {}
             }
 #else
             typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
