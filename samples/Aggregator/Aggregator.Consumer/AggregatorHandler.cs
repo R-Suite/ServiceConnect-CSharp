@@ -13,7 +13,7 @@ namespace Aggregator.Consumer
         }
         public override TimeSpan Timeout()
         {
-            return new TimeSpan(0, 0, 0, 1);
+            return new TimeSpan(0, 0, 0, 2);
         }
         
         public override void Execute(IList<TestMessage> message)
