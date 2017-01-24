@@ -31,7 +31,6 @@ namespace ServiceConnect.UnitTests
     
     public class InMemoryProcessManagerFinderTests
     {
-
         readonly Guid _correlationId = Guid.NewGuid();
         private readonly IProcessManagerPropertyMapper _mapper;
 
