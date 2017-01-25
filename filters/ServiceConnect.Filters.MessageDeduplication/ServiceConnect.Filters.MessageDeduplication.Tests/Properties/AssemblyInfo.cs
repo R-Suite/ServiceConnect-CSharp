@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 // associated with an assembly.
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Ruffer PLC")]
-[assembly: AssemblyProduct("ServiceConnect.Filters.MessageDeduplication")]
+[assembly: AssemblyProduct("ServiceConnect.Filters.MessageDeduplication.Tests")]
 [assembly: AssemblyTrademark("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible
@@ -16,4 +16,4 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("c6f0067c-7474-4b60-939e-502b244851d7")]
+[assembly: Guid("9d036f01-f8b6-412c-a4e1-bd6c3d290ecc")]

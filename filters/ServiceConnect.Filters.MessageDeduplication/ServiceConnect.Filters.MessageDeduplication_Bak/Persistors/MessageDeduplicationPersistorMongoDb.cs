@@ -7,7 +7,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 {
     public class MessageDeduplicationPersistorMongoDb : IMessageDeduplicationPersistor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(MessageDeduplicationPersistorMongoDb));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly IMongoCollection<ProcessedMessage> _collection;
 
         public MessageDeduplicationPersistorMongoDb()

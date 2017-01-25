@@ -1,0 +1,21 @@
+﻿{
+  "version": "1.0.0-*",
+
+  "dependencies": {
+    "Common.Logging": "3.4.0-Beta2",
+    "mongocsharpdriver": "2.4.1",
+    "NETStandard.Library": "1.6.0",
+    "ServiceConnect.Interfaces": "4.0.0-pre"
+  },
+
+  "frameworks": {
+    "netstandard1.6": {
+      "imports": "dnxcore50"
+    },
+    "net451": {
+      "dependencies": {
+        "System.Threading.Timer": "4.3.0"
+      }
+    }
+  }
+}
