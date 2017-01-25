@@ -1,9 +1,10 @@
 ﻿using System;
+using System.Reflection;
 using System.Text;
+using System.Timers;
 using Common.Logging;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
-using Timer = System.Threading.Timer;
 
 namespace ServiceConnect.Filters.MessageDeduplication.Filters
 {
@@ -13,8 +14,8 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
     /// </summary>
     public class OutgoingFilter
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(OutgoingFilter));
-        private readonly IMessageDeduplicationPersistor _messageDeduplicationPersistor;
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
+        private static IMessageDeduplicationPersistor _messageDeduplicationPersistor;
         private static Timer _timer;
         private readonly DeduplicationFilterSettings _settings;
         private static readonly object Padlock = new object();
@@ -39,24 +40,10 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             {
                 if (_timer == null && !_settings.DisableMsgExpiry)
                 {
-                    _timer = new Timer(Callback, null, 0, _settings.MsgCleanupIntervalMinutes * 60 * 1000);
+                    _timer = new Timer(_settings.MsgCleanupIntervalMinutes*60*1000);
+                    _timer.Elapsed += TimerElapsed;
+                    _timer.Start();
                 }
-            }
-        }
-
-        /// <summary>
-        /// Executes on every specified time interval and removes the expired message ids from the relevant persistance store.
-        /// </summary>
-        /// <param name="state"></param>
-        private void Callback(object state)
-        {
-            try
-            {
-                _messageDeduplicationPersistor.RemoveExpiredMessages(DateTime.UtcNow);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Error removing expired messages.", ex);
             }
         }
 
@@ -74,6 +61,23 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Executes on every specified time interval and removes the expired message ids from the relevant persistance store.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        static void TimerElapsed(object sender, ElapsedEventArgs e)
+        {
+            try
+            {
+                _messageDeduplicationPersistor.RemoveExpiredMessages(DateTime.UtcNow);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Error removing expired messages.", ex);
+            }
         }
     }
 }

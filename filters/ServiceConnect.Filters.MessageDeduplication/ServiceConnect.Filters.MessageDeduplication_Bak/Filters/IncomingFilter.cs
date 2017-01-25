@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reflection;
 using System.Text;
 using Common.Logging;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
@@ -12,7 +13,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
     /// </summary>
     public class IncomingFilter
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(IncomingFilter));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly IMessageDeduplicationPersistor _messageDeduplicationPersistor;
 
         /// <summary>
