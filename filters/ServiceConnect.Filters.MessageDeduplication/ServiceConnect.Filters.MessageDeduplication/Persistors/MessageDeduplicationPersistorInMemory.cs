@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Runtime.Caching;
 
 namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 {
@@ -10,28 +10,34 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
     /// </summary>
     public class MessageDeduplicationPersistorInMemory : IMessageDeduplicationPersistor
     {
-        private static readonly ObjectCache Cache = MemoryCache.Default;
-        private static readonly CacheItemPolicy CacheItemPolicy = new CacheItemPolicy { SlidingExpiration = new TimeSpan(0, 24, 0, 0, 0) };
+        private static readonly ConcurrentDictionary<string, CacheItem> Cache = new ConcurrentDictionary<string, CacheItem>();
 
         public bool GetMessageExists(Guid messageId)
         {
-            return Cache.Contains(messageId.ToString());
+            return Cache.ContainsKey(messageId.ToString());
         }
 
         public void Insert(Guid messageId, DateTime messageExpiry)
         {
-            Cache.Add(messageId.ToString(), messageExpiry, CacheItemPolicy);
+            Cache.TryAdd(messageId.ToString(), new CacheItem { MessageExpiry = messageExpiry });
         }
 
         public void RemoveExpiredMessages(DateTime messageExpiry)
         {
-            foreach (KeyValuePair<string, object> cacheItem in Cache)
+            foreach (KeyValuePair<string, CacheItem> cacheItem in Cache)
             {
-                if ((DateTime)cacheItem.Value < messageExpiry)
+                if (cacheItem.Value.MessageExpiry < messageExpiry)
                 {
-                    Cache.Remove(cacheItem.Key);
+                    CacheItem ci;
+                    Cache.TryRemove(cacheItem.Key, out ci);
                 }
             }
         }
+    }
+
+    internal sealed class CacheItem
+    {
+        public object Value { get; set; }
+        public DateTime MessageExpiry { get; set; }
     }
 }

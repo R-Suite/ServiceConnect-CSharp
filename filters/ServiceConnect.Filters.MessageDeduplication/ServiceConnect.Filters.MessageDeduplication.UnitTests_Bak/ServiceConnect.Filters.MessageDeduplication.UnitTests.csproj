@@ -76,12 +76,6 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\ServiceConnect.Filters.MessageDeduplication\ServiceConnect.Filters.MessageDeduplication.csproj">
-      <Project>{7952F1B4-E9D4-490E-A756-010C0438B37A}</Project>
-      <Name>ServiceConnect.Filters.MessageDeduplication</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
