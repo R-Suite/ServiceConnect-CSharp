@@ -1,15 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using Common.Logging;
 using MongoDB.Driver;
+using MongoDB.Driver.Builders;
 
 namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 {
     public class MessageDeduplicationPersistorMongoDbSsl : IMessageDeduplicationPersistor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(MessageDeduplicationPersistorMongoDbSsl));
+        private static readonly ILog Logger = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
         private readonly IMongoCollection<ProcessedMessage> _collection;
 
         public MessageDeduplicationPersistorMongoDbSsl()
