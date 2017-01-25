@@ -128,6 +128,8 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             var mongoClient = new MongoClient(settings);
             var mongoDatabase = mongoClient.GetDatabase(filterSettings.DatabaseNameMongoDb);
             _collection = mongoDatabase.GetCollection<ProcessedMessage>(filterSettings.CollectionNameMongoDb);
+            _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id));
+            _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.ExpiryDateTime));
         }
 
         public bool GetMessageExists(Guid messageId)

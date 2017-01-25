@@ -16,6 +16,8 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             var mongoClient = new MongoClient(settings.ConnectionStringMongoDb);
             var mongoDatabase = mongoClient.GetDatabase(settings.DatabaseNameMongoDb);
             _collection = mongoDatabase.GetCollection<ProcessedMessage>(settings.CollectionNameMongoDb);
+            _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id));
+            _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.ExpiryDateTime));
         }
 
         public bool GetMessageExists(Guid messageId)
