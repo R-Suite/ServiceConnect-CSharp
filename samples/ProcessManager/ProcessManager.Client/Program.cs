@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using ProcessManager.Messages;
 using ServiceConnect;
 using ServiceConnect.Interfaces;
