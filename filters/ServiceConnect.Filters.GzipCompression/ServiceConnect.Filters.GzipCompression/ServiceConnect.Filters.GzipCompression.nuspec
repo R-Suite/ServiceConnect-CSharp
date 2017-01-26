@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<package>
+  <metadata>
+    <id>ServiceConnect.Filters.GzipCompression</id>
+    <version>2.0.0-pre</version>
+    <title>ServiceConnect.Filters.GzipCompression</title>
+    <authors>Jakub Pachansky,Tim Watson</authors>
+    <owners>Jakub Pachansky,Tim Watson</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A set of filters that gzip-compresses each message</description>
+    <language>en-GB</language>
+    <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
+    <copyright>Copyright 2017 ServiceConnect. All rights reserved</copyright>
+    <tags>MessageBus filters,ServiceConnect filters, compression, idempotent,R MessageBus,message gzip,RabbitMQ MessageBus,RMessageBus,Messaging,message compression,Bus,Service</tags>
+    <dependencies>
+      <group targetFramework="net451">
+        <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
+      </group>
+      <group targetFramework="netstandard1.6">
+        <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
+        <dependency id="NETStandard.Library" version="1.6.0" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\net451\ServiceConnect.Filters.GzipCompression.*" target="lib\net451" />
+    <file src="bin\Release\netstandard1.6\ServiceConnect.Filters.GzipCompression.*" target="lib\netstandard1.6" />
+  </files>
+</package>

@@ -36,48 +36,48 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Common.Logging, Version=3.4.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\Common.Logging.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\Common.Logging.dll</HintPath>
     </Reference>
     <Reference Include="Common.Logging.Core, Version=3.4.0.0, Culture=neutral, PublicKeyToken=af08829b84f0328e, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\Common.Logging.Core.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\Common.Logging.Core.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json, Version=9.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\Newtonsoft.Json.dll</HintPath>
-      <Private>True</Private>
+    <Reference Include="Newtonsoft.Json, Version=4.5.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="RabbitMQ.Client, Version=4.0.0.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\RabbitMQ.Client.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\RabbitMQ.Client.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\ServiceConnect.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Client.RabbitMQ, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\ServiceConnect.Client.RabbitMQ.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Client.RabbitMQ.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Container.Default, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\ServiceConnect.Container.Default.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Container.Default.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Core, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\ServiceConnect.Core.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Core.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Interfaces, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\ServiceConnect.Interfaces.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Interfaces.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Persistance.InMemory, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\ServiceConnect.Persistance.InMemory.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Persistance.InMemory.dll</HintPath>
     </Reference>
     <Reference Include="ServiceConnect.Persistance.SqlServer, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\ServiceConnect.4.0.0-pre\lib\net451\ServiceConnect.Persistance.SqlServer.dll</HintPath>
-      <Private>True</Private>
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Persistance.SqlServer.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />

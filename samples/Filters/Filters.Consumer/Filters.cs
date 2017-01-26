@@ -17,6 +17,8 @@ namespace Filters.Consumer
             envelope.Body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message));
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 
     public class BeforeFilter2 : IFilter
@@ -35,6 +37,8 @@ namespace Filters.Consumer
             
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 
     public class AfterFilter1 : IFilter
@@ -44,6 +48,8 @@ namespace Filters.Consumer
             Console.WriteLine("Inside after filter 1");
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 
     public class AfterFilter2: IFilter
@@ -53,5 +59,7 @@ namespace Filters.Consumer
             Console.WriteLine("Inside after filter 2");
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 }
