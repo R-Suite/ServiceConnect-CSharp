@@ -2809,6 +2809,7 @@
         "dependencies": {
           "Common.Logging": "3.4.0-Beta2",
           "NETStandard.Library": "1.6.0",
+          "Newtonsoft.Json": "9.0.1",
           "ServiceConnect.Interfaces": "4.0.0-pre",
           "mongocsharpdriver": "2.4.1"
         },

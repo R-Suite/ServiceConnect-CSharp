@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Persistance.MongoDb</id>
-    <version>4.0.0-pre</version>
+    <version>4.0.2-pre</version>
     <title>ServiceConnect.Persistance.MongoDb</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -13,11 +13,19 @@
     <copyright>Copyright 2017 ServiceConnect. All rights reserved</copyright>
     <tags>ServiceConnect,RMessageBus,R,MessageBus,MessageBus Persistance,Persistance.MongoDb,R MongoDb,R MongoDb Persistance,MongoDb, MessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
-      <dependency id="mongocsharpdriver" version="2.4.1" />
+      <group targetFramework="net451">
+        <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
+        <dependency id="mongocsharpdriver" version="2.4.1" />
+      </group>
+      <group targetFramework="netstandard1.6">
+        <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
+        <dependency id="mongocsharpdriver" version="2.4.1" />
+        <dependency id="NETStandard.Library" version="1.6.0" />
+      </group>
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\**" target="lib" />
+    <file src="bin\Release\net451\ServiceConnect.Persistance.MongoDb.*" target="lib\net451" />
+    <file src="bin\Release\netstandard1.6\ServiceConnect.Persistance.MongoDb.*" target="lib\netstandard1.6" />
   </files>
 </package>
