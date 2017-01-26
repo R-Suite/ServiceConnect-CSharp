@@ -18,6 +18,8 @@ namespace Filters
 
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 
     public class Filter2 : IFilter
@@ -36,5 +38,7 @@ namespace Filters
 
             return true;
         }
+
+        public IBus Bus { get; set; }
     }
 }

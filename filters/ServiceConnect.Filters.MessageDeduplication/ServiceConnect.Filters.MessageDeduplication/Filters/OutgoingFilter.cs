@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Text;
 using Common.Logging;
+using MongoDB.Bson.IO;
+using Newtonsoft.Json;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 using Timer = System.Threading.Timer;
@@ -70,6 +72,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             }
             catch (Exception ex)
             {
+                Logger.ErrorFormat("envelope: {0}", Newtonsoft.Json.JsonConvert.SerializeObject(envelope));
                 Logger.Error("Error processing outgoing deduplication filter ", ex);
             }
 

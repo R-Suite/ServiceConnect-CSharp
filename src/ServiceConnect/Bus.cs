@@ -249,7 +249,7 @@ namespace ServiceConnect
             {
                 MethodInfo publish = GetType().GetMethods().First(m => m.Name == "Publish" && m.GetParameters()[1].Name == "routingKey");
                 MethodInfo genericPublish = publish.MakeGenericMethod(newBaseType);
-                genericPublish.Invoke(this, new object[] { message, routingKey, new Dictionary<string, string>(headers) });
+                genericPublish.Invoke(this, new object[] { message, routingKey, (null == headers) ? null : new Dictionary<string, string>(headers) });
             }
         }
 
