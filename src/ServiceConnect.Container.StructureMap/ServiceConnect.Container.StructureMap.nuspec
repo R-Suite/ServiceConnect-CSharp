@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Container.StructureMap</id>
-    <version>4.0.2-pre</version>
+    <version>4.0.3-pre</version>
     <title>ServiceConnect.Container.StructureMap</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>

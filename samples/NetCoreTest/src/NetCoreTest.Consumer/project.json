@@ -10,7 +10,8 @@
       "version": "1.0.1"
     },
     "NetCoreTest.Messages": "1.0.0-*",
-    "ServiceConnect": "4.0.2-pre"
+    "ServiceConnect": "4.0.0-pre",
+    "ServiceConnect.Container.StructureMap": "4.0.0-pre"
   },
 
   "frameworks": {
