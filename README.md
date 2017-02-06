@@ -1,7 +1,6 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/1bj54lpa7e0j8djg?svg=true)](https://ci.appveyor.com/project/jpachansky/serviceconnect-csharp)
 [![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-**In the 3.0 release version, R.MessageBus has been renamed to ServiceConnect**
+**4.0.* (pre)release version supports .NET Core**
 
 **_ServiceConnect 3.0.0 is available at [https://www.nuget.org/packages/ServiceConnect] (https://www.nuget.org/packages/ServiceConnect/)_**
 * **New in ServiceConnect 3.0.0**
