@@ -15,7 +15,7 @@ namespace ProcessManager.Host
                 config.SetThreads(1);
                 //config.SetProcessManagerFinder<MongoDbProcessManagerFinder>();
                 config.SetProcessManagerFinder<SingletonProcessManagerFinder>();
-                config.SetHost("lonappdev04");
+                config.SetHost("localhost");
             });
 
             Console.ReadLine();

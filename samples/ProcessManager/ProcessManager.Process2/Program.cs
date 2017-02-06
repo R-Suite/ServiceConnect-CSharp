@@ -14,7 +14,7 @@ namespace ProcessManager.Process2
             Bus.Initialize(config =>
             {
                 config.SetThreads(20);
-                config.SetHost("lonappdev04");
+                config.SetHost("localhost");
             });
         }
     }
