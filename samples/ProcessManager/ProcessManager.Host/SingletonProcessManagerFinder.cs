@@ -11,7 +11,7 @@ namespace Ruffer.Reporting.SqlTransformation
         static SingletonProcessManagerFinder()
         {
             Finder = new MongoDbProcessManagerFinder(
-                "mongodb://lonappdev04/", 
+                "mongodb://localhost/", 
                 "TestPM");
         }
 
