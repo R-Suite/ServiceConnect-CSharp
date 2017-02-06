@@ -13,7 +13,7 @@ namespace ProcessManager.Client
             Console.WriteLine("*********** ProcessManager.Client ***********");
             IBus bus = Bus.Initialize(config =>
             {
-                config.SetHost("lonappdev04");
+                config.SetHost("localhost");
             });
 
             Console.WriteLine("Press <ENTER> to start ProcessManager(s)");
