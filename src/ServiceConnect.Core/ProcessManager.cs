@@ -80,7 +80,7 @@ namespace ServiceConnect.Core
 
             return ProcessManagerFinder.FindData<T>(_mapper, message);
         }
-
+        
         protected virtual void ConfigureHowToFindProcessManager(IProcessManagerPropertyMapper mapper)
         {}
     }
