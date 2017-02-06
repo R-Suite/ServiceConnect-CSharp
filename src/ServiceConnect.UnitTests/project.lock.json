@@ -3201,7 +3201,7 @@
           "netstandard1.6/ServiceConnect.Interfaces.dll": {}
         }
       },
-      "ServiceConnect.Persistance.InMemory/4.0.0-pre": {
+      "ServiceConnect.Persistance.InMemory/4.0.1-pre": {
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
@@ -9140,7 +9140,7 @@
       "path": "../ServiceConnect.Interfaces/project.json",
       "msbuildProject": "../ServiceConnect.Interfaces/ServiceConnect.Interfaces.xproj"
     },
-    "ServiceConnect.Persistance.InMemory/4.0.0-pre": {
+    "ServiceConnect.Persistance.InMemory/4.0.1-pre": {
       "type": "project",
       "path": "../ServiceConnect.Persistance.InMemory/project.json",
       "msbuildProject": "../ServiceConnect.Persistance.InMemory/ServiceConnect.Persistance.InMemory.xproj"
