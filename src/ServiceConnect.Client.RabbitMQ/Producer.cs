@@ -49,7 +49,33 @@ namespace ServiceConnect.Client.RabbitMQ
 
             Retry.Do(CreateConnection, ex =>
             {
-                Logger.Error("Error creating producer - {0}", ex);
+                try
+                {
+                    if (_connection != null && _connection.IsOpen)
+                    {
+                        _connection.Close();
+                        _connection.Dispose();
+                    }
+                }
+                catch (Exception e)
+                {
+                    Logger.Warn("Exception trying to close connection", e);
+                    throw;
+                }
+
+                try
+                {
+                    if (_model != null && _model.IsOpen)
+                    {
+                        _model.Close();
+                        _model.Dispose();
+                    }
+                }
+                catch (Exception e)
+                {
+                    Logger.Warn("Exception trying to close model", e);
+                    throw;
+                }
 
                 if (_hosts.Length > 1)
                 {

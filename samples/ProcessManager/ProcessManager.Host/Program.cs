@@ -1,4 +1,5 @@
 ﻿using System;
+using Ruffer.Reporting.SqlTransformation;
 using ServiceConnect;
 using ServiceConnect.Persistance.MongoDb;
 
@@ -11,9 +12,10 @@ namespace ProcessManager.Host
             Console.WriteLine("*********** ProcessManager.Host ***********");
             Bus.Initialize(config =>
             {
-                config.SetProcessManagerFinder<MongoDbProcessManagerFinder>();
-                //config.SetProcessManagerFinder<InMemoryProcessManagerFinder>();
-                config.EnableProcessManagerTimeouts = true;
+                config.SetThreads(1);
+                //config.SetProcessManagerFinder<MongoDbProcessManagerFinder>();
+                config.SetProcessManagerFinder<SingletonProcessManagerFinder>();
+                config.SetHost("lonappdev04");
             });
 
             Console.ReadLine();
