@@ -203,22 +203,11 @@ namespace ServiceConnect.Client.RabbitMQ
             Retry.Do(CreateConsumer, ex =>
             {
                 Logger.Error(string.Format("Error creating consumer - queueName: {0}", queueName), ex);
-
-                if (_hosts.Length > 1)
-                {
-                    if (_activeHost < _hosts.Length - 1)
-                    {
-                        _activeHost++;
-                    }
-                    else
-                    {
-                        _activeHost = 0;
-                    }
-                }
-
+                DisposeConnection();
+                SwitchHost();
             }, new TimeSpan(0, 0, 0, 10));
         }
-        
+
         private void CreateConsumer()
         {
             Logger.DebugFormat("Creating consumer on queue {0}", _queueName);
@@ -347,21 +336,15 @@ namespace ServiceConnect.Client.RabbitMQ
                 return;
             }
 
-            if (_hosts.Length > 1)
-            {
-                if (_activeHost < _hosts.Length - 1)
-                {
-                    _activeHost++;
-                }
-                else
-                {
-                    _activeHost = 0;
-                }
-            }
+            SwitchHost();
 
             Logger.Debug("Heartbeat missed reconnecting to queue");
 
-            Retry.Do(CreateConsumer, ex => Logger.Error("Error connecting to queue - {0}", ex), new TimeSpan(0, 0, 0, 10));
+            Retry.Do(CreateConsumer, ex =>
+            {
+                Logger.Error("Error connecting to queue}", ex);
+                DisposeConnection();
+            }, new TimeSpan(0, 0, 0, 10));
         }
 
         private string GetErrorMessage(Exception exception)
@@ -568,6 +551,50 @@ namespace ServiceConnect.Client.RabbitMQ
                     Logger.Warn("Error disposing connection", ex);
                 }
                 _connection = null;
+            }
+        }
+
+        private void DisposeConnection()
+        {
+            try
+            {
+                if (_connection != null && _connection.IsOpen)
+                {
+                    _connection.Close();
+                    _connection.Dispose();
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Warn("Exception trying to close connection", e);
+            }
+
+            try
+            {
+                if (_model != null && _model.IsOpen)
+                {
+                    _model.Close();
+                    _model.Dispose();
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Warn("Exception trying to close model", e);
+            }
+        }
+
+        private void SwitchHost()
+        {
+            if (_hosts.Length > 1)
+            {
+                if (_activeHost < _hosts.Length - 1)
+                {
+                    _activeHost++;
+                }
+                else
+                {
+                    _activeHost = 0;
+                }
             }
         }
     }

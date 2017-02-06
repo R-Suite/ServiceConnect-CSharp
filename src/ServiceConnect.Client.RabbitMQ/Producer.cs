@@ -49,49 +49,11 @@ namespace ServiceConnect.Client.RabbitMQ
 
             Retry.Do(CreateConnection, ex =>
             {
-                try
-                {
-                    if (_connection != null && _connection.IsOpen)
-                    {
-                        _connection.Close();
-                        _connection.Dispose();
-                    }
-                }
-                catch (Exception e)
-                {
-                    Logger.Warn("Exception trying to close connection", e);
-                    throw;
-                }
-
-                try
-                {
-                    if (_model != null && _model.IsOpen)
-                    {
-                        _model.Close();
-                        _model.Dispose();
-                    }
-                }
-                catch (Exception e)
-                {
-                    Logger.Warn("Exception trying to close model", e);
-                    throw;
-                }
-
-                if (_hosts.Length > 1)
-                {
-                    if (_activeHost < _hosts.Length - 1)
-                    {
-                        _activeHost++;
-                    }
-                    else
-                    {
-                        _activeHost = 0;
-                    }
-                }
-
+                DisposeConnection();
+                SwitchHost();
             }, new TimeSpan(0, 0, 0, 10));
         }
-
+        
         private void CreateConnection()
         {
             _connectionFactory = new ConnectionFactory
@@ -167,29 +129,19 @@ namespace ServiceConnect.Client.RabbitMQ
                 var exchangeName = ConfigureExchange(exchName, "fanout");
 
                 Retry.Do(() => _model.BasicPublish(exchangeName, "", basicProperties, envelope.Body),
-                    ex =>
-                    {
-                        Logger.Error("Error publishing message", ex);
-                        RetryConnection();
-                    }, new TimeSpan(0, 0, 0, 6), 10);
+                ex =>
+                {
+                    Logger.Error("Error publishing message", ex);
+                    DisposeConnection();
+                    RetryConnection();
+                }, new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
         private void RetryConnection()
         {
             Logger.Debug("In Producer.RetryConnection()");
-
-            if (_hosts.Length > 1)
-            {
-                if (_activeHost < _hosts.Length - 1)
-                {
-                    _activeHost++;
-                }
-                else
-                {
-                    _activeHost = 0;
-                }
-            }
+            SwitchHost();
             CreateConnection();
         }
 
@@ -210,8 +162,12 @@ namespace ServiceConnect.Client.RabbitMQ
                     basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                     Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, message),
-                             ex => RetryConnection(),
-                             new TimeSpan(0, 0, 0, 6), 10);
+                    ex =>
+                    {
+                        DisposeConnection();
+                        RetryConnection();
+                    },
+                    new TimeSpan(0, 0, 0, 6), 10);
                 }
             }
         }
@@ -229,8 +185,12 @@ namespace ServiceConnect.Client.RabbitMQ
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, message),
-                         ex => RetryConnection(),
-                         new TimeSpan(0, 0, 0, 6), 10);
+                ex =>
+                {
+                    DisposeConnection();
+                    RetryConnection();
+                },
+                new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
@@ -332,8 +292,12 @@ namespace ServiceConnect.Client.RabbitMQ
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
                 Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, envelope.Body),
-                         ex => RetryConnection(),
-                         new TimeSpan(0, 0, 0, 6), 10);
+                ex =>
+                {
+                    DisposeConnection();
+                    RetryConnection();
+                },
+                new TimeSpan(0, 0, 0, 6), 10);
             }
         }
 
@@ -349,6 +313,56 @@ namespace ServiceConnect.Client.RabbitMQ
             }
 
             return exchangeName;
+        }
+
+        private void DisposeConnection()
+        {
+            try
+            {
+                lock (_connection)
+                {
+                    if (_connection != null && _connection.IsOpen)
+                    {
+                        _connection.Close();
+                        _connection.Dispose();
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Warn("Exception trying to close connection", e);
+            }
+
+            try
+            {
+                lock (_model)
+                {
+                    if (_model != null && _model.IsOpen)
+                    {
+                        _model.Close();
+                        _model.Dispose();
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Warn("Exception trying to close model", e);
+            }
+        }
+
+        private void SwitchHost()
+        {
+            if (_hosts.Length > 1)
+            {
+                if (_activeHost < _hosts.Length - 1)
+                {
+                    _activeHost++;
+                }
+                else
+                {
+                    _activeHost = 0;
+                }
+            }
         }
     }
 }
