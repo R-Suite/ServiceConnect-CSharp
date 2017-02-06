@@ -13,6 +13,8 @@ namespace ProcessManager.Process1
             Console.WriteLine("*********** ProcessManager.Process1 ***********");
             Bus.Initialize(config =>
             {
+                config.SetThreads(20);
+                config.SetHost("lonappdev04");
             });
         }
     }
