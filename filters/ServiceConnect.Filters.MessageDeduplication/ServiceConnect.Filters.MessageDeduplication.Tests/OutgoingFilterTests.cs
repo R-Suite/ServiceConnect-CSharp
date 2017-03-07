@@ -68,5 +68,30 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
             // Assert
             Assert.True(result);
         }
+
+        [Fact]
+        public void ShouldNotSetTimerWhenUsingRedisPersistor()
+        {
+            // Arrange
+            Guid messageId = Guid.NewGuid();
+
+            var deduplicationSettings = DeduplicationFilterSettings.Instance;
+            deduplicationSettings.DisableMsgExpiry = false;
+
+            IMessageDeduplicationPersistor persistor = new MessageDeduplicationPersistorRedis();
+
+            var outgoingFilter = new OutgoingFilter(persistor);
+            var envelope = new Envelope();
+            envelope.Headers = new Dictionary<string, object>();
+            envelope.Headers = new Dictionary<string, object> { { "MessageId", Encoding.ASCII.GetBytes(messageId.ToString()) } };
+
+
+            // Act
+            var result = outgoingFilter.Process(envelope);
+
+
+            // Assert
+            Assert.Null(outgoingFilter.Timer);
+        }
     }
 }
