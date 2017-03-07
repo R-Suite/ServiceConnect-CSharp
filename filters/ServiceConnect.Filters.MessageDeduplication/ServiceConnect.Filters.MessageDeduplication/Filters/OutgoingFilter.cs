@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Text;
 using Common.Logging;
-using MongoDB.Bson.IO;
-using Newtonsoft.Json;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 using Timer = System.Threading.Timer;
@@ -20,6 +18,8 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
         private static Timer _timer;
         private readonly DeduplicationFilterSettings _settings;
         private static readonly object Padlock = new object();
+
+        public Timer Timer { get { return _timer;} }
 
         /// <summary>
         /// Public ctor
@@ -39,7 +39,8 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             // setup timer for cleaning up expired messages
             lock (Padlock)
             {
-                if (_timer == null && !_settings.DisableMsgExpiry)
+                // note: no need to timer with Redis persistor
+                if (_timer == null && !_settings.DisableMsgExpiry && messageDeduplicationPersistor.GetType() != typeof(MessageDeduplicationPersistorRedis))
                 {
                     _timer = new Timer(Callback, null, 0, _settings.MsgCleanupIntervalMinutes * 60 * 1000);
                 }

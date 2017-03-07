@@ -6,7 +6,8 @@
     "mongocsharpdriver": "2.4.1",
     "NETStandard.Library": "1.6.0",
     "Newtonsoft.Json": "9.0.1",
-    "ServiceConnect.Interfaces": "4.0.0-pre"
+    "ServiceConnect.Interfaces": "4.0.0-pre",
+    "StackExchange.Redis": "1.2.1"
   },
 
   "frameworks": {
