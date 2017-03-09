@@ -18,22 +18,24 @@ namespace PointToPoint.Consumer
             var deduplicationSettings = DeduplicationFilterSettings.Instance;
             deduplicationSettings.MsgCleanupIntervalMinutes = 12;
             deduplicationSettings.MsgExpiryHours = 2;
+            deduplicationSettings.DatabaseNameMongoDb = "MessageDeduplication";
+            deduplicationSettings.CollectionNameMongoDb = "JPBenchmark";
 
             var bus = Bus.Initialize(config =>
             {
                 config.BeforeConsumingFilters = new List<Type>
                 {
-                    typeof(IncomingDeduplicationFilterMongoDb)
+                    typeof(IncomingDeduplicationFilterRedis)
                 };
                 config.AfterConsumingFilters = new List<Type>
                 {
-                    typeof(OutgoingDeduplicationFilterMongoDb)
+                    typeof(OutgoingDeduplicationFilterRedis)
                 };
                 config.SetQueueName("MessageDeduplication.Consumer");
-                config.SetThreads(1);
+                config.SetThreads(10);
                 config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("localhost");
-                config.TransportSettings.ClientSettings.Add("PrefetchCount", 7);
+                config.TransportSettings.ClientSettings.Add("PrefetchCount", 300);
                 config.TransportSettings.ClientSettings.Add("HeartbeatEnabled", true);
                 //config.TransportSettings.ClientSettings.Add("DisablePrefetch", true);
             });

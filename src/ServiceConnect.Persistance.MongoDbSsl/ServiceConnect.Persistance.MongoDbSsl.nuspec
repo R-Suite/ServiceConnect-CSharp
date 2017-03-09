@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Persistance.MongoDbSsl</id>
-    <version>4.0.2-pre</version>
+    <version>4.0.3-pre</version>
     <title>ServiceConnect.Persistance.MongoDbSsl</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -25,7 +25,7 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\net451\ServiceConnect.Persistance.MongoDb.*" target="lib\net451" />
+    <file src="bin\Release\net451\ServiceConnect.Persistance.MongoDbSsl.*" target="lib\net451" />
     <file src="bin\Release\netstandard1.6\ServiceConnect.Persistance.MongoDbSsl.*" target="lib\netstandard1.6" />
   </files>
 </package>
