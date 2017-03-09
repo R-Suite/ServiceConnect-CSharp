@@ -124,7 +124,6 @@ namespace ServiceConnect.Container.StructureMap
         {
             _container.Configure(x => x.Scan(y =>
             {
-                y.Assembly(Assembly.GetEntryAssembly());
                 y.AssembliesAndExecutablesFromApplicationBaseDirectory();
                 y.ConnectImplementationsToTypesClosing(typeof(IMessageHandler<>));
                 y.ConnectImplementationsToTypesClosing(typeof(IStartProcessManager<>));

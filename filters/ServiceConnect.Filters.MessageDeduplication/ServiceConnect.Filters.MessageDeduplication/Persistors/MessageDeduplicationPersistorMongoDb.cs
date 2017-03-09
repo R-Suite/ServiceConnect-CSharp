@@ -26,11 +26,11 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             return result.Any();
         }
 
-        public async void Insert(Guid messageId, DateTime messagExpiry)
+        public void Insert(Guid messageId, DateTime messagExpiry)
         {
             try
             {
-                await _collection.InsertOneAsync(new ProcessedMessage
+                _collection.InsertOne(new ProcessedMessage
                 {
                     Id = messageId,
                     ExpiryDateTime = messagExpiry
