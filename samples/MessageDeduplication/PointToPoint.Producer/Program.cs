@@ -23,12 +23,12 @@ namespace PointToPoint.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
 
-                for (int i = 0; i < 1; i++)
+                for (int i = 0; i < 1000000; i++)
                 {
                     var id = Guid.NewGuid();
                     bus.Send(new PointToPointMessage(id)
                     {
-                        Data = new byte[10000],
+                        //Data = new byte[10000],
                         SerialNumber = i
                     });
                     //Console.ReadLine();
