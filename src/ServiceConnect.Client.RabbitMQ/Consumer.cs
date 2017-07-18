@@ -97,6 +97,11 @@ namespace ServiceConnect.Client.RabbitMQ
 
                 ProcessMessage(args);
             }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                throw;
+            }
             finally
             {
                 _model.BasicAck(args.DeliveryTag, false);

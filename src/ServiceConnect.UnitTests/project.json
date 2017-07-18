@@ -9,8 +9,8 @@
     "ServiceConnect.Persistance.SqlServer": "4.0.0-pre",
     "ServiceConnect": "4.0.0-pre",
     "ServiceConnect.Container.StructureMap": "4.0.0-pre",
-    "xunit": "2.2.0-beta5-build3474",
-    "Moq": "4.6.38-alpha",
+    "xunit": "2.2.0",
+    "Moq": "4.7.99",
     "dotnet-test-xunit": "2.2.0-preview2-build1029",
     "Microsoft.DotNet.InternalAbstractions": "1.0.500-preview2-1-003177"
   },
