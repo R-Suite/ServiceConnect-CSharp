@@ -17,9 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Common.Logging;
-using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
 using RabbitMQ.Client;
 
@@ -38,6 +36,8 @@ namespace ServiceConnect.Client.RabbitMQ
         private int _activeHost;
         private readonly long _maxMessageSize;
         private string[] _serverNames;
+        private readonly ushort _retryCount;
+        private readonly ushort _retryTimeInSeconds;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
         {
@@ -46,12 +46,14 @@ namespace ServiceConnect.Client.RabbitMQ
             _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
             _hosts = transportSettings.Host.Split(',');
             _activeHost = 0;
+            _retryCount = transportSettings.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
+            _retryTimeInSeconds = transportSettings.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
 
             Retry.Do(CreateConnection, ex =>
             {
                 DisposeConnection();
                 SwitchHost();
-            }, new TimeSpan(0, 0, 0, 10));
+            }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
         
         private void CreateConnection()
@@ -134,7 +136,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     Logger.Error("Error publishing message", ex);
                     DisposeConnection();
                     RetryConnection();
-                }, new TimeSpan(0, 0, 0, 6), 10);
+                }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
             }
         }
 
@@ -167,7 +169,7 @@ namespace ServiceConnect.Client.RabbitMQ
                         DisposeConnection();
                         RetryConnection();
                     },
-                    new TimeSpan(0, 0, 0, 6), 10);
+                    new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
                 }
             }
         }
@@ -190,7 +192,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     DisposeConnection();
                     RetryConnection();
                 },
-                new TimeSpan(0, 0, 0, 6), 10);
+                new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
             }
         }
 
@@ -297,7 +299,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     DisposeConnection();
                     RetryConnection();
                 },
-                new TimeSpan(0, 0, 0, 6), 10);
+                new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
             }
         }
 

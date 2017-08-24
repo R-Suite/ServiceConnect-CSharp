@@ -4,7 +4,7 @@
   "dependencies": {
     "ServiceConnect.Core": "4.0.0-pre",
     "ServiceConnect.Interfaces": "4.0.0-pre",
-    "StructureMap": "4.4.2"
+    "StructureMap": "4.5.2"
   },
 
   "frameworks": {

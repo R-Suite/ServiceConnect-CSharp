@@ -24,10 +24,10 @@
           "lib/netstandard1.3/Castle.Core.dll": {}
         }
       },
-      "Common.Logging/3.4.0-Beta2": {
+      "Common.Logging/3.4.1": {
         "type": "package",
         "dependencies": {
-          "Common.Logging.Core": "3.4.0-Beta2",
+          "Common.Logging.Core": "3.4.1",
           "Microsoft.CSharp": "4.0.1",
           "System.Collections": "4.0.11",
           "System.Diagnostics.Debug": "4.0.11",
@@ -43,7 +43,7 @@
           "lib/netstandard1.3/Common.Logging.dll": {}
         }
       },
-      "Common.Logging.Core/3.4.0-Beta2": {
+      "Common.Logging.Core/3.4.1": {
         "type": "package",
         "dependencies": {
           "Microsoft.CSharp": "4.0.1"
@@ -653,37 +653,21 @@
           "System.Xml.XDocument": "4.3.0"
         }
       },
-      "Newtonsoft.Json/9.0.1": {
+      "Newtonsoft.Json/10.0.3": {
         "type": "package",
         "dependencies": {
-          "Microsoft.CSharp": "4.0.1",
-          "System.Collections": "4.0.11",
-          "System.Diagnostics.Debug": "4.0.11",
-          "System.Dynamic.Runtime": "4.0.11",
-          "System.Globalization": "4.0.11",
-          "System.IO": "4.1.0",
-          "System.Linq": "4.1.0",
-          "System.Linq.Expressions": "4.1.0",
-          "System.ObjectModel": "4.0.12",
-          "System.Reflection": "4.1.0",
-          "System.Reflection.Extensions": "4.0.1",
-          "System.Resources.ResourceManager": "4.0.1",
-          "System.Runtime": "4.1.0",
-          "System.Runtime.Extensions": "4.1.0",
-          "System.Runtime.Serialization.Primitives": "4.1.1",
-          "System.Text.Encoding": "4.0.11",
-          "System.Text.Encoding.Extensions": "4.0.11",
-          "System.Text.RegularExpressions": "4.1.0",
-          "System.Threading": "4.0.11",
-          "System.Threading.Tasks": "4.0.11",
-          "System.Xml.ReaderWriter": "4.0.11",
-          "System.Xml.XDocument": "4.0.11"
+          "Microsoft.CSharp": "4.3.0",
+          "NETStandard.Library": "1.6.1",
+          "System.ComponentModel.TypeConverter": "4.3.0",
+          "System.Runtime.Serialization.Formatters": "4.3.0",
+          "System.Runtime.Serialization.Primitives": "4.3.0",
+          "System.Xml.XmlDocument": "4.3.0"
         },
         "compile": {
-          "lib/netstandard1.0/Newtonsoft.Json.dll": {}
+          "lib/netstandard1.3/Newtonsoft.Json.dll": {}
         },
         "runtime": {
-          "lib/netstandard1.0/Newtonsoft.Json.dll": {}
+          "lib/netstandard1.3/Newtonsoft.Json.dll": {}
         }
       },
       "NuGet.Common/3.5.0-beta2-1484": {
@@ -2397,11 +2381,27 @@
           "lib/netstandard1.3/System.Runtime.Numerics.dll": {}
         }
       },
-      "System.Runtime.Serialization.Primitives/4.1.1": {
+      "System.Runtime.Serialization.Formatters/4.3.0": {
         "type": "package",
         "dependencies": {
-          "System.Resources.ResourceManager": "4.0.1",
-          "System.Runtime": "4.1.0"
+          "System.Collections": "4.3.0",
+          "System.Reflection": "4.3.0",
+          "System.Resources.ResourceManager": "4.3.0",
+          "System.Runtime": "4.3.0",
+          "System.Runtime.Serialization.Primitives": "4.3.0"
+        },
+        "compile": {
+          "ref/netstandard1.3/System.Runtime.Serialization.Formatters.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard1.4/System.Runtime.Serialization.Formatters.dll": {}
+        }
+      },
+      "System.Runtime.Serialization.Primitives/4.3.0": {
+        "type": "package",
+        "dependencies": {
+          "System.Resources.ResourceManager": "4.3.0",
+          "System.Runtime": "4.3.0"
         },
         "compile": {
           "ref/netstandard1.3/System.Runtime.Serialization.Primitives.dll": {}
@@ -3155,9 +3155,11 @@
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
+          "Common.Logging": "3.4.1",
+          "Common.Logging.Core": "3.4.1",
           "Microsoft.Extensions.DependencyModel": "1.1.0",
           "NETStandard.Library": "1.6.1",
-          "Newtonsoft.Json": "9.0.1",
+          "Newtonsoft.Json": "10.0.3",
           "ServiceConnect.Client.RabbitMQ": "4.0.0-pre",
           "ServiceConnect.Container.Default": "4.0.0-pre",
           "ServiceConnect.Core": "4.0.0-pre",
@@ -3178,9 +3180,9 @@
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
-          "Common.Logging": "3.4.0-Beta2",
+          "Common.Logging": "3.4.1",
           "NETStandard.Library": "1.6.1",
-          "Newtonsoft.Json": "9.0.1",
+          "Newtonsoft.Json": "10.0.3",
           "RabbitMQ.Client": "4.1.1",
           "ServiceConnect.Interfaces": "4.0.0-pre"
         },
@@ -3211,11 +3213,11 @@
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
-          "Common.Logging": "3.4.0-Beta2",
-          "Common.Logging.Core": "3.4.0-Beta2",
+          "Common.Logging": "3.4.1",
+          "Common.Logging.Core": "3.4.1",
           "Microsoft.Extensions.DependencyModel": "1.1.0",
           "NETStandard.Library": "1.6.1",
-          "Newtonsoft.Json": "9.0.1",
+          "Newtonsoft.Json": "10.0.3",
           "ServiceConnect.Interfaces": "4.0.0-pre",
           "System.Diagnostics.Process": "4.3.0",
           "System.Reflection": "4.3.0",
@@ -3278,9 +3280,9 @@
         "type": "project",
         "framework": ".NETStandard,Version=v1.6",
         "dependencies": {
-          "Common.Logging": "3.4.0-Beta2",
+          "Common.Logging": "3.4.1",
           "NETStandard.Library": "1.6.1",
-          "Newtonsoft.Json": "9.0.1",
+          "Newtonsoft.Json": "10.0.3",
           "ServiceConnect.Interfaces": "4.0.0-pre",
           "System.Data.SqlClient": "4.3.0",
           "System.Xml.XPath": "4.3.0",
@@ -3313,12 +3315,12 @@
         "readme.txt"
       ]
     },
-    "Common.Logging/3.4.0-Beta2": {
-      "sha512": "AmRQM/dywoKXf91n8zGetKlmwxcxFSsgO1ApbWYfoMosBArr9cza+WHnQQWlvNeTHad/LnHndIChlgQOpkJEOA==",
+    "Common.Logging/3.4.1": {
+      "sha512": "5eZ/vgEOqzLg4PypZqnJ+wMhhgHyckicbZY4iDxqQ4FtOz0CpdYZ0xQ78aszMzeAJZiLLb5VdR9tPfunVQLz6g==",
       "type": "package",
-      "path": "Common.Logging/3.4.0-Beta2",
+      "path": "Common.Logging/3.4.1",
       "files": [
-        "Common.Logging.3.4.0-Beta2.nupkg.sha512",
+        "Common.Logging.3.4.1.nupkg.sha512",
         "Common.Logging.nuspec",
         "lib/net35/Common.Logging.dll",
         "lib/net35/Common.Logging.pdb",
@@ -3331,12 +3333,12 @@
         "lib/netstandard1.3/Common.Logging.xml"
       ]
     },
-    "Common.Logging.Core/3.4.0-Beta2": {
-      "sha512": "8r1lz7P7z8XAOmr9dbS1uV7ZZeC+aX+k4NeueIeEJM2izDFpjKNGvwZhzLKnApLZ1pJRn2a83z/5sFzMiEivEw==",
+    "Common.Logging.Core/3.4.1": {
+      "sha512": "wLHldZHvxsSD6Ahonfj00/SkfHfKqO+YT6jsUwVm8Rch1REL9IArHAcSLXxYxYfu5/4ydGtmXvOtaH3AkVPu0A==",
       "type": "package",
-      "path": "Common.Logging.Core/3.4.0-Beta2",
+      "path": "Common.Logging.Core/3.4.1",
       "files": [
-        "Common.Logging.Core.3.4.0-Beta2.nupkg.sha512",
+        "Common.Logging.Core.3.4.1.nupkg.sha512",
         "Common.Logging.Core.nuspec",
         "lib/net40/Common.Logging.Core.XML",
         "lib/net40/Common.Logging.Core.dll",
@@ -3902,12 +3904,13 @@
         "dotnet_library_license.txt"
       ]
     },
-    "Newtonsoft.Json/9.0.1": {
-      "sha512": "U82mHQSKaIk+lpSVCbWYKNavmNH1i5xrExDEquU1i6I5pV6UMOqRnJRSlKO3cMPfcpp0RgDY+8jUXHdQ4IfXvw==",
+    "Newtonsoft.Json/10.0.3": {
+      "sha512": "wBM7i7i3U2WX0ecor4zdVGvgrwFUjuigBoHKiL+nH39fCOpCPjBY3RDqJM32edvdyTAVdjzlccHsg41+/+zpSA==",
       "type": "package",
-      "path": "Newtonsoft.Json/9.0.1",
+      "path": "Newtonsoft.Json/10.0.3",
       "files": [
-        "Newtonsoft.Json.9.0.1.nupkg.sha512",
+        "LICENSE.md",
+        "Newtonsoft.Json.10.0.3.nupkg.sha512",
         "Newtonsoft.Json.nuspec",
         "lib/net20/Newtonsoft.Json.dll",
         "lib/net20/Newtonsoft.Json.xml",
@@ -3919,10 +3922,12 @@
         "lib/net45/Newtonsoft.Json.xml",
         "lib/netstandard1.0/Newtonsoft.Json.dll",
         "lib/netstandard1.0/Newtonsoft.Json.xml",
-        "lib/portable-net40+sl5+wp80+win8+wpa81/Newtonsoft.Json.dll",
-        "lib/portable-net40+sl5+wp80+win8+wpa81/Newtonsoft.Json.xml",
-        "lib/portable-net45+wp80+win8+wpa81/Newtonsoft.Json.dll",
-        "lib/portable-net45+wp80+win8+wpa81/Newtonsoft.Json.xml",
+        "lib/netstandard1.3/Newtonsoft.Json.dll",
+        "lib/netstandard1.3/Newtonsoft.Json.xml",
+        "lib/portable-net40+sl5+win8+wp8+wpa81/Newtonsoft.Json.dll",
+        "lib/portable-net40+sl5+win8+wp8+wpa81/Newtonsoft.Json.xml",
+        "lib/portable-net45+win8+wp8+wpa81/Newtonsoft.Json.dll",
+        "lib/portable-net45+win8+wp8+wpa81/Newtonsoft.Json.xml",
         "tools/install.ps1"
       ]
     },
@@ -7741,12 +7746,39 @@
         "ref/xamarinwatchos10/_._"
       ]
     },
-    "System.Runtime.Serialization.Primitives/4.1.1": {
-      "sha512": "HZ6Du5QrTG8MNJbf4e4qMO3JRAkIboGT5Fk804uZtg3Gq516S7hAqTm2UZKUHa7/6HUGdVy3AqMQKbns06G/cg==",
+    "System.Runtime.Serialization.Formatters/4.3.0": {
+      "sha512": "KT591AkTNFOTbhZlaeMVvfax3RqhH1EJlcwF50Wm7sfnBLuHiOeZRRKrr1ns3NESkM20KPZ5Ol/ueMq5vg4QoQ==",
       "type": "package",
-      "path": "System.Runtime.Serialization.Primitives/4.1.1",
+      "path": "System.Runtime.Serialization.Formatters/4.3.0",
       "files": [
-        "System.Runtime.Serialization.Primitives.4.1.1.nupkg.sha512",
+        "System.Runtime.Serialization.Formatters.4.3.0.nupkg.sha512",
+        "System.Runtime.Serialization.Formatters.nuspec",
+        "ThirdPartyNotices.txt",
+        "dotnet_library_license.txt",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net46/System.Runtime.Serialization.Formatters.dll",
+        "lib/netstandard1.4/System.Runtime.Serialization.Formatters.dll",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net46/System.Runtime.Serialization.Formatters.dll",
+        "ref/netstandard1.3/System.Runtime.Serialization.Formatters.dll",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._"
+      ]
+    },
+    "System.Runtime.Serialization.Primitives/4.3.0": {
+      "sha512": "Wz+0KOukJGAlXjtKr+5Xpuxf8+c8739RI1C+A2BoQZT+wMCCoMDDdO8/4IRHfaVINqL78GO8dW8G2lW/e45Mcw==",
+      "type": "package",
+      "path": "System.Runtime.Serialization.Primitives/4.3.0",
+      "files": [
+        "System.Runtime.Serialization.Primitives.4.3.0.nupkg.sha512",
         "System.Runtime.Serialization.Primitives.nuspec",
         "ThirdPartyNotices.txt",
         "dotnet_library_license.txt",
