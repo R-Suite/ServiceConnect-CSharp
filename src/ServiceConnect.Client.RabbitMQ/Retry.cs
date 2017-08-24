@@ -22,30 +22,6 @@ namespace ServiceConnect.Client.RabbitMQ
 {
     public static class Retry
     {
-        public static void Do(Action action, Action<Exception> exceptionAction, TimeSpan retryInterval)
-        {
-            while (true)
-            {
-                try
-                {
-                    while (true)
-                    {
-                        action();
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        exceptionAction(ex);
-                    }
-                    catch { }
-                    Thread.Sleep(retryInterval);
-                }
-            }
-        }
-
         public static void Do(Action action, Action<Exception> exceptionAction, TimeSpan retryInterval, int retryCount)
         {
             var exceptions = new List<Exception>();
