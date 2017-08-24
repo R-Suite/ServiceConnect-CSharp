@@ -20,7 +20,7 @@
       <group targetFramework="netstandard1.6">
         <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
         <dependency id="mongocsharpdriver" version="2.4.1" />
-        <dependency id="NETStandard.Library" version="1.6.0" />
+        <dependency id="NETStandard.Library" version="1.6.1" />
       </group>      
     </dependencies>
   </metadata>
