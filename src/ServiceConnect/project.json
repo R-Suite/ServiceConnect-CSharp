@@ -21,13 +21,15 @@
   },
 
   "dependencies": {
-    "Newtonsoft.Json": "9.0.1",
     "ServiceConnect.Client.RabbitMQ": "4.0.0-pre",
     "ServiceConnect.Container.Default": "4.0.0-pre",
     "ServiceConnect.Core": "4.0.0-pre",
     "ServiceConnect.Interfaces": "4.0.0-pre",
     "ServiceConnect.Persistance.SqlServer": "4.0.0-pre",
-    "ServiceConnect.Persistance.InMemory": "4.0.0-pre"
+    "ServiceConnect.Persistance.InMemory": "4.0.0-pre",
+    "Newtonsoft.Json": "10.0.3",
+    "Common.Logging.Core": "3.4.1",
+    "Common.Logging": "3.4.1"
   },
 
   "frameworks": {
