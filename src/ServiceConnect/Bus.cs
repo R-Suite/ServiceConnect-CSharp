@@ -15,7 +15,6 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -23,6 +22,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
@@ -31,6 +31,7 @@ namespace ServiceConnect
 {
     public class Bus : IBus
     {
+        private static readonly ILog Logger = LogManager.GetLogger(typeof(Bus));
         private readonly IBusContainer _container;
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
         private readonly IDictionary<string, IMessageBusReadStream> _byteStreams = new Dictionary<string, IMessageBusReadStream>();
@@ -118,31 +119,40 @@ namespace ServiceConnect
         private void CheckStatus(object state)
         {
 #if NET451
-            var heartbeatState = (HeartbeatTimerState)state;
-
-            if (heartbeatState.CpuCounter == null)
+            try
             {
-                heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
+
+                var heartbeatState = (HeartbeatTimerState)state;
+
+                if (heartbeatState.CpuCounter == null)
+                {
+                    heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
+                }
+
+                if (heartbeatState.RamCounter == null)
+                {
+                    heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
+                }
+
+                var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
+                {
+                    Timestamp = DateTime.UtcNow,
+                    Location = Configuration.TransportSettings.MachineName,
+                    Name = Configuration.TransportSettings.QueueName,
+                    LatestCpu = heartbeatState.CpuCounter.NextValue(),
+                    LatestMemory = heartbeatState.RamCounter.NextValue(),
+                    Language = "C#",
+                    ConsumerType = _producer.Type
+                });
+                var messageBytes = Encoding.UTF8.GetBytes(messageString);
+
+                _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
+
             }
-
-            if (heartbeatState.RamCounter == null)
+            catch (Exception ex)
             {
-                heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
+                Logger.Warn("Error checking service status", ex);
             }
-
-            var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
-            {
-                Timestamp = DateTime.UtcNow,
-                Location = Configuration.TransportSettings.MachineName,
-                Name = Configuration.TransportSettings.QueueName,
-                LatestCpu = heartbeatState.CpuCounter.NextValue(),
-                LatestMemory = heartbeatState.RamCounter.NextValue(),
-                Language = "C#",
-                ConsumerType = _producer.Type
-            });
-            var messageBytes = Encoding.UTF8.GetBytes(messageString);
-
-            _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
 #endif
         }
 
