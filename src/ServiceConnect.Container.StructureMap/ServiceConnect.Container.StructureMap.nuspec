@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Container.StructureMap</id>
-    <version>4.0.3-pre</version>
+    <version>4.0.4-pre</version>
     <title>ServiceConnect.Container.StructureMap</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -15,14 +15,14 @@
     <dependencies>
       <group targetFramework="net451">
         <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
-        <dependency id="ServiceConnect" version="4.0.2-pre" />
+        <dependency id="ServiceConnect" version="4.0.3-pre" />
         <dependency id="structuremap" version="4.4.2" />
       </group>
       <group targetFramework="netstandard1.6">
         <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
-        <dependency id="ServiceConnect" version="4.0.2-pre" />
+        <dependency id="ServiceConnect" version="4.0.3-pre" />
         <dependency id="structuremap" version="4.4.2" />
-        <dependency id="NETStandard.Library" version="1.6.0" />
+        <dependency id="NETStandard.Library" version="1.6.1" />
       </group>
     </dependencies>
   </metadata>

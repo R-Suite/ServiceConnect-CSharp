@@ -53,6 +53,8 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly ushort _prefetchCount;
         private readonly bool _disablePrefetch;
         private string[] _serverNames;
+        private readonly ushort _retryCount;
+        private readonly ushort _retryTimeInSeconds;
 
         public Consumer(ITransportSettings transportSettings)
         {
@@ -73,6 +75,8 @@ namespace ServiceConnect.Client.RabbitMQ
             _purgeQueuesOnStartup = transportSettings.PurgeQueueOnStartup;
             _prefetchCount = transportSettings.ClientSettings.ContainsKey("PrefetchCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["PrefetchCount"]) : Convert.ToUInt16(20);
             _disablePrefetch = transportSettings.ClientSettings.ContainsKey("DisablePrefetch") && (bool)transportSettings.ClientSettings["DisablePrefetch"];
+            _retryCount = transportSettings.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
+            _retryTimeInSeconds = transportSettings.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
         }
 
         /// <summary>
@@ -210,7 +214,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 Logger.Error(string.Format("Error creating consumer - queueName: {0}", queueName), ex);
                 DisposeConnection();
                 SwitchHost();
-            }, new TimeSpan(0, 0, 0, 10));
+            }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
 
         private void CreateConsumer()
@@ -306,6 +310,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             var consumer = new EventingBasicConsumer(_model);
             consumer.Received += Event;
+
             if (_heartbeatEnabled)
             {
                 _connection.ConnectionShutdown += ConnectionShutdown;
@@ -349,7 +354,7 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 Logger.Error("Error connecting to queue}", ex);
                 DisposeConnection();
-            }, new TimeSpan(0, 0, 0, 10));
+            }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
 
         private string GetErrorMessage(Exception exception)
