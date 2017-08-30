@@ -25,7 +25,7 @@ namespace NetCoreTest.Producer
                 for (int i = 0; i < 30; i++)
                 {
                     var id = Guid.NewGuid();
-                    bus.Send(new NetCoreTestMessage(id)
+                    bus.Send("NetCoreTest.Consumer", new NetCoreTestMessage(id)
                     {
                         Data = new byte[10000],
                         SerialNumber = i

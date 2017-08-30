@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistance.SqlServer;
@@ -55,7 +56,7 @@ namespace ServiceConnect.UnitTests
             Assert.Null(configuration.TransportSettings.Username);
             Assert.Null(configuration.TransportSettings.Password);
             //Assert.Equal(System.Diagnostics.Process.GetCurrentProcess().ProcessName, configuration.TransportSettings.QueueName);
-            Assert.Equal("dotnet-test-xunit", configuration.TransportSettings.QueueName);
+            Assert.Equal(Assembly.GetEntryAssembly().GetName().Name, configuration.TransportSettings.QueueName);
             Assert.False(configuration.TransportSettings.AuditingEnabled);
             Assert.Equal("errors", configuration.TransportSettings.ErrorQueueName);
             Assert.Equal("audit", configuration.TransportSettings.AuditQueueName);
