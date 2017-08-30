@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Persistance.MongoDbSsl</id>
-    <version>4.0.3-pre</version>
+    <version>4.0.5</version>
     <title>ServiceConnect.Persistance.MongoDbSsl</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -14,12 +14,12 @@
     <tags>ServiceConnect,RMessageBus,R,MessageBus,MessageBus Persistance,Persistance.MongoDb,R MongoDb,R MongoDb Persistance,MongoDb, MessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
       <group targetFramework="net451">
-        <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
-        <dependency id="mongocsharpdriver" version="2.4.1" />
+        <dependency id="ServiceConnect.Interfaces" version="4.0.1" />
+        <dependency id="mongocsharpdriver" version="2.4.4" />
       </group>
       <group targetFramework="netstandard1.6">
-        <dependency id="ServiceConnect.Interfaces" version="4.0.0-pre" />
-        <dependency id="mongocsharpdriver" version="2.4.1" />
+        <dependency id="ServiceConnect.Interfaces" version="4.0.1" />
+        <dependency id="mongocsharpdriver" version="2.4.4" />
         <dependency id="NETStandard.Library" version="1.6.1" />
       </group>      
     </dependencies>
