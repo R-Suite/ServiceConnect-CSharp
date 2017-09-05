@@ -709,6 +709,12 @@ namespace ServiceConnect
             typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
 #endif
 
+            if (typeObject == null)
+            {
+                Logger.Warn(string.Format("Could not find type {0} when consuming message.", type));
+                return result;
+            }
+
             try
             {
                 var envelope = new Envelope
