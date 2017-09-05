@@ -55,7 +55,17 @@ namespace ServiceConnect.Persistance.InMemory
                           mapper.Mappings.First(m => m.MessageType == typeof(Message));
 
 
-                object msgPropValue = mapping.MessageProp.Invoke(message);
+                object msgPropValue = null;
+
+                try
+                {
+                    msgPropValue = mapping.MessageProp.Invoke(message);
+                }
+                catch
+                {
+                    return null;
+                }
+                            
                 if (null == msgPropValue)
                 {
                     throw new ArgumentException("Message property expression evaluates to null");
