@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Persistance.MongoDbSsl</id>
-    <version>4.0.5</version>
+    <version>4.0.6</version>
     <title>ServiceConnect.Persistance.MongoDbSsl</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
