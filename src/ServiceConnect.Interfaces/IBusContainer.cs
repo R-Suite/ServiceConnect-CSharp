@@ -22,7 +22,7 @@ namespace ServiceConnect.Interfaces
     public interface IBusContainer
     {
         IEnumerable<HandlerReference> GetHandlerTypes();
-        IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler);
+        IEnumerable<HandlerReference> GetHandlerTypes(params Type[] messageHandler);
         object GetInstance(Type handlerType);
         T GetInstance<T>(IDictionary<string, object> arguments);
         T GetInstance<T>();

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using Moq;
 using Newtonsoft.Json;
 using ServiceConnect.Core;
@@ -204,10 +205,10 @@ namespace ServiceConnect.UnitTests
             _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
             var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers))).Returns(Task.CompletedTask);
             var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
-            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
+            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers))).Returns(Task.CompletedTask);
 
             _mockConfiguration.Setup(x => x.AfterConsumingFilters).Returns(new List<Type>
             {
@@ -223,7 +224,7 @@ namespace ServiceConnect.UnitTests
             }));
 
             // Act
-            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
+            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers).GetAwaiter().GetResult();
 
             // Assert
             Assert.True(_afterFilter1Ran);
@@ -265,7 +266,7 @@ namespace ServiceConnect.UnitTests
             }));
 
             // Act
-            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
+            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers).GetAwaiter().GetResult();
 
             // Assert
             mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.IsAny<IConsumeContext>()), Times.Never);

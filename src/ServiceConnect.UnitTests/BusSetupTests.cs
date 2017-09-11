@@ -351,7 +351,7 @@ namespace ServiceConnect.UnitTests
                 return new List<HandlerReference>();
             }
 
-            public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
+            public IEnumerable<HandlerReference> GetHandlerTypes(params Type[] messageHandler)
             {
                 return new List<HandlerReference>();
             }
@@ -403,7 +403,7 @@ namespace ServiceConnect.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public FakeConsumer(ITransportSettings transportSettings)
+            public FakeConsumer()
             {
                 
             }
