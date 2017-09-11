@@ -34,7 +34,6 @@ namespace ServiceConnect.UnitTests
         private Mock<IConsumer> _mockConsumer;
         private Mock<IProducer> _mockProducer;
         private ConsumerEventHandler _fakeEventHandler;
-        private Mock<IConsumerPool> _mockConsumerPool;
 
         public ConsumeMessageEventTests()
         {
@@ -43,12 +42,10 @@ namespace ServiceConnect.UnitTests
             _mockConsumer = new Mock<IConsumer>();
             _mockProducer = new Mock<IProducer>();
             _mockConfiguration.Setup(x => x.GetContainer()).Returns(_mockContainer.Object);
-            _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
             _mockConfiguration.Setup(x => x.GetProducer()).Returns(_mockProducer.Object);
             _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { QueueName = "ServiceConnect.UnitTests" });
-
-            _mockConsumerPool = new Mock<IConsumerPool>();
-            _mockConfiguration.Setup(x => x.GetConsumerPool()).Returns(_mockConsumerPool.Object);
+            
+            _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
         }
 
         public bool AssignEventHandler(ConsumerEventHandler eventHandler)
@@ -64,7 +61,7 @@ namespace ServiceConnect.UnitTests
             
             var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
 
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
+            _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockProcessor = new Mock<IAggregatorProcessor>();
             var fakeAggregator = new FakeAggregator();
@@ -111,13 +108,13 @@ namespace ServiceConnect.UnitTests
             _mockConfiguration.SetupGet(x => x.ScanForMesssageHandlers).Returns(false);
             _mockConfiguration.Setup(x => x.SetAuditingEnabled(false));
             _mockConfiguration.Setup(x => x.Threads).Returns(1);
-            _mockConsumerPool.Setup(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()));
+            _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()));
 
             // Act
             var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
 
             // Assert
-            _mockConsumerPool.Verify(x => x.AddConsumer(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()), Times.Once);
+            _mockConsumer.Verify(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()), Times.Once);
         }
     }
 }

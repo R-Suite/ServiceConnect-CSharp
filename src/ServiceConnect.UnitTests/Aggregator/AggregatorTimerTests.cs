@@ -36,6 +36,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
             var mockAggregatorProcessor = new Mock<IAggregatorProcessor>();
             var mockConfiguration = new Mock<IConfiguration>();
+            var mockConsumer = new Mock<IConsumer>();
 
             var handlerRef = new HandlerReference()
             {
@@ -53,7 +54,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.AutoStartConsuming).Returns(true);
             mockConfiguration.Setup(x => x.TransportSettings).Returns(new TransportSettings());
-            mockConfiguration.Setup(x => x.GetConsumer()).Returns(new Mock<IConsumer>().Object);
+            mockConfiguration.Setup(x => x.GetConsumer()).Returns(mockConsumer.Object);
 
             // Act
             new Bus(mockConfiguration.Object);
