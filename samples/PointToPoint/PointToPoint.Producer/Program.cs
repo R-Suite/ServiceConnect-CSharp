@@ -13,6 +13,7 @@ namespace PointToPoint.Producer
             {
                 config.AddQueueMapping(typeof(PointToPointMessage), "PointToPoint.Consumer");
                 config.SetHost("localhost");
+                config.AutoStartConsuming = false;
             });
 
             while (true)
