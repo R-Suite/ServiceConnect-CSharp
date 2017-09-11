@@ -40,8 +40,10 @@ namespace ServiceConnect.Container.Default
             IEnumerable<KeyValuePair<ServiceDescriptor, Type>> instances = _container.AllInstances.Where(
                 i =>
                     i.Value.Name == typeof (IMessageHandler<>).Name ||
-                    i.Value.Name == typeof(IStartProcessManager<>).Name ||
-                    i.Value.Name == typeof(Aggregator<>).Name);
+                    i.Value.Name == typeof (IStartProcessManager<>).Name ||
+                    i.Value.Name == typeof (IAsyncMessageHandler<>).Name ||
+                    i.Value.Name == typeof (IStartAsyncProcessManager<>).Name ||
+                    i.Value.Name == typeof (Aggregator<>).Name);
 
             var retval = new List<HandlerReference>();
             foreach (var instance in instances)
@@ -63,11 +65,11 @@ namespace ServiceConnect.Container.Default
         /// <summary>
         /// Get handler references for a handler type (e.g. IMessageHandler`1)
         /// </summary>
-        /// <param name="messageHandler"></param>
+        /// <param name="messageHandlers"></param>
         /// <returns></returns>
-        public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
+        public IEnumerable<HandlerReference> GetHandlerTypes(params Type[] messageHandlers)
         {
-            IEnumerable<KeyValuePair<ServiceDescriptor, Type>> instances = _container.AllInstances.Where(i => i.Value == messageHandler);
+            IEnumerable<KeyValuePair<ServiceDescriptor, Type>> instances = _container.AllInstances.Where(i => messageHandlers.Contains(i.Value));
 
             var retval = new List<HandlerReference>();
 
@@ -211,6 +213,8 @@ namespace ServiceConnect.Container.Default
 
             var isHandler = t.GetInterfaces().Any(i => i.Name == typeof(IMessageHandler<>).Name) ||
                             t.GetInterfaces().Any(i => i.Name == typeof(IStartProcessManager<>).Name) ||
+                            t.GetInterfaces().Any(i => i.Name == typeof(IAsyncMessageHandler<>).Name) ||
+                            t.GetInterfaces().Any(i => i.Name == typeof(IStartAsyncProcessManager<>).Name) ||
                             t.GetInterfaces().Any(i => i.Name == typeof(IStreamHandler<>).Name) ||
                             (t.GetTypeInfo().BaseType != null && t.GetTypeInfo().BaseType.Name == typeof(Aggregator<>).Name);
 
