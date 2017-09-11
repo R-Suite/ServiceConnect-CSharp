@@ -22,7 +22,7 @@ namespace McDonalds.Cashier
                 //x.TransportSettings.Password = "password";
                 //x.TransportSettings.ServerName = "node1,node2,node3";
                 //x.TransportSettings.Version = SslProtocols.Default;
-                //x.SetHost("node1,node2,node3");
+                x.SetHost("localhost");
                 //x.PersistenceStoreConnectionString = @"nodes=node1;node2;node3,username=admin,password=secret,certpath=path";
             });
 

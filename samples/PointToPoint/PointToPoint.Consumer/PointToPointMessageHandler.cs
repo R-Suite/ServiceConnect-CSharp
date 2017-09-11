@@ -9,7 +9,6 @@ namespace PointToPoint.Consumer
     {
         public void Execute(PointToPointMessage command)
         {
-            Thread.Sleep(100);
             Console.WriteLine("{0}: Consumer 1 Received Message - {1}", Thread.CurrentThread.ManagedThreadId, command.CorrelationId);
         }
 

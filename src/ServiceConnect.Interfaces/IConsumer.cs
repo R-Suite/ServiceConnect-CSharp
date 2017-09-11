@@ -15,14 +15,12 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
     public interface IConsumer : IDisposable
     {
-        void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null);
-        void StopConsuming();
-        void ConsumeMessageType(string messageTypeName);
-        string Type { get; }
+        void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config);
     }
 }
