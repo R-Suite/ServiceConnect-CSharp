@@ -15,46 +15,32 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Threading.Tasks;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using ServiceConnect.UnitTests.Fakes.Messages;
-using System.Threading.Tasks;
 
-namespace ServiceConnect.UnitTests.Fakes.ProcessManagers
+namespace ServiceConnect.UnitTests.Fakes.Handlers
 {
-    public class FakeProcessManager1 : ProcessManager<FakeProcessManagerData>,
-                                       IStartProcessManager<FakeMessage1>,
-                                       IMessageHandler<FakeMessage2>
+    public class FakeAsyncHandler : IAsyncMessageHandler<FakeMessage1>
     {
-        public void Execute(FakeMessage1 command)
-        {
-            Data.User = command.Username;
-        }
+        public IConsumeContext Context { get; set; }
 
-        public void Execute(FakeMessage2 command)
-        {
-            Data.Email = command.Email;
-        }
-    }
+        public bool Executed { get; set; }
 
-    public class FakeAsyncProcessManager1 : ProcessManager<FakeProcessManagerData>,
-        IStartAsyncProcessManager<FakeMessage1>,
-        IAsyncMessageHandler<FakeMessage2>
-    {
         public async Task Execute(FakeMessage1 command)
         {
-            await Task.Run(() =>
-            {
-                Data.User = command.Username;
-            });
+            await ExecuteTask();
         }
 
-        public async Task Execute(FakeMessage2 command)
+        private async Task ExecuteTask()
         {
             await Task.Run(() =>
             {
-                Data.Email = command.Email;
+                Executed = true;
             });
         }
+
+        public FakeMessage1 Command { get; set; }
     }
 }
