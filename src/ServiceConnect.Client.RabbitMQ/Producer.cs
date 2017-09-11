@@ -35,7 +35,6 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly string[] _hosts;
         private int _activeHost;
         private readonly long _maxMessageSize;
-        private string[] _serverNames;
         private readonly ushort _retryCount;
         private readonly ushort _retryTimeInSeconds;
 
@@ -52,7 +51,6 @@ namespace ServiceConnect.Client.RabbitMQ
             Retry.Do(CreateConnection, ex =>
             {
                 DisposeConnection();
-                SwitchHost();
             }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
         
@@ -60,10 +58,12 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             _connectionFactory = new ConnectionFactory
             {
-                HostName = _hosts[_activeHost],
                 VirtualHost = "/",
                 Protocol = Protocols.DefaultProtocol,
-                Port = AmqpTcpEndpoint.UseDefaultPort
+                Port = AmqpTcpEndpoint.UseDefaultPort,
+                UseBackgroundThreadsForIO = true,
+                AutomaticRecoveryEnabled = true,
+                TopologyRecoveryEnabled = true
             };
 
             if (!string.IsNullOrEmpty(_transportSettings.Username))
@@ -78,13 +78,11 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (_transportSettings.SslEnabled)
             {
-                _serverNames = _transportSettings.ServerName.Split(',');
-
                 _connectionFactory.Ssl = new SslOption
                 {
                     Enabled = true,
                     AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
-                    ServerName = _serverNames[_activeHost],
+                    ServerName = _transportSettings.ServerName,
                     CertPassphrase = _transportSettings.CertPassphrase,
                     CertPath = _transportSettings.CertPath,
                     Certs = _transportSettings.Certs,
@@ -99,7 +97,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 _connectionFactory.VirtualHost = _transportSettings.VirtualHost;
             }
 
-            _connection = _connectionFactory.CreateConnection();
+            _connection = _connectionFactory.CreateConnection(_hosts);
             _model = _connection.CreateModel();
         }
 
@@ -143,7 +141,6 @@ namespace ServiceConnect.Client.RabbitMQ
         private void RetryConnection()
         {
             Logger.Debug("In Producer.RetryConnection()");
-            SwitchHost();
             CreateConnection();
         }
 
@@ -352,19 +349,5 @@ namespace ServiceConnect.Client.RabbitMQ
             }
         }
 
-        private void SwitchHost()
-        {
-            if (_hosts.Length > 1)
-            {
-                if (_activeHost < _hosts.Length - 1)
-                {
-                    _activeHost++;
-                }
-                else
-                {
-                    _activeHost = 0;
-                }
-            }
-        }
     }
 }
