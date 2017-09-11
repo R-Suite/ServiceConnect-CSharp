@@ -45,7 +45,8 @@ namespace ServiceConnect.Client.RabbitMQ
                 Port = AmqpTcpEndpoint.UseDefaultPort,
                 UseBackgroundThreadsForIO = true,
                 AutomaticRecoveryEnabled = true,
-                TopologyRecoveryEnabled = true
+                TopologyRecoveryEnabled = true,
+                DispatchConsumersAsync = true
             };
             
             if (_heartbeatEnabled)

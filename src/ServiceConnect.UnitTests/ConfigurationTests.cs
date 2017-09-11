@@ -207,7 +207,7 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
-            public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
+            public IEnumerable<HandlerReference> GetHandlerTypes(params Type[] messageHandler)
             {
                 throw new NotImplementedException();
             }
@@ -259,7 +259,7 @@ namespace ServiceConnect.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public FakeConsumer(ITransportSettings transportSettings)
+            public FakeConsumer()
             {}
 
             public void Dispose()
