@@ -42,6 +42,7 @@ namespace ServiceConnect
         private Timer _timer;
         private bool _startedConsuming;
         private readonly ExpiredTimeoutsPoller _expiredTimeoutsPoller;
+        private IConsumer _consumer;
 
         public IConfiguration Configuration { get; set; }
 
@@ -72,7 +73,6 @@ namespace ServiceConnect
 
             if (configuration.AutoStartConsuming)
             {
-
                 StartConsuming();
             }
 
@@ -176,7 +176,6 @@ namespace ServiceConnect
         public static IBus Initialize()
         {
             var configuration = new Configuration();
-
             return new Bus(configuration);
         }
 
@@ -194,18 +193,12 @@ namespace ServiceConnect
                                                         .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
                                                         .ToList();
 
-            for (int i = 0; i < Configuration.Threads; i++)
-            {
-                AddConsumer(queueName, messageTypes);
-            }
 
+            IConsumer consumer = Configuration.GetConsumer();
+            consumer.StartConsuming(queueName, messageTypes, ConsumeMessageEvent, Configuration);
+            _consumer = consumer;
+           
             _startedConsuming = true;
-        }
-
-        private void AddConsumer(string queueName, IList<string> messageTypes)
-        {
-            var consumerPool = Configuration.GetConsumerPool();
-            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, Configuration);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
@@ -666,7 +659,7 @@ namespace ServiceConnect
                 { "Start", "" },
                 { "SequenceId", sequenceId }
             };
-            SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 10000);
+            SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 30000);
             var stream = Configuration.GetMessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId, Configuration);
             return stream;
         }
@@ -696,7 +689,7 @@ namespace ServiceConnect
                     try
                     {
                         var asm = Assembly.Load(new AssemblyName(assembly.Name));
-                        typeObject = asm.GetTypes().Where(t => t.AssemblyQualifiedName == type).FirstOrDefault();
+                        typeObject = asm.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type);
 
                         if (null != typeObject)
                             break;
@@ -729,7 +722,7 @@ namespace ServiceConnect
                     return result;
                 }
                 
-                if (Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
+                if (headers.ContainsKey("MessageType") && Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
                     ProcessStream(envelope.Body, typeObject, headers);
                 }
@@ -926,8 +919,7 @@ namespace ServiceConnect
 
         public void StopConsuming()
         {
-            var consumerPool = Configuration.GetConsumerPool();
-            consumerPool.Dispose();
+            _consumer.Dispose();
         }
 
         public void Dispose()
