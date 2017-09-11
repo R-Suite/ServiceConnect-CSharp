@@ -63,7 +63,9 @@ namespace ServiceConnect.Container.StructureMap
             IEnumerable<InstanceRef> instances = _container.Model.AllInstances.Where(
                 i =>
                     i.PluginType.Name == typeof (IMessageHandler<>).Name ||
+                    i.PluginType.Name == typeof (IAsyncMessageHandler<>).Name ||
                     i.PluginType.Name == typeof (IStartProcessManager<>).Name ||
+                    i.PluginType.Name == typeof (IStartAsyncProcessManager<>).Name ||
                     i.PluginType.Name == typeof (Aggregator<>).Name);
 
             var retval = new List<HandlerReference>();
@@ -83,9 +85,9 @@ namespace ServiceConnect.Container.StructureMap
             return retval;
         }
 
-        public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
+        public IEnumerable<HandlerReference> GetHandlerTypes(params Type[] messageHandlers)
         {
-            var instances = _container.Model.AllInstances.Where(i => i.PluginType == messageHandler);
+            IEnumerable<InstanceRef> instances = _container.Model.AllInstances.Where(i => messageHandlers.Contains(i.PluginType));
 
             var retval = new List<HandlerReference>();
 
@@ -127,6 +129,8 @@ namespace ServiceConnect.Container.StructureMap
                 y.AssembliesAndExecutablesFromApplicationBaseDirectory();
                 y.ConnectImplementationsToTypesClosing(typeof(IMessageHandler<>));
                 y.ConnectImplementationsToTypesClosing(typeof(IStartProcessManager<>));
+                y.ConnectImplementationsToTypesClosing(typeof(IAsyncMessageHandler<>));
+                y.ConnectImplementationsToTypesClosing(typeof(IStartAsyncProcessManager<>));
                 y.ConnectImplementationsToTypesClosing(typeof(IStreamHandler<>));
                 y.ConnectImplementationsToTypesClosing(typeof(Aggregator<>));
             }));
