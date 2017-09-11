@@ -262,32 +262,15 @@ namespace ServiceConnect.UnitTests
             public FakeConsumer(ITransportSettings transportSettings)
             {}
 
-            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null, bool? autoDelete = null)
-            {
-                throw new NotImplementedException();
-            }
-
-            public void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null,
-                bool? autoDelete = null)
-            {
-            }
-
-            public void StopConsuming()
-            {
-                throw new NotImplementedException();
-            }
-
-            public void ConsumeMessageType(string messageTypeName)
-            {
-                throw new NotImplementedException();
-            }
-
             public void Dispose()
             {
                 throw new NotImplementedException();
             }
 
-            public string Type { get; private set; }
+            public void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
+            {
+                throw new NotImplementedException();
+            }
         }
     }
 }
