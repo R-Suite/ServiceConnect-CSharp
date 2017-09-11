@@ -15,10 +15,12 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -36,32 +38,40 @@ namespace ServiceConnect.Core
             _container = container;
         }
 
-        public void ProcessMessage<T>(string message, IConsumeContext context) where T : Message
+        public async Task ProcessMessage<T>(string message, IConsumeContext context) where T : Message
         {
-            IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
-                                                                        .Where(h => h.HandlerType.GetTypeInfo().BaseType == null || 
-                                                                                    h.HandlerType.GetTypeInfo().BaseType.Name != typeof(ProcessManager<>).Name);
-            InitHandlers<T>(message, context, handlerReferences);
+            List<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>), typeof(IAsyncMessageHandler<T>))
+                .Where(h => h.HandlerType.GetTypeInfo().BaseType == null || 
+                            h.HandlerType.GetTypeInfo().BaseType.Name != typeof(ProcessManager<>).Name)
+                .ToList();
+
+            await InitHandlers<T>(message, context, handlerReferences);
         }
 
-        private void ProcessMessageBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
+        private async Task ProcessMessageBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
         {
-            IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<TB>))
-                                                                        .Where(h => h.HandlerType.GetTypeInfo().BaseType == null ||
-                                                                                    h.HandlerType.GetTypeInfo().BaseType.Name != typeof(ProcessManager<>).Name);
-
-            InitHandlers<T>(message, context, handlerReferences, typeof(TB));
+            List<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<TB>), typeof(IAsyncMessageHandler<TB>))
+                .Where(h => h.HandlerType.GetTypeInfo().BaseType == null ||
+                            h.HandlerType.GetTypeInfo().BaseType.Name != typeof(ProcessManager<>).Name)
+                .ToList();
+            
+            await InitHandlers<T>(message, context, handlerReferences, typeof(TB));
         }        
         
-        private void InitHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> handlerReferences, Type baseType = null) where T : Message
+        private async Task InitHandlers<T>(string message, IConsumeContext context, List<HandlerReference> handlerReferences, Type baseType = null) where T : Message
         {
             MethodInfo executeHandler = GetType().GetMethod("ExecuteHandler", BindingFlags.NonPublic | BindingFlags.Instance);
-            MethodInfo genericexecuteHandler = (null != baseType) ? executeHandler.MakeGenericMethod(baseType) : executeHandler.MakeGenericMethod(typeof(T));
-
+            MethodInfo genericexecuteHandler = null != baseType ? executeHandler.MakeGenericMethod(baseType) : executeHandler.MakeGenericMethod(typeof(T));
+            
+            var tasks = new List<Task>();
             foreach (HandlerReference handlerReference in handlerReferences)
             {
                 object messageObject = JsonConvert.DeserializeObject(message, typeof (T));
-                genericexecuteHandler.Invoke(this, new[] {messageObject, handlerReference.HandlerType, handlerReference.RoutingKeys, context});
+                var result = genericexecuteHandler.Invoke(this, new[] { messageObject, handlerReference.HandlerType, handlerReference.RoutingKeys, context });
+                if (result != null)
+                {
+                    tasks.Add((Task)result);
+                }
             }
 
             string messageType = string.Empty;
@@ -80,12 +90,15 @@ namespace ServiceConnect.Core
                 {
                     MethodInfo processMessage = GetType().GetMethod("ProcessMessageBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
                     MethodInfo genericProcessMessage = processMessage.MakeGenericMethod(typeof (T), newBaseType);
-                    genericProcessMessage.Invoke(this, new object[] {message, context});
+                    var resultTask = (Task)genericProcessMessage.Invoke(this, new object[] {message, context});
+                    tasks.Add(resultTask);
                 }
             }
+
+            await Task.WhenAll(tasks);
         }
 
-        private void ExecuteHandler<T>(T message, Type handlerType, IList<string> routingKeys, IConsumeContext context) where T : Message
+        private async Task ExecuteHandler<T>(T message, Type handlerType, IList<string> routingKeys, IConsumeContext context) where T : Message
         {
             Logger.DebugFormat("Handler = {0}. Handler RoutingKeys = {1}, Message = {2}", handlerType.Name, JsonConvert.SerializeObject(routingKeys), typeof(T).Name);
 
@@ -116,12 +129,19 @@ namespace ServiceConnect.Core
             // Execute handler
             try
             {
-                var handler = (IMessageHandler<T>) _container.GetInstance(handlerType);
-                handler.Context = context;
+                var handler = _container.GetInstance(handlerType);
 
-                Logger.DebugFormat("Executing {0}.", handlerType.Name);
+                if (handler is IMessageHandler<T> syncHandler)
+                {
+                    syncHandler.Context = context;
+                    syncHandler.Execute(message);
+                }
 
-                handler.Execute(message);
+                if (handler is IAsyncMessageHandler<T> asyncHandler)
+                {
+                    asyncHandler.Context = context;
+                    await asyncHandler.Execute(message);
+                }
             }
             catch (Exception ex)
             {

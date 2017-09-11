@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -38,27 +39,27 @@ namespace ServiceConnect.Core
             _container = container;
         }
 
-        public void ProcessMessage<T>(string message, IConsumeContext context) where T : Message
+        public async Task ProcessMessage<T>(string message, IConsumeContext context) where T : Message
         {
-            StartProcessManagers<T>(message, context);
-            LoadExistingProcessManagers<T>(message, context);
+            await StartProcessManagers<T>(message, context);
+            await LoadExistingProcessManagers<T>(message, context);
         }
 
-        private void StartProcessManagersBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
+        private async Task StartProcessManagersBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
         {
-            List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<TB>)).ToList();
+            List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<TB>), typeof(IStartAsyncProcessManager<TB>)).ToList();
 
-            InitStartProcessManagerHandlers<T>(message, context, processManagerInstances, typeof(TB));
+            await InitStartProcessManagerHandlers<T>(message, context, processManagerInstances, typeof(TB));
         }
 
-        private void StartProcessManagers<T>(string message, IConsumeContext context, Type baseType = null) where T : Message
+        private async Task StartProcessManagers<T>(string message, IConsumeContext context, Type baseType = null) where T : Message
         {
-            List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<T>)).ToList();
+            List<HandlerReference> processManagerInstances = _container.GetHandlerTypes(typeof(IStartProcessManager<T>), typeof(IStartAsyncProcessManager<T>)).ToList();
 
-            InitStartProcessManagerHandlers<T>(message, context, processManagerInstances, baseType);
+            await InitStartProcessManagerHandlers<T>(message, context, processManagerInstances, baseType);
         }
 
-        private void InitStartProcessManagerHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> processManagerInstances, Type baseType = null) where T : Message
+        private async Task InitStartProcessManagerHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> processManagerInstances, Type baseType = null) where T : Message
         {
             Type msgType = baseType ?? typeof(T);
 
@@ -107,8 +108,13 @@ namespace ServiceConnect.Core
                     contextProp.SetValue(processManager, context, null);
 
                     // Execute process manager execute method
-                    processManagerInstance.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new[] { messageObject });
+                    var result = processManagerInstance.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new[] { messageObject });
 
+                    if (result != null && result is Task handlerTask)
+                    {
+                        await handlerTask;
+                    }
+                    
                     // Persist data if does not exist
                     if (!processManagerAlreadyExists)
                     {
@@ -143,30 +149,30 @@ namespace ServiceConnect.Core
             {
                 MethodInfo startProcessManagers = GetType().GetMethod("StartProcessManagersBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
                 MethodInfo genericStartProcessManagers = startProcessManagers.MakeGenericMethod(typeof (T), newBaseType);
-                genericStartProcessManagers.Invoke(this, new object[] {message, context});
+                await (Task)genericStartProcessManagers.Invoke(this, new object[] {message, context});
             }
         }
 
 
-        private void LoadExistingProcessManagersBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
+        private async Task LoadExistingProcessManagersBaseType<T, TB>(string message, IConsumeContext context) where T : Message where TB : Message
         {
-            IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<TB>))
+            IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<TB>), typeof(IAsyncMessageHandler<TB>))
                                                                         .Where(h => h.HandlerType.GetTypeInfo().BaseType != null &&
                                                                                     h.HandlerType.GetTypeInfo().BaseType.Name == typeof(ProcessManager<>).Name);
 
-            InitLoadExistingProcessManagerHandlers<T>(message, context, handlerReferences, typeof(TB));
+            await InitLoadExistingProcessManagerHandlers<T>(message, context, handlerReferences, typeof(TB));
         }
 
-        private void LoadExistingProcessManagers<T>(string message, IConsumeContext context, Type baseType = null) where T : Message
+        private async Task LoadExistingProcessManagers<T>(string message, IConsumeContext context, Type baseType = null) where T : Message
         {
-            IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>))
+            IEnumerable<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IMessageHandler<T>), typeof(IAsyncMessageHandler<T>))
                                                                         .Where(h => h.HandlerType.GetTypeInfo().BaseType != null &&
                                                                                     h.HandlerType.GetTypeInfo().BaseType.Name == typeof(ProcessManager<>).Name);
 
-            InitLoadExistingProcessManagerHandlers<T>(message, context, handlerReferences, baseType);
+            await InitLoadExistingProcessManagerHandlers<T>(message, context, handlerReferences, baseType);
         }
 
-        private void InitLoadExistingProcessManagerHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> handlerReferences, Type baseType = null) where T : Message
+        private async Task InitLoadExistingProcessManagerHandlers<T>(string message, IConsumeContext context, IEnumerable<HandlerReference> handlerReferences, Type baseType = null) where T : Message
         {
             Type msgType = baseType ?? typeof(T);
 
@@ -209,7 +215,12 @@ namespace ServiceConnect.Core
                     contextProp.SetValue(processManager, context, null);
 
                     // ***Execute handler***
-                    handlerReference.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new object[] { messageObject });
+                    var result = handlerReference.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new object[] { messageObject });
+
+                    if (result != null && result is Task handlerTask)
+                    {
+                        await handlerTask;
+                    }
 
                     // Get Complete property value
                     PropertyInfo completeProperty = handlerReference.HandlerType.GetProperty("Complete");
@@ -248,7 +259,7 @@ namespace ServiceConnect.Core
             {
                 MethodInfo loadExistingProcessManagers = GetType().GetMethod("LoadExistingProcessManagersBaseType", BindingFlags.NonPublic | BindingFlags.Instance);
                 MethodInfo genericLoadExistingProcessManagers = loadExistingProcessManagers.MakeGenericMethod(typeof (T),newBaseType);
-                genericLoadExistingProcessManagers.Invoke(this, new object[] {message, context});
+                await (Task)genericLoadExistingProcessManagers.Invoke(this, new object[] {message, context});
             }
         }
     }
