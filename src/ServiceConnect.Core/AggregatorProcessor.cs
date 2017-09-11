@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -103,8 +104,7 @@ namespace ServiceConnect.Core
 
                         try
                         {
-                            _handlerType.GetMethod("Execute", new[] { typeof(IList<T>) })
-                                .Invoke(aggregator, new object[] {messages.Cast<T>().ToList()});
+                            _handlerType.GetMethod("Execute", new[] { typeof(IList<T>) }).Invoke(aggregator, new object[] {messages.Cast<T>().ToList()});
                         }
                         catch (Exception ex)
                         {
