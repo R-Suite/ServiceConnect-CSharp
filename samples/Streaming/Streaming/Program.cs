@@ -15,7 +15,11 @@ namespace Streaming
             {
                 x.SetQueueName("StreamPublisher");
                 x.PurgeQueuesOnStart();
+                x.SetHost("localhost");
             });
+
+            Console.WriteLine("Press enter");
+            Console.ReadLine();
 
             FileStream f = new FileStream(@"logo.bmp", FileMode.Open);
 

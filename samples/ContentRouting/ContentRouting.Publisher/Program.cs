@@ -11,6 +11,7 @@ namespace ContentRouting.Publisher
             Console.WriteLine("*********** Producer ***********");
             var bus = Bus.Initialize(config =>
             {
+                config.SetHost("localhost");
             });
 
             while (true)
@@ -24,8 +25,8 @@ namespace ContentRouting.Publisher
                     bus.Publish(new MyMessage(id), "routingkey0");
                 }
 
-                bus.Dispose();
             }
+            
         }
     }
 }
