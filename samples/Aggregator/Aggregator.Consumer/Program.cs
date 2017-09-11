@@ -18,6 +18,8 @@ namespace Aggregator.Consumer
                 x.SetQueueName("Aggregator.Consumer");
                 x.PurgeQueuesOnStart();
                 x.SetAuditingEnabled(true);
+                x.SetHost("localhost");
+                x.SetThreads(10);
             });
 
             Console.ReadLine();
