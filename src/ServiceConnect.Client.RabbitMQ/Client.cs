@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading.Tasks;
 using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
@@ -75,7 +76,7 @@ namespace ServiceConnect.Client.RabbitMQ
         /// </summary>
         /// <param name="consumer"></param>
         /// <param name="args"></param>
-        public void Event(object consumer, BasicDeliverEventArgs args)
+        public async Task Event(object consumer, BasicDeliverEventArgs args)
         {
             try
             {
@@ -90,7 +91,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     SetHeader(args.BasicProperties.Headers, "Redelivered", true);
                 }
 
-                ProcessMessage(args);
+                await ProcessMessage(args);
             }
             catch (Exception ex)
             {
@@ -103,7 +104,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
         }
 
-        private void ProcessMessage(BasicDeliverEventArgs args)
+        private async Task ProcessMessage(BasicDeliverEventArgs args)
         {
             ConsumeEventResult result;
             IDictionary<string, object> headers = args.BasicProperties.Headers;
@@ -116,7 +117,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
                 var typeName = Encoding.UTF8.GetString((byte[])(headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]));
 
-                result = _consumerEventHandler(args.Body, typeName, headers);
+                result = await _consumerEventHandler(args.Body, typeName, headers);
 
                 SetHeader(args.BasicProperties.Headers, "TimeProcessed", DateTime.UtcNow.ToString("O"));
             }
@@ -249,7 +250,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 }
             }
 
-            var consumer = new EventingBasicConsumer(_model);
+            var consumer = new AsyncEventingBasicConsumer(_model);
             consumer.Received += Event;
             
             _model.BasicConsume(queueName, false, consumer);

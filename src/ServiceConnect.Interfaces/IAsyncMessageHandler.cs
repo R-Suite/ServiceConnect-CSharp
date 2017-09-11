@@ -14,10 +14,13 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ServiceConnect.Interfaces
 {
-    public delegate Task<ConsumeEventResult> ConsumerEventHandler(byte[] message, string type, IDictionary<string, object> headers);
+    public interface IAsyncMessageHandler<TMessage> where TMessage : Message
+    {
+        IConsumeContext Context { get; set; }
+        Task Execute(TMessage message);
+    }
 }
