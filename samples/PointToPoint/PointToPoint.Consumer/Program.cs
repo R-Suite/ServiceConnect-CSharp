@@ -18,9 +18,11 @@ namespace PointToPoint.Consumer
             {
                 config.SetContainer(myContainer);
                 config.SetQueueName("PointToPoint.Consumer");
-                config.SetThreads(20);
+                config.SetThreads(4);
                 //config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("localhost");
+                config.TransportSettings.ClientSettings.Add("PrefetchCount", 7);
+                config.TransportSettings.ClientSettings.Add("HeartbeatEnabled", true);
                 //config.TransportSettings.ClientSettings.Add("DisablePrefetch", true);
             });
             bus.StartConsuming();
