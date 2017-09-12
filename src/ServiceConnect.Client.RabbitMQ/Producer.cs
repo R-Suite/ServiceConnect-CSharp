@@ -239,9 +239,16 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (_model != null)
             {
-                Logger.Debug("Disposing Model");
-                _model.Dispose();
-                _model = null;
+                try
+                {
+                    Logger.Debug("Disposing Model");
+                    _model.Dispose();
+                    _model = null;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn("Error disposing model", ex);
+                }
             }
 
             if (_connection != null)
@@ -251,7 +258,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     Logger.Debug("Disposing connection");
                     _connection.Dispose();
                 }
-                catch (System.IO.EndOfStreamException ex)
+                catch (Exception ex)
                 {
                     Logger.Warn("Error disposing connection", ex);
                 }
