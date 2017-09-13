@@ -925,7 +925,10 @@ namespace ServiceConnect
 
         public void StopConsuming()
         {
-            _consumer.Dispose();
+            if (_consumer != null)
+            {
+                _consumer.Dispose();
+            }
         }
 
         public void Dispose()
