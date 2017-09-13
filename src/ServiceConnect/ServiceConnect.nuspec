@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect</id>
-    <version>5.0.0-pre</version>
+    <version>5.0.1-pre</version>
     <title>ServiceConnect</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -17,7 +17,7 @@
         <dependency id="Common.Logging" version="3.4.1" />
         <dependency id="Newtonsoft.Json" version="10.0.3" />
         <dependency id="ServiceConnect.Interfaces" version="5.0.0-pre" />
-        <dependency id="ServiceConnect.Client.RabbitMQ" version="5.0.0-pre" />
+        <dependency id="ServiceConnect.Client.RabbitMQ" version="5.0.1-pre" />
         <dependency id="System.Reactive.Linq" version="3.1.1" />
       </group>
       <group targetFramework="netstandard1.6">
