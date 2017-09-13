@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Common.Logging;
 using ServiceConnect.Interfaces;
 using RabbitMQ.Client;
@@ -33,7 +34,6 @@ namespace ServiceConnect.Client.RabbitMQ
         private static readonly ILog Logger = LogManager.GetLogger(typeof(Producer));
         private ConnectionFactory _connectionFactory;
         private readonly string[] _hosts;
-        private int _activeHost;
         private readonly long _maxMessageSize;
         private readonly ushort _retryCount;
         private readonly ushort _retryTimeInSeconds;
@@ -44,7 +44,6 @@ namespace ServiceConnect.Client.RabbitMQ
             _queueMappings = queueMappings;
             _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
             _hosts = transportSettings.Host.Split(',');
-            _activeHost = 0;
             _retryCount = transportSettings.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
             _retryTimeInSeconds = transportSettings.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
 
@@ -97,7 +96,9 @@ namespace ServiceConnect.Client.RabbitMQ
                 _connectionFactory.VirtualHost = _transportSettings.VirtualHost;
             }
 
-            _connection = _connectionFactory.CreateConnection(_hosts);
+            var producerName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+            
+            _connection = _connectionFactory.CreateConnection(_hosts, producerName);
             _model = _connection.CreateModel();
         }
 
@@ -122,8 +123,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
-
-                basicProperties.SetPersistent(true);
+                basicProperties.Persistent = true;
 
                 string exchName = type.FullName.Replace(".", string.Empty);
                 var exchangeName = ConfigureExchange(exchName, "fanout");
@@ -149,8 +149,8 @@ namespace ServiceConnect.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
+                basicProperties.Persistent = true;
 
-                basicProperties.SetPersistent(true);
                 IList<string> endPoints = _queueMappings[type.FullName];
 
                 foreach (string endPoint in endPoints)
@@ -176,7 +176,7 @@ namespace ServiceConnect.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
-                basicProperties.SetPersistent(true);
+                basicProperties.Persistent = true;
 
                 var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
@@ -284,7 +284,7 @@ namespace ServiceConnect.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
-                basicProperties.SetPersistent(true);
+                basicProperties.Persistent = true;
 
                 var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
 
@@ -325,14 +325,19 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             try
             {
-                lock (_connection)
+                if (_connection != null)
                 {
-                    if (_connection != null && _connection.IsOpen)
+                    lock (_connection)
                     {
-                        _connection.Close();
-                        _connection.Dispose();
+                        if (_connection != null && _connection.IsOpen)
+                        {
+                            _connection.Close();
+                            _connection.Dispose();
+                            _connection = null;
+                        }
                     }
                 }
+                
             }
             catch (Exception e)
             {
@@ -341,12 +346,15 @@ namespace ServiceConnect.Client.RabbitMQ
 
             try
             {
-                lock (_model)
+                if (_model != null)
                 {
-                    if (_model != null && _model.IsOpen)
+                    lock (_model)
                     {
-                        _model.Close();
-                        _model.Dispose();
+                        if (_model != null && _model.IsOpen)
+                        {
+                            _model.Close();
+                            _model.Dispose();
+                        }
                     }
                 }
             }
