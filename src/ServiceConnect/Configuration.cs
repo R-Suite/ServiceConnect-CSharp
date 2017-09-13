@@ -92,9 +92,7 @@ namespace ServiceConnect
                 QueueName = defaultQueueName,
                 ClientSettings = new Dictionary<string, object>()
             };
-
-            //_configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
-
+            
             SetTransportSettings();
             SetPersistanceSettings();
 
