@@ -75,7 +75,6 @@ namespace ServiceConnect
         public IList<Type> BeforeConsumingFilters { get; set; }
         public IList<Type> AfterConsumingFilters { get; set; }
         public IList<Type> OutgoingFilters { get; set; }
-        public IConsumerPool ConsumerPool { get; set; }
         public bool EnableProcessManagerTimeouts { get; set; }
 
         #endregion
@@ -93,9 +92,7 @@ namespace ServiceConnect
                 QueueName = defaultQueueName,
                 ClientSettings = new Dictionary<string, object>()
             };
-
-            //_configurationPath = AppDomain.CurrentDomain.SetupInformation.ConfigurationFile;
-
+            
             SetTransportSettings();
             SetPersistanceSettings();
 
@@ -115,7 +112,7 @@ namespace ServiceConnect
             AfterConsumingFilters = new List<Type>();
             OutgoingFilters = new List<Type>();
 
-            ConsumerPoolType = typeof(ConsumerPool);
+            ConsumerPoolType = typeof(Consumer);
         }
 
         /// <summary>
@@ -290,7 +287,7 @@ namespace ServiceConnect
         /// <returns></returns>
         public IConsumer GetConsumer()
         {
-            return (IConsumer)Activator.CreateInstance(ConsumerType, TransportSettings);
+            return (IConsumer)Activator.CreateInstance(ConsumerType);
         }
 
         /// <summary>
@@ -372,11 +369,7 @@ namespace ServiceConnect
         {
             Threads = numberOfThreads;
         }
-
-        public IConsumerPool GetConsumerPool()
-        {
-            return ConsumerPool ?? (ConsumerPool = (IConsumerPool)Activator.CreateInstance(ConsumerPoolType));
-        }
+        
 
         #region Private Methods
 

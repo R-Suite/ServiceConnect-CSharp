@@ -40,7 +40,6 @@ namespace ServiceConnect.Interfaces
         IList<Type> BeforeConsumingFilters { get; set; }
         IList<Type> AfterConsumingFilters { get; set; }
         IList<Type> OutgoingFilters { get; set; }
-        IConsumerPool ConsumerPool { get; set; }
         bool EnableProcessManagerTimeouts { get; set; }
 
         /// <summary>
@@ -143,12 +142,6 @@ namespace ServiceConnect.Interfaces
         string GetAuditQueueName();
 
         /// <summary>
-        /// Gets an instance of the consumer.
-        /// </summary>
-        /// <returns></returns>
-        IConsumer GetConsumer();
-
-        /// <summary>
         /// Gets an instance of the publisher.
         /// </summary>
         /// <returns></returns>
@@ -218,10 +211,11 @@ namespace ServiceConnect.Interfaces
         /// <returns></returns>
         void SetThreads(int numberOfThreads);
 
+  
         /// <summary>
-        /// Creates a consumer pool on first call.  Subsequent calls return the consumer pool.
+        /// Creates a consumer to consume messages on.
         /// </summary>
         /// <returns></returns>
-        IConsumerPool GetConsumerPool();
+        IConsumer GetConsumer();
     }
 }

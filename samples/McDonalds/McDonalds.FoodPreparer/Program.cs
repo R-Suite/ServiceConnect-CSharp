@@ -19,6 +19,7 @@ namespace McDonalds.FoodPreparer
                 //x.TransportSettings.ServerName = "node1,node2,node3";
                 //x.TransportSettings.Version = SslProtocols.Default;
                 //x.SetHost("node1,node2,node3");
+                x.SetHost("localhost");
             });
 
             bus.StartConsuming();

@@ -18,6 +18,7 @@ using System;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using ServiceConnect.UnitTests.Fakes.Messages;
+using System.Threading.Tasks;
 
 namespace ServiceConnect.UnitTests.Fakes.ProcessManagers
 {
@@ -33,6 +34,27 @@ namespace ServiceConnect.UnitTests.Fakes.ProcessManagers
         public void Execute(FakeMessage2 command)
         {
             Data.Email = command.Email;
+        }
+    }
+
+    public class FakeAsyncProcessManager1 : ProcessManager<FakeProcessManagerData>,
+        IStartAsyncProcessManager<FakeMessage1>,
+        IAsyncMessageHandler<FakeMessage2>
+    {
+        public async Task Execute(FakeMessage1 command)
+        {
+            await Task.Run(() =>
+            {
+                Data.User = command.Username;
+            });
+        }
+
+        public async Task Execute(FakeMessage2 command)
+        {
+            await Task.Run(() =>
+            {
+                Data.Email = command.Email;
+            });
         }
     }
 }

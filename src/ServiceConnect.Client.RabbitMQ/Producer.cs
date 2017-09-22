@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Common.Logging;
 using ServiceConnect.Interfaces;
 using RabbitMQ.Client;
@@ -33,9 +34,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private static readonly ILog Logger = LogManager.GetLogger(typeof(Producer));
         private ConnectionFactory _connectionFactory;
         private readonly string[] _hosts;
-        private int _activeHost;
         private readonly long _maxMessageSize;
-        private string[] _serverNames;
         private readonly ushort _retryCount;
         private readonly ushort _retryTimeInSeconds;
 
@@ -45,14 +44,12 @@ namespace ServiceConnect.Client.RabbitMQ
             _queueMappings = queueMappings;
             _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
             _hosts = transportSettings.Host.Split(',');
-            _activeHost = 0;
             _retryCount = transportSettings.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
             _retryTimeInSeconds = transportSettings.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
 
             Retry.Do(CreateConnection, ex =>
             {
                 DisposeConnection();
-                SwitchHost();
             }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
         
@@ -60,10 +57,12 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             _connectionFactory = new ConnectionFactory
             {
-                HostName = _hosts[_activeHost],
                 VirtualHost = "/",
                 Protocol = Protocols.DefaultProtocol,
-                Port = AmqpTcpEndpoint.UseDefaultPort
+                Port = AmqpTcpEndpoint.UseDefaultPort,
+                UseBackgroundThreadsForIO = true,
+                AutomaticRecoveryEnabled = true,
+                TopologyRecoveryEnabled = true
             };
 
             if (!string.IsNullOrEmpty(_transportSettings.Username))
@@ -78,13 +77,11 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (_transportSettings.SslEnabled)
             {
-                _serverNames = _transportSettings.ServerName.Split(',');
-
                 _connectionFactory.Ssl = new SslOption
                 {
                     Enabled = true,
                     AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
-                    ServerName = _serverNames[_activeHost],
+                    ServerName = _transportSettings.ServerName,
                     CertPassphrase = _transportSettings.CertPassphrase,
                     CertPath = _transportSettings.CertPath,
                     Certs = _transportSettings.Certs,
@@ -99,7 +96,9 @@ namespace ServiceConnect.Client.RabbitMQ
                 _connectionFactory.VirtualHost = _transportSettings.VirtualHost;
             }
 
-            _connection = _connectionFactory.CreateConnection();
+            var producerName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+            
+            _connection = _connectionFactory.CreateConnection(_hosts, producerName);
             _model = _connection.CreateModel();
         }
 
@@ -124,8 +123,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
-
-                basicProperties.SetPersistent(true);
+                basicProperties.Persistent = true;
 
                 string exchName = type.FullName.Replace(".", string.Empty);
                 var exchangeName = ConfigureExchange(exchName, "fanout");
@@ -143,7 +141,6 @@ namespace ServiceConnect.Client.RabbitMQ
         private void RetryConnection()
         {
             Logger.Debug("In Producer.RetryConnection()");
-            SwitchHost();
             CreateConnection();
         }
 
@@ -152,8 +149,8 @@ namespace ServiceConnect.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
+                basicProperties.Persistent = true;
 
-                basicProperties.SetPersistent(true);
                 IList<string> endPoints = _queueMappings[type.FullName];
 
                 foreach (string endPoint in endPoints)
@@ -179,7 +176,7 @@ namespace ServiceConnect.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
-                basicProperties.SetPersistent(true);
+                basicProperties.Persistent = true;
 
                 var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
@@ -242,9 +239,16 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (_model != null)
             {
-                Logger.Debug("Disposing Model");
-                _model.Dispose();
-                _model = null;
+                try
+                {
+                    Logger.Debug("Disposing Model");
+                    _model.Dispose();
+                    _model = null;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn("Error disposing model", ex);
+                }
             }
 
             if (_connection != null)
@@ -254,7 +258,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     Logger.Debug("Disposing connection");
                     _connection.Dispose();
                 }
-                catch (System.IO.EndOfStreamException ex)
+                catch (Exception ex)
                 {
                     Logger.Warn("Error disposing connection", ex);
                 }
@@ -280,7 +284,7 @@ namespace ServiceConnect.Client.RabbitMQ
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
-                basicProperties.SetPersistent(true);
+                basicProperties.Persistent = true;
 
                 var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
 
@@ -321,14 +325,19 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             try
             {
-                lock (_connection)
+                if (_connection != null)
                 {
-                    if (_connection != null && _connection.IsOpen)
+                    lock (_connection)
                     {
-                        _connection.Close();
-                        _connection.Dispose();
+                        if (_connection != null && _connection.IsOpen)
+                        {
+                            _connection.Close();
+                            _connection.Dispose();
+                            _connection = null;
+                        }
                     }
                 }
+                
             }
             catch (Exception e)
             {
@@ -337,12 +346,15 @@ namespace ServiceConnect.Client.RabbitMQ
 
             try
             {
-                lock (_model)
+                if (_model != null)
                 {
-                    if (_model != null && _model.IsOpen)
+                    lock (_model)
                     {
-                        _model.Close();
-                        _model.Dispose();
+                        if (_model != null && _model.IsOpen)
+                        {
+                            _model.Close();
+                            _model.Dispose();
+                        }
                     }
                 }
             }
@@ -352,19 +364,5 @@ namespace ServiceConnect.Client.RabbitMQ
             }
         }
 
-        private void SwitchHost()
-        {
-            if (_hosts.Length > 1)
-            {
-                if (_activeHost < _hosts.Length - 1)
-                {
-                    _activeHost++;
-                }
-                else
-                {
-                    _activeHost = 0;
-                }
-            }
-        }
     }
 }

@@ -15,8 +15,9 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace ServiceConnect.Interfaces
 {
-    public delegate ConsumeEventResult ConsumerEventHandler(byte[] message, string type, IDictionary<string, object> headers);
+    public delegate Task<ConsumeEventResult> ConsumerEventHandler(byte[] message, string type, IDictionary<string, object> headers);
 }

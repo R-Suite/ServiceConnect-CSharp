@@ -42,6 +42,7 @@ namespace ServiceConnect
         private Timer _timer;
         private bool _startedConsuming;
         private readonly ExpiredTimeoutsPoller _expiredTimeoutsPoller;
+        private IConsumer _consumer;
 
         public IConfiguration Configuration { get; set; }
 
@@ -72,7 +73,6 @@ namespace ServiceConnect
 
             if (configuration.AutoStartConsuming)
             {
-
                 StartConsuming();
             }
 
@@ -176,7 +176,6 @@ namespace ServiceConnect
         public static IBus Initialize()
         {
             var configuration = new Configuration();
-
             return new Bus(configuration);
         }
 
@@ -194,18 +193,12 @@ namespace ServiceConnect
                                                         .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
                                                         .ToList();
 
-            for (int i = 0; i < Configuration.Threads; i++)
-            {
-                AddConsumer(queueName, messageTypes);
-            }
 
+            IConsumer consumer = Configuration.GetConsumer();
+            consumer.StartConsuming(queueName, messageTypes, ConsumeMessageEvent, Configuration);
+            _consumer = consumer;
+           
             _startedConsuming = true;
-        }
-
-        private void AddConsumer(string queueName, IList<string> messageTypes)
-        {
-            var consumerPool = Configuration.GetConsumerPool();
-            consumerPool.AddConsumer(queueName, messageTypes, ConsumeMessageEvent, Configuration);
         }
 
         public void Publish<T>(T message, Dictionary<string, string> headers) where T : Message
@@ -666,12 +659,12 @@ namespace ServiceConnect
                 { "Start", "" },
                 { "SequenceId", sequenceId }
             };
-            SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 10000);
+            SendRequest<T, StreamResponseMessage>(endpoint, message, headers, 30000);
             var stream = Configuration.GetMessageBusWriteStream(Configuration.GetProducer(), endpoint, sequenceId, Configuration);
             return stream;
         }
 
-        private ConsumeEventResult ConsumeMessageEvent(byte[] message, string type, IDictionary<string, object> headers)
+        private async Task<ConsumeEventResult> ConsumeMessageEvent(byte[] message, string type, IDictionary<string, object> headers)
         {
             var result = new ConsumeEventResult
             {
@@ -696,7 +689,7 @@ namespace ServiceConnect
                     try
                     {
                         var asm = Assembly.Load(new AssemblyName(assembly.Name));
-                        typeObject = asm.GetTypes().Where(t => t.AssemblyQualifiedName == type).FirstOrDefault();
+                        typeObject = asm.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type);
 
                         if (null != typeObject)
                             break;
@@ -728,18 +721,23 @@ namespace ServiceConnect
                 {
                     return result;
                 }
+
+                var tasks = new List<Task>();
                 
-                if (Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
+                if (headers.ContainsKey("MessageType") && Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
                     ProcessStream(envelope.Body, typeObject, headers);
                 }
                 else
                 {
-                    ProcessMessageHandlers(envelope.Body, typeObject, context);
-                    ProcessProcessManagerHandlers(envelope.Body, typeObject, context);
+                    tasks.Add(ProcessMessageHandlers(envelope.Body, typeObject, context));
+                    tasks.Add(ProcessProcessManagerHandlers(envelope.Body, typeObject, context));
+
                     ProcessAggregatorHandlers(envelope.Body, typeObject);
                     ProcessRequestReplyConfigurations(envelope.Body, type, context);
                 }
+
+                await Task.WhenAll(tasks);
 
                 ProcessFilters(Configuration.AfterConsumingFilters, envelope);
 
@@ -887,7 +885,7 @@ namespace ServiceConnect
             }
         }
 
-        private void ProcessProcessManagerHandlers(byte[] objectMessage, Type type, IConsumeContext context)
+        private async Task ProcessProcessManagerHandlers(byte[] objectMessage, Type type, IConsumeContext context)
         {
             IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
             var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
@@ -898,7 +896,7 @@ namespace ServiceConnect
 
             MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(type);
-            genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {Encoding.UTF8.GetString(objectMessage), context});
+            await (Task)genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {Encoding.UTF8.GetString(objectMessage), context});
         }
 
         private void ProcessAggregatorHandlers(byte[] objectMessage, Type type)
@@ -913,7 +911,7 @@ namespace ServiceConnect
             }
         }
         
-        private void ProcessMessageHandlers(byte[] objectMessage, Type type, IConsumeContext context)
+        private async Task ProcessMessageHandlers(byte[] objectMessage, Type type, IConsumeContext context)
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
             {
@@ -921,13 +919,16 @@ namespace ServiceConnect
             });
             MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(type);
-            genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new object[] { Encoding.UTF8.GetString(objectMessage), context });
+            var result = genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new object[] { Encoding.UTF8.GetString(objectMessage), context });
+            await (Task) result;
         }
 
         public void StopConsuming()
         {
-            var consumerPool = Configuration.GetConsumerPool();
-            consumerPool.Dispose();
+            if (_consumer != null)
+            {
+                _consumer.Dispose();
+            }
         }
 
         public void Dispose()

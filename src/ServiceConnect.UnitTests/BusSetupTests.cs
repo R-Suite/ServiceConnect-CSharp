@@ -351,7 +351,7 @@ namespace ServiceConnect.UnitTests
                 return new List<HandlerReference>();
             }
 
-            public IEnumerable<HandlerReference> GetHandlerTypes(Type messageHandler)
+            public IEnumerable<HandlerReference> GetHandlerTypes(params Type[] messageHandler)
             {
                 return new List<HandlerReference>();
             }
@@ -403,34 +403,18 @@ namespace ServiceConnect.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public FakeConsumer(ITransportSettings transportSettings)
+            public FakeConsumer()
             {
                 
-            }
-
-            public void StartConsuming(ConsumerEventHandler messageReceived, string routingKey, string queueName = null, bool? exclusive = null, bool? autoDelete = null)
-            {
-                throw new NotImplementedException();
-            }
-
-            public void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null,
-                bool? autoDelete = null)
-            {
-            }
-
-            public void StopConsuming()
-            {
-                throw new NotImplementedException();
-            }
-
-            public void ConsumeMessageType(string messageTypeName)
-            {
-                throw new NotImplementedException();
             }
 
             public void Dispose()
             {
                 throw new NotImplementedException();
+            }
+
+            public void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
+            {
             }
 
             public string Type { get; private set; }
