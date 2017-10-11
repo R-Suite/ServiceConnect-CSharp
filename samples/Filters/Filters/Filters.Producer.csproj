@@ -58,6 +58,9 @@
     <Reference Include="ServiceConnect.Container.Default">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Container.Default.dll</HintPath>
     </Reference>
+    <Reference Include="ServiceConnect.Container.StructureMap">
+      <HintPath>..\..\..\src\ServiceConnect.Container.StructureMap\bin\Debug\net451\ServiceConnect.Container.StructureMap.dll</HintPath>
+    </Reference>
     <Reference Include="ServiceConnect.Core">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Core.dll</HintPath>
     </Reference>
@@ -69,6 +72,9 @@
     </Reference>
     <Reference Include="ServiceConnect.Persistance.SqlServer">
       <HintPath>..\..\..\src\ServiceConnect\bin\Debug\net451\ServiceConnect.Persistance.SqlServer.dll</HintPath>
+    </Reference>
+    <Reference Include="StructureMap">
+      <HintPath>..\..\..\src\ServiceConnect.Container.StructureMap\bin\Debug\net451\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
