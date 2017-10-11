@@ -77,13 +77,20 @@ namespace ServiceConnect.Container.Default
                 return instance ?? CreateInstance(serviceDesc.ServiceType);
             }
 
-            var genericDefinition = tService.GetGenericTypeDefinition();
-            if (genericDefinition != null && _services.Values.Any(v => v == genericDefinition))
+            try
             {
-                return GetGenericInstance(tService, _services.First(s => s.Value == genericDefinition).Key.ServiceType);
+                var genericDefinition = tService.GetGenericTypeDefinition();
+                if (genericDefinition != null && _services.Values.Any(v => v == genericDefinition))
+                {
+                    return GetGenericInstance(tService, _services.First(s => s.Value == genericDefinition).Key.ServiceType);
+                }
+            }
+            catch
+            {
+                return Activator.CreateInstance(tService);
             }
 
-            throw new Exception("Type not registered" + tService);
+            return Activator.CreateInstance(tService);
         }
 
         private object GetInstance(ServiceDescriptor serviceDescriptor)
