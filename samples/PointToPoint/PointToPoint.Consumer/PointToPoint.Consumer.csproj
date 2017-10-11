@@ -86,6 +86,7 @@
       <HintPath>..\..\..\src\ServiceConnect.Container.StructureMap\bin\Debug\net451\StructureMap.dll</HintPath>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
