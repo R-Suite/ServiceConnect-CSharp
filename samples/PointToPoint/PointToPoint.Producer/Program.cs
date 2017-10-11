@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using PointToPoint.Messages;
 using ServiceConnect;
 
@@ -12,8 +14,8 @@ namespace PointToPoint.Producer
             var bus = Bus.Initialize(config =>
             {
                 config.AddQueueMapping(typeof(PointToPointMessage), "PointToPoint.Consumer");
-                config.SetHost("localhost");
                 config.AutoStartConsuming = false;
+
             });
 
             while (true)
