@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Filters.Messages;
 using ServiceConnect;
+using ServiceConnect.Container.StructureMap;
+using StructureMap;
 
 namespace Filters
 {
@@ -12,9 +14,14 @@ namespace Filters
     {
         static void Main(string[] args)
         {
+            var container = new Container();
+
+            container.Configure(x => x.For<Filter1>().Use<Filter1>().Ctor<string>("p1").Is("test dependency injection"));
+
             Console.WriteLine("*********** Producer ***********");
             var bus = Bus.Initialize(config =>
             {
+                config.SetContainer(container);
                 config.SetQueueName("Filters.Producer");
                 config.SetThreads(10);
                 config.AutoStartConsuming = false;
