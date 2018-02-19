@@ -18,7 +18,7 @@ NuGet pack "%OUTDIR%ServiceConnect\ServiceConnect.nuspec"
 ::NuGet pack "%OUTDIRFILTERS%ServiceConnect.Filters.MessageDeduplication\ServiceConnect.Filters.MessageDeduplication\ServiceConnect.Filters.MessageDeduplication.nuspec"
 ::NuGet pack "%OUTDIRFILTERS%ServiceConnect.Filters.GzipCompression\ServiceConnect.Filters.GzipCompression\ServiceConnect.Filters.GzipCompression.nuspec"
 
-nuget push ServiceConnect.5.0.2-pre.nupkg -Source https://www.nuget.org/api/v2/package
+nuget push ServiceConnect.5.0.4-pre.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Client.RabbitMQ.5.0.1-pre.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Interfaces.4.0.1.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Container.StructureMap.4.0.6.nupkg -Source https://www.nuget.org/api/v2/package
