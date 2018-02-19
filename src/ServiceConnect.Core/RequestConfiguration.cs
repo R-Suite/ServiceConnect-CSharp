@@ -15,8 +15,6 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -55,14 +53,13 @@ namespace ServiceConnect.Core
         {
 #if NETSTANDARD1_6
             var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
-
             Type typeObject = null;
             foreach(var assembly in assemblies)
             {
                 try 
                 {          
                     var ass = Assembly.Load(new AssemblyName(assembly.Name));
-                    typeObject = ass.GetType(type);
+                    typeObject = ass.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type);
 
                     if (null != typeObject)
                         break;
