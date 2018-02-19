@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <VersionPrefix>4.0.0-pre</VersionPrefix>
+    <VersionPrefix>5.0.3-pre</VersionPrefix>
     <TargetFrameworks>netstandard1.6;net451</TargetFrameworks>
     <AssemblyName>ServiceConnect</AssemblyName>
     <PackageId>ServiceConnect</PackageId>
@@ -10,7 +10,7 @@
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
-    <Version>4.0.5</Version>
+    <Version>5.0.3</Version>
   </PropertyGroup>
 
   <ItemGroup>
