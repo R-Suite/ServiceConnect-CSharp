@@ -124,6 +124,17 @@ namespace ServiceConnect.Client.RabbitMQ
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
                 basicProperties.Persistent = true;
+                if (envelope.Headers != null && envelope.Headers.ContainsKey("Priority"))
+                {
+                    try
+                    {
+                        basicProperties.Priority = Convert.ToByte(envelope.Headers["Priority"]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Error setting message priority", ex);
+                    }
+                }
 
                 string exchName = type.FullName.Replace(".", string.Empty);
                 var exchangeName = ConfigureExchange(exchName, "fanout");
@@ -150,6 +161,17 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.Persistent = true;
+                if (headers != null && headers.ContainsKey("Priority"))
+                {
+                    try
+                    {
+                        basicProperties.Priority = Convert.ToByte(headers["Priority"]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Error setting message priority", ex);
+                    }
+                }
 
                 IList<string> endPoints = _queueMappings[type.FullName];
 
@@ -177,6 +199,17 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.Persistent = true;
+                if (headers != null && headers.ContainsKey("Priority"))
+                {
+                    try
+                    {
+                        basicProperties.Priority = Convert.ToByte(headers["Priority"]);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Error setting message priority", ex);
+                    }
+                }
 
                 var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
@@ -363,6 +396,5 @@ namespace ServiceConnect.Client.RabbitMQ
                 Logger.Warn("Exception trying to close model", e);
             }
         }
-
     }
 }
