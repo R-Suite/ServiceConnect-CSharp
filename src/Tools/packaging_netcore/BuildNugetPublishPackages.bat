@@ -19,7 +19,7 @@ NuGet pack "%OUTDIR%ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitM
 ::NuGet pack "%OUTDIRFILTERS%ServiceConnect.Filters.GzipCompression\ServiceConnect.Filters.GzipCompression\ServiceConnect.Filters.GzipCompression.nuspec"
 
 ::nuget push ServiceConnect.5.0.4-pre.nupkg -Source https://www.nuget.org/api/v2/package
-::nuget push ServiceConnect.Client.RabbitMQ.5.0.1-pre.nupkg -Source https://www.nuget.org/api/v2/package
+nuget push ServiceConnect.Client.RabbitMQ.5.0.3-pre.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Interfaces.4.0.1.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Container.StructureMap.4.0.6.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Persistance.MongoDb.4.0.4.nupkg -Source https://www.nuget.org/api/v2/package
