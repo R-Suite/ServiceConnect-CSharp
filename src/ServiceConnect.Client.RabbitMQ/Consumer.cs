@@ -126,7 +126,6 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private void ConfigureQueue(string queueName)
         {
-
             try
             {
                 _model.QueueDeclare(queueName, _durable, _exclusive, _autoDelete, _queueArguments);
