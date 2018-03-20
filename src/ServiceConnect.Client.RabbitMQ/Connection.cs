@@ -1,13 +1,18 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using ServiceConnect.Interfaces;
 using RabbitMQ.Client;
 using Common.Logging;
 
 namespace ServiceConnect.Client.RabbitMQ
 {
-    public class Connection : IDisposable
+    public interface IServiceConnectConnection
+    {
+        void Connect();
+        IModel CreateModel();
+        void Dispose();
+    }
+
+    public class Connection : IDisposable, IServiceConnectConnection
     {
         private static readonly ILog Logger = LogManager.GetLogger(typeof(Connection));
 
