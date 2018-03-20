@@ -32,7 +32,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private static readonly ILog Logger = LogManager.GetLogger(typeof(Client));
 
         private IModel _model;
-        private readonly Connection _connection;
+        private readonly IServiceConnectConnection _connection;
         private ConsumerEventHandler _consumerEventHandler;
         private readonly ITransportSettings _transportSettings;
 
@@ -48,7 +48,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private string _errorExchange;
         private string _auditExchange;
 
-        public Client(Connection connection, ITransportSettings transportSettings)
+        public Client(IServiceConnectConnection connection, ITransportSettings transportSettings)
         {
             _connection = connection;
             _transportSettings = transportSettings;
