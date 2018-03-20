@@ -17,10 +17,19 @@ namespace ServiceConnect.Client.RabbitMQ
         private int _retryDelay;
         private bool _exclusive;
         private bool _autoDelete;
-        private Connection _connection;
+        private IServiceConnectConnection _connection;
         private ITransportSettings _transportSettings;
         private IDictionary<string, object> _queueArguments;
         private readonly ConcurrentBag<Client> _clients = new ConcurrentBag<Client>();
+
+        public Consumer()
+        {
+        }
+
+        public Consumer(IServiceConnectConnection connection)
+        {
+            _connection = connection;
+        }
 
         public void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
         {
@@ -41,9 +50,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 _model = _connection.CreateModel();
             }
 
-            // Note: To avoid threading issues, declare queues and exchanges per consumer rather than per consumer thread.
-
-            // Configure excahnges
+            // Configure exchanges
             foreach (string messageType in messageTypes)
             {
                 ConfigureExchange(messageType, "fanout");
