@@ -1,2 +1,6 @@
 language: csharp
 solution: src/ServiceConnect.sln
+install:
+  - nuget # lets get version number
+  - nuget restore src/ServiceConnect.sln -Verbosity detailed
+  - nuget update src/ServiceConnect.sln -Verbosity detailed
