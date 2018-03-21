@@ -1,14 +1,12 @@
 [![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-**_ServiceConnect 5.0.0 is available at [https://www.nuget.org/packages/ServiceConnect] (https://www.nuget.org/packages/ServiceConnect/)_**
+**_ServiceConnect 5.0.0 is available at [https://www.nuget.org/packages/ServiceConnect](https://www.nuget.org/packages/ServiceConnect/)_**
 * **New in ServiceConnect 5.0.0**
     - Async consumers
     - Priority Queues support
     - Bug Fixes
 
-A simple, easy to use asynchronous messaging framework for .NET.
-
-In order to get started, have a look at the documentation at [http://serviceconnect.io/guides](http://serviceconnect.io/guides)
+ServiceConnect is a simple, easy to use asynchronous messaging framework for .NET.
 
 ## Features
 
