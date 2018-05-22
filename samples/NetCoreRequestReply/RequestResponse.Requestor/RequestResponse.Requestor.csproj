@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ServiceConnect" Version="5.0.2-pre" />
+    <PackageReference Include="ServiceConnect" Version="5.0.4-pre" />
   </ItemGroup>
 
   <ItemGroup>
