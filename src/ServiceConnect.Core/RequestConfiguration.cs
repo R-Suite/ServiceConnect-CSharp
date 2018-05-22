@@ -59,7 +59,7 @@ namespace ServiceConnect.Core
                 try 
                 {          
                     var ass = Assembly.Load(new AssemblyName(assembly.Name));
-                    typeObject = ass.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type);
+                    typeObject = ass.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type || t.FullName == type.Split(',')[0]);
 
                     if (null != typeObject)
                         break;
