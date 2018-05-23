@@ -734,7 +734,7 @@ namespace ServiceConnect
                     tasks.Add(ProcessProcessManagerHandlers(envelope.Body, typeObject, context));
 
                     ProcessAggregatorHandlers(envelope.Body, typeObject);
-                    ProcessRequestReplyConfigurations(envelope.Body, type, context);
+                    ProcessRequestReplyConfigurations(envelope.Body, typeObject, context);
                 }
 
                 await Task.WhenAll(tasks);
@@ -859,7 +859,7 @@ namespace ServiceConnect
             }
         }
 
-        private void ProcessRequestReplyConfigurations(byte[] byteMessage, string type, ConsumeContext context)
+        private void ProcessRequestReplyConfigurations(byte[] byteMessage, Type typeObject, ConsumeContext context)
         {
             lock (_requestLock)
             {
@@ -875,7 +875,7 @@ namespace ServiceConnect
                 }
                 IRequestConfiguration requestConfigration = _requestConfigurations[messageId];
                 
-                requestConfigration.ProcessMessage(Encoding.UTF8.GetString(byteMessage), type);
+                requestConfigration.ProcessMessage(Encoding.UTF8.GetString(byteMessage), typeObject);
 
                 if (requestConfigration.ProcessedCount == requestConfigration.EndpointsCount)
                 {
