@@ -36,6 +36,6 @@ namespace ServiceConnect.Interfaces
         /// <param name="handler">The handler to call with the response message</param>
         Task SetHandler(Action<object> handler);
 
-        void ProcessMessage(string message, string type);
+        void ProcessMessage(string message, Type typeObject);
     }
 }
