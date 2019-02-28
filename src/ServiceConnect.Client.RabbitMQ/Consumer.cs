@@ -90,20 +90,17 @@ namespace ServiceConnect.Client.RabbitMQ
                 }
             }
 
-            var threadCount = config.Threads;
+            var clientCount = config.Clients;
 
-            for (int i = 0; i < threadCount; i++)
+            for (int i = 0; i < clientCount; i++)
             {
-                new Thread(() =>
+                var client = new Client(_connection, config.TransportSettings);
+                client.StartConsuming(eventHandler, queueName);
+                foreach (string messageType in messageTypes)
                 {
-                    var client = new Client(_connection, config.TransportSettings);
-                    client.StartConsuming(eventHandler, queueName);
-                    foreach (string messageType in messageTypes)
-                    {
-                        client.ConsumeMessageType(messageType);
-                    }
-                    _clients.Add(client);
-                }).Start();
+                    client.ConsumeMessageType(messageType);
+                }
+                _clients.Add(client);
             }
         }
 

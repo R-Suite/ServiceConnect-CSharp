@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Common.Logging;
 using Newtonsoft.Json;
@@ -69,30 +70,36 @@ namespace ServiceConnect.Client.RabbitMQ
         /// <param name="args"></param>
         public async Task Event(object consumer, BasicDeliverEventArgs args)
         {
-            try
+            var task = new Task(async () =>
             {
-                if (!args.BasicProperties.Headers.ContainsKey("TypeName") && !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
+                try
                 {
-                    const string errMsg = "Error processing message, Message headers must contain type name.";
-                    Logger.Error(errMsg);
-                }
+                    if (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
+                        !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
+                    {
+                        const string errMsg = "Error processing message, Message headers must contain type name.";
+                        Logger.Error(errMsg);
+                    }
 
-                if (args.Redelivered)
+                    if (args.Redelivered)
+                    {
+                        SetHeader(args.BasicProperties.Headers, "Redelivered", true);
+                    }
+
+                    await ProcessMessage(args);
+                }
+                catch (Exception ex)
                 {
-                    SetHeader(args.BasicProperties.Headers, "Redelivered", true);
+                    Logger.Error(ex);
+                    throw;
                 }
-
-                await ProcessMessage(args);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex);
-                throw;
-            }
-            finally
-            {
-                _model.BasicAck(args.DeliveryTag, false);
-            }
+                finally
+                {
+                    _model.BasicAck(args.DeliveryTag, false);
+                }
+            });
+            task.Start();
+            await task;
         }
 
         private async Task ProcessMessage(BasicDeliverEventArgs args)

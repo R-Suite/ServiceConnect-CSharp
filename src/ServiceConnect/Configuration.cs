@@ -71,7 +71,7 @@ namespace ServiceConnect
         public IDictionary<string, IList<string>> QueueMappings { get; set; }
         public Action<Exception> ExceptionHandler { get; set; }
         public bool AddBusToContainer { get; set; }
-        public int Threads { get; set; }
+        public int Clients { get; set; }
         public IList<Type> BeforeConsumingFilters { get; set; }
         public IList<Type> AfterConsumingFilters { get; set; }
         public IList<Type> OutgoingFilters { get; set; }
@@ -106,7 +106,7 @@ namespace ServiceConnect
             MessageBusWriteStream = typeof (MessageBusWriteStream);
             AggregatorProcessor = typeof(AggregatorProcessor);
 
-            Threads = 1;
+            Clients = 1;
 
             BeforeConsumingFilters = new List<Type>();
             AfterConsumingFilters = new List<Type>();
@@ -365,12 +365,11 @@ namespace ServiceConnect
             return (IAggregatorProcessor)Activator.CreateInstance(AggregatorProcessor, aggregatorPersistor, container, handlerType);
         }
 
-        public void SetThreads(int numberOfThreads)
+        public void SetNumberOfClients(int numberOfClients)
         {
-            Threads = numberOfThreads;
+            Clients = numberOfClients;
         }
         
-
         #region Private Methods
 
         private void SetTransportSettings()

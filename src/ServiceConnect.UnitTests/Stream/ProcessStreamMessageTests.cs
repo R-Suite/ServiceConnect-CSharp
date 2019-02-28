@@ -43,7 +43,7 @@ namespace ServiceConnect.UnitTests.Stream
             _mockConfiguration.Setup(x => x.GetContainer()).Returns(_mockContainer.Object);
             _mockConfiguration.Setup(x => x.GetProducer()).Returns(_mockProducer.Object);
             _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { QueueName = "ServiceConnect.UnitTests" });
-            _mockConfiguration.Setup(x => x.Threads).Returns(1);
+            _mockConfiguration.Setup(x => x.Clients).Returns(1);
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
         }
 

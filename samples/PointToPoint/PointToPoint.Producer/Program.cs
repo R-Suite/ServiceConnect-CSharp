@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Configuration;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using PointToPoint.Messages;
 using ServiceConnect;
 
@@ -15,6 +17,14 @@ namespace PointToPoint.Producer
             {
                 config.AddQueueMapping(typeof(PointToPointMessage), "PointToPoint.Consumer");
                 config.AutoStartConsuming = false;
+                //config.TransportSettings.SslEnabled = true;
+                //config.TransportSettings.Username = ConfigurationManager.AppSettings["RabbitMqUsername"];
+                //config.TransportSettings.Password = ConfigurationManager.AppSettings["RabbitMqPassword"];
+                //config.TransportSettings.ServerName = ConfigurationManager.AppSettings["RabbitMqHost"];
+                config.TransportSettings.Version = SslProtocols.Default;
+                config.TransportSettings.CertificateValidationCallback += (sender, certificate, chain, errors) => true;
+                config.SetHost(ConfigurationManager.AppSettings["RabbitMqHost"]);
+                config.SetAuditingEnabled(false);
 
             });
 
@@ -25,7 +35,7 @@ namespace PointToPoint.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
 
-                for (int i = 0; i < 300; i++)
+                for (int i = 0; i < 300000; i++)
                 {
                     var id = Guid.NewGuid();
                     bus.Send(new PointToPointMessage(id)
@@ -33,7 +43,8 @@ namespace PointToPoint.Producer
                         Data = new byte[10000],
                         SerialNumber = i
                     });
-                    //Console.ReadLine();
+                   // Thread.Sleep(1000);
+                   // Console.ReadLine();
                 }
 
                 Console.WriteLine("Sent messages");
