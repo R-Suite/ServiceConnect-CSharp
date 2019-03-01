@@ -32,7 +32,7 @@ namespace PointToPoint.Consumer
                     typeof(OutgoingDeduplicationFilterRedis)
                 };
                 config.SetQueueName("MessageDeduplication.Consumer");
-                config.SetThreads(10);
+                config.SetNumberOfClients(10);
                 config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("localhost");
                 config.TransportSettings.ClientSettings.Add("PrefetchCount", 300);

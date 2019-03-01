@@ -22,7 +22,6 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
@@ -31,7 +30,6 @@ namespace ServiceConnect
 {
     public class Bus : IBus
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Bus));
         private readonly IBusContainer _container;
         private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
         private readonly IDictionary<string, IMessageBusReadStream> _byteStreams = new Dictionary<string, IMessageBusReadStream>();
@@ -43,14 +41,15 @@ namespace ServiceConnect
         private bool _startedConsuming;
         private readonly ExpiredTimeoutsPoller _expiredTimeoutsPoller;
         private IConsumer _consumer;
+        private ILogger _logger;
 
         public IConfiguration Configuration { get; set; }
 
         public Bus(IConfiguration configuration)
         {
-            Configuration = configuration; 
+            Configuration = configuration;
 
-
+            _logger = configuration.GetLogger();
             _container = configuration.GetContainer();
             _producer = configuration.GetProducer();
           
@@ -151,7 +150,7 @@ namespace ServiceConnect
             }
             catch (Exception ex)
             {
-                Logger.Warn("Error checking service status", ex);
+                _logger.Warn("Error checking service status", ex);
             }
 #endif
         }
@@ -704,7 +703,7 @@ namespace ServiceConnect
 
             if (typeObject == null)
             {
-                Logger.Warn(string.Format("Could not find type {0} when consuming message.", type));
+                _logger.Warn(string.Format("Could not find type {0} when consuming message.", type));
                 return result;
             }
 
@@ -891,7 +890,8 @@ namespace ServiceConnect
             var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
             {
                 {"container", _container},
-                {"processManagerFinder", processManagerFinder}
+                {"processManagerFinder", processManagerFinder},
+                {"logger", _logger }
             });
 
             MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
@@ -915,7 +915,8 @@ namespace ServiceConnect
         {
             var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
             {
-                {"container", _container}
+                {"container", _container},
+                {"logger", _logger }
             });
             MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
             MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(type);

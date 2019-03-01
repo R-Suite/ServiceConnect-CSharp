@@ -50,6 +50,7 @@ namespace ServiceConnect
         private Type _containerType = typeof(DefaultBusContainer);
         private IBusContainer _busContainer;
         private IProcessManagerFinder _processManagerFinder;
+        private ILogger _logger;
 
         #endregion
 
@@ -171,6 +172,16 @@ namespace ServiceConnect
             _containerType = typeof(T);
         }
 
+        public void SetLogger(ILogger logger)
+        {
+            _logger = logger;
+        }
+
+        public ILogger GetLogger()
+        {
+            return _logger ?? (_logger = new Logger());
+        }
+
         /// <summary>
         /// Sets the process manager finder
         /// </summary>
@@ -287,7 +298,7 @@ namespace ServiceConnect
         /// <returns></returns>
         public IConsumer GetConsumer()
         {
-            return (IConsumer)Activator.CreateInstance(ConsumerType);
+            return (IConsumer)Activator.CreateInstance(ConsumerType, GetLogger());
         }
 
         /// <summary>
@@ -296,7 +307,7 @@ namespace ServiceConnect
         /// <returns></returns>
         public IProducer GetProducer()
         {
-            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, QueueMappings);
+            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, QueueMappings, GetLogger());
         }
 
         /// <summary>
@@ -362,7 +373,7 @@ namespace ServiceConnect
 
         public IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
         {
-            return (IAggregatorProcessor)Activator.CreateInstance(AggregatorProcessor, aggregatorPersistor, container, handlerType);
+            return (IAggregatorProcessor)Activator.CreateInstance(AggregatorProcessor, aggregatorPersistor, container, handlerType, GetLogger());
         }
 
         public void SetNumberOfClients(int numberOfClients)

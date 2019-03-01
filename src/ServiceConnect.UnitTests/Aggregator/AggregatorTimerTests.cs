@@ -69,8 +69,9 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
+            var mockLogger = new Mock<ILogger>();
 
-            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof (FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof (FakeAggregator), mockLogger.Object);
 
             var count = 0;
 
@@ -93,8 +94,9 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
+            var mockLogger = new Mock<ILogger>();
 
-            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             mockPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(1);
             var aggregator = new FakeAggregator();
@@ -119,8 +121,9 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
+            var mockLogger = new Mock<ILogger>();
 
-            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             mockPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(1);
             var aggregator = new FakeAggregator();
@@ -144,8 +147,9 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockPersistor = new Mock<IAggregatorPersistor>();
             var mockContainer = new Mock<IBusContainer>();
+            var mockLogger = new Mock<ILogger>();
 
-            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var timer = new AggregatorProcessor(mockPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             var count = 0;
 

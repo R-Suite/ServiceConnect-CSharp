@@ -9,7 +9,7 @@ namespace PointToPoint.Consumer
     {
         public void Execute(PointToPointMessage command)
         {
-            //Console.WriteLine("+++++++++++++++++++++++++++++++++++++ {0}: Handler", Thread.CurrentThread.ManagedThreadId, command.CorrelationId);
+            Console.WriteLine("+++++++++++++++++++++++++++++++++++++ {0}: Handler", Thread.CurrentThread.ManagedThreadId, command.CorrelationId);
             //Thread.Sleep(1000);
         }
 

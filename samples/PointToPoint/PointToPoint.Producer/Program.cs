@@ -5,9 +5,38 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using PointToPoint.Messages;
 using ServiceConnect;
+using ServiceConnect.Interfaces;
 
 namespace PointToPoint.Producer
 {
+    class Logger : ILogger
+    {
+        public void Debug(string message)
+        {
+            Console.WriteLine(message);
+        }
+
+        public void Info(string message)
+        {
+            Console.WriteLine(message);
+        }
+
+        public void Error(string message, Exception ex = null)
+        {
+            Console.WriteLine(message);
+        }
+
+        public void Warn(string message, Exception ex = null)
+        {
+            Console.WriteLine(message);
+        }
+
+        public void Fatal(string message, Exception ex = null)
+        {
+            Console.WriteLine(message);
+        }
+    }
+
     class Program
     {
         static void Main(string[] args)
@@ -17,14 +46,9 @@ namespace PointToPoint.Producer
             {
                 config.AddQueueMapping(typeof(PointToPointMessage), "PointToPoint.Consumer");
                 config.AutoStartConsuming = false;
-                //config.TransportSettings.SslEnabled = true;
-                //config.TransportSettings.Username = ConfigurationManager.AppSettings["RabbitMqUsername"];
-                //config.TransportSettings.Password = ConfigurationManager.AppSettings["RabbitMqPassword"];
-                //config.TransportSettings.ServerName = ConfigurationManager.AppSettings["RabbitMqHost"];
-                config.TransportSettings.Version = SslProtocols.Default;
-                config.TransportSettings.CertificateValidationCallback += (sender, certificate, chain, errors) => true;
                 config.SetHost(ConfigurationManager.AppSettings["RabbitMqHost"]);
                 config.SetAuditingEnabled(false);
+                config.SetLogger(new Logger());
 
             });
 
@@ -43,7 +67,7 @@ namespace PointToPoint.Producer
                         Data = new byte[10000],
                         SerialNumber = i
                     });
-                   // Thread.Sleep(1000);
+                    Thread.Sleep(1000);
                    // Console.ReadLine();
                 }
 

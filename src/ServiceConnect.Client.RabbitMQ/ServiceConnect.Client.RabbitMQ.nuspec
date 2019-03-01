@@ -15,13 +15,11 @@
     <dependencies>
       <group targetFramework="net451">
         <dependency id="RabbitMQ.Client" version="5.0.1" />
-        <dependency id="Common.Logging" version="3.4.1" />
         <dependency id="Newtonsoft.Json" version="10.0.3" />
         <dependency id="ServiceConnect.Interfaces" version="5.0.0-pre" />
       </group>
       <group targetFramework="netstandard1.6">
         <dependency id="RabbitMQ.Client" version="5.0.1" />
-        <dependency id="Common.Logging" version="3.4.1" />
         <dependency id="Newtonsoft.Json" version="10.0.3" />
         <dependency id="ServiceConnect.Interfaces" version="5.0.0-pre" />
         <dependency id="NETStandard.Library" version="1.6.1" />

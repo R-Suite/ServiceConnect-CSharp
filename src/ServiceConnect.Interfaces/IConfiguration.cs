@@ -217,5 +217,8 @@ namespace ServiceConnect.Interfaces
         /// </summary>
         /// <returns></returns>
         IConsumer GetConsumer();
+
+        void SetLogger(ILogger logger);
+        ILogger GetLogger();
     }
 }

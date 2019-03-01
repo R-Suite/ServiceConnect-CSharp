@@ -21,9 +21,10 @@ namespace Filters
             Console.WriteLine("*********** Producer ***********");
             var bus = Bus.Initialize(config =>
             {
+                config.SetHost("localhost");
                 config.SetContainer(container);
                 config.SetQueueName("Filters.Producer");
-                config.SetThreads(10);
+                config.SetNumberOfClients(10);
                 config.AutoStartConsuming = false;
                 config.ScanForMesssageHandlers = false;
                 config.OutgoingFilters = new List<Type>

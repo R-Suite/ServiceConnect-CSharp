@@ -13,6 +13,7 @@ namespace RequestResponse.Responder
 
             Bus.Initialize(x =>
             {
+                x.SetHost("localhost");
                 x.SetQueueName("Responder");
             });
             

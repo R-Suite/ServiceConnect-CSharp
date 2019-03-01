@@ -17,7 +17,7 @@ namespace NetCoreTest.Consumer
             var bus = Bus.Initialize(config =>
             {
                 //config.SetContainer(myContainer);
-                config.SetThreads(1);
+                config.SetNumberOfClients(1);
                 //config.SetContainerType<DefaultBusContainer>();
                 config.SetContainerType<StructureMapContainer>();
                 config.ScanForMesssageHandlers = true;

@@ -259,7 +259,7 @@ namespace ServiceConnect.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public FakeConsumer()
+            public FakeConsumer(ILogger logger)
             {}
 
             public void Dispose()

@@ -11,6 +11,7 @@ namespace Retries.Producer
             Console.WriteLine("*********** Producer ***********");
             var bus = Bus.Initialize(config =>
             {
+                config.SetHost("localhost");
                 config.AddQueueMapping(typeof (RetryMessage), "RetryTest");
             });
 

@@ -29,6 +29,7 @@ namespace RequestResponse.Requestor
 
             var bus = Bus.Initialize(config =>
             {
+                config.SetHost("localhost");
                 config.SetQueueName("Requestor");
                 config.BeforeConsumingFilters.Add(typeof(Filter));
             });

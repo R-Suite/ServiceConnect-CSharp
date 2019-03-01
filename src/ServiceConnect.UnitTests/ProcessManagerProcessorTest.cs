@@ -31,11 +31,13 @@ namespace ServiceConnect.UnitTests
     {
         private readonly Mock<IBusContainer> _mockContainer;
         private readonly Mock<IProcessManagerFinder> _mockProcessManagerFinder;
+        private Mock<ILogger> _mockLogger;
 
         public ProcessManagerProcessorTest()
         {
             _mockContainer = new Mock<IBusContainer>();
             _mockProcessManagerFinder = new Mock<IProcessManagerFinder>();
+            _mockLogger = new Mock<ILogger>();
         }
 
         [Fact]
@@ -71,7 +73,7 @@ namespace ServiceConnect.UnitTests
             //_mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<Guid>())).Returns(mockPersistanceData.Object);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
@@ -118,7 +120,7 @@ namespace ServiceConnect.UnitTests
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
@@ -165,7 +167,7 @@ namespace ServiceConnect.UnitTests
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
@@ -211,7 +213,7 @@ namespace ServiceConnect.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             var context = new ConsumeContext();
 
@@ -253,7 +255,7 @@ namespace ServiceConnect.UnitTests
             IPersistanceData<FakeProcessManagerData> nullPersistanceData = null;
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(nullPersistanceData);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
@@ -297,7 +299,7 @@ namespace ServiceConnect.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>())).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
@@ -336,7 +338,7 @@ namespace ServiceConnect.UnitTests
             mockPersistanceData.Setup(x => x.Data).Returns(data);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<ProcessManagerPropertyMapper>(), message)).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
@@ -376,7 +378,7 @@ namespace ServiceConnect.UnitTests
             _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<ProcessManagerPropertyMapper>(),It.Is<FakeMessage2>(m => m.CorrelationId == id))).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
@@ -416,7 +418,7 @@ namespace ServiceConnect.UnitTests
             _mockContainer.Setup(x => x.GetInstance(typeof(FakeAsyncProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<ProcessManagerPropertyMapper>(), It.Is<FakeMessage2>(m => m.CorrelationId == id))).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
@@ -456,7 +458,7 @@ namespace ServiceConnect.UnitTests
             _mockContainer.Setup(x => x.GetInstance(typeof(FakeProcessManager1))).Returns(processManager);
             _mockProcessManagerFinder.Setup(x => x.FindData<FakeProcessManagerData>(It.IsAny<ProcessManagerPropertyMapper>(), It.Is<FakeMessage2>(m => m.CorrelationId == id))).Returns(mockPersistanceData.Object);
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             var context = new ConsumeContext();
 
@@ -499,7 +501,7 @@ namespace ServiceConnect.UnitTests
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
@@ -543,7 +545,7 @@ namespace ServiceConnect.UnitTests
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
@@ -577,7 +579,7 @@ namespace ServiceConnect.UnitTests
 
             _mockProcessManagerFinder.Setup(x => x.UpdateData(It.IsAny<FakePersistanceData>()));
 
-            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object);
+            var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
             processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext());

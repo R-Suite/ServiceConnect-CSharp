@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Threading;
-using Common.Logging;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 
@@ -10,25 +8,26 @@ namespace ServiceConnect.Client.RabbitMQ
 {
     public class Consumer : IConsumer
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Consumer));
-
         private IModel _model;
         private bool _durable;
         private int _retryDelay;
         private bool _exclusive;
         private bool _autoDelete;
         private IServiceConnectConnection _connection;
+        private readonly ILogger _logger;
         private ITransportSettings _transportSettings;
         private IDictionary<string, object> _queueArguments;
         private readonly ConcurrentBag<Client> _clients = new ConcurrentBag<Client>();
 
-        public Consumer()
+        public Consumer(ILogger logger)
         {
+            _logger = logger;
         }
 
-        public Consumer(IServiceConnectConnection connection)
+        public Consumer(IServiceConnectConnection connection, ILogger logger)
         {
             _connection = connection;
+            _logger = logger;
         }
 
         public void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
@@ -42,7 +41,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (_connection == null)
             {
-                _connection = new Connection(config.TransportSettings, queueName);
+                _connection = new Connection(config.TransportSettings, queueName, _logger);
             }
 
             if (_model == null)
@@ -62,7 +61,7 @@ namespace ServiceConnect.Client.RabbitMQ
             // Purge all messages on queue
             if (_transportSettings.PurgeQueueOnStartup)
             {
-                Logger.Debug("Purging queue");
+                _logger.Debug("Purging queue");
                 _model.QueuePurge(queueName);
             }
 
@@ -94,7 +93,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             for (int i = 0; i < clientCount; i++)
             {
-                var client = new Client(_connection, config.TransportSettings);
+                var client = new Client(_connection, config.TransportSettings, _logger);
                 client.StartConsuming(eventHandler, queueName);
                 foreach (string messageType in messageTypes)
                 {
@@ -124,7 +123,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring exchange {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring exchange {0}", ex.Message));
             }
         }
 
@@ -136,7 +135,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring queue - {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring queue - {0}", ex.Message));
             }
         }
 
@@ -153,7 +152,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring dead letter exchange - {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring dead letter exchange - {0}", ex.Message));
             }
 
             try
@@ -162,7 +161,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error binding dead letter queue - {0}", ex.Message));
+                _logger.Warn(string.Format("Error binding dead letter queue - {0}", ex.Message));
             }
 
             var arguments = new Dictionary<string, object>
@@ -178,7 +177,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring queue {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring queue {0}", ex.Message));
             }
         }
 
@@ -190,7 +189,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring error exchange {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring error exchange {0}", ex.Message));
             }
 
             return _transportSettings.ErrorQueueName;
@@ -204,7 +203,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring error queue {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring error queue {0}", ex.Message));
             }
 
             return _transportSettings.ErrorQueueName;
@@ -218,7 +217,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring audit exchange {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring audit exchange {0}", ex.Message));
             }
 
             return _transportSettings.AuditQueueName;
@@ -232,7 +231,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring audit queue {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring audit queue {0}", ex.Message));
             }
             return _transportSettings.AuditQueueName;
         }

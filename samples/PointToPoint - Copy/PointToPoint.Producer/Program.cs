@@ -44,7 +44,7 @@ namespace PointToPoint.Producer
                 config.TransportSettings.ServerName = ConfigurationManager.AppSettings["RabbitMqHostname"];
                 config.TransportSettings.Version = SslProtocols.Default;
                 config.ScanForMesssageHandlers = true;
-                config.SetThreads(20);
+                config.SetNumberOfClients(20);
                 config.SetContainer(myContainer);
                 config.SetAuditingEnabled(true);
 

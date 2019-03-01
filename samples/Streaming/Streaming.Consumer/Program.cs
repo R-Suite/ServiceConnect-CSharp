@@ -15,7 +15,7 @@ namespace Streaming.Consumer
                 x.SetQueueName("StreamConsumer");
                 x.PurgeQueuesOnStart();
                 x.SetHost("localhost");
-                x.SetThreads(10);
+                x.SetNumberOfClients(10);
             });
 
             Console.ReadLine();

@@ -12,6 +12,7 @@ namespace ServiceConnect.UnitTests
     {
         private readonly Mock<IServiceConnectConnection> _mockConnection;
         private readonly Mock<IModel> _mockModel;
+        private Mock<ILogger> _mockLogger;
 
         public ConsumerTests()
         {
@@ -19,13 +20,14 @@ namespace ServiceConnect.UnitTests
             _mockConnection = new Mock<IServiceConnectConnection>();
             _mockConnection.Setup(i => i.Connect());
             _mockConnection.Setup(i => i.CreateModel()).Returns(_mockModel.Object);
+            _mockLogger = new Mock<ILogger>();
         }
 
         [Fact]
         public void TestConsumerWithDefaultSettings()
         {
             // Arrange
-            IConsumer consumer = new Consumer(_mockConnection.Object);
+            IConsumer consumer = new Consumer(_mockConnection.Object, _mockLogger.Object);
 
             IConfiguration config = new Configuration();
             config.TransportSettings = new TransportSettings {ErrorQueueName = "myQueue.Errors", AuditQueueName = "myQueue.Audit" };
@@ -49,7 +51,7 @@ namespace ServiceConnect.UnitTests
         public void TestConsumerDeclaresAuditQueue()
         {
             // Arrange
-            IConsumer consumer = new Consumer(_mockConnection.Object);
+            IConsumer consumer = new Consumer(_mockConnection.Object, _mockLogger.Object);
 
             IConfiguration config = new Configuration();
             config.TransportSettings = new TransportSettings { ErrorQueueName = "myQueue.Errors", AuditQueueName = "myQueue.Audit", AuditingEnabled = true };
@@ -69,7 +71,7 @@ namespace ServiceConnect.UnitTests
         public void TestConsumerPurgesQueueOnStartup()
         {
             // Arrange
-            IConsumer consumer = new Consumer(_mockConnection.Object);
+            IConsumer consumer = new Consumer(_mockConnection.Object, _mockLogger.Object);
 
             IConfiguration config = new Configuration();
             config.TransportSettings = new TransportSettings { PurgeQueueOnStartup = true };
@@ -88,7 +90,7 @@ namespace ServiceConnect.UnitTests
         public void TestConsumerConsumesMessageType()
         {
             // Arrange
-            IConsumer consumer = new Consumer(_mockConnection.Object);
+            IConsumer consumer = new Consumer(_mockConnection.Object, _mockLogger.Object);
 
             IConfiguration config = new Configuration();
             config.TransportSettings = new TransportSettings { PurgeQueueOnStartup = true };

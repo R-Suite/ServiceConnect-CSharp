@@ -11,8 +11,9 @@ namespace Filters.Consumer
             Console.WriteLine("*********** Consumer ***********");
             var bus = Bus.Initialize(config =>
             {
+                config.SetHost("localhost");
                 config.SetQueueName("Filters.Consumer");
-                config.SetThreads(10);
+                config.SetNumberOfClients(10);
                 config.BeforeConsumingFilters = new List<Type>
                 {
                     typeof(BeforeFilter1),

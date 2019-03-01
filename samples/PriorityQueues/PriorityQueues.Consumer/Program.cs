@@ -17,7 +17,7 @@ namespace PriorityQueues.Consumer
             var bus = Bus.Initialize(config =>
             {
                 config.SetContainerType<StructureMapContainer>();
-                config.SetThreads(1);
+                config.SetNumberOfClients(1);
                 config.TransportSettings.ClientSettings.Add("Arguments", csArgs);
                 config.SetErrorQueueName("PriorityQueues.Consumer.Errors");
             });

@@ -17,9 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
 using RabbitMQ.Client;
@@ -30,12 +28,11 @@ namespace ServiceConnect.Client.RabbitMQ
 {
     public class Client
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Client));
-
         private IModel _model;
         private readonly IServiceConnectConnection _connection;
         private ConsumerEventHandler _consumerEventHandler;
         private readonly ITransportSettings _transportSettings;
+        private readonly ILogger _logger;
 
         private bool _autoDelete;
         private string _queueName;
@@ -49,11 +46,12 @@ namespace ServiceConnect.Client.RabbitMQ
         private string _errorExchange;
         private string _auditExchange;
 
-        public Client(IServiceConnectConnection connection, ITransportSettings transportSettings)
+        public Client(IServiceConnectConnection connection, ITransportSettings transportSettings, ILogger logger)
         {
             _connection = connection;
             _transportSettings = transportSettings;
-            
+            _logger = logger;
+
             _maxRetries = transportSettings.MaxRetries;
             _autoDelete = transportSettings.ClientSettings.ContainsKey("AutoDelete") && (bool)transportSettings.ClientSettings["AutoDelete"];
             _errorsDisabled = transportSettings.DisableErrors;
@@ -78,7 +76,7 @@ namespace ServiceConnect.Client.RabbitMQ
                         !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
                     {
                         const string errMsg = "Error processing message, Message headers must contain type name.";
-                        Logger.Error(errMsg);
+                        _logger.Error(errMsg);
                     }
 
                     if (args.Redelivered)
@@ -90,7 +88,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error(ex);
+                    _logger.Error("Error processing message", ex);
                     throw;
                 }
                 finally
@@ -155,7 +153,7 @@ namespace ServiceConnect.Client.RabbitMQ
                         }
                         catch (Exception ex)
                         {
-                            Logger.Warn("Error serializing exception", ex);
+                            _logger.Warn("Error serializing exception", ex);
                         }
 
                         SetHeader(args.BasicProperties.Headers, "Exception", JsonConvert.SerializeObject(new
@@ -169,7 +167,7 @@ namespace ServiceConnect.Client.RabbitMQ
                         }));
                     }
 
-                    Logger.ErrorFormat("Max number of retries exceeded. MessageId: {0}", args.BasicProperties.MessageId);
+                    _logger.Error(string.Format("Max number of retries exceeded. MessageId: {0}", args.BasicProperties.MessageId));
                     _model.BasicPublish(_errorExchange, string.Empty, args.BasicProperties, args.Body);
                 }
             }
@@ -201,7 +199,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             Retry.Do(CreateConsumer, ex =>
             {
-                Logger.Error(string.Format("Error creating model - queueName: {0}", queueName), ex);
+                _logger.Error(string.Format("Error creating model - queueName: {0}", queueName), ex);
             }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
 
@@ -219,7 +217,7 @@ namespace ServiceConnect.Client.RabbitMQ
             
             _model.BasicConsume(_queueName, false, consumer);
 
-            Logger.Debug("Started consuming");
+            _logger.Debug("Started consuming");
         }
 
         public void ConsumeMessageType(string messageTypeName)
@@ -271,13 +269,13 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             if (_autoDelete && _model != null)
             {
-                Logger.Debug("Deleting retry queue");
+                _logger.Debug("Deleting retry queue");
                 _model.QueueDelete(_queueName + ".Retries");
             }
 
             if (_model != null)
             {
-                Logger.Debug("Disposing Model");
+                _logger.Debug("Disposing Model");
                 _model.Dispose();
                 _model = null;
             }
