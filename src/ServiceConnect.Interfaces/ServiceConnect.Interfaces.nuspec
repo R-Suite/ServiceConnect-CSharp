@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Interfaces</id>
-    <version>5.0.2</version>
+    <version>5.0.3</version>
     <title>ServiceConnect.Interfaces</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
