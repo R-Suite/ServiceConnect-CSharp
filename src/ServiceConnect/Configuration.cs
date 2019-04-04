@@ -38,6 +38,7 @@ namespace ServiceConnect
         private const string DefaultDatabaseName = "RMessageBusPersistantStore";
         private const string DefaultConnectionString = "mongodb://localhost/";
         private const string DefaultHost= "localhost";
+        private const string DefaultAggregatorCollectionName = "Aggregator";
 
         #region Private Fields
 
@@ -68,6 +69,7 @@ namespace ServiceConnect
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
+        public string PersistenceStoreAggregatorCollectionName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
         public IDictionary<string, IList<string>> QueueMappings { get; set; }
         public Action<Exception> ExceptionHandler { get; set; }
@@ -342,7 +344,7 @@ namespace ServiceConnect
 
         public IAggregatorPersistor GetAggregatorPersistor()
         {
-            return (IAggregatorPersistor)Activator.CreateInstance(AggregatorPersistor, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
+            return (IAggregatorPersistor)Activator.CreateInstance(AggregatorPersistor, PersistenceStoreConnectionString, PersistenceStoreDatabaseName, PersistenceStoreAggregatorCollectionName);
         }
 
         public IRequestConfiguration GetRequestConfiguration(Guid requestMessageId)
@@ -393,6 +395,7 @@ namespace ServiceConnect
             // Set defaults
             PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? DefaultDatabaseName;
             PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? DefaultConnectionString;
+            PersistenceStoreAggregatorCollectionName = PersistenceStoreAggregatorCollectionName ?? DefaultAggregatorCollectionName;
         }
 
         private ITransportSettings GetTransportSettingsFromDefaults()

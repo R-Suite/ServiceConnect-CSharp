@@ -33,10 +33,4 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="System.Threading.ThreadPool">
-      <HintPath>..\..\..\..\..\Users\twatson\.nuget\packages\system.threading.threadpool\4.3.0\ref\netstandard1.3\System.Threading.ThreadPool.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
 </Project>

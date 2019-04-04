@@ -33,7 +33,8 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         /// </summary>
         /// <param name="connectionString"></param>
         /// <param name="databaseName"></param>
-        public MongoDBSslAggregatorPersistor(string connectionString, string databaseName)
+        /// <param name="collectionName"></param>
+        public MongoDBSslAggregatorPersistor(string connectionString, string databaseName, string collectionName)
         {
             var connectionParts = connectionString.Split(',');
             string nodes = string.Empty;
@@ -146,7 +147,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             var client = new MongoClient(settings);
             MongoServer server = client.GetServer();
             var mongoDatabase = server.GetDatabase(databaseName);
-            _collection = mongoDatabase.GetCollection<MongoDbSslData<object>>("Aggregator");
+            _collection = mongoDatabase.GetCollection<MongoDbSslData<object>>(collectionName);
         }
 
         public void InsertData(object data, string name)

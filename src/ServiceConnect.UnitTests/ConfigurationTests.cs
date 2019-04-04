@@ -39,6 +39,7 @@ namespace ServiceConnect.UnitTests
             Assert.Equal(typeof(SqlServerProcessManagerFinder), configuration.ProcessManagerFinder);
             Assert.Equal("RMessageBusPersistantStore", configuration.PersistenceStoreDatabaseName);
             Assert.Equal("mongodb://localhost/", configuration.PersistenceStoreConnectionString);
+            Assert.Equal("Aggregator", configuration.PersistenceStoreAggregatorCollectionName);
         }
 
         [Fact]

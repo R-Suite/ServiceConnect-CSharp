@@ -35,7 +35,8 @@ namespace ServiceConnect.Persistance.InMemory
         /// </summary>
         /// <param name="connectionString"></param>
         /// <param name="databaseName"></param>
-        public InMemoryAggregatorPersistor(string connectionString, string databaseName)
+        /// <param name="collectionName"></param>
+        public InMemoryAggregatorPersistor(string connectionString, string databaseName, string collectionName)
         { }
 
         public void InsertData(object data, string name)

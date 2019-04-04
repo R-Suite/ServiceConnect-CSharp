@@ -32,6 +32,7 @@ namespace ServiceConnect.Interfaces
         bool AutoStartConsuming { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
+        string PersistenceStoreAggregatorCollectionName { get; set; }
         ITransportSettings TransportSettings { get; set; }
         IDictionary<string, IList<string>> QueueMappings { get; set; }
         Action<Exception> ExceptionHandler { get; set; }

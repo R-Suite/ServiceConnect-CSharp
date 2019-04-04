@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Interfaces</id>
-    <version>5.0.3</version>
+    <version>5.0.4</version>
     <title>ServiceConnect.Interfaces</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,7 +10,7 @@
     <description>ServiceConnect Interfaces</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
-    <copyright>Copyright 2018 ServiceConnect. All rights reserved</copyright>
+    <copyright>Copyright 2019 ServiceConnect. All rights reserved</copyright>
     <tags>MessageBus Interfaces,MessageBus.Interfaces,ServiceConnect,R MessageBus,MessageBus</tags>
   </metadata>
   <files>
