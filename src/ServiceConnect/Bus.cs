@@ -723,7 +723,7 @@ namespace ServiceConnect
 
                 var tasks = new List<Task>();
                 
-                if (headers.ContainsKey("MessageType") && Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
+                if (headers.ContainsKey("MessageType") && ((headers["MessageType"].GetType() == typeof(byte[]) &&  Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream") || (headers["MessageType"].GetType() == typeof(string) && (string)headers["MessageType"] == "ByteStream")))
                 {
                     ProcessStream(envelope.Body, typeObject, headers);
                 }

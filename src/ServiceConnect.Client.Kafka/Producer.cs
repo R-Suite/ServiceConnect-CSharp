@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using ServiceConnect.Interfaces;
 using Confluent.Kafka;
 using Newtonsoft.Json;
@@ -15,13 +14,16 @@ namespace ServiceConnect.Client.Kafka
         private readonly ILogger _logger;       
         private readonly long _maxMessageSize;
         private readonly ProducerConfig _conf;
-        private readonly ProducerBuilder<Null, string> _producer;
+        private readonly IProducer<Null, string> _producer;
+        private readonly IProducer<Null, byte[]> _bytesProducer;
 
-        private readonly Action<DeliveryReport<Null, string>> _handler = r => {
-            if (r.Error.IsError) {
-                _logger.Error($"Delivery Error: {r.Error.Reason}");
+        private void ProducerHandler(DeliveryReport<Null, string> report)
+        {
+            if (report.Error.IsError)
+            {
+                _logger.Error($"Delivery Error: {report.Error.Reason}");
             }
-        };
+        }
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> consumerGroupMappings, ILogger logger)
         {
@@ -31,20 +33,23 @@ namespace ServiceConnect.Client.Kafka
             _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
             
             _conf = new ProducerConfig { BootstrapServers = transportSettings.Host };
-            _producer = new ProducerBuilder<Null, string>(conf).Build();
+            _producer = new ProducerBuilder<Null, string>(_conf).Build();
+            _bytesProducer = new ProducerBuilder<Null, byte[]>(_conf).Build();
 
             // wait for up to 10 seconds for any inflight messages to be delivered.
-            _producer.Flush(TimeSpan.FromSeconds(10));            
+            _producer.Flush(TimeSpan.FromSeconds(10));
+            _bytesProducer.Flush(TimeSpan.FromSeconds(10));
         }        
         public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
         {
-            Dictionary<string, string> messageHeaders = GetHeaders(type, headers, string.Empty, "Publish");
-            var msg = new Dictionary<string, object> {
-                { headers, messageHeaders},
-                { message, message }
+            Dictionary<string, object> messageHeaders = GetHeaders(type, headers, string.Empty, "Publish");
+            var msg = new MessageWrapper
+            {
+                Headers = messageHeaders,
+                Message = message
             };
             var messageString = JsonConvert.SerializeObject(msg);
-            p.Produce(endPoint, new Message<Null, string> { Value = messageString }, _handler);
+            _producer.Produce(type.FullName, new Message<Null, string> { Value = messageString }, ProducerHandler);
         }
 
         public void Send(Type type, byte[] message, Dictionary<string, string> headers = null)
@@ -55,17 +60,17 @@ namespace ServiceConnect.Client.Kafka
                 Send(endPoint, type, message, headers);
             }
         }
-
-      
+              
         public void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null)
         {
-            Dictionary<string, string> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-            var msg = new Dictionary<string, object> {
-                { headers, messageHeaders},
-                { message, message }
+            Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
+            var msg = new MessageWrapper
+            {
+                Headers = messageHeaders,
+                Message = message
             };
             var messageString = JsonConvert.SerializeObject(msg);
-            p.Produce(type.FullName, new Message<Null, string> { Value = messageString }, _handler);
+            _producer.Produce(endPoint, new Message<Null, string> { Value = messageString }, ProducerHandler);
         }
 
         private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
@@ -107,7 +112,8 @@ namespace ServiceConnect.Client.Kafka
 
         public void Dispose()
         {
-            //_producer();
+            _producer.Dispose();
+            _bytesProducer.Dispose();
         }
 
         public string Type
@@ -128,5 +134,4 @@ namespace ServiceConnect.Client.Kafka
             
         }       
     }
-
 }

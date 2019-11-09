@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp1.0</TargetFramework>
+    <AssemblyName>NetCoreTest.Producer</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <PackageId>NetCoreTest.Producer</PackageId>
+    <RuntimeFrameworkVersion>1.0.4</RuntimeFrameworkVersion>
+    <PackageTargetFallback>$(PackageTargetFallback);dnxcore50</PackageTargetFallback>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Confluent.Kafka" Version="1.2.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="2.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kafka.Messages\Kafka.Messages.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="ServiceConnect">
+      <HintPath>..\..\..\..\src\ServiceConnect\bin\Debug\netstandard1.6\ServiceConnect.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Client.Kafka">
+      <HintPath>..\..\..\..\src\ServiceConnect.Client.Kafka\bin\Debug\netstandard1.6\ServiceConnect.Client.Kafka.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Client.RabbitMQ">
+      <HintPath>..\..\..\..\src\ServiceConnect\bin\Debug\netstandard1.6\ServiceConnect.Client.RabbitMQ.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Container.Default">
+      <HintPath>..\..\..\..\src\ServiceConnect\bin\Debug\netstandard1.6\ServiceConnect.Container.Default.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Core">
+      <HintPath>..\..\..\..\src\ServiceConnect\bin\Debug\netstandard1.6\ServiceConnect.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Interfaces">
+      <HintPath>..\..\..\..\src\ServiceConnect\bin\Debug\netstandard1.6\ServiceConnect.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Persistance.InMemory">
+      <HintPath>..\..\..\..\src\ServiceConnect\bin\Debug\netstandard1.6\ServiceConnect.Persistance.InMemory.dll</HintPath>
+    </Reference>
+    <Reference Include="ServiceConnect.Persistance.SqlServer">
+      <HintPath>..\..\..\..\src\ServiceConnect\bin\Debug\netstandard1.6\ServiceConnect.Persistance.SqlServer.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

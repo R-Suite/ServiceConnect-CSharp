@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard1.6</TargetFramework>
+    <AssemblyName>NetCoreTest.Messages</AssemblyName>
+    <PackageId>NetCoreTest.Messages</PackageId>
+    <NetStandardImplicitPackageVersion>1.6.0</NetStandardImplicitPackageVersion>
+    <PackageTargetFallback>$(PackageTargetFallback);dnxcore50</PackageTargetFallback>
+    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="ServiceConnect.Interfaces">
+      <HintPath>..\..\..\..\src\ServiceConnect.Interfaces\bin\Debug\netstandard1.6\ServiceConnect.Interfaces.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

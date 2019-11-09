@@ -1,9 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.Messages", "PointToPoint.Messages\PointToPoint.Messages.csproj", "{DDFDEC3A-9546-4D50-83DF-464CBFCBDE82}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KafkaClient.Messages", "KafkaClient.Messages\KafkaClient.Messages.csproj", "{DDFDEC3A-9546-4D50-83DF-464CBFCBDE82}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.Producer", "PointToPoint.Producer\PointToPoint.Producer.csproj", "{343DC117-1550-4FE1-A867-01F76CBD438C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KafkaClient.Producer", "KafkaClient.Producer\KafkaClient.Producer.csproj", "{343DC117-1550-4FE1-A867-01F76CBD438C}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{46CB27FF-20C9-4578-823D-1EA15C8A7A83}"
 	ProjectSection(SolutionItems) = preProject
@@ -12,7 +12,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{46CB27
 		.nuget\NuGet.targets = .nuget\NuGet.targets
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointToPoint.Consumer", "PointToPoint.Consumer\PointToPoint.Consumer.csproj", "{17FC8160-EBE8-443A-9A58-3CFBF7DE0E0A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KafkaClient.Consumer", "KafkaClient.Consumer\KafkaClient.Consumer.csproj", "{17FC8160-EBE8-443A-9A58-3CFBF7DE0E0A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
