@@ -62,6 +62,14 @@ namespace ServiceConnect.Container.Default
             return retval;
         }
 
+        public bool HasProcessManagers()
+        {
+            return _container.AllInstances.Any(
+                i =>
+                    i.Value.Name == typeof(IStartProcessManager<>).Name ||
+                    i.Value.Name == typeof(IStartAsyncProcessManager<>).Name);
+        }
+
         /// <summary>
         /// Get handler references for a handler type (e.g. IMessageHandler`1)
         /// </summary>

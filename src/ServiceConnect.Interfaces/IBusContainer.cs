@@ -32,5 +32,6 @@ namespace ServiceConnect.Interfaces
         void AddHandler<T>(Type handlerType, T handler);
         void AddBus(IBus bus);
         object GetContainer();
+        bool HasProcessManagers();
     }
 }

@@ -41,6 +41,7 @@ namespace ServiceConnect
         private bool _startedConsuming;
         private readonly ExpiredTimeoutsPoller _expiredTimeoutsPoller;
         private IConsumer _consumer;
+        private bool _hasProcessManagers;
         private ILogger _logger;
 
         public IConfiguration Configuration { get; set; }
@@ -196,6 +197,7 @@ namespace ServiceConnect
             IConsumer consumer = Configuration.GetConsumer();
             consumer.StartConsuming(queueName, messageTypes, ConsumeMessageEvent, Configuration);
             _consumer = consumer;
+            _hasProcessManagers = _container.HasProcessManagers();
            
             _startedConsuming = true;
         }
@@ -663,6 +665,7 @@ namespace ServiceConnect
             return stream;
         }
 
+        private Dictionary<string, Type> _typeCahe = new Dictionary<string, Type>();
         private async Task<ConsumeEventResult> ConsumeMessageEvent(byte[] message, string type, IDictionary<string, object> headers)
         {
             var result = new ConsumeEventResult
@@ -678,28 +681,37 @@ namespace ServiceConnect
 
             Type typeObject = null;
 
-#if NETSTANDARD1_6
-            typeObject = Type.GetType(type);
-            if (typeObject == null)
-            {
-                var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
-                foreach (var assembly in assemblies)
-                {
-                    try
-                    {
-                        var asm = Assembly.Load(new AssemblyName(assembly.Name));
-                        typeObject = asm.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type || t.FullName == type.Split(',')[0]);
 
-                        if (null != typeObject)
-                            break;
+            if (_typeCahe.ContainsKey(type))
+            {
+                typeObject = _typeCahe[type];
+            } else
+            {
+#if NETSTANDARD1_6
+                typeObject = Type.GetType(type);
+                if (typeObject == null)
+                {
+                    var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
+                    foreach (var assembly in assemblies)
+                    {
+                        try
+                        {
+                            var asm = Assembly.Load(new AssemblyName(assembly.Name));
+                            typeObject = asm.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type || t.FullName == type.Split(',')[0]);
+
+                            if (null != typeObject)
+                                break;
+                        }
+                        catch (Exception)
+                        { }
                     }
-                    catch (Exception)
-                    {}
                 }
-            }
 #else
-            typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
+                typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
 #endif
+
+                _typeCahe[type] = typeObject;
+            }
 
             if (typeObject == null)
             {
@@ -723,7 +735,7 @@ namespace ServiceConnect
 
                 var tasks = new List<Task>();
                 
-                if (headers.ContainsKey("MessageType") && ((headers["MessageType"].GetType() == typeof(byte[]) &&  Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream") || (headers["MessageType"].GetType() == typeof(string) && (string)headers["MessageType"] == "ByteStream")))
+                if (headers.ContainsKey("MessageType") && ((headers["MessageType"].GetType() == typeof(byte[]) && Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream") || (headers["MessageType"].GetType() == typeof(string) && (string)headers["MessageType"] == "ByteStream")))
                 {
                     ProcessStream(envelope.Body, typeObject, headers);
                 }
@@ -779,7 +791,16 @@ namespace ServiceConnect
 
         private void ProcessRoutingSlip(byte[] message, Type type, IDictionary<string, object> headers)
         {
-            var routingSlip = Encoding.UTF8.GetString((byte[])headers["RoutingSlip"]);
+            string routingSlip;
+            if (headers["RoutingSlip"].GetType() == typeof(string))
+            {
+                routingSlip = (string)headers["RoutingSlip"];
+            }
+            else
+            {
+                routingSlip = Encoding.UTF8.GetString((byte[])headers["RoutingSlip"]);
+            }
+            
             var destinations = JsonConvert.DeserializeObject<IList<string>>(routingSlip);
 
             if (null != destinations && destinations.Count > 0)
@@ -797,14 +818,39 @@ namespace ServiceConnect
             lock (_byteStreamLock)
             {
                 var start = headers.ContainsKey("Start");
-                var sequenceId = Encoding.UTF8.GetString((byte[]) headers["SequenceId"]);
-                
+
+                string sequenceId;
+                if (headers["SequenceId"].GetType() == typeof(string))
+                {
+                    sequenceId = (string)headers["SequenceId"];
+                }
+                else
+                {
+                    sequenceId = Encoding.UTF8.GetString((byte[])headers["SequenceId"]);
+                }
+
                 IMessageBusReadStream stream;
 
                 if (start)
                 {
-                    var requestMessageId = Encoding.UTF8.GetString((byte[]) headers["RequestMessageId"]);
-                    var sourceAddress = Encoding.UTF8.GetString((byte[])headers["SourceAddress"]);
+                    string requestMessageId;
+                    if (headers["RequestMessageId"].GetType() == typeof(string))
+                    {
+                        requestMessageId = (string)headers["RequestMessageId"];
+                    }
+                    else
+                    {
+                        requestMessageId = Encoding.UTF8.GetString((byte[])headers["RequestMessageId"]);
+                    }
+                    string sourceAddress;
+                    if (headers["SourceAddress"].GetType() == typeof(string))
+                    {
+                        sourceAddress = (string)headers["SourceAddress"];
+                    }
+                    else
+                    {
+                        sourceAddress = Encoding.UTF8.GetString((byte[])headers["SourceAddress"]);
+                    }
 
                     stream = Configuration.GetMessageBusReadStream();
                     stream.CompleteEventHandler = StreamCompleteEventHandler;
@@ -833,7 +879,16 @@ namespace ServiceConnect
                         return;
                     }
 
-                    var packetNumber = Convert.ToInt64(Encoding.UTF8.GetString((byte[])headers["PacketNumber"]));
+                    Int64 packetNumber;
+                    if (headers["PacketNumber"].GetType() == typeof(string))
+                    {
+                        packetNumber = Convert.ToInt64((string)headers["PacketNumber"]);
+                    }
+                    else
+                    {
+                        packetNumber = Convert.ToInt64(Encoding.UTF8.GetString((byte[])headers["PacketNumber"]));
+                    }
+                    
                     var stop = headers.ContainsKey("Stop");
 
                     stream = _byteStreams[sequenceId];
@@ -860,14 +915,23 @@ namespace ServiceConnect
 
         private void ProcessRequestReplyConfigurations(byte[] byteMessage, Type typeObject, ConsumeContext context)
         {
-            lock (_requestLock)
+            if (!context.Headers.ContainsKey("ResponseMessageId"))
             {
-                if (!context.Headers.ContainsKey("ResponseMessageId"))
+                return;
+            }
+
+            lock (_requestLock)
+            {      
+                string messageId;
+                if (context.Headers["ResponseMessageId"].GetType() == typeof(string))
                 {
-                    return;
+                    messageId = (string)context.Headers["ResponseMessageId"];
                 }
-                
-                string messageId = Encoding.UTF8.GetString((byte[])context.Headers["ResponseMessageId"]);
+                else
+                {
+                    messageId = Encoding.UTF8.GetString((byte[])context.Headers["ResponseMessageId"]);
+                }
+
                 if (!_requestConfigurations.ContainsKey(messageId))
                 {
                     return;
@@ -886,17 +950,20 @@ namespace ServiceConnect
 
         private async Task ProcessProcessManagerHandlers(byte[] objectMessage, Type type, IConsumeContext context)
         {
-            IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
-            var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
+            if (_hasProcessManagers)
             {
-                {"container", _container},
-                {"processManagerFinder", processManagerFinder},
-                {"logger", _logger }
-            });
+                IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
+                var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
+                {
+                    {"container", _container},
+                    {"processManagerFinder", processManagerFinder},
+                    {"logger", _logger }
+                });
 
-            MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
-            MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(type);
-            await (Task)genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {Encoding.UTF8.GetString(objectMessage), context});
+                MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
+                MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(type);
+                await (Task)genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] { Encoding.UTF8.GetString(objectMessage), context });
+            }
         }
 
         private void ProcessAggregatorHandlers(byte[] objectMessage, Type type)

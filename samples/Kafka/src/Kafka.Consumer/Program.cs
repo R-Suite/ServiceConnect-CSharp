@@ -12,7 +12,6 @@ namespace Kafka.Consumer
             var bus = Bus.Initialize(config =>
             {
                 config.SetQueueName("Kafka.Consumer");
-                config.SetNumberOfClients(2);
                 config.ScanForMesssageHandlers = true;
                 config.SetHost("localhost:9092");
                 config.SetProducer<ServiceConnect.Client.Kafka.Producer>();

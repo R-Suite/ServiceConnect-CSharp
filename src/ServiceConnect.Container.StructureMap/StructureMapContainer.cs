@@ -85,6 +85,14 @@ namespace ServiceConnect.Container.StructureMap
             return retval;
         }
 
+        public bool HasProcessManagers()
+        {
+            return _container.Model.AllInstances.Any(
+                i =>
+                    i.PluginType.Name == typeof(IStartProcessManager<>).Name ||
+                    i.PluginType.Name == typeof(IStartAsyncProcessManager<>).Name);
+        }
+
         public IEnumerable<HandlerReference> GetHandlerTypes(params Type[] messageHandlers)
         {
             IEnumerable<InstanceRef> instances = _container.Model.AllInstances.Where(i => messageHandlers.Contains(i.PluginType));

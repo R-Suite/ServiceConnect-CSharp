@@ -10,50 +10,54 @@ namespace ServiceConnect.Client.Kafka
      public class Consumer : IConsumer 
      {
         private readonly ILogger _logger;
-        private IConsumer<Ignore, string> _commandConsumer;
-        private IList<IConsumer<Ignore, string>> _eventConsumers;
+        private IList<IConsumer<Ignore, string>> _consumers;
         private ConsumerEventHandler _eventHandler;
 
         public Consumer(ILogger logger)
         {
             _logger = logger;
-            _eventConsumers = new List<IConsumer<Ignore, string>>();
+            _consumers = new List<IConsumer<Ignore, string>>();
         }
 
         public void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
         {
+            var clientCount = config.Clients;
+
             _eventHandler = eventHandler;
-
-            // Setup command processor
-            var commandConfig = new ConsumerConfig
-            {
-                GroupId = queueName,
-                BootstrapServers = config.TransportSettings.Host,
-                AutoOffsetReset = AutoOffsetReset.Earliest,
-                EnableAutoCommit = false
-            };
-
-            _commandConsumer = new ConsumerBuilder<Ignore, string>(commandConfig).Build();
-            _commandConsumer.Subscribe(queueName);
-
-            new Task(() => ConsumeMessages(_commandConsumer).GetAwaiter().GetResult()).Start();
             
-            // Setup event processor
-            foreach (var type in messageTypes)
+            for (var i = 0; i < clientCount; i++)
             {
-                var cfg = new ConsumerConfig
+                // Setup command processor
+                var commandConfig = new ConsumerConfig
                 {
                     GroupId = queueName,
                     BootstrapServers = config.TransportSettings.Host,
                     AutoOffsetReset = AutoOffsetReset.Earliest,
-                    EnableAutoCommit = false
+                    EnableAutoCommit = true
                 };
-                var consumer = new ConsumerBuilder<Ignore, string>(cfg).Build();
-                consumer.Subscribe(queueName);
-                _eventConsumers.Add(consumer);
 
-                new Task(() => ConsumeMessages(consumer).GetAwaiter().GetResult()).Start();
-            }
+                var commandConsumer = new ConsumerBuilder<Ignore, string>(commandConfig).Build();
+                commandConsumer.Subscribe(queueName);
+                _consumers.Add(commandConsumer);
+                
+                Task.Run(() => ConsumeMessages(commandConsumer));
+                
+                if (messageTypes.Count > 0)
+                {
+                    // Setup event processor
+                    var cfg = new ConsumerConfig
+                    {
+                        GroupId = queueName,
+                        BootstrapServers = config.TransportSettings.Host,
+                        AutoOffsetReset = AutoOffsetReset.Earliest
+                    };
+                    var consumer = new ConsumerBuilder<Ignore, string>(cfg).Build();
+                    consumer.Subscribe(messageTypes);
+                    _consumers.Add(consumer);
+
+                    Task.Run(() => ConsumeMessages(consumer));
+                }                
+            }            
         }
 
         private async Task ConsumeMessages(IConsumer<Ignore, string> consumer)
@@ -64,7 +68,8 @@ namespace ServiceConnect.Client.Kafka
                 {
                     try
                     {
-                        var message = JsonConvert.DeserializeObject<MessageWrapper>(consumer.Consume().Value);
+                        var res = consumer.Consume();
+                        var message = JsonConvert.DeserializeObject<MessageWrapper>(res.Value);
                         var headers = message.Headers;
                         await _eventHandler(message.Message, (string)headers["TypeName"], headers);
                     }
@@ -78,6 +83,7 @@ namespace ServiceConnect.Client.Kafka
                         _logger.Error("Error consuming message", ex);
                     }
                 }
+
             }
             catch (OperationCanceledException)
             {
@@ -87,9 +93,7 @@ namespace ServiceConnect.Client.Kafka
 
         public void Dispose()
         {
-            _commandConsumer.Dispose();
-
-            foreach(var consumer in _eventConsumers)
+            foreach(var consumer in _consumers)
             {
                 consumer.Dispose();
             }
