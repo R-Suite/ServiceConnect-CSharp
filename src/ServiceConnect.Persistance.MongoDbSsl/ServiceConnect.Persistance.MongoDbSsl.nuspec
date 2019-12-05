@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Persistance.MongoDbSsl</id>
-    <version>5.0.2</version>
+    <version>5.0.3</version>
     <title>ServiceConnect.Persistance.MongoDbSsl</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -15,11 +15,11 @@
     <dependencies>
       <group targetFramework="net451">
         <dependency id="ServiceConnect.Interfaces" version="5.0.4" />
-        <dependency id="mongocsharpdriver" version="2.4.4" />
+        <dependency id="mongocsharpdriver" version="2.7.3" />
       </group>
       <group targetFramework="netstandard1.6">
         <dependency id="ServiceConnect.Interfaces" version="5.0.4" />
-        <dependency id="mongocsharpdriver" version="2.4.4" />
+        <dependency id="mongocsharpdriver" version="2.7.3" />
         <dependency id="NETStandard.Library" version="1.6.1" />
       </group>      
     </dependencies>
