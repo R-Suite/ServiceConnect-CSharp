@@ -47,29 +47,31 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
             foreach (string connectionPart in connectionParts)
             {
-                var nameValue = connectionPart.Split('=');
-                switch (nameValue[0].ToLower())
+                var assignmentIndex = connectionPart.IndexOf('=');
+                var nameValue = connectionPart.Substring(0, assignmentIndex);
+
+                switch (nameValue.ToLower())
                 {
                     case "nodes":
-                        nodes = nameValue[1];
+                        nodes = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "userdb":
-                        userdb = nameValue[1];
+                        userdb = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "username":
-                        username = nameValue[1];
+                        username = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "password":
-                        password = nameValue[1];
+                        password = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "certpath":
-                        certPath = nameValue[1];
+                        certPath = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "cert":
-                        cert = nameValue[1];
+                        cert = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "certpassword":
-                        certPassword = nameValue[1];
+                        certPassword = connectionPart.Substring(assignmentIndex + 1);
                         break;
                 }
             }
