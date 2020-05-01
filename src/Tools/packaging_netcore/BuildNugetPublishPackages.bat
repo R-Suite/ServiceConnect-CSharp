@@ -23,7 +23,7 @@ NuGet pack "%OUTDIR%ServiceConnect.Persistance.MongoDbSsl\ServiceConnect.Persist
 ::nuget push ServiceConnect.Interfaces.5.0.4.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Container.StructureMap.5.0.1.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Persistance.MongoDb.5.0.2.nupkg -Source https://www.nuget.org/api/v2/package
-nuget push ServiceConnect.Persistance.MongoDbSsl.5.0.4.nupkg -Source https://www.nuget.org/api/v2/package
+nuget push ServiceConnect.Persistance.MongoDbSsl.6.0.0-pre.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Filters.MessageDeduplication.2.0.6.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Filters.GzipCompression.2.0.0-pre.nupkg -Source https://www.nuget.org/api/v2/package
 

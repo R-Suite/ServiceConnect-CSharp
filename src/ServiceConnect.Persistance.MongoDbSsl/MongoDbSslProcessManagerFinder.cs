@@ -20,7 +20,6 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Security.Cryptography.X509Certificates;
 using MongoDB.Driver;
-using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
 using System.Reflection;
 
@@ -31,7 +30,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
     /// </summary>
     public class MongoDbSslProcessManagerFinder : IProcessManagerFinder
     {
-        private readonly MongoDatabase _mongoDatabase;
+        private readonly IMongoDatabase _mongoDatabase;
         private const string TimeoutsCollectionName = "Timeouts";
 
         public MongoDbSslProcessManagerFinder(string connectionString, string databaseName)
@@ -116,7 +115,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                 }
             }
 
-            List<MongoCredential> credentials = null;
+            MongoCredential credential = null;
             if (!string.IsNullOrEmpty(username))
             {
                 string db = "admin";
@@ -126,16 +125,13 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                     db = userdb;
                 }
 
-                credentials = new List<MongoCredential>
-                {
-                    MongoCredential.CreateCredential(db, username, password)
-                };
+                credential = MongoCredential.CreateCredential(db, username, password);
             }
 
             var settings = new MongoClientSettings
             {
-                UseSsl = true,
-                Credentials = credentials,
+                UseTls = true,
+                Credential = credential,
                 ConnectionMode = ConnectionMode.Automatic,
                 Servers = mongoNodes.Select(x => new MongoServerAddress(x)),
                 SslSettings = new SslSettings
@@ -147,8 +143,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             };
 
             var client = new MongoClient(settings);
-            MongoServer server = client.GetServer();
-            _mongoDatabase = server.GetDatabase(databaseName);
+            _mongoDatabase = client.GetDatabase(databaseName);
         }
 
         public event TimeoutInsertedDelegate TimeoutInserted;
@@ -166,8 +161,11 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                           mapper.Mappings.First(m => m.MessageType == typeof(Message));
 
             var collectionName = typeof(T).Name;
-            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
-            collection.CreateIndex("CorrelationId");
+            IMongoCollection<MongoDbSslData<T>> collection = _mongoDatabase.GetCollection<MongoDbSslData<T>>(collectionName);
+            var indexOptions = new CreateIndexOptions();
+            var indexKeys = Builders<MongoDbSslData<T>>.IndexKeys.Ascending("Data.CorrelationId");
+            var indexModel = new CreateIndexModel<MongoDbSslData<T>>(indexKeys, indexOptions);
+            collection.Indexes.CreateOne(indexModel);
 
             object msgPropValue = null;
 
@@ -207,10 +205,9 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                 throw new Exception("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
             }
 
-            var lambda = Expression.Lambda<Func<MongoDbSslData<T>, bool>>(expression, pe);
-            IMongoQuery query = Query<MongoDbSslData<T>>.Where(lambda);
-            
-            return collection.FindOneAs<MongoDbSslData<T>>(query);
+            Expression<Func<MongoDbSslData<T>, bool>> lambda = Expression.Lambda<Func<MongoDbSslData<T>, bool>>(expression, pe);
+
+            return collection.AsQueryable().FirstOrDefault(lambda);
         }
 
         /// <summary>
@@ -223,8 +220,11 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         {
             var collectionName = GetCollectionName(data);
 
-            MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
-            collection.CreateIndex("CorrelationId");
+            IMongoCollection<MongoDbSslData<IProcessManagerData>> collection = _mongoDatabase.GetCollection<MongoDbSslData<IProcessManagerData>>(collectionName);
+            var indexOptions = new CreateIndexOptions();
+            var indexKeys = Builders<MongoDbSslData<IProcessManagerData>>.IndexKeys.Ascending("Data.CorrelationId");
+            var indexModel = new CreateIndexModel<MongoDbSslData<IProcessManagerData>>(indexKeys, indexOptions);
+            collection.Indexes.CreateOne(indexModel);
 
             var mongoDbData = new MongoDbSslData<IProcessManagerData>
             {
@@ -233,7 +233,8 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                 Id = Guid.NewGuid()
             };
 
-            collection.FindAndModify(Query.EQ("CorrelationId", mongoDbData.Data.CorrelationId), SortBy.Null, Update.Replace(mongoDbData), false, true);
+            var filter = Builders<MongoDbSslData<IProcessManagerData>>.Filter.Eq("Data.CorrelationId", mongoDbData.Data.CorrelationId);
+            collection.ReplaceOne(filter, mongoDbData, new ReplaceOptions { IsUpsert = true});
         }
 
         /// <summary>
@@ -245,17 +246,22 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         {
             var collectionName = GetCollectionName(persistanceData.Data);
 
-            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
-            collection.CreateIndex("CorrelationId");
+            IMongoCollection<MongoDbSslData<T>> collection = _mongoDatabase.GetCollection<MongoDbSslData<T>>(collectionName);
+            var indexOptions = new CreateIndexOptions();
+            var indexKeys = Builders<MongoDbSslData<T>>.IndexKeys.Ascending("Data.CorrelationId");
+            var indexModel = new CreateIndexModel<MongoDbSslData<T>>(indexKeys, indexOptions);
+            collection.Indexes.CreateOne(indexModel);
 
             var versionData = (MongoDbSslData<T>)persistanceData;
 
             int currentVersion = versionData.Version;
-            var query = Query.And(Query.EQ("Data.CorrelationId", versionData.Data.CorrelationId), Query.EQ("Version", currentVersion));
+            var filter =
+                Builders<MongoDbSslData<T>>.Filter.Eq("Data.CorrelationId", versionData.Data.CorrelationId) &
+                Builders<MongoDbSslData<T>>.Filter.Eq(_ => _.Version, currentVersion);
             versionData.Version += 1;
-            var result = collection.FindAndModify(query, SortBy.Null, Update.Replace(versionData));
+            var result = collection.ReplaceOne(filter, versionData);
 
-            if (result.ModifiedDocument == null)
+            if (result.IsAcknowledged && result.ModifiedCount == 0)
                 throw new ArgumentException(string.Format("Possible Concurrency Error. ProcessManagerData with CorrelationId {0} and Version {1} could not be updated.", versionData.Data.CorrelationId, versionData.Version));
         }
 
@@ -267,30 +273,34 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         {
             var collectionName = GetCollectionName(persistanceData.Data);
 
-            MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
-            collection.CreateIndex("CorrelationId");
+            IMongoCollection<IPersistanceData<T>> collection = _mongoDatabase.GetCollection<IPersistanceData<T>>(collectionName);
+            var indexOptions = new CreateIndexOptions();
+            var indexKeys = Builders<IPersistanceData<T>>.IndexKeys.Ascending("Data.CorrelationId");
+            var indexModel = new CreateIndexModel<IPersistanceData<T>>(indexKeys, indexOptions);
+            collection.Indexes.CreateOne(indexModel);
 
-            collection.Remove(Query.EQ("Data.CorrelationId", persistanceData.Data.CorrelationId));
+            var filter = Builders<IPersistanceData<T>>.Filter.Eq("Data.CorrelationId", persistanceData.Data.CorrelationId);
+            collection.DeleteOne(filter);
         }
 
         public void InsertTimeout(TimeoutData timeoutData)
         {
-            MongoCollection collection = _mongoDatabase.GetCollection(TimeoutsCollectionName);
-            collection.CreateIndex("Id");
+            IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            var indexOptions = new CreateIndexOptions();
+            var indexKeys = Builders<TimeoutData>.IndexKeys.Ascending("Id");
+            var indexModel = new CreateIndexModel<TimeoutData>(indexKeys, indexOptions);
+            collection.Indexes.CreateOne(indexModel);
 
-            collection.Insert(timeoutData);
+            collection.InsertOne(timeoutData);
 
-            if (TimeoutInserted != null)
-            {
-                TimeoutInserted(timeoutData.Time);
-            }
+            TimeoutInserted?.Invoke(timeoutData.Time);
         }
 
         public TimeoutsBatch GetTimeoutsBatch()
         {
             var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
 
-            MongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
             DateTime utcNow = DateTime.UtcNow;
 
@@ -298,29 +308,28 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             bool doQuery = true;
             while (doQuery)
             {
-                var args = new FindAndModifyArgs
-                {
-                    Query = Query.And(Query.EQ("Dispatched", false), Query.EQ("Locked", false), Query.LTE("Time", utcNow)),
-                    Update = Update<TimeoutData>.Set(c => c.Locked, true),
-                    Upsert = false,
-                    VersionReturned = FindAndModifyDocumentVersion.Original
-                };
-                FindAndModifyResult result = collection.FindAndModify(args);
+                var filter1 = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, false) &
+                              Builders<TimeoutData>.Filter.Lte(_ => _.Time, utcNow);
 
-                if (result.ModifiedDocument == null)
+                var update = Builders<TimeoutData>.Update.Set(_ => _.Locked, true);
+                var result = collection.UpdateOne(filter1, update);
+
+                if (result.ModifiedCount == 0)
                 {
                     doQuery = false;
                 }
                 else
                 {
-                    retval.DueTimeouts.Add(result.GetModifiedDocumentAs<TimeoutData>());
+                    var filter2 = Builders<TimeoutData>.Filter.Eq(s => s.Id, result.UpsertedId);
+                    retval.DueTimeouts.Add(collection.Find(filter2).First());
                 }
             }
 
             // Get next query time
             var nextQueryTime = DateTime.MaxValue;
-            var upcomingTimeoutsRes = collection.Find(Query.GT("Time", utcNow));
-            foreach (TimeoutData upcomingTimeout in upcomingTimeoutsRes)
+            var filter = Builders<TimeoutData>.Filter.Eq(_=>_.Time, utcNow);
+            var upcomingTimeoutsRes = collection.Find(filter);
+            foreach (TimeoutData upcomingTimeout in upcomingTimeoutsRes.ToList())
             {
                 if (upcomingTimeout.Time < nextQueryTime)
                 {
@@ -340,14 +349,12 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
         public void RemoveDispatchedTimeout(Guid id)
         {
-            MongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
-            var args = new FindAndRemoveArgs
-            {
-                Query = Query.And(Query.EQ("Locked", true), Query.EQ("_id", id))
-            };
+            var filter = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, true) &
+                          Builders<TimeoutData>.Filter.Lte(_ => _.Id, id);
 
-            collection.FindAndRemove(args);
+            collection.DeleteOne(filter);
         }
 
         private static string GetCollectionName<T>(T data) where T : class, IProcessManagerData

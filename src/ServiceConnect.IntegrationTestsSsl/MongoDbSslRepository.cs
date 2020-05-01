@@ -1,39 +1,16 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
-
-//This program is free software; you can redistribute it and/or
-//modify it under the terms of the GNU General Public License
-//as published by the Free Software Foundation; either version 2
-//of the License, or (at your option) any later version.
-
-//This program is distributed in the hope that it will be useful,
-//but WITHOUT ANY WARRANTY; without even the implied warranty of
-//MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//GNU General Public License for more details.
-
-//You should have received a copy of the GNU General Public License
-//along with this program; if not, write to the Free Software
-//Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using MongoDB.Driver;
-using ServiceConnect.Interfaces;
 
-namespace ServiceConnect.Persistance.MongoDbSsl
+namespace ServiceConnect.IntegrationTestsSsl
 {
-    public class MongoDBSslAggregatorPersistor : IAggregatorPersistor
+    public class MongoDbSslRepository
     {
-        private readonly IMongoCollection<MongoDbSslData<object>> _collection;
+        public IMongoDatabase MongoDatabase { get; }
 
-        /// <summary>
-        /// Constructor
-        /// </summary>
-        /// <param name="connectionString"></param>
-        /// <param name="databaseName"></param>
-        /// <param name="collectionName"></param>
-        public MongoDBSslAggregatorPersistor(string connectionString, string databaseName, string collectionName)
+        public MongoDbSslRepository(string connectionString, string databaseName)
         {
             var connectionParts = connectionString.Split(',');
             string nodes = string.Empty;
@@ -46,29 +23,31 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
             foreach (string connectionPart in connectionParts)
             {
-                var nameValue = connectionPart.Split('=');
-                switch (nameValue[0].ToLower())
+                var assignmentIndex = connectionPart.IndexOf('=');
+                var nameValue = connectionPart.Substring(0, assignmentIndex);
+
+                switch (nameValue.ToLower())
                 {
                     case "nodes":
-                        nodes = nameValue[1];
+                        nodes = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "userdb":
-                        userdb = nameValue[1];
+                        userdb = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "username":
-                        username = nameValue[1];
+                        username = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "password":
-                        password = nameValue[1];
+                        password = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "certpath":
-                        certPath = nameValue[1];
+                        certPath = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "cert":
-                        cert = nameValue[1];
+                        cert = connectionPart.Substring(assignmentIndex + 1);
                         break;
                     case "certpassword":
-                        certPassword = nameValue[1];
+                        certPassword = connectionPart.Substring(assignmentIndex + 1);
                         break;
                 }
             }
@@ -92,7 +71,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                         new X509Certificate2(certPath, certPassword)
                     };
                 }
-                
+
             }
 
             if (!string.IsNullOrEmpty(cert))
@@ -141,38 +120,8 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             };
 
             var client = new MongoClient(settings);
-            var mongoDatabase = client.GetDatabase(databaseName);
-            _collection = mongoDatabase.GetCollection<MongoDbSslData<object>>(collectionName);
-        }
+            MongoDatabase = client.GetDatabase(databaseName);
 
-        public void InsertData(object data, string name)
-        {
-            _collection.InsertOne(new MongoDbSslData<object>
-            {
-                Name = name,
-                Data = data,
-                Version = 1
-            });
-        }
-
-        public IList<object> GetData(string name)
-        {
-            var filter = Builders<MongoDbSslData<object>>.Filter.Eq(_ => _.Name, name);
-            return _collection.Find(filter).ToList().Select(x => x.Data).ToList();
-        }
-
-        public void RemoveData(string name, Guid correlationsId)
-        {
-            var filter = Builders<MongoDbSslData<object>>.Filter.Eq(_ => _.Name, name) &
-                         Builders<MongoDbSslData<object>>.Filter.Eq("Data.CorrelationId", correlationsId);
-
-            _collection.DeleteMany(filter);
-        }
-        
-        public int Count(string name)
-        {
-            var filter = Builders<MongoDbSslData<object>>.Filter.Eq(_ => _.Name, name);
-            return Convert.ToInt32(_collection.CountDocuments(filter));
         }
     }
 }
