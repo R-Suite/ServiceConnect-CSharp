@@ -230,7 +230,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             {
                 Data = data,
                 Version = 1,
-                Id = Guid.NewGuid()
+                //Id = Guid.NewGuid()
             };
 
             var filter = Builders<MongoDbSslData<IProcessManagerData>>.Filter.Eq("Data.CorrelationId", mongoDbData.Data.CorrelationId);
