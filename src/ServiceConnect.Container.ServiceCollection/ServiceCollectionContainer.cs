@@ -78,13 +78,13 @@ namespace ServiceConnect.Container.ServiceCollection
             var retval = new List<HandlerReference>();
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.ServiceType.GetTypeInfo().GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.ImplementationInstance.GetType().GetTypeInfo().GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
                     MessageType = instance.ServiceType.GetGenericArguments()[0],
-                    HandlerType = instance.ImplementationType,
+                    HandlerType = instance.ImplementationInstance.GetType(),
                     RoutingKeys = routingKeys
                 });
             }
@@ -100,13 +100,13 @@ namespace ServiceConnect.Container.ServiceCollection
 
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.ServiceType.GetTypeInfo().GetCustomAttributes(false);
+                IEnumerable<object> attrs = instance.ImplementationInstance.GetType().GetTypeInfo().GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
                     MessageType = instance.ServiceType.GetGenericArguments()[0],
-                    HandlerType = instance.ImplementationType,
+                    HandlerType = instance.ImplementationInstance.GetType(),
                     RoutingKeys = routingKeys
                 });
             }
@@ -147,7 +147,7 @@ namespace ServiceConnect.Container.ServiceCollection
         {
             if (_serviceCollection.Any(v => v.ServiceType == typeof(T)))
             {
-                ConstructorInfo ctor = _serviceCollection.First(s => s.ServiceType == typeof(T)).ImplementationType.GetTypeInfo().GetConstructors().First();
+                ConstructorInfo ctor = _serviceCollection.First(s => s.ServiceType == typeof(T)).ImplementationInstance.GetType().GetTypeInfo().GetConstructors().First();
 
                 IList<object> dependecies = new List<object>();
                 ParameterInfo[] ctorParams = ctor.GetParameters();
