@@ -78,13 +78,14 @@ namespace ServiceConnect.Container.ServiceCollection
             var retval = new List<HandlerReference>();
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.ImplementationInstance.GetType().GetTypeInfo().GetCustomAttributes(false);
+                var implementationType = instance.ImplementationType ?? instance.ImplementationInstance.GetType();
+                IEnumerable<object> attrs = implementationType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
                     MessageType = instance.ServiceType.GetGenericArguments()[0],
-                    HandlerType = instance.ImplementationInstance.GetType(),
+                    HandlerType = implementationType,
                     RoutingKeys = routingKeys
                 });
             }
@@ -100,13 +101,14 @@ namespace ServiceConnect.Container.ServiceCollection
 
             foreach (var instance in instances)
             {
-                IEnumerable<object> attrs = instance.ImplementationInstance.GetType().GetTypeInfo().GetCustomAttributes(false);
+                var implementationType = instance.ImplementationType ?? instance.ImplementationInstance.GetType();
+                IEnumerable<object> attrs = implementationType.GetCustomAttributes(false);
                 var routingKeys = attrs.OfType<RoutingKey>().Select(rk => rk.GetValue()).ToList();
 
                 retval.Add(new HandlerReference
                 {
                     MessageType = instance.ServiceType.GetGenericArguments()[0],
-                    HandlerType = instance.ImplementationInstance.GetType(),
+                    HandlerType = implementationType,
                     RoutingKeys = routingKeys
                 });
             }
@@ -119,6 +121,12 @@ namespace ServiceConnect.Container.ServiceCollection
             if (_serviceCollection.Any(v => v.ImplementationType == handlerType))
             {
                 var serviceDescriptor = _serviceCollection.First(s => s.ImplementationType == handlerType);
+                return _serviceCollection.BuildServiceProvider().GetRequiredService(serviceDescriptor.ServiceType);
+            }
+
+            if (_serviceCollection.Any(v => v.ImplementationInstance.GetType() == handlerType))
+            {
+                var serviceDescriptor = _serviceCollection.First(s => s.ImplementationInstance.GetType() == handlerType);
                 return _serviceCollection.BuildServiceProvider().GetRequiredService(serviceDescriptor.ServiceType);
             }
 
@@ -147,7 +155,9 @@ namespace ServiceConnect.Container.ServiceCollection
         {
             if (_serviceCollection.Any(v => v.ServiceType == typeof(T)))
             {
-                ConstructorInfo ctor = _serviceCollection.First(s => s.ServiceType == typeof(T)).ImplementationInstance.GetType().GetTypeInfo().GetConstructors().First();
+                var instance = _serviceCollection.First(s => s.ServiceType == typeof(T));
+                var implementationType = instance.ImplementationType ?? instance.ImplementationInstance.GetType();
+                ConstructorInfo ctor = implementationType.GetTypeInfo().GetConstructors().First();
 
                 IList<object> dependecies = new List<object>();
                 ParameterInfo[] ctorParams = ctor.GetParameters();
