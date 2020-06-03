@@ -72,6 +72,7 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 connectionFactory.Ssl = new SslOption
                 {
+                    Version = _transportSettings.Version,
                     Enabled = true,
                     AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
                     ServerName = _transportSettings.ServerName,
