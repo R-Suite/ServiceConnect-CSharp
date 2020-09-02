@@ -16,7 +16,7 @@ namespace AsyncProcessManager.Consumer
             var bus = Bus.Initialize(config =>
             {
                 config.SetQueueName("AsyncProcessManager.Consumer");
-                config.SetThreads(10);
+                config.SetNumberOfClients(10);
                 config.SetHost("localhost");
             });
             bus.StartConsuming();

@@ -19,21 +19,21 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using MongoDB.Driver;
-using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistance.MongoDbSsl
 {
     public class MongoDBSslAggregatorPersistor : IAggregatorPersistor
     {
-        private readonly MongoCollection<MongoDbSslData<object>> _collection;
+        private readonly IMongoCollection<MongoDbSslData<object>> _collection;
 
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="connectionString"></param>
         /// <param name="databaseName"></param>
-        public MongoDBSslAggregatorPersistor(string connectionString, string databaseName)
+        /// <param name="collectionName"></param>
+        public MongoDBSslAggregatorPersistor(string connectionString, string databaseName, string collectionName)
         {
             var connectionParts = connectionString.Split(',');
             string nodes = string.Empty;
@@ -113,7 +113,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                 }
             }
 
-            List<MongoCredential> credentials = null;
+            MongoCredential credential = null;
             if (!string.IsNullOrEmpty(username))
             {
                 string db = "admin";
@@ -123,16 +123,13 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                     db = userdb;
                 }
 
-                credentials = new List<MongoCredential>
-                {
-                    MongoCredential.CreateCredential(db, username, password)
-                };
+                credential = MongoCredential.CreateCredential(db, username, password);
             }
 
             var settings = new MongoClientSettings
             {
-                UseSsl = true,
-                Credentials = credentials,
+                UseTls = true,
+                Credential = credential,
                 ConnectionMode = ConnectionMode.Automatic,
                 Servers = mongoNodes.Select(x => new MongoServerAddress(x)),
                 SslSettings = new SslSettings
@@ -144,14 +141,13 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             };
 
             var client = new MongoClient(settings);
-            MongoServer server = client.GetServer();
-            var mongoDatabase = server.GetDatabase(databaseName);
-            _collection = mongoDatabase.GetCollection<MongoDbSslData<object>>("Aggregator");
+            var mongoDatabase = client.GetDatabase(databaseName);
+            _collection = mongoDatabase.GetCollection<MongoDbSslData<object>>(collectionName);
         }
 
         public void InsertData(object data, string name)
         {
-            _collection.Insert(new MongoDbSslData<object>
+            _collection.InsertOne(new MongoDbSslData<object>
             {
                 Name = name,
                 Data = data,
@@ -161,22 +157,22 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
         public IList<object> GetData(string name)
         {
-            return _collection.Find(Query<MongoDbSslData<object>>.EQ(x => x.Name, name)).Select(x => x.Data).ToList();
+            var filter = Builders<MongoDbSslData<object>>.Filter.Eq(_ => _.Name, name);
+            return _collection.Find(filter).ToList().Select(x => x.Data).ToList();
         }
 
         public void RemoveData(string name, Guid correlationsId)
         {
-            _collection.Remove(
-                Query.And(
-                    Query<MongoDbSslData<object>>.EQ(x => x.Name, name),
-                    Query<MongoDbSslData<Message>>.EQ(x => x.Data.CorrelationId, correlationsId)
-                )
-            );
+            var filter = Builders<MongoDbSslData<object>>.Filter.Eq(_ => _.Name, name) &
+                         Builders<MongoDbSslData<object>>.Filter.Eq("Data.CorrelationId", correlationsId);
+
+            _collection.DeleteMany(filter);
         }
         
         public int Count(string name)
         {
-            return Convert.ToInt32(_collection.Count(Query<MongoDbSslData<object>>.EQ(x => x.Name, name)));
+            var filter = Builders<MongoDbSslData<object>>.Filter.Eq(_ => _.Name, name);
+            return Convert.ToInt32(_collection.CountDocuments(filter));
         }
     }
 }

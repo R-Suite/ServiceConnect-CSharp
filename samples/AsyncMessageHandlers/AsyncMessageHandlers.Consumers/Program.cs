@@ -16,7 +16,7 @@ namespace AsyncMessageHandlers.Consumers
             var bus = Bus.Initialize(config =>
             {
                 config.SetQueueName("AsyncTest.Consumer");
-                config.SetThreads(10);
+                config.SetNumberOfClients(10);
                 config.SetHost("localhost");
             });
             bus.StartConsuming();

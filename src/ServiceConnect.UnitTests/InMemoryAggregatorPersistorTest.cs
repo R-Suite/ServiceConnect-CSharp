@@ -14,7 +14,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldInsertData()
         {
             // Arrange
-            IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty);
+            IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
 
             // Act
             aggregatorPersistor.InsertData("TestData", "key1");
@@ -28,7 +28,7 @@ namespace ServiceConnect.UnitTests
         {
             // Arrange
             var corrId = Guid.NewGuid();
-            IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty);
+            IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             aggregatorPersistor.InsertData(new Message(corrId), "key1");
 
             // Act

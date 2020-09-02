@@ -10,6 +10,7 @@ namespace Retries.Consumer
             Console.WriteLine("*********** Consumer ***********");
             Bus.Initialize(x =>
             {
+                x.SetHost("localhost");
                 x.SetQueueName("RetryTest");
             });
             

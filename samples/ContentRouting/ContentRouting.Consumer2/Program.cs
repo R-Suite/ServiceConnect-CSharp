@@ -13,7 +13,7 @@ namespace ContentRouting.Consumer2
                 x.ScanForMesssageHandlers = true;
                 x.SetQueueName("Consumer2");
                 x.SetHost("localhost");
-                x.SetThreads(20);
+                x.SetNumberOfClients(20);
             });
 
             bus.StartConsuming();

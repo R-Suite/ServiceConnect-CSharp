@@ -24,7 +24,6 @@ using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
 using System.Xml.XPath;
-using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
 using IsolationLevel = System.Data.IsolationLevel;
@@ -36,7 +35,6 @@ namespace ServiceConnect.Persistance.SqlServer
     /// </summary>
     public class SqlServerProcessManagerFinder : IProcessManagerFinder
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(SqlServerProcessManagerFinder));
         private readonly string _connectionString;
         private readonly int _commandTimeout = 30;
         private const string TimeoutsTableName = "Timeouts";
@@ -89,16 +87,7 @@ namespace ServiceConnect.Persistance.SqlServer
             }
             sbXPath.Append(")[1]");
 
-            XPathExpression xPathExpression;
-            try
-            {
-                xPathExpression = XPathExpression.Compile(sbXPath.ToString());
-            }
-            catch (XPathException ex)
-            {
-                Logger.ErrorFormat("Error compiling xpath expression. {0}", ex.Message);
-                throw;
-            }
+            XPathExpression xPathExpression = XPathExpression.Compile(sbXPath.ToString());
 
             // Message Propery Value
             object msgPropValue = mapping.MessageProp.Invoke(message);

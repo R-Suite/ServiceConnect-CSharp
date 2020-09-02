@@ -31,17 +31,19 @@ namespace ServiceConnect.UnitTests
     public class MessageHandlerProcessorTest
     {
         private readonly Mock<IBusContainer> _mockContainer;
+        private Mock<ILogger> _mockLogger;
 
         public MessageHandlerProcessorTest()
         {
             _mockContainer = new Mock<IBusContainer>();
+            _mockLogger = new Mock<ILogger>();
         }
 
         [Fact]
         public void ProcessMessageShouldGetTheCorrectHandlerTypesFromContainer()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             // Act
             messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
@@ -57,7 +59,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldExecuteTheCorrectHandlers()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -97,7 +99,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldExecuteTheCorrectBaseMessageHandlers()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -131,7 +133,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldExecuteTheCorrectHandlerWithRoutingKeyAttribute()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -166,7 +168,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldExecuteTheCorrectHandlerWithCatchAllRoutingKeyAttribute()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -201,7 +203,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldExecuteTheCorrectHandlerWithMultipleRoutingKeyAttributes()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             var message1HandlerReference = new HandlerReference
             {
@@ -236,7 +238,7 @@ namespace ServiceConnect.UnitTests
         public void ShouldExecuteAsyncHandler()
         {
             // Arrange
-            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object);
+            var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             var message1HandlerReference = new HandlerReference
             {

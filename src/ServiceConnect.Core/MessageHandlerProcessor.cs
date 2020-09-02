@@ -29,13 +29,13 @@ namespace ServiceConnect.Core
 {
     public class MessageHandlerProcessor : IMessageHandlerProcessor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(MessageHandlerProcessor));
-
         private readonly IBusContainer _container;
+        private readonly ILogger _logger;
 
-        public MessageHandlerProcessor(IBusContainer container)
+        public MessageHandlerProcessor(IBusContainer container, ILogger logger)
         {
             _container = container;
+            _logger = logger;
         }
 
         public async Task ProcessMessage<T>(string message, IConsumeContext context) where T : Message
@@ -100,28 +100,22 @@ namespace ServiceConnect.Core
 
         private async Task ExecuteHandler<T>(T message, Type handlerType, IList<string> routingKeys, IConsumeContext context) where T : Message
         {
-            Logger.DebugFormat("Handler = {0}. Handler RoutingKeys = {1}, Message = {2}", handlerType.Name, JsonConvert.SerializeObject(routingKeys), typeof(T).Name);
-
             // Ignore irelevant handlers
             if (null != context && null != context.Headers && context.Headers.ContainsKey("RoutingKey"))
             {
                 string msgRoutingKey = Encoding.UTF8.GetString((byte[])context.Headers["RoutingKey"]);
-
-                Logger.DebugFormat("Msg RoutingKey = {0}.", msgRoutingKey);
-
+                
                 if (!routingKeys.Contains(msgRoutingKey) && !routingKeys.Contains("#"))
                 {
-                    Logger.Debug("Ignoring handler execution.");
+                    _logger.Debug("Ignoring handler execution.");
                     return;
                 }
             }
             else
             {
-                Logger.Debug("Msg with no RoutingKeys.");
-
                 if (null != routingKeys && routingKeys.Any())
                 {
-                    Logger.Debug("Ignoring handler execution.");
+                    _logger.Debug("Ignoring handler execution.");
                     return;
                 }
             }
@@ -145,7 +139,7 @@ namespace ServiceConnect.Core
             }
             catch (Exception ex)
             {
-                Logger.Error(string.Format("Error executing handler. {0}", handlerType.FullName), ex);
+                _logger.Error(string.Format("Error executing handler. {0}", handlerType.FullName), ex);
                 throw;
             }
         }

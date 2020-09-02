@@ -38,6 +38,7 @@ namespace ServiceConnect
         private const string DefaultDatabaseName = "RMessageBusPersistantStore";
         private const string DefaultConnectionString = "mongodb://localhost/";
         private const string DefaultHost= "localhost";
+        private const string DefaultAggregatorCollectionName = "Aggregator";
 
         #region Private Fields
 
@@ -50,6 +51,7 @@ namespace ServiceConnect
         private Type _containerType = typeof(DefaultBusContainer);
         private IBusContainer _busContainer;
         private IProcessManagerFinder _processManagerFinder;
+        private ILogger _logger;
 
         #endregion
 
@@ -67,11 +69,12 @@ namespace ServiceConnect
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
+        public string PersistenceStoreAggregatorCollectionName { get; set; }
         public ITransportSettings TransportSettings { get; set; }
         public IDictionary<string, IList<string>> QueueMappings { get; set; }
         public Action<Exception> ExceptionHandler { get; set; }
         public bool AddBusToContainer { get; set; }
-        public int Threads { get; set; }
+        public int Clients { get; set; }
         public IList<Type> BeforeConsumingFilters { get; set; }
         public IList<Type> AfterConsumingFilters { get; set; }
         public IList<Type> OutgoingFilters { get; set; }
@@ -106,7 +109,7 @@ namespace ServiceConnect
             MessageBusWriteStream = typeof (MessageBusWriteStream);
             AggregatorProcessor = typeof(AggregatorProcessor);
 
-            Threads = 1;
+            Clients = 1;
 
             BeforeConsumingFilters = new List<Type>();
             AfterConsumingFilters = new List<Type>();
@@ -169,6 +172,16 @@ namespace ServiceConnect
         public void SetContainerType<T>() where T : class, IBusContainer
         {
             _containerType = typeof(T);
+        }
+
+        public void SetLogger(ILogger logger)
+        {
+            _logger = logger;
+        }
+
+        public ILogger GetLogger()
+        {
+            return _logger ?? (_logger = new Logger());
         }
 
         /// <summary>
@@ -287,7 +300,7 @@ namespace ServiceConnect
         /// <returns></returns>
         public IConsumer GetConsumer()
         {
-            return (IConsumer)Activator.CreateInstance(ConsumerType);
+            return (IConsumer)Activator.CreateInstance(ConsumerType, GetLogger());
         }
 
         /// <summary>
@@ -296,7 +309,7 @@ namespace ServiceConnect
         /// <returns></returns>
         public IProducer GetProducer()
         {
-            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, QueueMappings);
+            return (IProducer)Activator.CreateInstance(ProducerType, TransportSettings, QueueMappings, GetLogger());
         }
 
         /// <summary>
@@ -331,7 +344,7 @@ namespace ServiceConnect
 
         public IAggregatorPersistor GetAggregatorPersistor()
         {
-            return (IAggregatorPersistor)Activator.CreateInstance(AggregatorPersistor, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
+            return (IAggregatorPersistor)Activator.CreateInstance(AggregatorPersistor, PersistenceStoreConnectionString, PersistenceStoreDatabaseName, PersistenceStoreAggregatorCollectionName);
         }
 
         public IRequestConfiguration GetRequestConfiguration(Guid requestMessageId)
@@ -362,15 +375,14 @@ namespace ServiceConnect
 
         public IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
         {
-            return (IAggregatorProcessor)Activator.CreateInstance(AggregatorProcessor, aggregatorPersistor, container, handlerType);
+            return (IAggregatorProcessor)Activator.CreateInstance(AggregatorProcessor, aggregatorPersistor, container, handlerType, GetLogger());
         }
 
-        public void SetThreads(int numberOfThreads)
+        public void SetNumberOfClients(int numberOfClients)
         {
-            Threads = numberOfThreads;
+            Clients = numberOfClients;
         }
         
-
         #region Private Methods
 
         private void SetTransportSettings()
@@ -383,6 +395,7 @@ namespace ServiceConnect
             // Set defaults
             PersistenceStoreDatabaseName = PersistenceStoreDatabaseName ?? DefaultDatabaseName;
             PersistenceStoreConnectionString = PersistenceStoreConnectionString ?? DefaultConnectionString;
+            PersistenceStoreAggregatorCollectionName = PersistenceStoreAggregatorCollectionName ?? DefaultAggregatorCollectionName;
         }
 
         private ITransportSettings GetTransportSettingsFromDefaults()

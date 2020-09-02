@@ -68,7 +68,7 @@ namespace BusDisposeTest
             // Start Bus
             _bus = Bus.Initialize(config =>
             {
-                //config.SetThreads(2);
+                //config.SetNumberOfClients(2);
                 //config.SetContainer(ObjectFactory.Container);
                 config.SetContainerType<DefaultBusContainer>();
                 config.SetHost("localhost");

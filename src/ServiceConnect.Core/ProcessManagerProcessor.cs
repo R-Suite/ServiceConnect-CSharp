@@ -18,9 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Threading.Tasks;
-using Common.Logging;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
 
@@ -28,15 +26,15 @@ namespace ServiceConnect.Core
 {
     public class ProcessManagerProcessor : IProcessManagerProcessor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(ProcessManagerProcessor));
-
         private readonly IProcessManagerFinder _processManagerFinder;
         private readonly IBusContainer _container;
+        private readonly ILogger _logger;
 
-        public ProcessManagerProcessor(IProcessManagerFinder processManagerFinder, IBusContainer container)
+        public ProcessManagerProcessor(IProcessManagerFinder processManagerFinder, IBusContainer container, ILogger logger)
         {
             _processManagerFinder = processManagerFinder;
             _container = container;
+            _logger = logger;
         }
 
         public async Task ProcessMessage<T>(string message, IConsumeContext context) where T : Message
@@ -135,7 +133,7 @@ namespace ServiceConnect.Core
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error(
+                    _logger.Error(
                         string.Format("Error executing process manager start handler. {0}",
                             processManagerInstance.HandlerType.FullName), ex);
                     throw;
@@ -197,7 +195,7 @@ namespace ServiceConnect.Core
 
                     if (null == persistanceData)
                     {
-                        Logger.Warn(string.Format("ProcessManagerData not found for {0}. message.CorrelationId = {1}", handlerReference.HandlerType, messageObject.CorrelationId));
+                        _logger.Warn(string.Format("ProcessManagerData not found for {0}. message.CorrelationId = {1}", handlerReference.HandlerType, messageObject.CorrelationId));
                         continue;
                     }
 
@@ -245,7 +243,7 @@ namespace ServiceConnect.Core
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error(
+                    _logger.Error(
                         string.Format("Error executing process manager handler. {0}", handlerReference.HandlerType.FullName),
                         ex);
                     throw;

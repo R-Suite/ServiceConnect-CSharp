@@ -1,19 +1,12 @@
 [![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-**4.0.* (pre)release version supports .NET Core**
+**_ServiceConnect 5.0.0 is available at [https://www.nuget.org/packages/ServiceConnect](https://www.nuget.org/packages/ServiceConnect/)_**
+* **New in ServiceConnect 5.0.0**
+    - Async consumers
+    - Priority Queues support
+    - Bug Fixes
 
-**_ServiceConnect 3.0.0 is available at [https://www.nuget.org/packages/ServiceConnect] (https://www.nuget.org/packages/ServiceConnect/)_**
-* **New in ServiceConnect 3.0.0**
-    - Support for multi-threaded consumers
-    - SSL support
-    - Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/ServiceConnect/tree/master/samples/Filters) sample application for a complete example.
-    - Removed dependency on StructureMap. (To use StructureMap, pull down _ServiceConnect.Container.StructureMap_ nuget and set
-     ```Bus.Initialize(config =>config.SetContainerType<StructureMapContainer>());``` when initializing the bus. You can also initialize the bus with your own container by specifying ```config.InitializeContainer(myStructureMapContainer)```)
-    - Ninject container support ```Bus.Initialize(config =>config.SetContainerType<NinjectContainer>());```
-
-A simple, easy to use asynchronous messaging framework for .NET.
-
-In order to get started, have a look at the documentation at [http://serviceconnect.io/guides](http://serviceconnect.io/guides)
+ServiceConnect is a simple, easy to use asynchronous messaging framework for .NET.
 
 ## Features
 
@@ -29,8 +22,11 @@ In order to get started, have a look at the documentation at [http://serviceconn
 * Streaming
 * Retries
 * Auditing
+* .NET Core
 * SSL Support
 * Polymorphic message dispatch
+* Multi-threaded consumers
+* Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/ServiceConnect/tree/master/samples/Filters) sample application for a complete example.
 
 ## Project Maturity
 ServiceConnect (recently renamed from R.MessageBus) has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.

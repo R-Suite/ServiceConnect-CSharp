@@ -1,15 +1,12 @@
 ﻿using System;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Common.Logging;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Core
 {
     public class ExpiredTimeoutsPoller
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(ExpiredTimeoutsPoller));
         private readonly IProcessManagerFinder _processManagerFinder;
         private readonly IBus _bus;
         readonly object _locker = new object();
@@ -98,7 +95,6 @@ namespace ServiceConnect.Core
 
                 NextQueryUtc = (nextQueryTime > maxNextQuery) ? maxNextQuery : nextQueryTime;
 
-                Logger.DebugFormat("Polling next query is at {0}.", NextQueryUtc.ToLocalTime());
             }
         }
     }

@@ -32,15 +32,16 @@ namespace ServiceConnect.Interfaces
         bool AutoStartConsuming { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }
+        string PersistenceStoreAggregatorCollectionName { get; set; }
         ITransportSettings TransportSettings { get; set; }
         IDictionary<string, IList<string>> QueueMappings { get; set; }
         Action<Exception> ExceptionHandler { get; set; }
         bool AddBusToContainer { get; set; }
-        int Threads { get; set; }
         IList<Type> BeforeConsumingFilters { get; set; }
         IList<Type> AfterConsumingFilters { get; set; }
         IList<Type> OutgoingFilters { get; set; }
         bool EnableProcessManagerTimeouts { get; set; }
+        int Clients { get; set; }
 
         /// <summary>
         /// Adds a message queue mapping. 
@@ -206,10 +207,10 @@ namespace ServiceConnect.Interfaces
         IAggregatorProcessor GetAggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType);
 
         /// <summary>
-        /// Sets the number of threads to consume messages on.
+        /// Sets the number of clients to consume messages on.
         /// </summary>
         /// <returns></returns>
-        void SetThreads(int numberOfThreads);
+        void SetNumberOfClients(int numberOfClients);
 
   
         /// <summary>
@@ -217,5 +218,8 @@ namespace ServiceConnect.Interfaces
         /// </summary>
         /// <returns></returns>
         IConsumer GetConsumer();
+
+        void SetLogger(ILogger logger);
+        ILogger GetLogger();
     }
 }

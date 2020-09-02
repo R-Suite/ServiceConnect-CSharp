@@ -75,7 +75,7 @@ namespace ServiceConnect.Filters.MessageDeduplication
             ConnectionStringMongoDb = "mongodb://localhost";
             DatabaseNameMongoDb = "ServiceConnect-Filters-MessageDeduplication";
             CollectionNameMongoDb = "ProcessedMessages";
-            ConnectionStringRedis = "localhost";
+            ConnectionStringRedis = "localhost,abortConnect=false";
             DatabaseIndexRedis = 0;
         }
     }

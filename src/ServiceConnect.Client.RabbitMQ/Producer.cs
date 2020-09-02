@@ -18,7 +18,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using Common.Logging;
 using ServiceConnect.Interfaces;
 using RabbitMQ.Client;
 
@@ -28,20 +27,21 @@ namespace ServiceConnect.Client.RabbitMQ
     {
         private readonly ITransportSettings _transportSettings;
         private readonly IDictionary<string, IList<string>> _queueMappings;
+        private readonly ILogger _logger;
         private IModel _model;
         private IConnection _connection;
         private readonly Object _lock = new Object();
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Producer));
         private ConnectionFactory _connectionFactory;
         private readonly string[] _hosts;
         private readonly long _maxMessageSize;
         private readonly ushort _retryCount;
         private readonly ushort _retryTimeInSeconds;
 
-        public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
+        public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings, ILogger logger)
         {
             _transportSettings = transportSettings;
             _queueMappings = queueMappings;
+            _logger = logger;
             _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
             _hosts = transportSettings.Host.Split(',');
             _retryCount = transportSettings.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
@@ -79,6 +79,7 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 _connectionFactory.Ssl = new SslOption
                 {
+                    Version = _transportSettings.Version,
                     Enabled = true,
                     AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
                     ServerName = _transportSettings.ServerName,
@@ -124,6 +125,17 @@ namespace ServiceConnect.Client.RabbitMQ
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
                 basicProperties.Persistent = true;
+                if (envelope.Headers != null && envelope.Headers.ContainsKey("Priority"))
+                {
+                    try
+                    {
+                        basicProperties.Priority = Convert.ToByte(envelope.Headers["Priority"]);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error("Error setting message priority", ex);
+                    }
+                }
 
                 string exchName = type.FullName.Replace(".", string.Empty);
                 var exchangeName = ConfigureExchange(exchName, "fanout");
@@ -131,7 +143,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 Retry.Do(() => _model.BasicPublish(exchangeName, "", basicProperties, envelope.Body),
                 ex =>
                 {
-                    Logger.Error("Error publishing message", ex);
+                    _logger.Error("Error publishing message", ex);
                     DisposeConnection();
                     RetryConnection();
                 }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
@@ -140,7 +152,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private void RetryConnection()
         {
-            Logger.Debug("In Producer.RetryConnection()");
+            _logger.Debug("In Producer.RetryConnection()");
             CreateConnection();
         }
 
@@ -150,6 +162,17 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.Persistent = true;
+                if (headers != null && headers.ContainsKey("Priority"))
+                {
+                    try
+                    {
+                        basicProperties.Priority = Convert.ToByte(headers["Priority"]);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error("Error setting message priority", ex);
+                    }
+                }
 
                 IList<string> endPoints = _queueMappings[type.FullName];
 
@@ -177,6 +200,17 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.Persistent = true;
+                if (headers != null && headers.ContainsKey("Priority"))
+                {
+                    try
+                    {
+                        basicProperties.Priority = Convert.ToByte(headers["Priority"]);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error("Error setting message priority", ex);
+                    }
+                }
 
                 var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
@@ -228,26 +262,24 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void Disconnect()
         {
-            Logger.Debug("In Producer.Disconnect()");
+            _logger.Debug("In Producer.Disconnect()");
 
             Dispose();
         }
 
         public void Dispose()
         {
-            Logger.Debug("In Producer.Dispose()");
-
             if (_model != null)
             {
                 try
                 {
-                    Logger.Debug("Disposing Model");
+                    _logger.Debug("Disposing Model");
                     _model.Dispose();
                     _model = null;
                 }
                 catch (Exception ex)
                 {
-                    Logger.Warn("Error disposing model", ex);
+                    _logger.Warn("Error disposing model", ex);
                 }
             }
 
@@ -255,12 +287,12 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 try
                 {
-                    Logger.Debug("Disposing connection");
+                    _logger.Debug("Disposing connection");
                     _connection.Dispose();
                 }
                 catch (Exception ex)
                 {
-                    Logger.Warn("Error disposing connection", ex);
+                    _logger.Warn("Error disposing connection", ex);
                 }
                 _connection = null;
             }
@@ -315,7 +347,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception ex)
             {
-                Logger.Warn(string.Format("Error declaring exchange - {0}", ex.Message));
+                _logger.Warn(string.Format("Error declaring exchange - {0}", ex.Message));
             }
 
             return exchangeName;
@@ -341,7 +373,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception e)
             {
-                Logger.Warn("Exception trying to close connection", e);
+                _logger.Warn("Exception trying to close connection", e);
             }
 
             try
@@ -360,9 +392,8 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             catch (Exception e)
             {
-                Logger.Warn("Exception trying to close model", e);
+                _logger.Warn("Exception trying to close model", e);
             }
         }
-
     }
 }

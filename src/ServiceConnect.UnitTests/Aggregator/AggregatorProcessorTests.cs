@@ -59,6 +59,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
             
             var handlerRef = new HandlerReference()
             {
@@ -73,7 +74,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
 
 
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
             
             // Act
             aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -88,6 +89,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
 
             var handlerRef = new HandlerReference()
             {
@@ -102,7 +104,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(10);
             mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -118,6 +120,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
 
             var handlerRef = new HandlerReference()
             {
@@ -132,7 +135,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
 
 
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             // Act
             aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -147,6 +150,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
 
             var handlerRef = new HandlerReference()
             {
@@ -162,7 +166,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.InsertData(It.IsAny<Message>(), It.IsAny<string>()));
 
 
-            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregator = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             // Act
             aggregator.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -178,6 +182,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
 
             var handlerRef = new HandlerReference()
             {
@@ -195,7 +200,7 @@ namespace ServiceConnect.UnitTests.Aggregator
                 new FakeMessage1(Guid.NewGuid())
             });
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -211,6 +216,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
 
             var handlerRef = new HandlerReference()
             {
@@ -228,7 +234,7 @@ namespace ServiceConnect.UnitTests.Aggregator
                 new FakeMessage1(Guid.NewGuid())
             });
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid()){ Username = "Tim"}));
@@ -243,6 +249,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
 
             var handlerRef = new HandlerReference()
             {
@@ -257,7 +264,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(9);
             mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));
@@ -272,6 +279,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             // Arrange
             var mockContainer = new Mock<IBusContainer>();
             var mockAggregatorPersistor = new Mock<IAggregatorPersistor>();
+            var mockLogger = new Mock<ILogger>();
 
             var handlerRef = new HandlerReference()
             {
@@ -289,7 +297,7 @@ namespace ServiceConnect.UnitTests.Aggregator
             mockAggregatorPersistor.Setup(x => x.Count(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(20);
             mockAggregatorPersistor.Setup(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName)).Returns(new List<object>());
 
-            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator));
+            var aggregatorProcessor = new AggregatorProcessor(mockAggregatorPersistor.Object, mockContainer.Object, typeof(FakeAggregator), mockLogger.Object);
 
             // Act
             aggregatorProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())));

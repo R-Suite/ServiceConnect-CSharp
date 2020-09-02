@@ -12,7 +12,7 @@ namespace ProcessManager.Host
             Console.WriteLine("*********** ProcessManager.Host ***********");
             Bus.Initialize(config =>
             {
-                config.SetThreads(1);
+                config.SetNumberOfClients(1);
                 //config.SetProcessManagerFinder<MongoDbProcessManagerFinder>();
                 config.SetProcessManagerFinder<SingletonProcessManagerFinder>();
                 config.SetHost("localhost");

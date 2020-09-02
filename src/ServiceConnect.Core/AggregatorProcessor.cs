@@ -33,22 +33,22 @@ namespace ServiceConnect.Core
     /// </summary>
     public class AggregatorProcessor : IAggregatorProcessor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(AggregatorProcessor));
-
         private readonly IAggregatorPersistor _aggregatorPersistor;
         private readonly IBusContainer _container;
         private readonly Type _handlerType;
+        private readonly ILogger _logger;
         private Timer _timer;
         private Type _type;
         private Type _genericListType;
         private readonly object _lock = new object();
         private TimeSpan _timeout;
 
-        public AggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType)
+        public AggregatorProcessor(IAggregatorPersistor aggregatorPersistor, IBusContainer container, Type handlerType, ILogger logger)
         {
             _aggregatorPersistor = aggregatorPersistor;
             _container = container;
             _handlerType = handlerType;
+            _logger = logger;
         }
 
         /// <summary>
@@ -108,7 +108,7 @@ namespace ServiceConnect.Core
                         }
                         catch (Exception ex)
                         {
-                            Logger.Error("Error executing aggregator execute method", ex);
+                            _logger.Error("Error executing aggregator execute method", ex);
                             throw;
                         }
 
@@ -144,7 +144,7 @@ namespace ServiceConnect.Core
                     }
                     catch (Exception)
                     {
-                        Logger.Error("Error executing aggregator execute method");
+                        _logger.Error("Error executing aggregator execute method");
                         throw;
                     }
                     foreach (var persistedMessage in messages)

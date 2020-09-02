@@ -403,7 +403,7 @@ namespace ServiceConnect.UnitTests
 
         public class FakeConsumer : IConsumer
         {
-            public FakeConsumer()
+            public FakeConsumer(ILogger logger)
             {
                 
             }
@@ -422,7 +422,7 @@ namespace ServiceConnect.UnitTests
 
         public class FakePublisher : IProducer
         {
-            public FakePublisher(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings)
+            public FakePublisher(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings, ILogger logger)
             {
             }
             public void Dispose()

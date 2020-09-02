@@ -32,12 +32,13 @@ namespace ServiceConnect.Persistance.MongoDb
         /// </summary>
         /// <param name="connectionString"></param>
         /// <param name="databaseName"></param>
-        public MongoDBAggregatorPersistor(string connectionString, string databaseName)
+        /// <param name="collectionName"></param>
+        public MongoDBAggregatorPersistor(string connectionString, string databaseName, string collectionName)
         {
             var mongoClient = new MongoClient(connectionString);
             MongoServer server = mongoClient.GetServer();
             var mongoDatabase = server.GetDatabase(databaseName);
-            _collection = mongoDatabase.GetCollection<MongoDbData<object>>("Aggregator");
+            _collection = mongoDatabase.GetCollection<MongoDbData<object>>(collectionName);
         }
 
         public void InsertData(object data, string name)

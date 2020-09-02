@@ -82,13 +82,13 @@ namespace ServiceConnect.UnitTests.Container
             // Assert
             Assert.NotNull(result1);
             Assert.True(result1.GetType().GetTypeInfo().IsGenericType);
-            Assert.Equal(1, result1.GetType().GetGenericArguments().Count());
-            Assert.Equal("Int32", result1.GetType().GetGenericArguments()[0].Name);
+            Assert.Equal(1, result1.GetType().GenericTypeArguments.Count());
+            Assert.Equal("Int32", result1.GetType().GenericTypeArguments[0].Name);
 
             Assert.NotNull(result2);
             Assert.True(result2.GetType().GetTypeInfo().IsGenericType);
             Assert.Equal(1, result2.GetType().GetTypeInfo().GetGenericArguments().Count());
-            Assert.Equal("String", result2.GetType().GetGenericArguments()[0].Name);
+            Assert.Equal("String", result2.GetType().GenericTypeArguments[0].Name);
         }
 
         [Fact]

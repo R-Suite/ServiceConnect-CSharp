@@ -67,7 +67,7 @@ namespace ServiceConnect.UnitTests
             var fakeAggregator = new FakeAggregator();
 
             _mockConfiguration.Setup(x => x.GetAggregatorPersistor()).Returns(mockPersistor.Object);
-            _mockConfiguration.Setup(x => x.Threads).Returns(1);
+            _mockConfiguration.Setup(x => x.Clients).Returns(1);
             _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(new Mock<IMessageHandlerProcessor>().Object);
             _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(new Mock<IProcessManagerProcessor>().Object);
             _mockConfiguration.Setup(x => x.GetAggregatorProcessor(It.IsAny<IAggregatorPersistor>(), It.IsAny<IBusContainer>(), It.IsAny<Type>())).Returns(mockProcessor.Object);
@@ -107,7 +107,7 @@ namespace ServiceConnect.UnitTests
             _mockConfiguration.SetupGet(x => x.AutoStartConsuming).Returns(true);
             _mockConfiguration.SetupGet(x => x.ScanForMesssageHandlers).Returns(false);
             _mockConfiguration.Setup(x => x.SetAuditingEnabled(false));
-            _mockConfiguration.Setup(x => x.Threads).Returns(1);
+            _mockConfiguration.Setup(x => x.Clients).Returns(1);
             _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()));
 
             // Act

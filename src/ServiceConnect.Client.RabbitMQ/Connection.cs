@@ -1,29 +1,33 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using ServiceConnect.Interfaces;
 using RabbitMQ.Client;
-using Common.Logging;
 
 namespace ServiceConnect.Client.RabbitMQ
 {
-    public class Connection : IDisposable
+    public interface IServiceConnectConnection
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(Connection));
+        void Connect();
+        IModel CreateModel();
+        void Dispose();
+    }
 
+    public class Connection : IDisposable, IServiceConnectConnection
+    {
         private readonly ITransportSettings _transportSettings;
         private IConnection _connection;
 
         private readonly string _queueName;
+        private readonly ILogger _logger;
         private readonly bool _heartbeatEnabled;
         private readonly ushort _heartbeatTime;
         private readonly string[] _hosts;
 
-        public Connection(ITransportSettings transportSettings, string queueName)
+        public Connection(ITransportSettings transportSettings, string queueName, ILogger logger)
         {
             _hosts = transportSettings.Host.Split(',');
             _transportSettings = transportSettings;
             _queueName = queueName;
+            _logger = logger;
             _transportSettings = transportSettings;
             _heartbeatEnabled = !transportSettings.ClientSettings.ContainsKey("HeartbeatEnabled") || (bool)transportSettings.ClientSettings["HeartbeatEnabled"];
             _heartbeatTime = transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
@@ -37,7 +41,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private void CreateConnection()
         {
-            Logger.DebugFormat("Creating connection to queue {0}", _queueName);
+            _logger.Debug(string.Format("Creating connection to queue {0}", _queueName));
 
             var connectionFactory = new ConnectionFactory
             {
@@ -68,6 +72,7 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 connectionFactory.Ssl = new SslOption
                 {
+                    Version = _transportSettings.Version,
                     Enabled = true,
                     AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
                     ServerName = _transportSettings.ServerName,

@@ -14,22 +14,16 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
-using Common.Logging;
-using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Core
 {
     public class StreamProcessor : IStreamProcessor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(StreamProcessor));
-
-        private readonly IBusContainer _container;
+       private readonly IBusContainer _container;
 
         public StreamProcessor(IBusContainer container)
         {
@@ -41,17 +35,9 @@ namespace ServiceConnect.Core
             IList<HandlerReference> handlerReferences = _container.GetHandlerTypes(typeof(IStreamHandler<T>)).ToList();
             foreach (HandlerReference handlerReference in handlerReferences)
             {
-                try
-                {
-                    var handler = (IStreamHandler<T>)_container.GetInstance(handlerReference.HandlerType);
-                    handler.Stream = stream;
-                    new Task(() => handler.Execute(message)).Start();
-                }
-                catch (Exception)
-                {
-                    Logger.Error("Error executing handler");
-                    throw;
-                }
+                var handler = (IStreamHandler<T>)_container.GetInstance(handlerReference.HandlerType);
+                handler.Stream = stream;
+                new Task(() => handler.Execute(message)).Start();
             }
             stream.HandlerCount = handlerReferences.Count();
         }

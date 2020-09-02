@@ -19,7 +19,7 @@ namespace Aggregator.Consumer
                 x.PurgeQueuesOnStart();
                 x.SetAuditingEnabled(true);
                 x.SetHost("localhost");
-                x.SetThreads(10);
+                x.SetNumberOfClients(10);
             });
 
             Console.ReadLine();
