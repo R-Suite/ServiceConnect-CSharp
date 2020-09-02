@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>ServiceConnect.Container.ServiceCollection</id>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
     <title>ServiceConnect.Container.ServiceCollection</title>
     <authors>Omar Itani</authors>
     <owners>Omar Itani</owners>
