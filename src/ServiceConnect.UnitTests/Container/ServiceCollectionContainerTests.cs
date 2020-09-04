@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Container.ServiceCollection;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
@@ -149,6 +150,50 @@ namespace ServiceConnect.UnitTests.Container
             // Assert
             Assert.NotNull(result);
             Assert.Equal("MyMessageHandler2", result.GetType().Name);
+        }
+
+        [Fact]
+        public void ShouldGetSameInstanceOfSingletonRegisteredType()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddSingleton<IMessageHandler<MyMessage>, MyMessageHandler>();
+
+            var busContainer = new ServiceCollectionContainer();
+            busContainer.Initialize(services);
+
+            // Act
+            var result1 = busContainer.GetInstance(typeof(IMessageHandler<MyMessage>));
+            var result2 = busContainer.GetInstance(typeof(IMessageHandler<MyMessage>));
+
+            // Assert
+            Assert.NotNull(result1);
+            Assert.NotNull(result2);
+            Assert.Equal("MyMessageHandler", result1.GetType().Name);
+            Assert.Equal("MyMessageHandler", result2.GetType().Name);
+            Assert.Same(result1, result2);
+        }
+
+        [Fact]
+        public void ShouldGetDifferentInstanceOfTransientRegisteredType()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddTransient<IMessageHandler<MyMessage>, MyMessageHandler>();
+
+            var busContainer = new ServiceCollectionContainer();
+            busContainer.Initialize(services);
+
+            // Act
+            var result1 = busContainer.GetInstance(typeof(IMessageHandler<MyMessage>));
+            var result2 = busContainer.GetInstance(typeof(IMessageHandler<MyMessage>));
+
+            // Assert
+            Assert.NotNull(result1);
+            Assert.NotNull(result2);
+            Assert.Equal("MyMessageHandler", result1.GetType().Name);
+            Assert.Equal("MyMessageHandler", result2.GetType().Name);
+            Assert.NotSame(result1, result2);
         }
     }
 }

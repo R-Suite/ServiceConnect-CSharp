@@ -16,6 +16,7 @@ namespace ServiceConnect.Container.ServiceCollection
     public class ServiceCollectionContainer : IBusContainer
     {
         private IServiceCollection _serviceCollection = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        private IServiceProvider _serviceProvider;
         private bool _initialized;
 
         public void Initialize()
@@ -126,21 +127,24 @@ namespace ServiceConnect.Container.ServiceCollection
 
         public object GetInstance(Type handlerType)
         {
+            if (_serviceProvider == null) 
+                _serviceProvider = _serviceCollection.BuildServiceProvider();
+
             if (_serviceCollection.Any(v => v.ImplementationType == handlerType))
             {
                 var serviceDescriptor = _serviceCollection.First(s => s.ImplementationType == handlerType);
-                return _serviceCollection.BuildServiceProvider().GetRequiredService(serviceDescriptor.ServiceType);
+                return _serviceProvider.GetRequiredService(serviceDescriptor.ServiceType);
             }
 
             if (_serviceCollection.Any(v => v.ImplementationInstance?.GetType() == handlerType))
             {
                 var serviceDescriptor = _serviceCollection.First(s => s.ImplementationInstance?.GetType() == handlerType);
-                return _serviceCollection.BuildServiceProvider().GetRequiredService(serviceDescriptor.ServiceType);
+                return _serviceProvider.GetRequiredService(serviceDescriptor.ServiceType);
             }
 
             if (_serviceCollection.Any(k => k.ServiceType == handlerType))
             {
-                return _serviceCollection.BuildServiceProvider().GetRequiredService(handlerType);
+                return _serviceProvider.GetRequiredService(handlerType);
             }
 
             try
@@ -184,7 +188,10 @@ namespace ServiceConnect.Container.ServiceCollection
 
         public T GetInstance<T>()
         {
-            throw new NotImplementedException();
+            if (_serviceProvider == null) 
+                _serviceProvider = _serviceCollection.BuildServiceProvider();
+            
+            return _serviceProvider.GetRequiredService<T>();
         }
 
         public void ScanForHandlers()
