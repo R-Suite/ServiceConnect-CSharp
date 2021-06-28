@@ -175,5 +175,11 @@ namespace ServiceConnect.Interfaces
         /// <param name="message">The start message to send</param>
         /// <returns>Stream for writing data</returns>
         IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message;
+
+        /// <summary>
+        /// Returns true if current connection can be used.
+        /// </summary>
+        /// <returns>True/False. If False, connection is closed.</returns>
+        bool IsConnected();
     }
 }

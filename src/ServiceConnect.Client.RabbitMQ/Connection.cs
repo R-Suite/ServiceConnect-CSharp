@@ -9,6 +9,7 @@ namespace ServiceConnect.Client.RabbitMQ
         void Connect();
         IModel CreateModel();
         void Dispose();
+        bool IsConnected();
     }
 
     public class Connection : IDisposable, IServiceConnectConnection
@@ -90,6 +91,11 @@ namespace ServiceConnect.Client.RabbitMQ
                 connectionFactory.VirtualHost = _transportSettings.VirtualHost;
             }
             _connection = connectionFactory.CreateConnection(_hosts, _queueName);
+        }
+
+        public bool IsConnected()
+        {
+            return _connection?.IsOpen ?? false;
         }
 
         public IModel CreateModel()

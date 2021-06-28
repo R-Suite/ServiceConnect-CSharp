@@ -235,5 +235,7 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             return _transportSettings.AuditQueueName;
         }
+
+        public bool IsConnected() => _connection?.IsConnected() ?? false;
     }
 }

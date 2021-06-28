@@ -54,6 +54,34 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void DisposingBusShouldReturnFalseForIsConnected()
+        {
+            // Arrange
+            var bus = new Bus(_mockConfiguration.Object);
+            _mockConsumer.Setup(x => x.IsConnected()).Returns(true);
+
+            // Act
+            bus.Dispose();
+
+            // Assert
+            Assert.False(bus.IsConnected());
+        }
+
+        [Fact]
+        public void StartConsumingShouldReturnTrueForIsConnected()
+        {
+            // Arrange
+            var bus = new Bus(_mockConfiguration.Object);
+            _mockConsumer.Setup(x => x.IsConnected()).Returns(true);
+
+            // Act
+            bus.StartConsuming();
+
+            // Assert
+            Assert.True(bus.IsConnected());
+        }
+
+        [Fact]
         public void StartConsumingShouldGetAllHandlerTypesFromContainer()
         {
             // Arrange

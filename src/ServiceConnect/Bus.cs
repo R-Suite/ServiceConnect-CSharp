@@ -932,6 +932,8 @@ namespace ServiceConnect
             }
         }
 
+        public bool IsConnected() => _consumer?.IsConnected() ?? false;
+
         public void Dispose()
         {
             StopConsuming();

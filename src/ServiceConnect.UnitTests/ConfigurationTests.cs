@@ -268,6 +268,11 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
+            public bool IsConnected()
+            {
+                throw new NotImplementedException();
+            }
+
             public void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config)
             {
                 throw new NotImplementedException();
