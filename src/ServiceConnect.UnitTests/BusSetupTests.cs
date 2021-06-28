@@ -417,6 +417,11 @@ namespace ServiceConnect.UnitTests
             {
             }
 
+            public bool IsConnected()
+            {
+                throw new NotImplementedException();
+            }
+
             public string Type { get; private set; }
         }
 

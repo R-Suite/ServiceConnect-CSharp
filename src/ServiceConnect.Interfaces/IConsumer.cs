@@ -21,6 +21,7 @@ namespace ServiceConnect.Interfaces
 {
     public interface IConsumer : IDisposable
     {
+        bool IsConnected();
         void StartConsuming(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, IConfiguration config);
     }
 }
