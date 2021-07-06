@@ -24,6 +24,30 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void ShouldNotCreateRetryQueueIfMaxRetriesIs0()
+        {
+            // Arrange
+            IConsumer consumer = new Consumer(_mockConnection.Object, _mockLogger.Object);
+
+            IConfiguration config = new Configuration();
+            config.TransportSettings = new TransportSettings { ErrorQueueName = "myQueue.Errors", AuditQueueName = "myQueue.Audit", MaxRetries = 0};
+            config.TransportSettings.ClientSettings = new Dictionary<string, object>();
+
+
+            // Act
+            consumer.StartConsuming("myQueue", new List<string>(), null, config);
+
+
+            // Assert
+            _mockModel.Verify(x => x.QueueDeclare("myQueue", true, false, false, It.IsAny<Dictionary<string, object>>()), Times.Once);
+            _mockModel.Verify(x => x.ExchangeDeclare("myQueue.Retries.DeadLetter", "direct", true, false, null), Times.Never);
+            _mockModel.Verify(x => x.QueueDeclare("myQueue.Retries", true, false, false, It.IsAny<Dictionary<string, object>>()), Times.Never);
+            _mockModel.Verify(x => x.ExchangeDeclare("myQueue.Errors", "direct", false, false, null), Times.Once);
+            _mockModel.Verify(x => x.QueueDeclare("myQueue.Errors", true, false, false, It.IsAny<Dictionary<string, object>>()), Times.Once);
+            _mockModel.Verify(x => x.QueueDeclare("myQueue.Audit", true, false, false, It.IsAny<Dictionary<string, object>>()), Times.Never);
+        }
+
+        [Fact]
         public void TestConsumerWithDefaultSettings()
         {
             // Arrange
