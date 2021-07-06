@@ -65,8 +65,9 @@ namespace ServiceConnect.Client.RabbitMQ
                 _model.QueuePurge(queueName);
             }
 
-            // Configure retry queue
-            ConfigureRetryQueue(queueName);
+            // Configure retry queue ( but only if retries are expected )
+            if (_transportSettings.MaxRetries > 0)
+                ConfigureRetryQueue(queueName);
 
             // Configure Error Queue/Exchange
             var errorExchange = ConfigureErrorExchange();
