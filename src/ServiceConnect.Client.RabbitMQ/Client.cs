@@ -46,6 +46,8 @@ namespace ServiceConnect.Client.RabbitMQ
         private string _errorExchange;
         private string _auditExchange;
 
+        private int _messagesBeingProcessed = 0;
+
         public Client(IServiceConnectConnection connection, ITransportSettings transportSettings, ILogger logger)
         {
             _connection = connection;
@@ -72,6 +74,8 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 try
                 {
+                    _messagesBeingProcessed++;
+
                     if (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
                         !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
                     {
@@ -94,6 +98,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 finally
                 {
                     _model.BasicAck(args.DeliveryTag, false);
+                    _messagesBeingProcessed--;
                 }
             });
             task.Start();
@@ -214,7 +219,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             var consumer = new AsyncEventingBasicConsumer(_model);
             consumer.Received += Event;
-            
+
             _model.BasicConsume(_queueName, false, consumer);
 
             _logger.Debug("Started consuming");
@@ -233,7 +238,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 return "RabbitMQ";
             }
         }
-       
+
         private string GetErrorMessage(Exception exception)
         {
             var sbMessage = new StringBuilder();
@@ -267,6 +272,14 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void Dispose()
         {
+            // Wait until all messages have been processed.
+            var timeout = 0;
+            while (_messagesBeingProcessed > 0 && timeout < 6000)
+            {
+                System.Threading.Thread.Sleep(100);
+                timeout++;
+            }
+
             if (_autoDelete && _model != null)
             {
                 _logger.Debug("Deleting retry queue");
