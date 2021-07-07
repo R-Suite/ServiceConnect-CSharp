@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect</id>
-    <version>5.0.12</version>
+    <version>5.0.13</version>
     <title>ServiceConnect</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,7 +10,7 @@
     <description>A simple, easy to use asynchronous messaging framework for .NET.</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
-    <copyright>Copyright 2020 ServiceConnect. All rights reserved</copyright>
+    <copyright>Copyright 2021 ServiceConnect. All rights reserved</copyright>
     <tags>ServiceConnect,MessageBus,R MessageBus,RabbitMQ MessageBus,RMessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
       <group targetFramework="net451">
