@@ -698,7 +698,7 @@ namespace ServiceConnect
                 }
             }
 #else
-            typeObject = Type.GetType(type) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type)).FirstOrDefault(t => t != null);
+            typeObject = Type.GetType(type.Split(',')[0]) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type.Split(',')[0])).FirstOrDefault(t => t != null);
 #endif
 
             if (typeObject == null)

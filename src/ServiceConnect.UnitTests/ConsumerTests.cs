@@ -54,7 +54,7 @@ namespace ServiceConnect.UnitTests
             IConsumer consumer = new Consumer(_mockConnection.Object, _mockLogger.Object);
 
             IConfiguration config = new Configuration();
-            config.TransportSettings = new TransportSettings {ErrorQueueName = "myQueue.Errors", AuditQueueName = "myQueue.Audit" };
+            config.TransportSettings = new TransportSettings {ErrorQueueName = "myQueue.Errors", AuditQueueName = "myQueue.Audit", MaxRetries = 1};
             config.TransportSettings.ClientSettings = new Dictionary<string, object>();
 
 
