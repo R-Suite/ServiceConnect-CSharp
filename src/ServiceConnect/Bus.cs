@@ -679,7 +679,7 @@ namespace ServiceConnect
             Type typeObject = null;
 
 #if NETSTANDARD1_6
-            typeObject = Type.GetType(type);
+            typeObject = Type.GetType(type.Split(',')[0]);
             if (typeObject == null)
             {
                 var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
