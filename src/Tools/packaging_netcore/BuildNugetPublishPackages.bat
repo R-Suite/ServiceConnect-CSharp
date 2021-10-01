@@ -10,7 +10,7 @@ del *.nupkg
 :: comment
 
 NuGet pack "%OUTDIR%ServiceConnect\ServiceConnect.nuspec"
-NuGet pack "%OUTDIR%ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.nuspec"
+::NuGet pack "%OUTDIR%ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.nuspec"
 ::NuGet pack "%OUTDIR%ServiceConnect.Interfaces\ServiceConnect.Interfaces.nuspec"
 ::NuGet pack "%OUTDIR%ServiceConnect.Container.StructureMap\ServiceConnect.Container.StructureMap.nuspec
 ::NuGet pack "%OUTDIR%ServiceConnect.Container.ServiceCollection\ServiceConnect.Container.ServiceCollection.nuspec
@@ -19,8 +19,8 @@ NuGet pack "%OUTDIR%ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitM
 ::NuGet pack "%OUTDIRFILTERS%ServiceConnect.Filters.MessageDeduplication\ServiceConnect.Filters.MessageDeduplication\ServiceConnect.Filters.MessageDeduplication.nuspec"
 ::NuGet pack "%OUTDIRFILTERS%ServiceConnect.Filters.GzipCompression\ServiceConnect.Filters.GzipCompression\ServiceConnect.Filters.GzipCompression.nuspec"
 
-nuget push ServiceConnect.5.0.14.nupkg -Source https://www.nuget.org/api/v2/package
-nuget push ServiceConnect.Client.RabbitMQ.5.0.11.nupkg -Source https://www.nuget.org/api/v2/package
+nuget push ServiceConnect.5.0.15.nupkg -Source https://www.nuget.org/api/v2/package
+::nuget push ServiceConnect.Client.RabbitMQ.5.0.11.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Interfaces.5.0.5.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Container.StructureMap.5.0.1.nupkg -Source https://www.nuget.org/api/v2/package
 ::nuget push ServiceConnect.Container.ServiceCollection.1.0.4.nupkg -Source https://www.nuget.org/api/v2/package
