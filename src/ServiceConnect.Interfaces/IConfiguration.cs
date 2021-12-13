@@ -40,8 +40,17 @@ namespace ServiceConnect.Interfaces
         IList<Type> BeforeConsumingFilters { get; set; }
         IList<Type> AfterConsumingFilters { get; set; }
         IList<Type> OutgoingFilters { get; set; }
+        IList<Type> Middleware { get; set; }
         bool EnableProcessManagerTimeouts { get; set; }
+
+        IProcessMessagePipeline GetProcessMessagePipeline(IBusState busState);
+
         int Clients { get; set; }
+
+        /// <summary>
+        /// Adds middleware. 
+        /// </summary>
+        void AddMiddleware<T>() where T : IBusMiddleware;
 
         /// <summary>
         /// Adds a message queue mapping. 

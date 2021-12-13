@@ -53,53 +53,7 @@ namespace ServiceConnect.UnitTests
             _fakeEventHandler = eventHandler;
             return true;
         }
-
-        [Fact]
-        public void ShouldSendMessageToAggregatorProcessor()
-        {
-            // Arrange
-            
-            var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
-
-            _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
-            var mockPersistor = new Mock<IAggregatorPersistor>();
-            var mockProcessor = new Mock<IAggregatorProcessor>();
-            var fakeAggregator = new FakeAggregator();
-
-            _mockConfiguration.Setup(x => x.GetAggregatorPersistor()).Returns(mockPersistor.Object);
-            _mockConfiguration.Setup(x => x.Clients).Returns(1);
-            _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(new Mock<IMessageHandlerProcessor>().Object);
-            _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(new Mock<IProcessManagerProcessor>().Object);
-            _mockConfiguration.Setup(x => x.GetAggregatorProcessor(It.IsAny<IAggregatorPersistor>(), It.IsAny<IBusContainer>(), It.IsAny<Type>())).Returns(mockProcessor.Object);
-            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(new List<HandlerReference>
-            {
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeAggregator),
-                    MessageType = typeof (FakeMessage1)
-                }
-            });
-            _mockContainer.Setup(x => x.GetInstance(typeof(FakeAggregator))).Returns(fakeAggregator);
-            
-            var message = new FakeMessage1(Guid.NewGuid())
-            {
-                Username = "Tim"
-            };
-
-            mockProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message)));
-                
-            bus.StartConsuming();
-
-            // Act
-            _fakeEventHandler(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message)), typeof(FakeMessage1).AssemblyQualifiedName, new Dictionary<string, object>
-            {
-                { "MessageType", Encoding.UTF8.GetBytes("Send")}
-            });
-
-            // Assert
-            mockProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(y => JsonConvert.DeserializeObject<FakeMessage1>(y).Username == "Tim")), Times.Once);
-        }
-
+        
         [Fact]
         public void ShouldNotCreateMultipleConsumers()
         {
