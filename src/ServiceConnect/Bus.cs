@@ -38,6 +38,7 @@ namespace ServiceConnect
         private readonly ExpiredTimeoutsPoller _expiredTimeoutsPoller;
         private readonly ILogger _logger;
         private readonly IProcessMessagePipeline _processMessagePipeline;
+        private readonly ISendMessagePipeline _sendMessagePipeline;
         private readonly BusState _busState;
 
         public IConfiguration Configuration { get; set; }
@@ -52,6 +53,7 @@ namespace ServiceConnect
             _container = configuration.GetContainer();
             _producer = configuration.GetProducer();
             _processMessagePipeline = configuration.GetProcessMessagePipeline(_busState);
+            _sendMessagePipeline = configuration.GetSendMessagePipeline();
 
             _container.Initialize();
 
@@ -244,7 +246,7 @@ namespace ServiceConnect
                 }
             }
 
-            _producer.Publish(typeof(T), messageBytes, headers);
+            _sendMessagePipeline.ExecutePublishMessagePipeline(typeof(T), messageBytes, headers);
 
             Type newBaseType = typeof(T).GetTypeInfo().BaseType;
             if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
@@ -298,7 +300,7 @@ namespace ServiceConnect
                 messageBytes = envelope.Body;
             }
 
-            _producer.Publish(typeof(TRequest), messageBytes, headers);
+            _sendMessagePipeline.ExecutePublishMessagePipeline(typeof(TRequest), messageBytes, headers);
 
             Task.WaitAll(new[] { task }, timeout);
 
@@ -327,7 +329,8 @@ namespace ServiceConnect
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(typeof(T), messageBytes, headers);
+
+            _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers);
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message
@@ -352,7 +355,8 @@ namespace ServiceConnect
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(endPoint, typeof(T), messageBytes, headers);
+
+            _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, endPoint);
         }
         
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers) where T : Message
@@ -379,7 +383,7 @@ namespace ServiceConnect
             }
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(T), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, endPoint);
             }
         }
 
@@ -440,7 +444,7 @@ namespace ServiceConnect
 
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
         }
 
@@ -487,11 +491,11 @@ namespace ServiceConnect
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers);
             }
             else
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
         }
 
@@ -547,11 +551,11 @@ namespace ServiceConnect
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers);
             }
             else
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
 
             Task.WaitAll(new[]{ task }, timeout);
@@ -609,7 +613,7 @@ namespace ServiceConnect
             
             foreach (var endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
 
             Task.WaitAll(new[] { task }, timeout);
@@ -646,7 +650,7 @@ namespace ServiceConnect
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(nextDestination, typeof(T), messageBytes, headers);
+            _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, nextDestination);
         }
 
         public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message

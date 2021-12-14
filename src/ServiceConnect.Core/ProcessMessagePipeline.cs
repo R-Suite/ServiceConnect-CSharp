@@ -27,9 +27,9 @@ namespace ServiceConnect.Core
         {
             // Build process message pipeline
             ProcessMessageDelegate current = ProcessMessage;
-            for (int i = _configuration.Middleware.Count; i > 0; i--)
+            for (int i = _configuration.MessageProcessingMiddleware.Count; i > 0; i--)
             {
-                var middleware = (IBusMiddleware)_container.GetInstance(_configuration.Middleware[i - 1]);
+                var middleware = (IProcessMessageMiddleware)_container.GetInstance(_configuration.MessageProcessingMiddleware[i - 1]);
                 middleware.Next = current;
                 current = middleware.Process;
             }

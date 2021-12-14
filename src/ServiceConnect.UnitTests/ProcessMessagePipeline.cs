@@ -49,7 +49,7 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task ShouldExecuteMiddlewareWhenHandlingMessage()
         {
-            _mockConfiguration.SetupGet(x => x.Middleware).Returns(new List<Type> {
+            _mockConfiguration.SetupGet(x => x.MessageProcessingMiddleware).Returns(new List<Type> {
                 typeof(Middleware1),
                 typeof(Middleware2)
             });
@@ -73,7 +73,7 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task ShouldExecuteHandlerWhenNoMiddlewareDefined()
         {
-            _mockConfiguration.SetupGet(x => x.Middleware).Returns(new List<Type>());
+            _mockConfiguration.SetupGet(x => x.MessageProcessingMiddleware).Returns(new List<Type>());
 
             var pipeline = new ProcessMessagePipeline(_mockConfiguration.Object, new BusState());
             await pipeline.ExecutePipeline(_consumeContext, typeof(MiddlewareMessage), new Envelope
@@ -96,7 +96,7 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task ShouldSendMessageToAggregatorProcessor()
         {
-            _mockConfiguration.SetupGet(x => x.Middleware).Returns(new List<Type>());
+            _mockConfiguration.SetupGet(x => x.MessageProcessingMiddleware).Returns(new List<Type>());
                                                 
             var message = new FakeMessage1(Guid.NewGuid())
             {
@@ -125,7 +125,7 @@ namespace ServiceConnect.UnitTests
         private static bool _middleware2BeforeExecuted = false;
         private static bool _middleware2AfterExecuted = false;
 
-        public class Middleware1 : IBusMiddleware
+        public class Middleware1 : IProcessMessageMiddleware
         {
             public ProcessMessageDelegate Next { get; set; }
             public async Task Process(IConsumeContext context, Type typeObject, Envelope envelope)
@@ -136,7 +136,7 @@ namespace ServiceConnect.UnitTests
             }
         }
 
-        public class Middleware2 : IBusMiddleware
+        public class Middleware2 : IProcessMessageMiddleware
         {
             public ProcessMessageDelegate Next { get; set; }
 

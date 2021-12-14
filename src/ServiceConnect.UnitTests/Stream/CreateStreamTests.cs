@@ -37,7 +37,8 @@ namespace ServiceConnect.UnitTests.Stream
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
             var mockStream = new Mock<IMessageBusWriteStream>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings ());
@@ -51,7 +52,7 @@ namespace ServiceConnect.UnitTests.Stream
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -72,7 +73,8 @@ namespace ServiceConnect.UnitTests.Stream
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -85,7 +87,7 @@ namespace ServiceConnect.UnitTests.Stream
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>())).Callback(task.Start);
 
             // Act
             var bus = new Bus(mockConfiguration.Object);
@@ -94,7 +96,8 @@ namespace ServiceConnect.UnitTests.Stream
             bus.CreateStream("TestEndpoint", message);
 
             // Assert
-            mockProducer.Verify(x => x.Send("TestEndpoint",It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["MessageType"] == "ByteStream" && y.ContainsKey("Start"))));
+
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["MessageType"] == "ByteStream" && y.ContainsKey("Start")), "TestEndpoint"));
         }
     }
 }

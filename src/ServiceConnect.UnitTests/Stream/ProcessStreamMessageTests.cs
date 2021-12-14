@@ -120,44 +120,7 @@ namespace ServiceConnect.UnitTests.Stream
             // Assert
             mockProcessor.Verify(x => x.ProcessMessage(It.Is<FakeMessage1>(y => y.Username == "Tim"), It.IsAny<IMessageBusReadStream>()), Times.Once);
         }
-
-        [Fact]
-        public void AfterStartMessageHasBeenProcessedAResponseShouldBeSentBackToTheSource()
-        {
-            // Arrange
-            var bus = new Bus(_mockConfiguration.Object);
-
-            var mockStream = new Mock<IMessageBusReadStream>();
-            mockStream.Setup(x => x.HandlerCount).Returns(1);
-            _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
-            var mockProcessor = new Mock<IStreamProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IStreamProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockProcessor.Object);
-            mockProcessor.Setup(x => x.ProcessMessage(It.IsAny<FakeMessage1>(), mockStream.Object));
-            _mockConfiguration.Setup(x => x.GetMessageBusReadStream()).Returns(mockStream.Object);
-
-            var message = new FakeMessage1(Guid.NewGuid())
-            {
-                Username = "Tim"
-            };
-
-            _mockProducer.Setup(x => x.Send("Source", typeof(StreamResponseMessage), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")));
-
-            bus.StartConsuming();
-
-            // Act
-            _fakeEventHandler(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message)), typeof(FakeMessage1).AssemblyQualifiedName, new Dictionary<string, object>
-            {
-                { "Start", "" },
-                { "SequenceId", Encoding.UTF8.GetBytes("TestSequence") },
-                { "SourceAddress", Encoding.UTF8.GetBytes("Source") },
-                { "RequestMessageId", Encoding.UTF8.GetBytes("MessageId") },
-                { "MessageType", Encoding.UTF8.GetBytes("ByteStream")}
-            });
-
-            // Assert
-            _mockProducer.Verify(x => x.Send("Source", typeof(StreamResponseMessage), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(y => y["ResponseMessageId"] == "MessageId")), Times.Once);
-        }
-
+                
         [Fact]
         public void IfByteStreamHasntBeenStartedAndBusRecievesAStreamMessageBusShouldIgnoreIt()
         {

@@ -5,7 +5,7 @@ namespace ServiceConnect.Interfaces
 {
     public delegate Task ProcessMessageDelegate(IConsumeContext context, Type typeObject, Envelope envelope);
 
-    public interface IBusMiddleware
+    public interface IProcessMessageMiddleware
     {
         ProcessMessageDelegate Next { get; set; }
 
