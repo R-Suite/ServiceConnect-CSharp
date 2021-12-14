@@ -25,6 +25,7 @@ namespace ServiceConnect.UnitTests
         private static bool _beforeFilter2Ran;
         private static bool _afterFilter1Ran;
         private static bool _afterFilter2Ran;
+        private Mock<IProcessMessagePipeline> _mockMessagePipeline;
 
         public class BeforeFilter1 : IFilter
         {
@@ -133,6 +134,8 @@ namespace ServiceConnect.UnitTests
             _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { QueueName = "ServiceConnect.UnitTests" });
             _mockConfiguration.Setup(x => x.Clients).Returns(1);
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
+            _mockMessagePipeline = new Mock<IProcessMessagePipeline>();
+            _mockConfiguration.Setup(x => x.GetProcessMessagePipeline(It.IsAny<IBusState>())).Returns(_mockMessagePipeline.Object);
 
             _handlerReferences = new List<HandlerReference>
             {
@@ -316,7 +319,7 @@ namespace ServiceConnect.UnitTests
             _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
             // Assert
-            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.IsAny<IConsumeContext>()), Times.Once);
+            _mockMessagePipeline.Verify(x => x.ExecutePipeline(It.IsAny<IConsumeContext>(), It.IsAny<Type>(), It.IsAny<Envelope>()), Times.Once);
         }
 
         [Fact]
@@ -356,7 +359,7 @@ namespace ServiceConnect.UnitTests
             _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
             // Assert
-            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(j => JsonConvert.DeserializeObject<FakeMessage1>(j).Username == "mutated"), It.IsAny<IConsumeContext>()), Times.Once);
+            _mockMessagePipeline.Verify(x => x.ExecutePipeline(It.IsAny<IConsumeContext>(), It.IsAny<Type>(), It.Is<Envelope>(j => JsonConvert.DeserializeObject<FakeMessage1>(Encoding.UTF8.GetString(j.Body)).Username == "mutated")), Times.Once);
         }
 
         public bool AssignEventHandler(ConsumerEventHandler eventHandler)

@@ -33,18 +33,24 @@ namespace ServiceConnect.UnitTests
         private readonly Mock<IConfiguration> _mockConfiguration;
         private readonly Mock<IBusContainer> _mockContainer;
         private readonly Mock<IConsumer> _mockConsumer;
+        private readonly Mock<ISendMessagePipeline> _mockSendMessagePipeline;
         private ConsumerEventHandler _fakeEventHandler;
         private Guid _correlationId;
+        private Mock<IProcessMessagePipeline> _mockProcessMessagePipeline;
 
         public BusTests()
         {
             _mockConfiguration = new Mock<IConfiguration>();
             _mockContainer = new Mock<IBusContainer>();
             _mockConsumer = new Mock<IConsumer>();
+            _mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
             _mockConfiguration.Setup(x => x.GetContainer()).Returns(_mockContainer.Object);
             _mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings { QueueName = "ServiceConnect.UnitTests" });
             _mockConfiguration.Setup(x => x.Clients).Returns(1);
             _mockConfiguration.Setup(x => x.GetConsumer()).Returns(_mockConsumer.Object);
+            _mockProcessMessagePipeline = new Mock<IProcessMessagePipeline>();
+            _mockConfiguration.Setup(x => x.GetProcessMessagePipeline(It.IsAny<IBusState>())).Returns(_mockProcessMessagePipeline.Object);
+            _mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(_mockSendMessagePipeline.Object);
         }
 
         public bool AssignEventHandler(ConsumerEventHandler eventHandler)
@@ -130,7 +136,7 @@ namespace ServiceConnect.UnitTests
         }
         
         [Fact]
-        public void ConsumeMessageEventShouldProcessMessagesOnMessageHandler()
+        public void ConsumeMessageEventShouldExecuteMessageProcessingPipeline()
         {
             // Arrange
             var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
@@ -156,13 +162,7 @@ namespace ServiceConnect.UnitTests
 
             _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
             _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
-            var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
-            var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
-            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
-
+            
             bus.StartConsuming();
 
             var message = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
@@ -174,154 +174,13 @@ namespace ServiceConnect.UnitTests
             _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
             // Assert
-            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(y => ((FakeMessage1)JsonConvert.DeserializeObject(y, typeof(FakeMessage1))).Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);
+            _mockProcessMessagePipeline.Verify(x => x.ExecutePipeline(It.Is<IConsumeContext>(y => y.Headers == headers), It.IsAny<Type>(), It.Is<Envelope>(y => ((FakeMessage1)JsonConvert.DeserializeObject(Encoding.UTF8.GetString(y.Body), typeof(FakeMessage1))).Username == "Tim Watson")), Times.Once);
         }
-
-        [Fact]
-        public void ConsumeMessageEventShouldProcessMessagesOnProcessManagers()
-        {
-            // Arrange
-            var mockProcessManagerFinder = new Mock<IProcessManagerFinder>();
-            _mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProcessManagerFinder.Object);
-
-            var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
-
-            var handlerReferences = new List<HandlerReference>
-            {
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler1),
-                    MessageType = typeof (FakeMessage1)
-                },
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler2),
-                    MessageType = typeof (FakeMessage2)
-                }
-            };
-
-            var headers = new Dictionary<string, object>
-            {
-                { "MessageType", Encoding.ASCII.GetBytes("Send") }
-            };
-            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
-            var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object &&
-                                                                                                                     y["processManagerFinder"] == mockProcessManagerFinder.Object))).Returns(mockProcessManagerProcessor.Object);
-            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
-            var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
-
-            bus.StartConsuming();
-            var message = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
-            {
-                Username = "Tim Watson"
-            }));
-
-            // Act
-            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
-
-            // Assert
-            mockProcessManagerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.Is<string>(y => ((FakeMessage1)JsonConvert.DeserializeObject(y, typeof(FakeMessage1))).Username == "Tim Watson"), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once); 
-        }
-        
-        [Fact]
-        public void ConsumeMessageEventShouldProcessResponseMessage()
-        {
-            // Arrange
-            var mockProducer = new Mock<IProducer>();
-            var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-            _mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
-
-            var bus = new ServiceConnect.Bus(_mockConfiguration.Object);
-
-            var handlerReferences = new List<HandlerReference>
-            {
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler1),
-                    MessageType = typeof (FakeMessage1)
-                },
-                new HandlerReference
-                {
-                    HandlerType = typeof (FakeHandler2),
-                    MessageType = typeof (FakeMessage2)
-                }
-            };
-
-            var headers = new Dictionary<string, object>
-            {
-                { "MessageType", Encoding.ASCII.GetBytes("Send") }
-            };
-            _mockContainer.Setup(x => x.GetHandlerTypes()).Returns(handlerReferences);
-            _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
-            var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage2>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
-            var mockProcessManagerProcessor = new Mock<IProcessManagerProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IProcessManagerProcessor>(It.IsAny<Dictionary<string, object>>())).Returns(mockProcessManagerProcessor.Object);
-            mockProcessManagerProcessor.Setup(x => x.ProcessMessage<FakeMessage2>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers)));
-
-
-            _mockConfiguration.Setup(x => x.GetRequestConfiguration(It.Is<Guid>(y => SetCorrelationId(y)))).Returns(mockRequestConfiguration.Object);
-            var task = new Task(() => { });
-            mockRequestConfiguration.Setup(x => x.SetHandler(It.IsAny<Action<object>>())).Returns(task);
-
-            var id = Guid.NewGuid();
-
-            var message = new FakeMessage1(id)
-            {
-                Username = "Tim Watson"
-            };
-
-            mockProducer.Setup(x => x.Send(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
-
-
-            bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { }, null);
-            bus.StartConsuming();
-
-            headers["SourceAddress"] = Encoding.ASCII.GetBytes(_correlationId.ToString());
-
-            var message2 = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new FakeMessage2(id)
-            {
-            }));
-
-
-            // Act
-            _fakeEventHandler(message2, typeof(FakeMessage2).AssemblyQualifiedName, headers);
-
-            // Assert
-            mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage2>(It.Is<string>(y => ((FakeMessage2)JsonConvert.DeserializeObject(y, typeof(FakeMessage2))).CorrelationId == id), It.Is<IConsumeContext>(y => y.Headers == headers)), Times.Once);
-        }
-
+       
         private bool SetCorrelationId(Guid id)
         {
             _correlationId = id;
             return true;
-        }
-
-        [Fact]
-        public void PublishShouldGetProducerFromContainer()
-        {
-            // Arrange
-            var mockConfiguration = new Mock<IConfiguration>();
-            var mockProducer = new Mock<IProducer>();
-            var mockContainer = new Mock<IBusContainer>();
-            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
-            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
-            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
-            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
-            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings ());
-
-            // Act
-            var bus = new ServiceConnect.Bus(mockConfiguration.Object);
-            bus.Publish(new FakeMessage1(Guid.NewGuid()), null);
-
-            // Assert
-            mockConfiguration.Verify(x => x.GetProducer(), Times.Once());
         }
 
         [Fact]
@@ -332,7 +191,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -343,14 +203,13 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Publish(typeof(FakeMessage1), It.IsAny<byte[]>(), null));
 
             // Act
             var bus = new ServiceConnect.Bus(mockConfiguration.Object);
             bus.Publish(message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Publish(typeof(FakeMessage1), It.IsAny<byte[]>(), null), Times.Once);
+            mockSendMessagePipeline.Setup(x => x.ExecutePublishMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>()));
         }
 
         [Fact]
@@ -361,7 +220,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -379,7 +239,8 @@ namespace ServiceConnect.UnitTests
             bus.Publish(message, "routingkey1");
 
             // Assert
-            mockProducer.Verify(x => x.Publish(typeof(FakeMessage1), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingKey"))), Times.Once);
+
+            mockSendMessagePipeline.Setup(x => x.ExecutePublishMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingKey")), It.IsAny<string>()));
         }
 
         [Fact]
@@ -390,7 +251,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -412,7 +274,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -434,7 +297,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -452,7 +316,8 @@ namespace ServiceConnect.UnitTests
             bus.Send(message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(typeof(FakeMessage1), It.IsAny<byte[]>(), null), Times.Once);
+
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null), Times.Once);
         }
 
         [Fact]
@@ -463,7 +328,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -483,7 +349,8 @@ namespace ServiceConnect.UnitTests
             bus.Send(endPoint, message, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(endPoint, typeof(FakeMessage1), It.IsAny<byte[]>(), null), Times.Once);
+
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), endPoint), Times.Once);
         }
 
         [Fact]
@@ -494,7 +361,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -509,7 +377,7 @@ namespace ServiceConnect.UnitTests
 
             foreach (string endPoint in endPoints)
             {
-                mockProducer.Setup(x => x.Send(endPoint, typeof(FakeMessage1), It.IsAny<byte[]>(), null));
+                mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), endPoint));
             }
 
             // Act
@@ -519,7 +387,7 @@ namespace ServiceConnect.UnitTests
             // Assert
             foreach (string endPoint in endPoints)
             {
-                mockProducer.Verify(x => x.Send(endPoint, typeof(FakeMessage1), It.IsAny<byte[]>(), null), Times.Once);
+                mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), endPoint), Times.Once);
             }
         }
 
@@ -531,7 +399,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -544,14 +413,15 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>())).Callback(task.Start);
 
             // Act
             var bus = new ServiceConnect.Bus(mockConfiguration.Object);
             FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>(message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null), Times.Once);
         }
 
         [Fact]
@@ -562,7 +432,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -578,7 +449,7 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>())).Callback(() =>
             {
                 action(new FakeMessage2(message.CorrelationId)
                 {
@@ -606,7 +477,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -619,14 +491,14 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test")).Callback(task.Start);
 
             // Act
             var bus = new ServiceConnect.Bus(mockConfiguration.Object);
             FakeMessage2 response = bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test", typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test"), Times.Once);
         }
 
         [Fact]
@@ -637,7 +509,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -653,7 +526,8 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
+
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test")).Callback(() =>
             {
                 action(new FakeMessage2(message.CorrelationId)
                 {
@@ -681,7 +555,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -694,14 +569,14 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
-
             // Act
             var bus = new ServiceConnect.Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>(message, x => { }, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null), Times.Once);
+
         }
 
         [Fact]
@@ -712,7 +587,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -748,7 +624,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -761,14 +638,13 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new ServiceConnect.Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>("test", message, x => { }, null);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test"), Times.Once);
         }
 
         [Fact]
@@ -779,7 +655,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -815,7 +692,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -865,7 +743,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -878,16 +757,15 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test1", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
-            mockProducer.Setup(x => x.Send("test2", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
 
             // Act
             var bus = new ServiceConnect.Bus(mockConfiguration.Object);
             bus.SendRequest<FakeMessage1, FakeMessage2>(new List<string> { "test1", "test2" }, message, x => { });
 
             // Assert
-            mockProducer.Verify(x => x.Send("test1", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
-            mockProducer.Verify(x => x.Send("test2", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test1"), Times.Once);
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test2"), Times.Once);
         }
 
         [Fact]
@@ -898,7 +776,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -919,12 +798,13 @@ namespace ServiceConnect.UnitTests
             var r1 = new FakeMessage2(Guid.NewGuid());
             var r2 = new FakeMessage2(Guid.NewGuid());
 
-            mockProducer.Setup(x => x.Send("test1", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
+
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test1")).Callback(() =>
             {
                 action(r1);
             });
 
-            mockProducer.Setup(x => x.Send("test2", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test2")).Callback(() =>
             {
                 action(r2);
                 task.Start();
@@ -948,7 +828,8 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
-
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
             mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
@@ -961,8 +842,8 @@ namespace ServiceConnect.UnitTests
                 Username = "Tim Watson"
             };
 
-            mockProducer.Setup(x => x.Send("test1", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()));
-            mockProducer.Setup(x => x.Send("test2", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(task.Start);
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test2")).Callback(task.Start);
+
 
             // Act
             var bus = new ServiceConnect.Bus(mockConfiguration.Object);
@@ -973,8 +854,8 @@ namespace ServiceConnect.UnitTests
             }, message, null, 1000);
 
             // Assert
-            mockProducer.Verify(x => x.Send("test1", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
-            mockProducer.Verify(x => x.Send("test2", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test1"), Times.Once);
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "test2"), Times.Once);
         }
 
         [Fact]
@@ -986,6 +867,9 @@ namespace ServiceConnect.UnitTests
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
             var mockRequestConfiguration = new Mock<IRequestConfiguration>();
+
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
 
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
@@ -1009,7 +893,7 @@ namespace ServiceConnect.UnitTests
             var r1 = new FakeMessage2(Guid.NewGuid());
             var r2 = new FakeMessage2(Guid.NewGuid());
 
-            mockProducer.Setup(x => x.Publish(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>())).Callback(() =>
+            mockSendMessagePipeline.Setup(x => x.ExecutePublishMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>())).Callback(() =>
             {
                 action(r1);
                 action(r2);
@@ -1056,9 +940,7 @@ namespace ServiceConnect.UnitTests
 
             _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.Is<ConsumerEventHandler>(y => AssignEventHandler(y)), It.IsAny<IConfiguration>()));
 
-            var mockMessageHandlerProcessor = new Mock<IMessageHandlerProcessor>();
-            _mockContainer.Setup(x => x.GetInstance<IMessageHandlerProcessor>(It.Is<Dictionary<string, object>>(y => y["container"] == _mockContainer.Object))).Returns(mockMessageHandlerProcessor.Object);
-            mockMessageHandlerProcessor.Setup(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.Is<IConsumeContext>(y => y.Headers == headers))).Throws(new Exception());
+            _mockProcessMessagePipeline.Setup(x => x.ExecutePipeline(It.IsAny<IConsumeContext>(), It.IsAny<Type>(), It.IsAny<Envelope>())).Throws(new Exception());
 
             bus.StartConsuming();
 
@@ -1080,7 +962,9 @@ namespace ServiceConnect.UnitTests
             var mockProducer = new Mock<IProducer>();
             var mockContainer = new Mock<IBusContainer>();
             var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
+            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
 
+            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
             mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
             mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
             mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
@@ -1101,9 +985,10 @@ namespace ServiceConnect.UnitTests
             bus.Route(message, new List<string> { endPoint1, endPoint2 });
 
             // Assert
-            mockProducer.Verify(x => x.Send(endPoint1, It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.Count == 1)), Times.Once);
-            mockProducer.Verify(x => x.Send(endPoint1, It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingSlip"))), Times.Once);
-            mockProducer.Verify(x => x.Send(endPoint1, It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsValue("[\"MyEndPoint2\"]"))), Times.Once);
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.Count == 1), It.IsAny<string>()));
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsKey("RoutingSlip")), It.IsAny<string>()));
+            mockSendMessagePipeline.Setup(x => x.ExecuteSendMessagePipeline(It.IsAny<Type>(), It.IsAny<byte[]>(), It.Is<Dictionary<string, string>>(i => i.ContainsValue("[\"MyEndPoint2\"]")), It.IsAny<string>()));
+
         }
     }
 }

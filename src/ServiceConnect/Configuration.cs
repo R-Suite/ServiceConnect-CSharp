@@ -79,6 +79,8 @@ namespace ServiceConnect
         public IList<Type> AfterConsumingFilters { get; set; }
         public IList<Type> OutgoingFilters { get; set; }
         public bool EnableProcessManagerTimeouts { get; set; }
+        public IList<Type> MessageProcessingMiddleware { get; set; }
+        public IList<Type> SendMessageMiddleware { get; set; }
 
         #endregion
 
@@ -114,8 +116,30 @@ namespace ServiceConnect
             BeforeConsumingFilters = new List<Type>();
             AfterConsumingFilters = new List<Type>();
             OutgoingFilters = new List<Type>();
+            MessageProcessingMiddleware = new List<Type>();
+            SendMessageMiddleware = new List<Type>();
 
             ConsumerPoolType = typeof(Consumer);
+        }
+
+        public void AddMessageProcessingMiddleware<T>() where T : IProcessMessageMiddleware
+        {
+            MessageProcessingMiddleware.Add(typeof(T));
+        }
+
+        public IProcessMessagePipeline GetProcessMessagePipeline(IBusState busState)
+        {
+            return new ProcessMessagePipeline(this, busState);
+        }
+
+        public ISendMessagePipeline GetSendMessagePipeline()
+        {
+            return new SendMessagePipeline(this);
+        }
+
+        public void AddSendMessageMiddleware<T>() where T : ISendMessageMiddleware
+        {
+            SendMessageMiddleware.Add(typeof(T));
         }
 
         /// <summary>

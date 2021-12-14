@@ -16,7 +16,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -25,34 +24,37 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
+using System.Diagnostics;
 
 namespace ServiceConnect
 {
     public class Bus : IBus
     {
-        private readonly IBusContainer _container;
-        private readonly IDictionary<string, IRequestConfiguration> _requestConfigurations = new Dictionary<string, IRequestConfiguration>();
-        private readonly IDictionary<string, IMessageBusReadStream> _byteStreams = new Dictionary<string, IMessageBusReadStream>();
-        private readonly object _requestLock = new object();
-        private readonly object _byteStreamLock = new object();
-        private readonly IDictionary<Type, IAggregatorProcessor> _aggregatorProcessors = new Dictionary<Type, IAggregatorProcessor>();
+        private readonly IBusContainer _container;        
         private readonly IProducer _producer;
+        private IConsumer _consumer;
         private Timer _timer;
         private bool _startedConsuming;
         private readonly ExpiredTimeoutsPoller _expiredTimeoutsPoller;
-        private IConsumer _consumer;
-        private ILogger _logger;
+        private readonly ILogger _logger;
+        private readonly IProcessMessagePipeline _processMessagePipeline;
+        private readonly ISendMessagePipeline _sendMessagePipeline;
+        private readonly BusState _busState;
 
         public IConfiguration Configuration { get; set; }
 
         public Bus(IConfiguration configuration)
         {
+            _busState = new BusState();
+
             Configuration = configuration;
 
             _logger = configuration.GetLogger();
             _container = configuration.GetContainer();
             _producer = configuration.GetProducer();
-          
+            _processMessagePipeline = configuration.GetProcessMessagePipeline(_busState);
+            _sendMessagePipeline = configuration.GetSendMessagePipeline();
+
             _container.Initialize();
 
             if (configuration.AddBusToContainer)
@@ -92,9 +94,9 @@ namespace ServiceConnect
                 object aggregator = _container.GetInstance(handlerReference.HandlerType);
 
                 var processor = Configuration.GetAggregatorProcessor(Configuration.GetAggregatorPersistor(), _container, handlerReference.HandlerType);
-                if (!_aggregatorProcessors.ContainsKey(handlerReference.MessageType))
+                if (!_busState.AggregatorProcessors.ContainsKey(handlerReference.MessageType))
                 {
-                    _aggregatorProcessors.Add(handlerReference.MessageType, processor);
+                    _busState.AggregatorProcessors.Add(handlerReference.MessageType, processor);
                 }
 
                 var timeout = (TimeSpan)(handlerReference.HandlerType.GetMethod("Timeout").Invoke(aggregator, new object[] { }));
@@ -244,7 +246,7 @@ namespace ServiceConnect
                 }
             }
 
-            _producer.Publish(typeof(T), messageBytes, headers);
+            _sendMessagePipeline.ExecutePublishMessagePipeline(typeof(T), messageBytes, headers);
 
             Type newBaseType = typeof(T).GetTypeInfo().BaseType;
             if (newBaseType != null && newBaseType.Name != typeof(Message).Name)
@@ -265,9 +267,9 @@ namespace ServiceConnect
 
             Task task = configuration.SetHandler(r => responses.Add((TReply)r));
 
-            lock (_requestLock)
+            lock (_busState.RequestLock)
             {
-                _requestConfigurations[messageId.ToString()] = configuration;
+                _busState.RequestConfigurations[messageId.ToString()] = configuration;
             }
 
             if (headers == null)
@@ -298,7 +300,7 @@ namespace ServiceConnect
                 messageBytes = envelope.Body;
             }
 
-            _producer.Publish(typeof(TRequest), messageBytes, headers);
+            _sendMessagePipeline.ExecutePublishMessagePipeline(typeof(TRequest), messageBytes, headers);
 
             Task.WaitAll(new[] { task }, timeout);
 
@@ -327,7 +329,8 @@ namespace ServiceConnect
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(typeof(T), messageBytes, headers);
+
+            _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers);
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers) where T : Message
@@ -352,7 +355,8 @@ namespace ServiceConnect
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(endPoint, typeof(T), messageBytes, headers);
+
+            _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, endPoint);
         }
         
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers) where T : Message
@@ -379,7 +383,7 @@ namespace ServiceConnect
             }
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(T), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, endPoint);
             }
         }
 
@@ -405,9 +409,9 @@ namespace ServiceConnect
                 }
             });
 
-            lock (_requestLock)
+            lock (_busState.RequestLock)
             {
-                _requestConfigurations[messageId.ToString()] = configuration;
+                _busState.RequestConfigurations[messageId.ToString()] = configuration;
             }
 
             if (headers == null)
@@ -440,7 +444,7 @@ namespace ServiceConnect
 
             foreach (string endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
         }
 
@@ -452,9 +456,9 @@ namespace ServiceConnect
 
             configuration.SetHandler(r => callback((TReply)r));
 
-            lock (_requestLock)
+            lock (_busState.RequestLock)
             {
-                _requestConfigurations[messageId.ToString()] = configuration;
+                _busState.RequestConfigurations[messageId.ToString()] = configuration;
             }
 
             if (headers == null)
@@ -487,11 +491,11 @@ namespace ServiceConnect
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers);
             }
             else
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
         }
 
@@ -513,9 +517,9 @@ namespace ServiceConnect
                 response = (TReply)r;
             });
 
-            lock (_requestLock)
+            lock (_busState.RequestLock)
             {
-                _requestConfigurations[messageId.ToString()] = configuration;
+                _busState.RequestConfigurations[messageId.ToString()] = configuration;
             }
 
             if (headers == null)
@@ -547,11 +551,11 @@ namespace ServiceConnect
 
             if (string.IsNullOrEmpty(endPoint))
             {
-                _producer.Send(typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers);
             }
             else
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
 
             Task.WaitAll(new[]{ task }, timeout);
@@ -575,9 +579,9 @@ namespace ServiceConnect
 
             Task task = configuration.SetHandler(r => responses.Add((TReply)r));
 
-            lock (_requestLock)
+            lock (_busState.RequestLock)
             {
-                _requestConfigurations[messageId.ToString()] = configuration;
+                _busState.RequestConfigurations[messageId.ToString()] = configuration;
             }
 
             if (headers == null)
@@ -609,7 +613,7 @@ namespace ServiceConnect
             
             foreach (var endPoint in endPoints)
             {
-                _producer.Send(endPoint, typeof(TRequest), messageBytes, headers);
+                _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(TRequest), messageBytes, headers, endPoint);
             }
 
             Task.WaitAll(new[] { task }, timeout);
@@ -646,7 +650,7 @@ namespace ServiceConnect
                 headers = envelope.Headers.ToDictionary(x => x.Key, x => x.Value.ToString());
                 messageBytes = envelope.Body;
             }
-            _producer.Send(nextDestination, typeof(T), messageBytes, headers);
+            _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, nextDestination);
         }
 
         public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
@@ -720,8 +724,6 @@ namespace ServiceConnect
                 {
                     return result;
                 }
-
-                var tasks = new List<Task>();
                 
                 if (headers.ContainsKey("MessageType") && Encoding.UTF8.GetString((byte[])headers["MessageType"]) == "ByteStream")
                 {
@@ -729,14 +731,8 @@ namespace ServiceConnect
                 }
                 else
                 {
-                    tasks.Add(ProcessMessageHandlers(envelope.Body, typeObject, context));
-                    tasks.Add(ProcessProcessManagerHandlers(envelope.Body, typeObject, context));
-
-                    ProcessAggregatorHandlers(envelope.Body, typeObject);
-                    ProcessRequestReplyConfigurations(envelope.Body, typeObject, context);
+                    await _processMessagePipeline.ExecutePipeline(context, typeObject, envelope);
                 }
-
-                await Task.WhenAll(tasks);
 
                 ProcessFilters(Configuration.AfterConsumingFilters, envelope);
 
@@ -794,7 +790,7 @@ namespace ServiceConnect
 
         private void ProcessStream(byte[] message, Type type, IDictionary<string, object> headers)
         {
-            lock (_byteStreamLock)
+            lock (_busState.ByteStreamLock)
             {
                 var start = headers.ContainsKey("Start");
                 var sequenceId = Encoding.UTF8.GetString((byte[]) headers["SequenceId"]);
@@ -821,14 +817,14 @@ namespace ServiceConnect
 
                     if (stream.HandlerCount > 0)
                     {
-                        _byteStreams.Add(sequenceId, stream);
+                        _busState.ByteStreams.Add(sequenceId, stream);
                     }
 
                     Send(sourceAddress, new StreamResponseMessage(Guid.NewGuid()), new Dictionary<string, string> { { "ResponseMessageId", requestMessageId } });
                 }
                 else
                 {
-                    if (!_byteStreams.ContainsKey(sequenceId))
+                    if (!_busState.ByteStreams.ContainsKey(sequenceId))
                     {
                         return;
                     }
@@ -836,7 +832,7 @@ namespace ServiceConnect
                     var packetNumber = Convert.ToInt64(Encoding.UTF8.GetString((byte[])headers["PacketNumber"]));
                     var stop = headers.ContainsKey("Stop");
 
-                    stream = _byteStreams[sequenceId];
+                    stream = _busState.ByteStreams[sequenceId];
                     
                     if (!stop)
                     {
@@ -852,78 +848,12 @@ namespace ServiceConnect
 
         private void StreamCompleteEventHandler(string sequenceId)
         {
-            lock (_byteStreamLock)
+            lock (_busState.ByteStreamLock)
             {
-                _byteStreams.Remove(sequenceId);
+                _busState.ByteStreams.Remove(sequenceId);
             }
         }
-
-        private void ProcessRequestReplyConfigurations(byte[] byteMessage, Type typeObject, ConsumeContext context)
-        {
-            lock (_requestLock)
-            {
-                if (!context.Headers.ContainsKey("ResponseMessageId"))
-                {
-                    return;
-                }
-                
-                string messageId = Encoding.UTF8.GetString((byte[])context.Headers["ResponseMessageId"]);
-                if (!_requestConfigurations.ContainsKey(messageId))
-                {
-                    return;
-                }
-                IRequestConfiguration requestConfigration = _requestConfigurations[messageId];
-                
-                requestConfigration.ProcessMessage(Encoding.UTF8.GetString(byteMessage), typeObject);
-
-                if (requestConfigration.ProcessedCount == requestConfigration.EndpointsCount)
-                {
-                    var item = _requestConfigurations.First(kvp => kvp.Key == messageId);
-                    _requestConfigurations.Remove(item.Key);
-                }
-            }
-        }
-
-        private async Task ProcessProcessManagerHandlers(byte[] objectMessage, Type type, IConsumeContext context)
-        {
-            IProcessManagerFinder processManagerFinder = Configuration.GetProcessManagerFinder();
-            var processManagerProcessor = _container.GetInstance<IProcessManagerProcessor>(new Dictionary<string, object>
-            {
-                {"container", _container},
-                {"processManagerFinder", processManagerFinder},
-                {"logger", _logger }
-            });
-
-            MethodInfo processManagerProcessorMethod = processManagerProcessor.GetType().GetMethod("ProcessMessage");
-            MethodInfo genericProcessManagerProcessorMethod = processManagerProcessorMethod.MakeGenericMethod(type);
-            await (Task)genericProcessManagerProcessorMethod.Invoke(processManagerProcessor, new object[] {Encoding.UTF8.GetString(objectMessage), context});
-        }
-
-        private void ProcessAggregatorHandlers(byte[] objectMessage, Type type)
-        {
-            if (_aggregatorProcessors.ContainsKey(type))
-            {
-                IAggregatorProcessor aggregatorProcessor = _aggregatorProcessors[type];
-
-                MethodInfo aggregatorProcessorMethod = aggregatorProcessor.GetType().GetMethod("ProcessMessage");
-                MethodInfo genericAggregatorProcessorMethod = aggregatorProcessorMethod.MakeGenericMethod(type);
-                genericAggregatorProcessorMethod.Invoke(aggregatorProcessor, new object[] { Encoding.UTF8.GetString(objectMessage) });
-            }
-        }
-        
-        private async Task ProcessMessageHandlers(byte[] objectMessage, Type type, IConsumeContext context)
-        {
-            var messageHandlerProcessor = _container.GetInstance<IMessageHandlerProcessor>(new Dictionary<string, object>
-            {
-                {"container", _container},
-                {"logger", _logger }
-            });
-            MethodInfo handlerProcessorMethod = messageHandlerProcessor.GetType().GetMethod("ProcessMessage");
-            MethodInfo genericHandlerProcessorMethod = handlerProcessorMethod.MakeGenericMethod(type);
-            var result = genericHandlerProcessorMethod.Invoke(messageHandlerProcessor, new object[] { Encoding.UTF8.GetString(objectMessage), context });
-            await (Task) result;
-        }
-
+               
         public void StopConsuming()
         {
             if (_consumer != null)
@@ -948,7 +878,7 @@ namespace ServiceConnect
                 _timer.Dispose();
             }
 
-            foreach (var aggregatorProcessor in _aggregatorProcessors.Values)
+            foreach (var aggregatorProcessor in _busState.AggregatorProcessors.Values)
             {
                 aggregatorProcessor.Dispose();
             }
