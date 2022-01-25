@@ -196,6 +196,9 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null)
         {
+            if (string.IsNullOrWhiteSpace(endPoint))
+                throw new ArgumentException(string.Format("Cannot send message of type {0} to empty endpoint", type));
+
             lock (_lock)
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
