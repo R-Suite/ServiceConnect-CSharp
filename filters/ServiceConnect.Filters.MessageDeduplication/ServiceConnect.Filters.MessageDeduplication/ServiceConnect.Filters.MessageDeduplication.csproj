@@ -14,7 +14,7 @@
   <ItemGroup>
     <PackageReference Include="Common.Logging" Version="3.4.1" />
     <PackageReference Include="mongocsharpdriver" Version="2.4.4" />
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="ServiceConnect.Interfaces" Version="4.0.1" />
     <PackageReference Include="StackExchange.Redis" Version="1.2.6" />
   </ItemGroup>
