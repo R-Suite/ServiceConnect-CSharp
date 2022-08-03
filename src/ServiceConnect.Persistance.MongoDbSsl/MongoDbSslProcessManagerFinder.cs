@@ -134,7 +134,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                 Credential = credential,
                 ConnectionMode = ConnectionMode.Automatic,
                 Servers = mongoNodes.Select(x => new MongoServerAddress(x)),
-                SslSettings = new SslSettings
+                SslSettings = certs == null ? null : new SslSettings
                 {
                     ClientCertificates = certs,
                     ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],

@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Persistance.MongoDbSsl</id>
-    <version>6.0.2</version>
+    <version>6.0.3</version>
     <title>ServiceConnect.Persistance.MongoDbSsl</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,7 +10,7 @@
     <description>MongoDb SSL implementation of IProcessManagerFinder.</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
-    <copyright>Copyright 2020 ServiceConnect. All rights reserved</copyright>
+    <copyright>Copyright 2022 ServiceConnect. All rights reserved</copyright>
     <tags>ServiceConnect,RMessageBus,R,MessageBus,MessageBus Persistance,Persistance.MongoDb,R MongoDb,R MongoDb Persistance,MongoDb, MessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
       <group targetFramework="netstandard1.6">
