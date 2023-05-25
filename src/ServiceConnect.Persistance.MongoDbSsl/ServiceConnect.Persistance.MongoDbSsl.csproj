@@ -1,16 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <VersionPrefix>6.0.0-pre</VersionPrefix>
-    <TargetFrameworks>netstandard1.6</TargetFrameworks>
+	  <TargetFrameworks>net6.0</TargetFrameworks>
     <AssemblyName>ServiceConnect.Persistance.MongoDbSsl</AssemblyName>
     <PackageId>ServiceConnect.Persistance.MongoDbSsl</PackageId>
-    <PackageTargetFallback Condition=" '$(TargetFramework)' == 'netstandard1.6' ">$(PackageTargetFallback);dnxcore50</PackageTargetFallback>
-    <NetStandardImplicitPackageVersion Condition=" '$(TargetFramework)' == 'netstandard1.6' ">1.6.1</NetStandardImplicitPackageVersion>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
-    <Version>6.0.0</Version>
+    <Version>7.0.0</Version>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
 
@@ -18,7 +15,7 @@
     <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard1.6'">
+  <ItemGroup>
     <PackageReference Include="MongoDB.Driver">
       <Version>2.10.3</Version>
     </PackageReference>
