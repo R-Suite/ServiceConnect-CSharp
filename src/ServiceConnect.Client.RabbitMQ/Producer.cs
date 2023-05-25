@@ -58,7 +58,6 @@ namespace ServiceConnect.Client.RabbitMQ
             _connectionFactory = new ConnectionFactory
             {
                 VirtualHost = "/",
-                Protocol = Protocols.DefaultProtocol,
                 Port = AmqpTcpEndpoint.UseDefaultPort,
                 UseBackgroundThreadsForIO = true,
                 AutomaticRecoveryEnabled = true,

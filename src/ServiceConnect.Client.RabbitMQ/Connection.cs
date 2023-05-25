@@ -20,7 +20,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly string _queueName;
         private readonly ILogger _logger;
         private readonly bool _heartbeatEnabled;
-        private readonly ushort _heartbeatTime;
+        private readonly TimeSpan _heartbeatTime;
         private readonly string[] _hosts;
 
         public Connection(ITransportSettings transportSettings, string queueName, ILogger logger)
@@ -31,7 +31,7 @@ namespace ServiceConnect.Client.RabbitMQ
             _logger = logger;
             _transportSettings = transportSettings;
             _heartbeatEnabled = !transportSettings.ClientSettings.ContainsKey("HeartbeatEnabled") || (bool)transportSettings.ClientSettings["HeartbeatEnabled"];
-            _heartbeatTime = transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? Convert.ToUInt16((int)transportSettings.ClientSettings["HeartbeatTime"]) : Convert.ToUInt16(120);
+            _heartbeatTime = transportSettings.ClientSettings.ContainsKey("HeartbeatTime") ? new TimeSpan(0,0,(int)transportSettings.ClientSettings["HeartbeatTime"]) : new TimeSpan(0, 0, 120);
         }
 
         public void Connect()
@@ -46,7 +46,6 @@ namespace ServiceConnect.Client.RabbitMQ
 
             var connectionFactory = new ConnectionFactory
             {
-                Protocol = Protocols.DefaultProtocol,
                 Port = AmqpTcpEndpoint.UseDefaultPort,
                 UseBackgroundThreadsForIO = true,
                 AutomaticRecoveryEnabled = true,
@@ -109,7 +108,7 @@ namespace ServiceConnect.Client.RabbitMQ
         public void Dispose()
         {
             if (_connection == null) return;
-            _connection.Abort(500);
+            _connection.Abort();
             _connection = null;
         }
     }

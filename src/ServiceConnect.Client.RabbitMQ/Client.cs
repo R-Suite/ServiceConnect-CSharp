@@ -118,7 +118,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
                 var typeName = Encoding.UTF8.GetString((byte[])(headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]));
 
-                result = await _consumerEventHandler(args.Body, typeName, headers);
+                result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers);
 
                 SetHeader(args.BasicProperties.Headers, "TimeProcessed", DateTime.UtcNow.ToString("O"));
             }
