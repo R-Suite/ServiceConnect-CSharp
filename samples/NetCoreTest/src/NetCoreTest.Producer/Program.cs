@@ -22,7 +22,7 @@ namespace NetCoreTest.Producer
 
                 Console.WriteLine("Start: {0}", DateTime.Now);
 
-                for (int i = 0; i < 30; i++)
+                for (int i = 0; i < 100000; i++)
                 {
                     var id = Guid.NewGuid();
                     bus.Send("NetCoreTest.Consumer", new NetCoreTestMessage(id)

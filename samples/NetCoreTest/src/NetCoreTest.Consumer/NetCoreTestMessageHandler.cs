@@ -9,7 +9,6 @@ namespace NetCoreTest.Consumer
     {
         public void Execute(NetCoreTestMessage command)
         {
-            Thread.Sleep(100);
             Console.WriteLine("{0}: Consumer 1 Received Message - {1}", Thread.CurrentThread.ManagedThreadId, command.CorrelationId);
         }
 

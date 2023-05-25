@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26730.10
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33530.505
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{5BF13081-3752-4631-8DED-E5F8E43F9F83}"
 EndProject
@@ -12,6 +12,10 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetCoreTest.Consumer", "src\NetCoreTest.Consumer\NetCoreTest.Consumer.csproj", "{36047028-991E-4A28-A916-39DD860C36F8}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect.Interfaces", "..\..\src\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj", "{6B9A4C1F-75C1-42AB-82F7-DB468401B582}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect", "..\..\src\ServiceConnect\ServiceConnect.csproj", "{4EBD0403-052E-48D1-88CD-AA3BBC1AF78B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect.Container.StructureMap", "..\..\src\ServiceConnect.Container.StructureMap\ServiceConnect.Container.StructureMap.csproj", "{95745646-EB38-48AF-ABBF-E06910F4FB29}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -35,6 +39,14 @@ Global
 		{6B9A4C1F-75C1-42AB-82F7-DB468401B582}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6B9A4C1F-75C1-42AB-82F7-DB468401B582}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6B9A4C1F-75C1-42AB-82F7-DB468401B582}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4EBD0403-052E-48D1-88CD-AA3BBC1AF78B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4EBD0403-052E-48D1-88CD-AA3BBC1AF78B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4EBD0403-052E-48D1-88CD-AA3BBC1AF78B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4EBD0403-052E-48D1-88CD-AA3BBC1AF78B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{95745646-EB38-48AF-ABBF-E06910F4FB29}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{95745646-EB38-48AF-ABBF-E06910F4FB29}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{95745646-EB38-48AF-ABBF-E06910F4FB29}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{95745646-EB38-48AF-ABBF-E06910F4FB29}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
