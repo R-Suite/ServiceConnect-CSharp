@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>ServiceConnect.Container.StructureMap</id>
-    <version>5.0.1</version>
+    <version>6.0.0</version>
     <title>ServiceConnect.Container.StructureMap</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -13,21 +13,14 @@
     <copyright>Copyright 2018 ServiceConnect. All rights reserved</copyright>
     <tags>ServiceConnect,MessageBus,StructureMap,R MessageBus,ServiceConnect StructureMap,RabbitMQ MessageBus,Service.Connect StructureMap,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <group targetFramework="net451">
-        <dependency id="ServiceConnect.Interfaces" version="5.0.2" />
-        <dependency id="ServiceConnect" version="5.0.8" />
-        <dependency id="structuremap" version="4.6.1" />
-      </group>
-      <group targetFramework="netstandard1.6">
-        <dependency id="ServiceConnect.Interfaces" version="5.0.2" />
-        <dependency id="ServiceConnect" version="5.0.8" />
-        <dependency id="structuremap" version="4.6.1" />
-        <dependency id="NETStandard.Library" version="1.6.1" />
+      <group>
+        <dependency id="ServiceConnect.Interfaces" version="6.0.0" />
+        <dependency id="ServiceConnect" version="6.0.0" />
+        <dependency id="structuremap" version="4.7.1" />
       </group>
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\net451\ServiceConnect.Container.StructureMap.*" target="lib\net451" />
-    <file src="bin\Release\netstandard1.6\ServiceConnect.Container.StructureMap.*" target="lib\netstandard1.6" />
+    <file src="bin\Release\net6.0\ServiceConnect.Container.StructureMap.*" target="lib\net6.0" />
   </files>
 </package>

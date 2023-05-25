@@ -2,7 +2,7 @@
 <package xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
   <metadata xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
     <id>ServiceConnect.Client.RabbitMQ</id>
-    <version>5.0.11</version>
+    <version>6.0.0</version>
     <title>ServiceConnect.Client.RabbitMQ</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -13,21 +13,14 @@
     <copyright>Copyright 2020 ServiceConnect. All rights reserved</copyright>
     <tags>ServiceConnect,RMessageBus,R,MessageBus,MessageBus Client,Client.RabbitMQ,R RabbitMQ,R RabbitMQ Client,RabbitMQ, MessageBus,Messaging,Message,Bus,Service</tags>
     <dependencies>
-      <group targetFramework="net451">
-        <dependency id="RabbitMQ.Client" version="5.2.0" />
-        <dependency id="Newtonsoft.Json" version="10.0.3" />
-        <dependency id="ServiceConnect.Interfaces" version="5.0.5" />
-      </group>
-      <group targetFramework="netstandard1.6">
-        <dependency id="RabbitMQ.Client" version="5.2.0" />
-        <dependency id="Newtonsoft.Json" version="10.0.3" />
-        <dependency id="ServiceConnect.Interfaces" version="5.0.5" />
-        <dependency id="NETStandard.Library" version="1.6.1" />
+      <group>
+        <dependency id="RabbitMQ.Client" version="6.5.0" />
+        <dependency id="Newtonsoft.Json" version="13.0.3" />
+        <dependency id="ServiceConnect.Interfaces" version="6.0.0" />
       </group>
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\net451\ServiceConnect.Client.RabbitMQ.*" target="lib\net451" />
-    <file src="bin\Release\netstandard1.6\ServiceConnect.Client.RabbitMQ.*" target="lib\netstandard1.6" />
+    <file src="bin\Release\net6.0\ServiceConnect.Client.RabbitMQ.*" target="lib\net6.0" />
   </files>
 </package> 

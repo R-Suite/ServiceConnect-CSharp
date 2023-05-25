@@ -25,6 +25,7 @@ using Newtonsoft.Json;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using System.Diagnostics;
+using System.Collections.Concurrent;
 
 namespace ServiceConnect
 {
@@ -33,13 +34,14 @@ namespace ServiceConnect
         private readonly IBusContainer _container;        
         private readonly IProducer _producer;
         private IConsumer _consumer;
-        private Timer _timer;
         private bool _startedConsuming;
         private readonly ExpiredTimeoutsPoller _expiredTimeoutsPoller;
         private readonly ILogger _logger;
         private readonly IProcessMessagePipeline _processMessagePipeline;
         private readonly ISendMessagePipeline _sendMessagePipeline;
         private readonly BusState _busState;
+        private readonly ConcurrentDictionary<string, Type> _typeLookup = new ConcurrentDictionary<string, Type>();
+
 
         public IConfiguration Configuration { get; set; }
 
@@ -65,11 +67,6 @@ namespace ServiceConnect
             if (configuration.ScanForMesssageHandlers)
             {
                 _container.ScanForHandlers();
-            }
-
-            if (configuration.TransportSettings.AuditingEnabled)
-            {
-                StartHeartbeatTimer();
             }
 
             if (configuration.AutoStartConsuming)
@@ -110,52 +107,6 @@ namespace ServiceConnect
             }
         }
 
-        private void StartHeartbeatTimer()
-        {
-            var state = new HeartbeatTimerState();
-            var timerDelegate = new TimerCallback(CheckStatus);
-            _timer = new Timer(timerDelegate, state, new TimeSpan(0, 0, 0), new TimeSpan(0, 0, 30));
-        }
-
-        private void CheckStatus(object state)
-        {
-#if NET451
-            try
-            {
-
-                var heartbeatState = (HeartbeatTimerState)state;
-
-                if (heartbeatState.CpuCounter == null)
-                {
-                    heartbeatState.CpuCounter = new PerformanceCounter("Process", "% Processor Time", Process.GetCurrentProcess().ProcessName);
-                }
-
-                if (heartbeatState.RamCounter == null)
-                {
-                    heartbeatState.RamCounter = new PerformanceCounter("Process", "Working Set", Process.GetCurrentProcess().ProcessName);
-                }
-
-                var messageString = JsonConvert.SerializeObject(new HeartbeatMessage(Guid.NewGuid())
-                {
-                    Timestamp = DateTime.UtcNow,
-                    Location = Configuration.TransportSettings.MachineName,
-                    Name = Configuration.TransportSettings.QueueName,
-                    LatestCpu = heartbeatState.CpuCounter.NextValue(),
-                    LatestMemory = heartbeatState.RamCounter.NextValue(),
-                    Language = "C#",
-                    ConsumerType = _producer.Type
-                });
-                var messageBytes = Encoding.UTF8.GetBytes(messageString);
-
-                _producer.Send(Configuration.TransportSettings.HeartbeatQueueName, typeof(HeartbeatMessage), messageBytes);
-
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn("Error checking service status", ex);
-            }
-#endif
-        }
 
         /// <summary>
         /// Instantiates a Bus instance, including any configuration.
@@ -667,6 +618,8 @@ namespace ServiceConnect
             return stream;
         }
 
+
+
         private async Task<ConsumeEventResult> ConsumeMessageEvent(byte[] message, string type, IDictionary<string, object> headers)
         {
             var result = new ConsumeEventResult
@@ -680,30 +633,12 @@ namespace ServiceConnect
                 Headers = headers,
             };
 
-            Type typeObject = null;
-
-#if NETSTANDARD1_6
-            typeObject = Type.GetType(type.Split(',')[0]);
-            if (typeObject == null)
+            var typeName = type.Split(',')[0];
+            if (!_typeLookup.TryGetValue(typeName, out var typeObject))
             {
-                var assemblies = Microsoft.Extensions.DependencyModel.DependencyContext.Default.RuntimeLibraries;
-                foreach (var assembly in assemblies)
-                {
-                    try
-                    {
-                        var asm = Assembly.Load(new AssemblyName(assembly.Name));
-                        typeObject = asm.GetTypes().FirstOrDefault(t => t.FullName == type || t.AssemblyQualifiedName == type || t.FullName == type.Split(',')[0]);
-
-                        if (null != typeObject)
-                            break;
-                    }
-                    catch (Exception)
-                    {}
-                }
+                typeObject = Type.GetType(typeName) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(typeName)).FirstOrDefault(t => t != null);
+                _typeLookup.TryAdd(typeName, typeObject);
             }
-#else
-            typeObject = Type.GetType(type.Split(',')[0]) ?? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(type.Split(',')[0])).FirstOrDefault(t => t != null);
-#endif
 
             if (typeObject == null)
             {
@@ -871,11 +806,6 @@ namespace ServiceConnect
             if (null != _producer)
             {
                 _producer.Dispose();
-            }
-
-            if (Configuration.TransportSettings.AuditingEnabled && null != _timer)
-            {
-                _timer.Dispose();
             }
 
             foreach (var aggregatorProcessor in _busState.AggregatorProcessors.Values)
