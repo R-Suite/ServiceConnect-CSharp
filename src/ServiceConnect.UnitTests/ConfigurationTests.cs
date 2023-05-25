@@ -157,7 +157,7 @@ namespace ServiceConnect.UnitTests
             configuration.AddQueueMapping(typeof(FakeMessage1), "MyEndPoint");
 
             // Assert
-            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value.Contains("MyEndPoint")));
+            Assert.Contains(configuration.QueueMappings, x => x.Key == typeof(FakeMessage1).FullName && x.Value.Contains("MyEndPoint"));
         }
 
         [Fact]
@@ -184,7 +184,7 @@ namespace ServiceConnect.UnitTests
             configuration.PurgeQueuesOnStart();
 
             // Assert
-            Assert.Equal(true, configuration.TransportSettings.PurgeQueueOnStartup);
+            Assert.True(configuration.TransportSettings.PurgeQueueOnStartup);
         }
 
         [Fact]

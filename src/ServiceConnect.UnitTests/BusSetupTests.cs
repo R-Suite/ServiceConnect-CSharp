@@ -88,7 +88,7 @@ namespace ServiceConnect.UnitTests
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.Equal(true, configuration.ScanForMesssageHandlers);
+            Assert.True(configuration.ScanForMesssageHandlers);
         }
 
         //[Fact]
@@ -203,8 +203,8 @@ namespace ServiceConnect.UnitTests
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage1).FullName && x.Value.Contains("MyEndPoint1")));
-            Assert.True(configuration.QueueMappings.Any(x => x.Key == typeof(FakeMessage2).FullName && x.Value.Contains("MyEndPoint2")));
+            Assert.Contains(configuration.QueueMappings, x => x.Key == typeof(FakeMessage1).FullName && x.Value.Contains("MyEndPoint1"));
+            Assert.Contains(configuration.QueueMappings, x => x.Key == typeof(FakeMessage2).FullName && x.Value.Contains("MyEndPoint2"));
         }
 
         [Fact]

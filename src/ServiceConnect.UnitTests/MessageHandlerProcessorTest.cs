@@ -261,7 +261,7 @@ namespace ServiceConnect.UnitTests
                 new ConsumeContext { Headers = new Dictionary<string, object>() }).GetAwaiter().GetResult(); ;
 
             // Assert
-            Assert.Equal(true, fakeHandler.Executed);
+            Assert.True(fakeHandler.Executed);
         }
     }
 }

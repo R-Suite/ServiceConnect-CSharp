@@ -64,7 +64,7 @@ namespace ServiceConnect.UnitTests.Container
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(1, result.Count());
+            Assert.Single(result);
             Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
             Assert.Equal("MyMessageHandler", result.ToList()[0].HandlerType.Name);
         }
@@ -81,7 +81,7 @@ namespace ServiceConnect.UnitTests.Container
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(1, result.Count());
+            Assert.Single(result);
             Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
             Assert.Equal("MyMessageHandler3", result.ToList()[0].HandlerType.Name);
             Assert.Equal("key1", result.ToList()[0].RoutingKeys[0]);
@@ -99,7 +99,7 @@ namespace ServiceConnect.UnitTests.Container
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(1, result.Count());
+            Assert.Single(result);
             Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
             Assert.Equal("MyMessageHandler", result.ToList()[0].HandlerType.Name);
         }
@@ -116,7 +116,7 @@ namespace ServiceConnect.UnitTests.Container
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(1, result.Count());
+            Assert.Single(result);
             Assert.Equal("MyMessage", result.ToList()[0].MessageType.Name);
             Assert.Equal("MyMessageHandler3", result.ToList()[0].HandlerType.Name);
             Assert.Equal("key1", result.ToList()[0].RoutingKeys[0]);
