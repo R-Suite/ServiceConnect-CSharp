@@ -14,14 +14,14 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+using Newtonsoft.Json;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using ServiceConnect.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using ServiceConnect.Interfaces;
-using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
 using ConsumerEventHandler = ServiceConnect.Interfaces.ConsumerEventHandler;
 
 namespace ServiceConnect.Client.RabbitMQ
@@ -47,6 +47,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private string _auditExchange;
 
         private int _messagesBeingProcessed = 0;
+        private AsyncEventingBasicConsumer _consumer;
 
         public Client(IServiceConnectConnection connection, ITransportSettings transportSettings, ILogger logger)
         {
@@ -70,7 +71,7 @@ namespace ServiceConnect.Client.RabbitMQ
         /// <param name="args"></param>
         public async Task Event(object consumer, BasicDeliverEventArgs args)
         {
-            var task = new Task(async () =>
+            Task task = new(async () =>
             {
                 try
                 {
@@ -116,7 +117,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 SetHeader(args.BasicProperties.Headers, "DestinationMachine", Environment.MachineName);
                 SetHeader(args.BasicProperties.Headers, "DestinationAddress", _transportSettings.QueueName);
 
-                var typeName = Encoding.UTF8.GetString((byte[])(headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]));
+                string typeName = Encoding.UTF8.GetString((byte[])(headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]));
 
                 result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers);
 
@@ -200,7 +201,9 @@ namespace ServiceConnect.Client.RabbitMQ
             _auditExchange = _transportSettings.AuditQueueName;
 
             if (autoDelete.HasValue)
+            {
                 _autoDelete = autoDelete.Value;
+            }
 
             Retry.Do(CreateConsumer, ex =>
             {
@@ -217,10 +220,10 @@ namespace ServiceConnect.Client.RabbitMQ
                 _model.BasicQos(0, _prefetchCount, false);
             }
 
-            var consumer = new AsyncEventingBasicConsumer(_model);
-            consumer.Received += Event;
+            _consumer = new AsyncEventingBasicConsumer(_model);
+            _consumer.Received += Event;
 
-            _model.BasicConsume(_queueName, false, consumer);
+            _ = _model.BasicConsume(_queueName, false, _consumer);
 
             _logger.Debug("Started consuming");
         }
@@ -231,22 +234,16 @@ namespace ServiceConnect.Client.RabbitMQ
             _model.QueueBind(_queueName, messageTypeName, string.Empty);
         }
 
-        public string Type
-        {
-            get
-            {
-                return "RabbitMQ";
-            }
-        }
+        public string Type => "RabbitMQ";
 
         private string GetErrorMessage(Exception exception)
         {
-            var sbMessage = new StringBuilder();
-            sbMessage.Append(exception.Message + Environment.NewLine);
-            var ie = exception.InnerException;
+            StringBuilder sbMessage = new();
+            _ = sbMessage.Append(exception.Message + Environment.NewLine);
+            Exception ie = exception.InnerException;
             while (ie != null)
             {
-                sbMessage.Append(ie.Message + Environment.NewLine);
+                _ = sbMessage.Append(ie.Message + Environment.NewLine);
                 ie = ie.InnerException;
             }
 
@@ -257,7 +254,7 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             if (Equals(value, default(T)))
             {
-                headers.Remove(key);
+                _ = headers.Remove(key);
             }
             else
             {
@@ -272,8 +269,24 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void Dispose()
         {
+            // Stop consuming
+            if (_consumer != null)
+            {
+                foreach (string tag in _consumer.ConsumerTags)
+                {
+                    try
+                    {
+                        _model.BasicCancel(tag);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error("Error cancelling consumer", ex);
+                    }
+                }
+            }
+
             // Wait until all messages have been processed.
-            var timeout = 0;
+            int timeout = 0;
             while (_messagesBeingProcessed > 0 && timeout < 6000)
             {
                 System.Threading.Thread.Sleep(100);
@@ -283,14 +296,23 @@ namespace ServiceConnect.Client.RabbitMQ
             if (_autoDelete && _model != null)
             {
                 _logger.Debug("Deleting retry queue");
-                _model.QueueDelete(_queueName + ".Retries");
+                _ = _model.QueueDelete(_queueName + ".Retries");
             }
 
+            // Dispose model
             if (_model != null)
             {
-                _logger.Debug("Disposing Model");
-                _model.Dispose();
-                _model = null;
+                try
+                {
+
+                    _logger.Debug("Disposing Model");
+                    _model.Dispose();
+                    _model = null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("Error disposing consumer", ex);
+                }
             }
         }
     }
