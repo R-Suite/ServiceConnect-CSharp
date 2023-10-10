@@ -14,12 +14,12 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+using RabbitMQ.Client;
+using ServiceConnect.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using ServiceConnect.Interfaces;
-using RabbitMQ.Client;
 
 namespace ServiceConnect.Client.RabbitMQ
 {
@@ -30,19 +30,20 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly ILogger _logger;
         private IModel _model;
         private IConnection _connection;
-        private readonly Object _lock = new Object();
+        private readonly object _lock = new();
         private ConnectionFactory _connectionFactory;
         private readonly string[] _hosts;
-        private readonly long _maxMessageSize;
         private readonly ushort _retryCount;
         private readonly ushort _retryTimeInSeconds;
+        private readonly bool _publisherAcks;
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings, ILogger logger)
         {
             _transportSettings = transportSettings;
             _queueMappings = queueMappings;
             _logger = logger;
-            _maxMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
+            MaximumMessageSize = transportSettings.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportSettings.ClientSettings["MessageSize"]) : 65536;
+            _publisherAcks = transportSettings.ClientSettings.ContainsKey("PublisherAcknowledgements") && Convert.ToBoolean(_transportSettings.ClientSettings["PublisherAcknowledgements"]);
             _hosts = transportSettings.Host.Split(',');
             _retryCount = transportSettings.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
             _retryTimeInSeconds = transportSettings.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
@@ -52,7 +53,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 DisposeConnection();
             }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
-        
+
         private void CreateConnection()
         {
             _connectionFactory = new ConnectionFactory
@@ -96,10 +97,15 @@ namespace ServiceConnect.Client.RabbitMQ
                 _connectionFactory.VirtualHost = _transportSettings.VirtualHost;
             }
 
-            var producerName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
-            
+            string producerName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly().GetName().Name : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+
             _connection = _connectionFactory.CreateConnection(_hosts, producerName);
             _model = _connection.CreateModel();
+
+            if (_publisherAcks)
+            {
+                _model.ConfirmSelect();
+            }
         }
 
         public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
@@ -113,9 +119,9 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
 
-                var messageHeaders = GetHeaders(type, headers, _transportSettings.QueueName, "Publish");
+                Dictionary<string, object> messageHeaders = GetHeaders(type, headers, _transportSettings.QueueName, "Publish");
 
-                var envelope = new Envelope
+                Envelope envelope = new()
                 {
                     Body = message,
                     Headers = messageHeaders
@@ -137,15 +143,20 @@ namespace ServiceConnect.Client.RabbitMQ
                 }
 
                 string exchName = type.FullName.Replace(".", string.Empty);
-                var exchangeName = ConfigureExchange(exchName, "fanout");
+                string exchangeName = ConfigureExchange(exchName, "fanout");
 
-                Retry.Do(() => _model.BasicPublish(exchangeName, "", basicProperties, envelope.Body),
+                Retry.Do(() => ClientPublish(exchangeName, "", basicProperties, envelope.Body),
                 ex =>
                 {
                     _logger.Error("Error publishing message", ex);
                     DisposeConnection();
                     RetryConnection();
                 }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+            }
+
+            if (_publisherAcks)
+            {
+                _ = _model.WaitForConfirms();
             }
         }
 
@@ -182,7 +193,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     basicProperties.Headers = messageHeaders;
                     basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
-                    Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, message),
+                    Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
                     ex =>
                     {
                         DisposeConnection();
@@ -196,7 +207,9 @@ namespace ServiceConnect.Client.RabbitMQ
         public void Send(string endPoint, Type type, byte[] message, Dictionary<string, string> headers = null)
         {
             if (string.IsNullOrWhiteSpace(endPoint))
+            {
                 throw new ArgumentException(string.Format("Cannot send message of type {0} to empty endpoint", type));
+            }
 
             lock (_lock)
             {
@@ -214,12 +227,12 @@ namespace ServiceConnect.Client.RabbitMQ
                     }
                 }
 
-                var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
+                Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
                 basicProperties.Headers = messageHeaders;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
-                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, message),
+                Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
                 ex =>
                 {
                     DisposeConnection();
@@ -231,10 +244,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string> headers, string queueName, string messageType)
         {
-            if (headers == null)
-            {
-                headers = new Dictionary<string, string>();
-            }
+            headers ??= new Dictionary<string, string>();
 
             if (!headers.ContainsKey("DestinationAddress"))
             {
@@ -300,18 +310,9 @@ namespace ServiceConnect.Client.RabbitMQ
             }
         }
 
-        public string Type
-        {
-            get
-            {
-                return "RabbitMQ";
-            }
-        }
+        public string Type => "RabbitMQ";
 
-        public long MaximumMessageSize
-        {
-            get { return _maxMessageSize; }
-        }
+        public long MaximumMessageSize { get; }
 
         public void SendBytes(string endPoint, byte[] packet, Dictionary<string, string> headers)
         {
@@ -320,9 +321,9 @@ namespace ServiceConnect.Client.RabbitMQ
                 IBasicProperties basicProperties = _model.CreateBasicProperties();
                 basicProperties.Persistent = true;
 
-                var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
+                Dictionary<string, object> messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
 
-                var envelope = new Envelope
+                Envelope envelope = new()
                 {
                     Body = packet,
                     Headers = messageHeaders
@@ -331,13 +332,23 @@ namespace ServiceConnect.Client.RabbitMQ
                 basicProperties.Headers = envelope.Headers;
                 basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
 
-                Retry.Do(() => _model.BasicPublish(string.Empty, endPoint, basicProperties, envelope.Body),
+                Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, envelope.Body),
                 ex =>
                 {
                     DisposeConnection();
                     RetryConnection();
                 },
                 new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+                _ = _model.WaitForConfirms();
+            }
+        }
+
+        private void ClientPublish(string exchange, string routingKey, IBasicProperties basicProperties, byte[] message)
+        {
+            _model.BasicPublish(exchange, routingKey, basicProperties, message);
+            if (_publisherAcks)
+            {
+                _ = _model.WaitForConfirms();
             }
         }
 
@@ -371,7 +382,7 @@ namespace ServiceConnect.Client.RabbitMQ
                         }
                     }
                 }
-                
+
             }
             catch (Exception e)
             {
