@@ -32,7 +32,7 @@ namespace ServiceConnect.Core
             SendMessageDelegate current = del;
             for (int i = _configuration.SendMessageMiddleware.Count; i > 0; i--)
             {
-                var middleware = (ISendMessageMiddleware)_container.GetInstance(_configuration.SendMessageMiddleware[i - 1]);
+                ISendMessageMiddleware middleware = (ISendMessageMiddleware)_container.GetInstance(_configuration.SendMessageMiddleware[i - 1]);
                 middleware.Next = current;
                 current = middleware.Process;
             }
@@ -54,6 +54,11 @@ namespace ServiceConnect.Core
         private void PublishMessage(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers = null, string endPoint = null)
         {
             _producer.Publish(typeObject, messageBytes, headers);
+        }
+
+        public void Dispose()
+        {
+            _producer.Dispose();
         }
     }
 }
