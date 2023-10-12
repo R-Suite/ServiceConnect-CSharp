@@ -71,39 +71,34 @@ namespace ServiceConnect.Client.RabbitMQ
         /// <param name="args"></param>
         public async Task Event(object consumer, BasicDeliverEventArgs args)
         {
-            Task task = new(async () =>
+            try
             {
-                try
-                {
-                    _messagesBeingProcessed++;
+                _messagesBeingProcessed++;
 
-                    if (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
-                        !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
-                    {
-                        const string errMsg = "Error processing message, Message headers must contain type name.";
-                        _logger.Error(errMsg);
-                    }
-
-                    if (args.Redelivered)
-                    {
-                        SetHeader(args.BasicProperties.Headers, "Redelivered", true);
-                    }
-
-                    await ProcessMessage(args);
-                }
-                catch (Exception ex)
+                if (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
+                    !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
                 {
-                    _logger.Error("Error processing message", ex);
-                    throw;
+                    const string errMsg = "Error processing message, Message headers must contain type name.";
+                    _logger.Error(errMsg);
                 }
-                finally
+
+                if (args.Redelivered)
                 {
-                    _model.BasicAck(args.DeliveryTag, false);
-                    _messagesBeingProcessed--;
+                    SetHeader(args.BasicProperties.Headers, "Redelivered", true);
                 }
-            });
-            task.Start();
-            await task;
+
+                await ProcessMessage(args);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Error processing message", ex);
+                throw;
+            }
+            finally
+            {
+                _model.BasicAck(args.DeliveryTag, false);
+                _messagesBeingProcessed--;
+            }
         }
 
         private async Task ProcessMessage(BasicDeliverEventArgs args)
