@@ -17,6 +17,7 @@
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -36,6 +37,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly ushort _retryCount;
         private readonly ushort _retryTimeInSeconds;
         private readonly bool _publisherAcks;
+        private readonly ConcurrentDictionary<ulong, string> _messagesSent = new();
 
         public Producer(ITransportSettings transportSettings, IDictionary<string, IList<string>> queueMappings, ILogger logger)
         {
@@ -102,10 +104,13 @@ namespace ServiceConnect.Client.RabbitMQ
             _connection = _connectionFactory.CreateConnection(_hosts, producerName);
             _model = _connection.CreateModel();
 
-            if (_publisherAcks)
+            _model.ConfirmSelect();
+            _model.BasicAcks += (o, e) => CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
+            _model.BasicNacks += (o, e) =>
             {
-                _model.ConfirmSelect();
-            }
+                _logger.Warn($"Message with delivery tag {e.DeliveryTag} was not acknowledged by the broker.");
+                CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
+            };
         }
 
         public void Publish(Type type, byte[] message, Dictionary<string, string> headers = null)
@@ -152,11 +157,6 @@ namespace ServiceConnect.Client.RabbitMQ
                     DisposeConnection();
                     RetryConnection();
                 }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
-            }
-
-            if (_publisherAcks)
-            {
-                _ = _model.WaitForConfirms();
             }
         }
 
@@ -281,6 +281,14 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public void Dispose()
         {
+            // Wait until all messages have been processed.
+            int timeout = 0;
+            while (_messagesSent.Count != 0 && timeout < 6000)
+            {
+                System.Threading.Thread.Sleep(100);
+                timeout++;
+            }
+
             if (_model != null)
             {
                 try
@@ -339,16 +347,35 @@ namespace ServiceConnect.Client.RabbitMQ
                     RetryConnection();
                 },
                 new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
-                _ = _model.WaitForConfirms();
             }
         }
 
         private void ClientPublish(string exchange, string routingKey, IBasicProperties basicProperties, byte[] message)
         {
+            ulong sequenceNumber = _model.NextPublishSeqNo;
+            _ = _messagesSent.TryAdd(sequenceNumber, string.Empty);
+
             _model.BasicPublish(exchange, routingKey, basicProperties, message);
+
             if (_publisherAcks)
             {
                 _ = _model.WaitForConfirms();
+            }
+        }
+
+        private void CleanOutstandingConfirms(ulong sequenceNumber, bool multiple)
+        {
+            if (multiple)
+            {
+                IEnumerable<KeyValuePair<ulong, string>> confirmed = _messagesSent.Where(k => k.Key <= sequenceNumber);
+                foreach (KeyValuePair<ulong, string> entry in confirmed)
+                {
+                    _ = _messagesSent.TryRemove(entry.Key, out _);
+                }
+            }
+            else
+            {
+                _ = _messagesSent.TryRemove(sequenceNumber, out _);
             }
         }
 
