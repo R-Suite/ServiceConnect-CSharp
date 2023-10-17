@@ -96,7 +96,15 @@ namespace ServiceConnect.Client.RabbitMQ
             }
             finally
             {
-                _model.BasicAck(args.DeliveryTag, false);
+                try
+                {
+                    _model.BasicAck(args.DeliveryTag, false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn("Error acking the message", ex);
+                }
+
                 _messagesBeingProcessed--;
             }
         }
@@ -280,14 +288,6 @@ namespace ServiceConnect.Client.RabbitMQ
                 }
             }
 
-            // Wait until all messages have been processed.
-            int timeout = 0;
-            while (_messagesBeingProcessed > 0 && timeout < 6000)
-            {
-                System.Threading.Thread.Sleep(100);
-                timeout++;
-            }
-
             if (_autoDelete && _model != null)
             {
                 _logger.Debug("Deleting retry queue");
@@ -308,6 +308,14 @@ namespace ServiceConnect.Client.RabbitMQ
                 {
                     _logger.Error("Error disposing consumer", ex);
                 }
+            }
+
+            // Wait until all messages have been processed.
+            int timeout = 0;
+            while (_messagesBeingProcessed > 0 && timeout < 6000)
+            {
+                System.Threading.Thread.Sleep(100);
+                timeout++;
             }
         }
     }
