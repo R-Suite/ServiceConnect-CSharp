@@ -20,6 +20,7 @@ using ServiceConnect.Interfaces;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -38,6 +39,7 @@ namespace ServiceConnect
         private readonly ISendMessagePipeline _sendMessagePipeline;
         private readonly BusState _busState;
         private readonly ConcurrentDictionary<string, Type> _typeLookup = new();
+        private static readonly DiagnosticSource _diagnosticSource = new DiagnosticListener("ServiceConnect.Bus");
 
         public IConfiguration Configuration { get; set; }
 
@@ -102,7 +104,6 @@ namespace ServiceConnect
             }
         }
 
-
         /// <summary>
         /// Instantiates a Bus instance, including any configuration.
         /// </summary>
@@ -142,7 +143,6 @@ namespace ServiceConnect
                                                         .Select(reference => reference.MessageType.FullName.Replace(".", string.Empty))
                                                         .ToList();
 
-
             IConsumer consumer = Configuration.GetConsumer();
             consumer.StartConsuming(queueName, messageTypes, ConsumeMessageEvent, Configuration);
             _consumer = consumer;
@@ -157,6 +157,11 @@ namespace ServiceConnect
 
         public void Publish<T>(T message, string routingKey, Dictionary<string, string> headers = null) where T : Message
         {
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartPublish"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StartPublish", new { Message = message, RoutingKey = routingKey, Headers = headers });
+            }
+
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
 
@@ -202,6 +207,11 @@ namespace ServiceConnect
                 MethodInfo publish = GetType().GetMethods().First(m => m.Name == "Publish" && m.GetParameters()[1].Name == "routingKey");
                 MethodInfo genericPublish = publish.MakeGenericMethod(newBaseType);
                 _ = genericPublish.Invoke(this, new object[] { message, routingKey, (null == headers) ? null : new Dictionary<string, string>(headers) });
+            }
+
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopPublish"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StopPublish", new { Message = message, RoutingKey = routingKey, Headers = headers });
             }
         }
 
@@ -254,6 +264,11 @@ namespace ServiceConnect
 
         public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StartSend", new { Message = message, Headers = headers });
+            }
+
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
 
@@ -276,10 +291,20 @@ namespace ServiceConnect
             }
 
             _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers);
+
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StopSend", new { Message = message, Headers = headers });
+            }
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
         {
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StartSend", new { EndPoint = endPoint, Message = message, Headers = headers });
+            }
+
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
 
@@ -302,10 +327,20 @@ namespace ServiceConnect
             }
 
             _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, endPoint);
+
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StopSend", new { EndPoint = endPoint, Message = message, Headers = headers });
+            }
         }
 
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers = null) where T : Message
         {
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StartSend", new { EndPoints = endPoints, Message = message, Headers = headers });
+            }
+
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
 
@@ -329,6 +364,11 @@ namespace ServiceConnect
             foreach (string endPoint in endPoints)
             {
                 _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, endPoint);
+            }
+
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StopSend", new { EndPoints = endPoints, Message = message, Headers = headers });
             }
         }
 
@@ -496,7 +536,6 @@ namespace ServiceConnect
 
             _ = Task.WaitAll(new[] { task }, timeout);
 
-
             return !task.IsCompleted ? throw new TimeoutException() : response;
         }
 
@@ -595,10 +634,13 @@ namespace ServiceConnect
             return stream;
         }
 
-
-
         private async Task<ConsumeEventResult> ConsumeMessageEvent(byte[] message, string type, IDictionary<string, object> headers)
         {
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartConsume"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StartConsume", new { Message = message, Type = type, Headers = headers });
+            }
+
             ConsumeEventResult result = new()
             {
                 Success = true
@@ -658,6 +700,13 @@ namespace ServiceConnect
                 Configuration.ExceptionHandler?.Invoke(ex);
                 result.Success = false;
                 result.Exception = ex;
+            }
+            finally
+            {
+                if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopConsume"))
+                {
+                    _diagnosticSource.Write("ServiceConnect.Bus.StopConsume", new { Message = message, Type = type, Headers = headers });
+                }
             }
 
             return result;
