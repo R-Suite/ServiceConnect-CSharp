@@ -264,6 +264,11 @@ namespace ServiceConnect
 
         public void Send<T>(T message, Dictionary<string, string> headers = null) where T : Message
         {
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StartSend", new { Message = message, Headers = headers });
+            }
+
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
 
@@ -286,6 +291,11 @@ namespace ServiceConnect
             }
 
             _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers);
+
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StopSend", new { Message = message, Headers = headers });
+            }
         }
 
         public void Send<T>(string endPoint, T message, Dictionary<string, string> headers = null) where T : Message
@@ -326,6 +336,11 @@ namespace ServiceConnect
 
         public void Send<T>(IList<string> endPoints, T message, Dictionary<string, string> headers = null) where T : Message
         {
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StartSend", new { EndPoints = endPoints, Message = message, Headers = headers });
+            }
+
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
 
@@ -349,6 +364,11 @@ namespace ServiceConnect
             foreach (string endPoint in endPoints)
             {
                 _sendMessagePipeline.ExecuteSendMessagePipeline(typeof(T), messageBytes, headers, endPoint);
+            }
+
+            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopSend"))
+            {
+                _diagnosticSource.Write("ServiceConnect.Bus.StopSend", new { EndPoints = endPoints, Message = message, Headers = headers });
             }
         }
 
