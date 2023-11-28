@@ -635,10 +635,13 @@ namespace ServiceConnect
 
         private async Task<ConsumeEventResult> ConsumeMessageEvent(byte[] message, string type, IDictionary<string, object> headers)
         {
-            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartConsume"))
+            ConsumeEventArgs eventArgs = new()
             {
-                _diagnosticSource.Write("ServiceConnect.Bus.StartConsume", new { Message = message, Type = type, Headers = headers });
-            }
+                Message = message,
+                Type = type,
+                Headers = headers
+            };
+            using Activity activity = ServiceConnectActivitySource.Consume(eventArgs);
 
             ConsumeEventResult result = new()
             {
@@ -699,13 +702,6 @@ namespace ServiceConnect
                 Configuration.ExceptionHandler?.Invoke(ex);
                 result.Success = false;
                 result.Exception = ex;
-            }
-            finally
-            {
-                if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopConsume"))
-                {
-                    _diagnosticSource.Write("ServiceConnect.Bus.StopConsume", new { Message = message, Type = type, Headers = headers });
-                }
             }
 
             return result;
