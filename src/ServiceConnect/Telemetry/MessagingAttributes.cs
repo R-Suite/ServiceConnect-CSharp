@@ -1,4 +1,4 @@
-﻿namespace ServiceConnect.Core.Telemetry;
+﻿namespace ServiceConnect.Telemetry;
 
 internal static class MessagingAttributes
 {

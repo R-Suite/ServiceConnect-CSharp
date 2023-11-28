@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System;
 
-namespace ServiceConnect.Core.Telemetry;
+namespace ServiceConnect.Telemetry;
 
 /// <summary>
 /// Options for <see cref="ServiceConnectInstrumentation"/>.

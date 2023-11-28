@@ -1,7 +1,7 @@
 ﻿using ServiceConnect.Interfaces;
 using System.Collections.Generic;
 
-namespace ServiceConnect.Core.Telemetry;
+namespace ServiceConnect.Telemetry;
 
 public class SendEventArgs
 {
