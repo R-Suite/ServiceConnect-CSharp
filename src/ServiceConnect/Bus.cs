@@ -16,6 +16,7 @@
 
 using Newtonsoft.Json;
 using ServiceConnect.Core;
+using ServiceConnect.Core.Telemetry;
 using ServiceConnect.Interfaces;
 using System;
 using System.Collections.Concurrent;
@@ -157,10 +158,13 @@ namespace ServiceConnect
 
         public void Publish<T>(T message, string routingKey, Dictionary<string, string> headers = null) where T : Message
         {
-            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StartPublish"))
+            PublishEventArgs eventArgs = new()
             {
-                _diagnosticSource.Write("ServiceConnect.Bus.StartPublish", new { Message = message, RoutingKey = routingKey, Headers = headers });
-            }
+                Message = message,
+                RoutingKey = routingKey,
+                Headers = headers ?? default
+            };
+            using Activity activity = ServiceConnectActivitySource.Publish(eventArgs);
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -207,11 +211,6 @@ namespace ServiceConnect
                 MethodInfo publish = GetType().GetMethods().First(m => m.Name == "Publish" && m.GetParameters()[1].Name == "routingKey");
                 MethodInfo genericPublish = publish.MakeGenericMethod(newBaseType);
                 _ = genericPublish.Invoke(this, new object[] { message, routingKey, (null == headers) ? null : new Dictionary<string, string>(headers) });
-            }
-
-            if (_diagnosticSource.IsEnabled("ServiceConnect.Bus.StopPublish"))
-            {
-                _diagnosticSource.Write("ServiceConnect.Bus.StopPublish", new { Message = message, RoutingKey = routingKey, Headers = headers });
             }
         }
 

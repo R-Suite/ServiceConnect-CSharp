@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace ServiceConnect.Core.Telemetry;
 
-internal class PublishEventArgs
+public class PublishEventArgs
 {
     public Message Message { get; init; }
 
