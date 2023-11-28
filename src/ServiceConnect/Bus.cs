@@ -16,8 +16,8 @@
 
 using Newtonsoft.Json;
 using ServiceConnect.Core;
-using ServiceConnect.Core.Telemetry;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Telemetry;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -40,7 +40,6 @@ namespace ServiceConnect
         private readonly ISendMessagePipeline _sendMessagePipeline;
         private readonly BusState _busState;
         private readonly ConcurrentDictionary<string, Type> _typeLookup = new();
-        private static readonly DiagnosticSource _diagnosticSource = new DiagnosticListener("ServiceConnect.Bus");
 
         public IConfiguration Configuration { get; set; }
 
