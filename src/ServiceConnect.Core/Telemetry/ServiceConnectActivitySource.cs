@@ -13,8 +13,10 @@ public static class ServiceConnectActivitySource
     internal static readonly Version Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
     internal static readonly string ActivitySourceName = typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect";
     internal static readonly string ActivityName = ActivitySourceName + ".Bus";
+
     private static readonly ActivitySource _publishActivitySource = new(ActivitySourceName + ".Publish", Version?.ToString() ?? "0.0.0");
     private static readonly ActivitySource _consumeActivitySource = new(ActivitySourceName + ".Consume", Version?.ToString() ?? "0.0.0");
+    private static readonly ActivitySource _sendActivitySource = new(ActivitySourceName + ".Send", Version?.ToString() ?? "0.0.0");
 
     public static Activity Publish(PublishEventArgs eventArgs)
     {
@@ -128,6 +130,57 @@ public static class ServiceConnectActivitySource
                     activity.SetTag("enrichment.exception", ex.Message);
                 }
             }
+        }
+
+        return activity;
+    }
+
+    public static Activity Send(SendEventArgs eventArgs)
+    {
+        if (!_publishActivitySource.HasListeners())
+        {
+            return null;
+        }
+
+        // TODO: get context
+
+        Activity activity = _sendActivitySource.StartActivity(ActivityName + ".Send", ActivityKind.Producer, default(ActivityContext));
+
+        if (activity is null)
+        {
+            return null;
+        }
+
+        activity
+            .SetTag(MessagingAttributes.MessagingSystem, "rabbitmq")
+            .SetTag(MessagingAttributes.ProtocolName, "amqp")
+            .SetTag(MessagingAttributes.MessagingOperation, "publish");
+
+        activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? "anonymous" : eventArgs.EndPoint) + " send";
+
+        if (!string.IsNullOrEmpty(eventArgs.EndPoint))
+        {
+            _ = activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.EndPoint);
+        }
+        else
+        {
+            _ = activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+        }
+
+        if (eventArgs.Message is null)
+        {
+            return activity;
+        }
+
+        activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId);
+
+        try
+        {
+            Options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
+        }
+        catch (Exception ex)
+        {
+            activity.SetTag("enrichment.exception", ex.Message);
         }
 
         return activity;
