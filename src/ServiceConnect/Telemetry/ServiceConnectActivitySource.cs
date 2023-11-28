@@ -6,17 +6,22 @@ using System.Text;
 
 namespace ServiceConnect.Telemetry;
 
-internal static class ServiceConnectActivitySource
+public static class ServiceConnectActivitySource
 {
     public static ServiceConnectInstrumentationOptions Options { get; set; } = new();
 
     internal static readonly Version Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
     internal static readonly string ActivitySourceName = typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect";
+
     internal static readonly string ActivityName = ActivitySourceName + ".Bus";
 
-    private static readonly ActivitySource _publishActivitySource = new(ActivitySourceName + ".Publish", Version?.ToString() ?? "0.0.0");
-    private static readonly ActivitySource _consumeActivitySource = new(ActivitySourceName + ".Consume", Version?.ToString() ?? "0.0.0");
-    private static readonly ActivitySource _sendActivitySource = new(ActivitySourceName + ".Send", Version?.ToString() ?? "0.0.0");
+    public static readonly string PublishActivitySourceName = ActivitySourceName + ".Publish";
+    public static readonly string ConsumeActivitySourceName = ActivitySourceName + ".Consume";
+    public static readonly string SendActivitySourceName = ActivitySourceName + ".Send";
+
+    private static readonly ActivitySource _publishActivitySource = new(PublishActivitySourceName, Version?.ToString() ?? "0.0.0");
+    private static readonly ActivitySource _consumeActivitySource = new(ConsumeActivitySourceName, Version?.ToString() ?? "0.0.0");
+    private static readonly ActivitySource _sendActivitySource = new(SendActivitySourceName, Version?.ToString() ?? "0.0.0");
 
     public static Activity Publish(PublishEventArgs eventArgs)
     {
