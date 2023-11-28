@@ -164,7 +164,9 @@ namespace ServiceConnect
                 RoutingKey = routingKey,
                 Headers = headers ?? default
             };
-            using Activity activity = ServiceConnectActivitySource.Publish(eventArgs);
+            using Activity activity = ServiceConnectActivitySource.Options.EnablePublishTelemetry
+                ? ServiceConnectActivitySource.Publish(eventArgs)
+                : default;
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -268,7 +270,9 @@ namespace ServiceConnect
                 Message = message,
                 Headers = headers
             };
-            using Activity activity = ServiceConnectActivitySource.Send(eventArgs);
+            using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
+                ? ServiceConnectActivitySource.Send(eventArgs)
+                : default;
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -302,7 +306,9 @@ namespace ServiceConnect
                 Message = message,
                 Headers = headers
             };
-            using Activity activity = ServiceConnectActivitySource.Send(eventArgs);
+            using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
+                ? ServiceConnectActivitySource.Send(eventArgs)
+                : default;
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -336,7 +342,9 @@ namespace ServiceConnect
                 Message = message,
                 Headers = headers
             };
-            using Activity activity = ServiceConnectActivitySource.Send(eventArgs);
+            using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
+                ? ServiceConnectActivitySource.Send(eventArgs)
+                : default;
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -634,7 +642,9 @@ namespace ServiceConnect
                 Type = type,
                 Headers = headers
             };
-            using Activity activity = ServiceConnectActivitySource.Consume(eventArgs);
+            using Activity activity = ServiceConnectActivitySource.Options.EnableConsumeTelemetry
+                ? ServiceConnectActivitySource.Consume(eventArgs)
+                : default;
 
             ConsumeEventResult result = new()
             {
