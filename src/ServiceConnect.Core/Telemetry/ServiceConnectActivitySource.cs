@@ -3,21 +3,16 @@ using System.Diagnostics;
 
 namespace ServiceConnect.Core.Telemetry;
 
-public class ServiceConnectActivitySource
+public static class ServiceConnectActivitySource
 {
+    public static ServiceConnectInstrumentationOptions Options { get; set; } = new();
+
     internal static readonly Version Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
     internal static readonly string ActivitySourceName = typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect";
     internal static readonly string ActivityName = ActivitySourceName + ".Bus";
     private static readonly ActivitySource _publishActivitySource = new(ActivitySourceName, Version?.ToString() ?? "0.0.0");
 
-    private readonly ServiceConnectInstrumentationOptions _options;
-
-    public ServiceConnectActivitySource(ServiceConnectInstrumentationOptions options)
-    {
-        _options = options ?? new ServiceConnectInstrumentationOptions();
-    }
-
-    internal Activity Publish(PublishEventArgs eventArgs)
+    public static Activity Publish(PublishEventArgs eventArgs)
     {
         if (!_publishActivitySource.HasListeners())
         {
@@ -58,7 +53,7 @@ public class ServiceConnectActivitySource
             {
                 try
                 {
-                    _options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
+                    Options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
                 }
                 catch (Exception ex)
                 {
