@@ -6,7 +6,7 @@ using System.Text;
 
 namespace ServiceConnect.Core.Telemetry;
 
-public static class ServiceConnectActivitySource
+internal static class ServiceConnectActivitySource
 {
     public static ServiceConnectInstrumentationOptions Options { get; set; } = new();
 
