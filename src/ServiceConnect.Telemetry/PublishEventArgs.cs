@@ -1,5 +1,4 @@
 ﻿using ServiceConnect.Interfaces;
-using System.Collections.Generic;
 
 namespace ServiceConnect.Telemetry;
 
@@ -9,5 +8,11 @@ public class PublishEventArgs
 
     public string RoutingKey { get; init; } = string.Empty;
 
-    public Dictionary<string, string> Headers { get; init; } = new();
+    public Dictionary<string, string> Headers
+    {
+        get => _headers;
+        init => _headers = value is not null ? value : new();
+    }
+
+    private Dictionary<string, string> _headers;
 }

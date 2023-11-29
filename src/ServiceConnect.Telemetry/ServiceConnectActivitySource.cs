@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
+﻿using System.Diagnostics;
 using System.Text;
 
 namespace ServiceConnect.Telemetry;
@@ -10,10 +7,8 @@ public static class ServiceConnectActivitySource
 {
     public static ServiceConnectInstrumentationOptions Options { get; set; } = new();
 
-    internal static readonly Version Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
-    internal static readonly string ActivitySourceName = typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect";
-
-    internal static readonly string ActivityName = ActivitySourceName + ".Bus";
+    internal static readonly Version? Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
+    internal static readonly string ActivitySourceName = typeof(ServiceConnectActivitySource).Assembly.GetName().Name + ".Bus" ?? "ServiceConnect.Bus";
 
     public static readonly string PublishActivitySourceName = ActivitySourceName + ".Publish";
     public static readonly string ConsumeActivitySourceName = ActivitySourceName + ".Consume";
@@ -23,7 +18,7 @@ public static class ServiceConnectActivitySource
     private static readonly ActivitySource _consumeActivitySource = new(ConsumeActivitySourceName, Version?.ToString() ?? "0.0.0");
     private static readonly ActivitySource _sendActivitySource = new(SendActivitySourceName, Version?.ToString() ?? "0.0.0");
 
-    public static Activity Publish(PublishEventArgs eventArgs)
+    public static Activity? Publish(PublishEventArgs eventArgs)
     {
         if (!_publishActivitySource.HasListeners())
         {
@@ -32,51 +27,53 @@ public static class ServiceConnectActivitySource
 
         // TODO: get context
 
-        Activity activity = _publishActivitySource.StartActivity(ActivityName + ".Publish", ActivityKind.Producer, default(ActivityContext));
+        Activity? activity = _publishActivitySource.StartActivity(PublishActivitySourceName, ActivityKind.Producer, default(ActivityContext));
 
-        if (activity is not null)
+        if (activity is null)
         {
-            activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.RoutingKey) ? "anonymous" : eventArgs.RoutingKey) + " publish";
+            return null;
+        }
 
+        activity
+            .SetTag(MessagingAttributes.MessagingSystem, "rabbitmq")
+            .SetTag(MessagingAttributes.ProtocolName, "amqp")
+            .SetTag(MessagingAttributes.MessagingOperation, "publish")
+            .SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
+
+        if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
+        {
+            activity.DisplayName = eventArgs.RoutingKey + " publish";
             activity
-                .SetTag(MessagingAttributes.MessagingSystem, "rabbitmq")
-                .SetTag(MessagingAttributes.ProtocolName, "amqp")
-                .SetTag(MessagingAttributes.MessagingOperation, "publish")
-                .SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId);
+                .SetTag(MessagingAttributes.MessagingDestination, eventArgs.RoutingKey)
+                .SetTag(MessagingAttributes.MessagingDestinationRoutingKey, eventArgs.RoutingKey);
+        }
+        else
+        {
+            activity.DisplayName = "anonymous publish";
+            activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+        }
 
-            if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
-            {
-                activity
-                    .SetTag(MessagingAttributes.MessagingDestination, eventArgs.RoutingKey)
-                    .SetTag(MessagingAttributes.MessagingDestinationRoutingKey, eventArgs.RoutingKey);
-            }
-            else
-            {
-                activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
-            }
+        if (eventArgs.Headers.TryGetValue("MessageId", out string? messageId))
+        {
+            activity.SetTag(MessagingAttributes.MessageId, messageId);
+        }
 
-            if (eventArgs.Headers.TryGetValue("MessageId", out string messageId))
+        if (eventArgs.Message is not null)
+        {
+            try
             {
-                activity.SetTag(MessagingAttributes.MessageId, messageId);
+                Options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
             }
-
-            if (eventArgs.Message is not null)
+            catch (Exception ex)
             {
-                try
-                {
-                    Options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
-                }
-                catch (Exception ex)
-                {
-                    activity.SetTag("enrichment.exception", ex.Message);
-                }
+                activity.SetTag("enrichment.exception", ex.Message);
             }
         }
 
         return activity;
     }
 
-    public static Activity Consume(ConsumeEventArgs eventArgs)
+    public static Activity? Consume(ConsumeEventArgs eventArgs)
     {
         if (!_publishActivitySource.HasListeners())
         {
@@ -85,7 +82,7 @@ public static class ServiceConnectActivitySource
 
         // TODO: get context
 
-        Activity activity = _consumeActivitySource.StartActivity(ActivityName + ".Consume", ActivityKind.Consumer, default(ActivityContext));
+        Activity? activity = _consumeActivitySource.StartActivity(ConsumeActivitySourceName, ActivityKind.Consumer, default(ActivityContext));
 
         if (activity is not null)
         {
@@ -94,7 +91,7 @@ public static class ServiceConnectActivitySource
                 .SetTag(MessagingAttributes.ProtocolName, "amqp")
                 .SetTag(MessagingAttributes.MessagingOperation, "receive");
 
-            Dictionary<string, string> readableHeaders = new();
+            Dictionary<string, string?> readableHeaders = new();
             foreach (var kvp in eventArgs.Headers.ToList())
             {
                 if (kvp.Value.GetType() == typeof(byte[]))
@@ -106,10 +103,10 @@ public static class ServiceConnectActivitySource
                 readableHeaders[kvp.Key] = kvp.Value.ToString();
             }
 
-            readableHeaders.TryGetValue("DestinationAddress", out string destinationAddress);
-            activity.DisplayName = (destinationAddress ?? "anonymous") + " receive";
+            readableHeaders.TryGetValue("DestinationAddress", out string? destinationAddress);
+            activity.DisplayName = (string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive";
 
-            if (readableHeaders.TryGetValue("MessageId", out string messageId))
+            if (readableHeaders.TryGetValue("MessageId", out string? messageId))
             {
                 activity.SetTag(MessagingAttributes.MessageId, messageId);
             }
@@ -140,7 +137,7 @@ public static class ServiceConnectActivitySource
         return activity;
     }
 
-    public static Activity Send(SendEventArgs eventArgs)
+    public static Activity? Send(SendEventArgs eventArgs)
     {
         if (!_publishActivitySource.HasListeners())
         {
@@ -149,7 +146,7 @@ public static class ServiceConnectActivitySource
 
         // TODO: get context
 
-        Activity activity = _sendActivitySource.StartActivity(ActivityName + ".Send", ActivityKind.Producer, default(ActivityContext));
+        Activity? activity = _sendActivitySource.StartActivity(SendActivitySourceName, ActivityKind.Producer, default(ActivityContext));
 
         if (activity is null)
         {
@@ -161,15 +158,15 @@ public static class ServiceConnectActivitySource
             .SetTag(MessagingAttributes.ProtocolName, "amqp")
             .SetTag(MessagingAttributes.MessagingOperation, "publish");
 
-        activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? "anonymous" : eventArgs.EndPoint) + " send";
+        activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? "anonymous" : eventArgs.EndPoint) + " publish";
 
         if (!string.IsNullOrEmpty(eventArgs.EndPoint))
         {
-            _ = activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.EndPoint);
+            activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.EndPoint);
         }
         else
         {
-            _ = activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+            activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
         }
 
         if (eventArgs.Message is null)
@@ -177,7 +174,7 @@ public static class ServiceConnectActivitySource
             return activity;
         }
 
-        activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId);
+        activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
 
         try
         {

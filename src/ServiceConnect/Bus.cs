@@ -161,7 +161,7 @@ namespace ServiceConnect
             {
                 Message = message,
                 RoutingKey = routingKey,
-                Headers = headers ?? default
+                Headers = headers
             };
             using Activity activity = ServiceConnectActivitySource.Options.EnablePublishTelemetry
                 ? ServiceConnectActivitySource.Publish(eventArgs)

@@ -1,5 +1,4 @@
 ﻿using ServiceConnect.Interfaces;
-using System.Collections.Generic;
 
 namespace ServiceConnect.Telemetry;
 
@@ -21,7 +20,7 @@ public class SendEventArgs
     public Dictionary<string, string> Headers
     {
         get => _headers;
-        init => _headers = value is not null ? value : default;
+        init => _headers = value is not null ? value : new();
     }
 
     private Dictionary<string, string> _headers;
