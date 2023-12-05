@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29519.181
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34309.116
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".nuget", ".nuget", "{F6AA773B-5C5E-4EAA-AF50-3579298ECC5C}"
 	ProjectSection(SolutionItems) = preProject
@@ -44,6 +44,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect.IntegrationTestsSsl", "ServiceConnect.IntegrationTestsSsl\ServiceConnect.IntegrationTestsSsl.csproj", "{1833EB44-7761-4B67-9015-F6BA1197460E}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect.Container.ServiceCollection", "ServiceConnect.Container.ServiceCollection\ServiceConnect.Container.ServiceCollection.csproj", "{C951CE45-E6C0-4A6C-94D5-A17630540014}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect.Telemetry", "ServiceConnect.Telemetry\ServiceConnect.Telemetry.csproj", "{448796B0-2094-4B67-9FC1-B12CC5FA0696}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -281,6 +283,22 @@ Global
 		{C951CE45-E6C0-4A6C-94D5-A17630540014}.Release|x64.Build.0 = Release|Any CPU
 		{C951CE45-E6C0-4A6C-94D5-A17630540014}.Release|x86.ActiveCfg = Release|Any CPU
 		{C951CE45-E6C0-4A6C-94D5-A17630540014}.Release|x86.Build.0 = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|x64.Build.0 = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Debug|x86.Build.0 = Debug|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|Any CPU.Build.0 = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|Mixed Platforms.Build.0 = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|x64.ActiveCfg = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|x64.Build.0 = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|x86.ActiveCfg = Release|Any CPU
+		{448796B0-2094-4B67-9FC1-B12CC5FA0696}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
