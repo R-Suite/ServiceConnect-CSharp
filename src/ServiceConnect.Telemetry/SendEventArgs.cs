@@ -1,10 +1,8 @@
-﻿using ServiceConnect.Interfaces;
+﻿namespace ServiceConnect.Telemetry;
 
-namespace ServiceConnect.Telemetry;
-
-public class SendEventArgs
+public class SendEventArgs : OutgoingEventArgs
 {
-    public string EndPoint { get; init; }
+    public string EndPoint { get; init; } = string.Empty;
 
     public IList<string> EndPoints
     {
@@ -14,14 +12,4 @@ public class SendEventArgs
                 .Split(',');
         init => EndPoint = "[" + string.Join(',', value) + "]";
     }
-
-    public Message Message { get; init; }
-
-    public Dictionary<string, string> Headers
-    {
-        get => _headers;
-        init => _headers = value is not null ? value : new();
-    }
-
-    private Dictionary<string, string> _headers;
 }

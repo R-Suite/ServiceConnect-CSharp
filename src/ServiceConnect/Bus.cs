@@ -163,9 +163,14 @@ namespace ServiceConnect
                 RoutingKey = routingKey,
                 Headers = headers
             };
+            ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnablePublishTelemetry
-                ? ServiceConnectActivitySource.Publish(eventArgs)
+                ? ServiceConnectActivitySource.Publish(eventArgs, existingContext)
                 : default;
+            if (activity is not null)
+            {
+                headers = PopulateActivityAndPropagateTraceId(eventArgs, activity);
+            }
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -269,9 +274,14 @@ namespace ServiceConnect
                 Message = message,
                 Headers = headers
             };
+            ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
-                ? ServiceConnectActivitySource.Send(eventArgs)
+                ? ServiceConnectActivitySource.Send(eventArgs, existingContext)
                 : default;
+            if (activity is not null)
+            {
+                headers = PopulateActivityAndPropagateTraceId(eventArgs, activity);
+            }
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -305,6 +315,7 @@ namespace ServiceConnect
                 Message = message,
                 Headers = headers
             };
+            ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
                 ? ServiceConnectActivitySource.Send(eventArgs)
                 : default;
@@ -341,6 +352,7 @@ namespace ServiceConnect
                 Message = message,
                 Headers = headers
             };
+            ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
                 ? ServiceConnectActivitySource.Send(eventArgs)
                 : default;
@@ -852,6 +864,36 @@ namespace ServiceConnect
             }
 
             _expiredTimeoutsPoller?.Stop();
+        }
+
+        private static Dictionary<string, string> PopulateActivityAndPropagateTraceId(OutgoingEventArgs eventArgs, Activity outoingActivity)
+        {
+            if (outoingActivity.IsAllDataRequested && !string.IsNullOrEmpty(eventArgs.Message.CorrelationId.ToString()))
+            {
+                outoingActivity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
+            }
+
+            var headers = eventArgs.Headers ?? new Dictionary<string, string>();
+
+            // Inject the ActivityContext into the message headers to propagate trace context to the receiving service.
+            DistributedContextPropagator.Current.Inject(outoingActivity, headers, InjectTraceContextIntoBasicProperties);
+            eventArgs.Headers = headers;
+
+            return headers;
+        }
+
+        private static void InjectTraceContextIntoBasicProperties(object propsObj, string key, string value)
+        {
+            if (propsObj is not Dictionary<string, string> headers)
+            {
+                return;
+            }
+
+            // Only propagate headers if they haven't already been set
+            if (!headers.ContainsKey(key))
+            {
+                headers[key] = value;
+            }
         }
     }
 }
