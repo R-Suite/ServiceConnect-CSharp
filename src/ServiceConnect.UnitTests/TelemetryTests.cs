@@ -14,6 +14,8 @@ using System.Linq;
 using Newtonsoft.Json;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace ServiceConnect.UnitTests;
 
@@ -110,7 +112,7 @@ public class TelemetryTests
 
         sut.Publish(message, routingKey);
 
-        Activity? activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
+        Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
         Assert.Equal("TestQueue publish", activity?.DisplayName);
         Assert.Equal("TestQueue", activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.MessagingDestination).Value);
     }
@@ -132,6 +134,22 @@ public class TelemetryTests
 
         Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
         Assert.Equal("psmith", activity?.Tags.FirstOrDefault(x => x.Key == "user.username").Value);
+    }
+
+    [Fact]
+    public void ServiceConnectPublishCommandTelemetryDisabledTest()
+    {
+        var activityProcessor = new Mock<BaseProcessor<Activity>>();
+        using var tracer = GetTracer(activityProcessor.Object, options =>
+        {
+            options.EnablePublishTelemetry = false;
+        });
+        FakeMessage1 message = new(CorrelationId);
+
+        sut.Publish(message);
+
+        activityProcessor.Verify(x => x.OnStart(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
+        activityProcessor.Verify(x => x.OnEnd(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
     }
 
     [Fact]
@@ -219,8 +237,24 @@ public class TelemetryTests
 
         await myEventHandler!(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
-        Activity? activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
+        Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
         Assert.Equal("psmith", activity?.Tags.FirstOrDefault(x => x.Key == "user.username").Value);
+    }
+
+    [Fact]
+    public void ServiceConnectConsumeCommandTelemetryDisabledTest()
+    {
+        var activityProcessor = new Mock<BaseProcessor<Activity>>();
+        using var tracer = GetTracer(activityProcessor.Object, options =>
+        {
+            options.EnableConsumeTelemetry = false;
+        });
+        FakeMessage1 message = new(CorrelationId);
+
+        sut.Publish(message);
+
+        activityProcessor.Verify(x => x.OnStart(It.Is<Activity>(a => a.DisplayName.Contains("receive"))), Times.Never);
+        activityProcessor.Verify(x => x.OnEnd(It.Is<Activity>(a => a.DisplayName.Contains("receive"))), Times.Never);
     }
 
     [Fact]
@@ -314,11 +348,43 @@ public class TelemetryTests
         Assert.Equal("[Test.Service1,Test.Service2]", activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.MessagingDestination).Value);
     }
 
+    [Fact]
+    public void ServiceConnectPublishSendTelemetryDisabledTest()
+    {
+        var activityProcessor = new Mock<BaseProcessor<Activity>>();
+        using var tracer = GetTracer(activityProcessor.Object, options =>
+        {
+            options.EnableSendTelemetry = false;
+        });
+        FakeMessage1 message = new(CorrelationId);
+
+        sut.Send(message);
+
+        activityProcessor.Verify(x => x.OnStart(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
+        activityProcessor.Verify(x => x.OnEnd(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
+    }
+
     private static TracerProvider GetTracer(BaseProcessor<Activity> activityProcessor, Action<ServiceConnectInstrumentationOptions> options = null)
     {
         return Sdk.CreateTracerProviderBuilder()
             .AddProcessor(activityProcessor)
-            .AddServiceConnectInstrumentation(options)
+            .ConfigureServices(services =>
+            {
+                if (options is not null)
+                {
+                    services.Configure(null, options);
+                }
+            })
+            .AddInstrumentation(sp =>
+            {
+                var options = sp.GetRequiredService<IOptionsMonitor<ServiceConnectInstrumentationOptions>>().Get(null);
+                ServiceConnectActivitySource.Options = options;
+
+                return sp;
+            })
+            .AddSource(ServiceConnectActivitySource.PublishActivitySourceName)
+            .AddSource(ServiceConnectActivitySource.ConsumeActivitySourceName)
+            .AddSource(ServiceConnectActivitySource.SendActivitySourceName)
             .Build();
     }
 
