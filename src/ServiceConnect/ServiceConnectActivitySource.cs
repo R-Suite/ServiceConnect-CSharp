@@ -206,15 +206,7 @@ public static class ServiceConnectActivitySource
             return false;
         }
 
-        bool hasHeaders = false;
-        foreach (string header in DistributedContextPropagator.Current.Fields)
-        {
-            if (headers.ContainsKey(header))
-            {
-                hasHeaders = true;
-                break;
-            }
-        }
+        bool hasHeaders = DistributedContextPropagator.Current.Fields.Any(header => headers.ContainsKey(header));
 
         if (hasHeaders)
         {
