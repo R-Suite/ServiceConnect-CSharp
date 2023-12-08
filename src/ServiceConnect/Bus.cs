@@ -164,7 +164,7 @@ namespace ServiceConnect
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnablePublishTelemetry
-                ? ServiceConnectActivitySource.Publish(eventArgs, existingContext)
+                ? ServiceConnectActivitySource.StartPublishActivity(eventArgs, existingContext)
                 : default;
             if (activity is not null)
             {
@@ -275,7 +275,7 @@ namespace ServiceConnect
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
-                ? ServiceConnectActivitySource.Send(eventArgs, existingContext)
+                ? ServiceConnectActivitySource.StartSendAcitivty(eventArgs, existingContext)
                 : default;
             if (activity is not null)
             {
@@ -316,7 +316,7 @@ namespace ServiceConnect
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
-                ? ServiceConnectActivitySource.Send(eventArgs)
+                ? ServiceConnectActivitySource.StartSendAcitivty(eventArgs)
                 : default;
 
             string messageString = JsonConvert.SerializeObject(message);
@@ -353,7 +353,7 @@ namespace ServiceConnect
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
             using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
-                ? ServiceConnectActivitySource.Send(eventArgs)
+                ? ServiceConnectActivitySource.StartSendAcitivty(eventArgs)
                 : default;
 
             string messageString = JsonConvert.SerializeObject(message);
@@ -653,7 +653,7 @@ namespace ServiceConnect
                 Headers = headers
             };
             using Activity activity = ServiceConnectActivitySource.Options.EnableConsumeTelemetry
-                ? ServiceConnectActivitySource.Consume(eventArgs)
+                ? ServiceConnectActivitySource.StartConsumeActivity(eventArgs)
                 : default;
 
             ConsumeEventResult result = new()

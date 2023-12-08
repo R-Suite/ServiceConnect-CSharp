@@ -22,7 +22,7 @@ public static class ServiceConnectActivitySource
     private static readonly ActivitySource _consumeActivitySource = new(ConsumeActivitySourceName, Version?.ToString() ?? "0.0.0");
     private static readonly ActivitySource _sendActivitySource = new(SendActivitySourceName, Version?.ToString() ?? "0.0.0");
 
-    public static Activity Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
+    public static Activity StartPublishActivity(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
     {
         if (!_publishActivitySource.HasListeners())
         {
@@ -75,7 +75,7 @@ public static class ServiceConnectActivitySource
         return activity;
     }
 
-    public static Activity Consume(ConsumeEventArgs eventArgs)
+    public static Activity StartConsumeActivity(ConsumeEventArgs eventArgs)
     {
         if (!_consumeActivitySource.HasListeners())
         {
@@ -146,7 +146,7 @@ public static class ServiceConnectActivitySource
         return activity;
     }
 
-    public static Activity Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
+    public static Activity StartSendAcitivty(SendEventArgs eventArgs, ActivityContext linkedContext = default)
     {
         if (!_sendActivitySource.HasListeners())
         {
