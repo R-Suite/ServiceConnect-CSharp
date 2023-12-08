@@ -18,7 +18,6 @@
     <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
     <ProjectReference Include="..\ServiceConnect.Persistance.SqlServer\ServiceConnect.Persistance.SqlServer.csproj" />
     <ProjectReference Include="..\ServiceConnect.Persistance.InMemory\ServiceConnect.Persistance.InMemory.csproj" />
-    <ProjectReference Include="..\ServiceConnect.Telemetry\ServiceConnect.Telemetry.csproj" />
   </ItemGroup>
 
   <ItemGroup>

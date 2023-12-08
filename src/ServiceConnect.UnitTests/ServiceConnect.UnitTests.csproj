@@ -18,7 +18,6 @@
     <ProjectReference Include="..\ServiceConnect.Persistance.InMemory\ServiceConnect.Persistance.InMemory.csproj" />
     <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj" />
     <ProjectReference Include="..\ServiceConnect.Persistance.SqlServer\ServiceConnect.Persistance.SqlServer.csproj" />
-    <ProjectReference Include="..\ServiceConnect.Telemetry\ServiceConnect.Telemetry.csproj" />
     <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
     <ProjectReference Include="..\ServiceConnect.Container.StructureMap\ServiceConnect.Container.StructureMap.csproj" />
   </ItemGroup>

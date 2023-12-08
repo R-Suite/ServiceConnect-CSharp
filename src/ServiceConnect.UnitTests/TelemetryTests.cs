@@ -1,21 +1,20 @@
-﻿using Moq;
-using OpenTelemetry.Trace;
-using OpenTelemetry;
-using ServiceConnect.Core;
-using ServiceConnect.Interfaces;
-using ServiceConnect.Telemetry;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using Xunit;
-using ServiceConnect.UnitTests.Fakes.Messages;
-using ServiceConnect.UnitTests.Fakes.Handlers;
 using System.Linq;
-using Newtonsoft.Json;
 using System.Text;
 using System.Threading.Tasks;
+using Xunit;
+using Moq;
+using OpenTelemetry.Trace;
+using OpenTelemetry;
+using Newtonsoft.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using ServiceConnect.Core;
+using ServiceConnect.Interfaces;
+using ServiceConnect.UnitTests.Fakes.Messages;
+using ServiceConnect.UnitTests.Fakes.Handlers;
 
 namespace ServiceConnect.UnitTests;
 
@@ -307,7 +306,7 @@ public class TelemetryTests
 
         sut.Send(message, headers: null);
 
-        Activity? activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
+        Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
         Assert.Equal(ServiceConnectActivitySource.SendActivitySourceName, activity?.OperationName);
         Assert.Equal(ActivityKind.Producer, activity?.Kind);
         Assert.Equal("anonymous publish", activity?.DisplayName);
@@ -328,7 +327,7 @@ public class TelemetryTests
 
         sut.Send(endPoint, message, headers: null);
 
-        Activity? activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
+        Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
         Assert.Equal($"{endPoint} publish", activity?.DisplayName);
         Assert.Equal(endPoint, activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.MessagingDestination).Value);
     }
@@ -343,7 +342,7 @@ public class TelemetryTests
 
         sut.Send(endPoints, message, headers: null);
 
-        Activity? activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
+        Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
         Assert.Equal("[Test.Service1,Test.Service2] publish", activity?.DisplayName);
         Assert.Equal("[Test.Service1,Test.Service2]", activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.MessagingDestination).Value);
     }
