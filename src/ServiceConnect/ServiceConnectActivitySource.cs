@@ -12,7 +12,7 @@ public static class ServiceConnectActivitySource
     public static ServiceConnectInstrumentationOptions Options { get; set; } = new();
 
     internal static readonly Version Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
-    internal static readonly string ActivitySourceName = typeof(ServiceConnectActivitySource).Assembly.GetName().Name + ".Bus" ?? "ServiceConnect.Bus";
+    internal const string ActivitySourceName = "ServiceConnect.Bus";
 
     public static readonly string PublishActivitySourceName = ActivitySourceName + ".Publish";
     public static readonly string ConsumeActivitySourceName = ActivitySourceName + ".Consume";
