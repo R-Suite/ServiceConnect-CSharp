@@ -9,8 +9,6 @@ using Moq;
 using OpenTelemetry.Trace;
 using OpenTelemetry;
 using Newtonsoft.Json;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using ServiceConnect.UnitTests.Fakes.Messages;
@@ -117,41 +115,6 @@ public class TelemetryTests
     }
 
     [Fact]
-    public void ServiceConnectPublishCommandWithMessageEnrichmentInstrumentedTest()
-    {
-        var activityProcessor = new Mock<BaseProcessor<Activity>>();
-        using var tracer = GetTracer(activityProcessor.Object, options =>
-        {
-            options.EnrichWithMessage = (activity, message) =>
-            {
-                _ = activity.SetTag("user.username", (message as FakeMessage1)?.Username.ToString());
-            };
-        });
-        FakeMessage1 message = new(CorrelationId) { Username = "psmith" };
-
-        sut.Publish(message);
-
-        Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
-        Assert.Equal("psmith", activity?.Tags.FirstOrDefault(x => x.Key == "user.username").Value);
-    }
-
-    [Fact]
-    public void ServiceConnectPublishCommandTelemetryDisabledTest()
-    {
-        var activityProcessor = new Mock<BaseProcessor<Activity>>();
-        using var tracer = GetTracer(activityProcessor.Object, options =>
-        {
-            options.EnablePublishTelemetry = false;
-        });
-        FakeMessage1 message = new(CorrelationId);
-
-        sut.Publish(message);
-
-        activityProcessor.Verify(x => x.OnStart(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
-        activityProcessor.Verify(x => x.OnEnd(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
-    }
-
-    [Fact]
     public async Task ServiceConnectConsumeCommandActivityStartStopTest()
     {
         var activityProcessor = new Mock<BaseProcessor<Activity>>();
@@ -210,50 +173,6 @@ public class TelemetryTests
         Assert.Equal("amqp", activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.ProtocolName).Value);
         Assert.Equal("receive", activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.MessagingOperation).Value);
         Assert.Equal(messageId, activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.MessageId).Value);
-    }
-
-    [Fact]
-    public async Task ServiceConnectConsumeCommandWithMessageBytesEnrichmentInstrumentedTest()
-    {
-        var activityProcessor = new Mock<BaseProcessor<Activity>>();
-        using var tracer = GetTracer(activityProcessor.Object, options =>
-        {
-            options.EnrichWithMessageBytes = (activity, message) =>
-            {
-                _ = activity.SetTag("user.username", JsonConvert.DeserializeObject<FakeMessage1>(Encoding.UTF8.GetString(message))?.Username.ToString());
-            };
-        });
-
-        var headers = new Dictionary<string, object>
-        {
-            { "MessageType", Encoding.ASCII.GetBytes("Send") },
-        };
-
-        SetupConsumer();
-        byte[] message = Encoding.UTF8.GetBytes(
-            JsonConvert.SerializeObject(
-                new FakeMessage1(CorrelationId) { Username = "psmith" }));
-
-        await myEventHandler!(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
-
-        Activity activity = activityProcessor.Invocations[1].Arguments[0] as Activity;
-        Assert.Equal("psmith", activity?.Tags.FirstOrDefault(x => x.Key == "user.username").Value);
-    }
-
-    [Fact]
-    public void ServiceConnectConsumeCommandTelemetryDisabledTest()
-    {
-        var activityProcessor = new Mock<BaseProcessor<Activity>>();
-        using var tracer = GetTracer(activityProcessor.Object, options =>
-        {
-            options.EnableConsumeTelemetry = false;
-        });
-        FakeMessage1 message = new(CorrelationId);
-
-        sut.Publish(message);
-
-        activityProcessor.Verify(x => x.OnStart(It.Is<Activity>(a => a.DisplayName.Contains("receive"))), Times.Never);
-        activityProcessor.Verify(x => x.OnEnd(It.Is<Activity>(a => a.DisplayName.Contains("receive"))), Times.Never);
     }
 
     [Fact]
@@ -347,40 +266,10 @@ public class TelemetryTests
         Assert.Equal("[Test.Service1,Test.Service2]", activity?.Tags.FirstOrDefault(x => x.Key == MessagingAttributes.MessagingDestination).Value);
     }
 
-    [Fact]
-    public void ServiceConnectPublishSendTelemetryDisabledTest()
-    {
-        var activityProcessor = new Mock<BaseProcessor<Activity>>();
-        using var tracer = GetTracer(activityProcessor.Object, options =>
-        {
-            options.EnableSendTelemetry = false;
-        });
-        FakeMessage1 message = new(CorrelationId);
-
-        sut.Send(message);
-
-        activityProcessor.Verify(x => x.OnStart(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
-        activityProcessor.Verify(x => x.OnEnd(It.Is<Activity>(a => a.DisplayName.Contains("publish"))), Times.Never);
-    }
-
-    private static TracerProvider GetTracer(BaseProcessor<Activity> activityProcessor, Action<ServiceConnectInstrumentationOptions> options = null)
+    private static TracerProvider GetTracer(BaseProcessor<Activity> activityProcessor)
     {
         return Sdk.CreateTracerProviderBuilder()
             .AddProcessor(activityProcessor)
-            .ConfigureServices(services =>
-            {
-                if (options is not null)
-                {
-                    services.Configure(null, options);
-                }
-            })
-            .AddInstrumentation(sp =>
-            {
-                var options = sp.GetRequiredService<IOptionsMonitor<ServiceConnectInstrumentationOptions>>().Get(null);
-                ServiceConnectActivitySource.Options = options;
-
-                return sp;
-            })
             .AddSource(ServiceConnectActivitySource.PublishActivitySourceName)
             .AddSource(ServiceConnectActivitySource.ConsumeActivitySourceName)
             .AddSource(ServiceConnectActivitySource.SendActivitySourceName)

@@ -7,10 +7,8 @@ using System.Text;
 
 namespace ServiceConnect;
 
-public static class ServiceConnectActivitySource
+internal static class ServiceConnectActivitySource
 {
-    public static ServiceConnectInstrumentationOptions Options { get; set; } = new();
-
     internal static readonly Version Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
     internal const string ActivitySourceName = "ServiceConnect.Bus";
 
@@ -58,18 +56,6 @@ public static class ServiceConnectActivitySource
         if (eventArgs.Headers.TryGetValue("MessageId", out string messageId) && messageId is not null)
         {
             activity.SetTag(MessagingAttributes.MessageId, messageId);
-        }
-
-        if (eventArgs.Message is not null && Options.EnrichWithMessage is not null)
-        {
-            try
-            {
-                Options.EnrichWithMessage.Invoke(activity, eventArgs.Message);
-            }
-            catch (Exception ex)
-            {
-                activity.SetTag("enrichment.exception", ex.Message);
-            }
         }
 
         return activity;
@@ -129,18 +115,6 @@ public static class ServiceConnectActivitySource
         if (eventArgs.Message is not null)
         {
             activity.SetTag(MessagingAttributes.MessagingBodySize, eventArgs.Message.Length);
-
-            if (Options.EnrichWithMessageBytes is not null)
-            {
-                try
-                {
-                    Options.EnrichWithMessageBytes.Invoke(activity, eventArgs.Message);
-                }
-                catch (Exception ex)
-                {
-                    activity.SetTag("enrichment.exception", ex.Message);
-                }
-            }
         }
 
         return activity;
@@ -182,18 +156,6 @@ public static class ServiceConnectActivitySource
         }
 
         activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
-
-        if (Options.EnrichWithMessage is not null)
-        {
-            try
-            {
-                Options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
-            }
-            catch (Exception ex)
-            {
-                activity.SetTag("enrichment.exception", ex.Message);
-            }
-        }
 
         return activity;
     }
