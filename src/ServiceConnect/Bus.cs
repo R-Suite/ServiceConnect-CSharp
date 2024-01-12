@@ -163,9 +163,7 @@ namespace ServiceConnect
                 Headers = headers
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
-            using Activity activity = ServiceConnectActivitySource.Options.EnablePublishTelemetry
-                ? ServiceConnectActivitySource.StartPublishActivity(eventArgs, existingContext)
-                : default;
+            using Activity activity = ServiceConnectActivitySource.StartPublishActivity(eventArgs, existingContext);
             if (activity is not null)
             {
                 headers = PopulateActivityAndPropagateTraceId(eventArgs, activity);
@@ -274,9 +272,7 @@ namespace ServiceConnect
                 Headers = headers
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
-            using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
-                ? ServiceConnectActivitySource.StartSendAcitivty(eventArgs, existingContext)
-                : default;
+            using Activity activity = ServiceConnectActivitySource.StartSendAcitivty(eventArgs, existingContext);
             if (activity is not null)
             {
                 headers = PopulateActivityAndPropagateTraceId(eventArgs, activity);
@@ -315,9 +311,7 @@ namespace ServiceConnect
                 Headers = headers
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
-            using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
-                ? ServiceConnectActivitySource.StartSendAcitivty(eventArgs)
-                : default;
+            using Activity activity = ServiceConnectActivitySource.StartSendAcitivty(eventArgs);
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -352,9 +346,7 @@ namespace ServiceConnect
                 Headers = headers
             };
             ServiceConnectActivitySource.TryGetExistingContext(eventArgs.Headers, out ActivityContext existingContext);
-            using Activity activity = ServiceConnectActivitySource.Options.EnableSendTelemetry
-                ? ServiceConnectActivitySource.StartSendAcitivty(eventArgs)
-                : default;
+            using Activity activity = ServiceConnectActivitySource.StartSendAcitivty(eventArgs);
 
             string messageString = JsonConvert.SerializeObject(message);
             byte[] messageBytes = Encoding.UTF8.GetBytes(messageString);
@@ -652,9 +644,7 @@ namespace ServiceConnect
                 Type = type,
                 Headers = headers
             };
-            using Activity activity = ServiceConnectActivitySource.Options.EnableConsumeTelemetry
-                ? ServiceConnectActivitySource.StartConsumeActivity(eventArgs)
-                : default;
+            using Activity activity = ServiceConnectActivitySource.StartConsumeActivity(eventArgs);
 
             ConsumeEventResult result = new()
             {
