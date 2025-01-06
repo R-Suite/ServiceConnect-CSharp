@@ -52,6 +52,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             Retry.Do(CreateConnection, ex =>
             {
+                _logger.Error("Error creating connection", ex);
                 DisposeConnection();
             }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
         }
@@ -196,6 +197,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
                     ex =>
                     {
+                        _logger.Error("Error sending message", ex);
                         DisposeConnection();
                         RetryConnection();
                     },
@@ -235,6 +237,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
                 ex =>
                 {
+                    _logger.Error("Error sending message", ex);
                     DisposeConnection();
                     RetryConnection();
                 },
@@ -343,6 +346,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, envelope.Body),
                 ex =>
                 {
+                    _logger.Error("Error sending message", ex);
                     DisposeConnection();
                     RetryConnection();
                 },

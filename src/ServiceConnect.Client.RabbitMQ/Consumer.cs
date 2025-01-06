@@ -1,8 +1,8 @@
-﻿using System;
+﻿using RabbitMQ.Client;
+using ServiceConnect.Interfaces;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using RabbitMQ.Client;
-using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Client.RabbitMQ
 {
@@ -17,7 +17,9 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly ILogger _logger;
         private ITransportSettings _transportSettings;
         private IDictionary<string, object> _queueArguments;
-        private readonly ConcurrentBag<Client> _clients = new ConcurrentBag<Client>();
+        private IDictionary<string, object> _retryQueueArguments;
+        private IDictionary<string, object> _utilityQueueArguments;
+        private readonly ConcurrentBag<Client> _clients = new();
 
         public Consumer(ILogger logger)
         {
@@ -37,17 +39,13 @@ namespace ServiceConnect.Client.RabbitMQ
             _exclusive = _transportSettings.ClientSettings.ContainsKey("Exclusive") && (bool)_transportSettings.ClientSettings["Exclusive"];
             _autoDelete = _transportSettings.ClientSettings.ContainsKey("AutoDelete") && (bool)_transportSettings.ClientSettings["AutoDelete"];
             _queueArguments = _transportSettings.ClientSettings.ContainsKey("Arguments") ? (IDictionary<string, object>)_transportSettings.ClientSettings["Arguments"] : new Dictionary<string, object>();
+            _retryQueueArguments = _transportSettings.ClientSettings.ContainsKey("RetryQueueArguments") ? (IDictionary<string, object>)_transportSettings.ClientSettings["RetryQueueArguments"] : new Dictionary<string, object>();
+            _utilityQueueArguments = _transportSettings.ClientSettings.ContainsKey("UtilityQueueArguments") ? (IDictionary<string, object>)_transportSettings.ClientSettings["UtilityQueueArguments"] : new Dictionary<string, object>();
             _retryDelay = _transportSettings.RetryDelay;
 
-            if (_connection == null)
-            {
-                _connection = new Connection(config.TransportSettings, queueName, _logger);
-            }
+            _connection ??= new Connection(config.TransportSettings, queueName, _logger);
 
-            if (_model == null)
-            {
-                _model = _connection.CreateModel();
-            }
+            _model ??= _connection.CreateModel();
 
             // Configure exchanges
             foreach (string messageType in messageTypes)
@@ -62,16 +60,18 @@ namespace ServiceConnect.Client.RabbitMQ
             if (_transportSettings.PurgeQueueOnStartup)
             {
                 _logger.Debug("Purging queue");
-                _model.QueuePurge(queueName);
+                _ = _model.QueuePurge(queueName);
             }
 
             // Configure retry queue ( but only if retries are expected )
             if (_transportSettings.MaxRetries > 0)
+            {
                 ConfigureRetryQueue(queueName);
+            }
 
             // Configure Error Queue/Exchange
-            var errorExchange = ConfigureErrorExchange();
-            var errorQueue = ConfigureErrorQueue();
+            string errorExchange = ConfigureErrorExchange();
+            string errorQueue = ConfigureErrorQueue();
 
             if (!string.IsNullOrEmpty(errorExchange))
             {
@@ -81,8 +81,8 @@ namespace ServiceConnect.Client.RabbitMQ
             // Configure Audit Queue/Exchange
             if (_transportSettings.AuditingEnabled)
             {
-                var auditExchange = ConfigureAuditExchange();
-                var auditQueue = ConfigureAuditQueue();
+                string auditExchange = ConfigureAuditExchange();
+                string auditQueue = ConfigureAuditQueue();
 
                 if (!string.IsNullOrEmpty(auditExchange))
                 {
@@ -90,11 +90,11 @@ namespace ServiceConnect.Client.RabbitMQ
                 }
             }
 
-            var clientCount = config.Clients;
+            int clientCount = config.Clients;
 
             for (int i = 0; i < clientCount; i++)
             {
-                var client = new Client(_connection, config.TransportSettings, _logger);
+                Client client = new(_connection, config.TransportSettings, _logger);
                 client.StartConsuming(eventHandler, queueName);
                 foreach (string messageType in messageTypes)
                 {
@@ -132,7 +132,7 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             try
             {
-                _model.QueueDeclare(queueName, _durable, _exclusive, _autoDelete, _queueArguments);
+                _ = _model.QueueDeclare(queueName, _durable, _exclusive, _autoDelete, _queueArguments);
             }
             catch (Exception ex)
             {
@@ -144,7 +144,7 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
             // dead-letter exchange is of type "direct" and bound to the original queue.
-            var retryQueueName = queueName + ".Retries";
+            string retryQueueName = queueName + ".Retries";
             string retryDeadLetterExchangeName = queueName + ".Retries.DeadLetter";
 
             try
@@ -165,7 +165,7 @@ namespace ServiceConnect.Client.RabbitMQ
                 _logger.Warn(string.Format("Error binding dead letter queue - {0}", ex.Message));
             }
 
-            var arguments = new Dictionary<string, object>
+            Dictionary<string, object> arguments = new(_retryQueueArguments)
             {
                 {"x-dead-letter-exchange", retryDeadLetterExchangeName},
                 {"x-message-ttl", _retryDelay}
@@ -174,7 +174,7 @@ namespace ServiceConnect.Client.RabbitMQ
             try
             {
                 // We never have consumers on the retry queue.  Therefore set autodelete to false.
-                _model.QueueDeclare(retryQueueName, _durable, false, false, arguments);
+                _ = _model.QueueDeclare(retryQueueName, _durable, false, false, arguments);
             }
             catch (Exception ex)
             {
@@ -200,7 +200,7 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             try
             {
-                _model.QueueDeclare(_transportSettings.ErrorQueueName, true, false, false, null);
+                _ = _model.QueueDeclare(_transportSettings.ErrorQueueName, true, false, false, _utilityQueueArguments);
             }
             catch (Exception ex)
             {
@@ -228,7 +228,7 @@ namespace ServiceConnect.Client.RabbitMQ
         {
             try
             {
-                _model.QueueDeclare(_transportSettings.AuditQueueName, true, false, false, null);
+                _ = _model.QueueDeclare(_transportSettings.AuditQueueName, true, false, false, _utilityQueueArguments);
             }
             catch (Exception ex)
             {
@@ -237,6 +237,9 @@ namespace ServiceConnect.Client.RabbitMQ
             return _transportSettings.AuditQueueName;
         }
 
-        public bool IsConnected() => _connection?.IsConnected() ?? false;
+        public bool IsConnected()
+        {
+            return _connection?.IsConnected() ?? false;
+        }
     }
 }

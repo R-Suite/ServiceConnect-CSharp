@@ -24,7 +24,7 @@ namespace ServiceConnect.Client.RabbitMQ
     {
         public static void Do(Action action, Action<Exception> exceptionAction, TimeSpan retryInterval, int retryCount)
         {
-            var exceptions = new List<Exception>();
+            List<Exception> exceptions = new();
 
             for (int retry = 0; retry < retryCount; retry++)
             {
@@ -40,7 +40,7 @@ namespace ServiceConnect.Client.RabbitMQ
                     {
                         exceptionAction(ex);
                     }
-                    catch{}
+                    catch { }
                     Thread.Sleep(retryInterval);
                 }
             }
@@ -50,7 +50,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
         public static T Do<T>(Func<T> action, Action<Exception> exceptionAction, TimeSpan retryInterval, int retryCount)
         {
-            var exceptions = new List<Exception>();
+            List<Exception> exceptions = new();
 
             for (int retry = 0; retry < retryCount; retry++)
             {
