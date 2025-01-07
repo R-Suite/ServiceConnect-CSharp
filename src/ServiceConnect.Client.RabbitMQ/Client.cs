@@ -42,6 +42,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private readonly ushort _prefetchCount;
         private readonly bool _disablePrefetch;
         private readonly ushort _retryTimeInSeconds;
+        private readonly IDictionary<string, object> _queueArguments;
         private string _retryQueueName;
         private string _errorExchange;
         private string _auditExchange;
@@ -62,6 +63,7 @@ namespace ServiceConnect.Client.RabbitMQ
             _disablePrefetch = transportSettings.ClientSettings.ContainsKey("DisablePrefetch") && (bool)transportSettings.ClientSettings["DisablePrefetch"];
             _retryCount = transportSettings.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
             _retryTimeInSeconds = transportSettings.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportSettings.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
+            _queueArguments = _transportSettings.ClientSettings.ContainsKey("Arguments") ? (IDictionary<string, object>)_transportSettings.ClientSettings["Arguments"] : new Dictionary<string, object>();
         }
 
         /// <summary>
@@ -234,7 +236,7 @@ namespace ServiceConnect.Client.RabbitMQ
         public void ConsumeMessageType(string messageTypeName)
         {
             // messageTypeName is the name of the exchange
-            _model.QueueBind(_queueName, messageTypeName, string.Empty);
+            _model.QueueBind(_queueName, messageTypeName, string.Empty, _queueArguments);
         }
 
         public string Type => "RabbitMQ";

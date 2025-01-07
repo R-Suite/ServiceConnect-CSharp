@@ -75,7 +75,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (!string.IsNullOrEmpty(errorExchange))
             {
-                _model.QueueBind(errorQueue, errorExchange, string.Empty, null);
+                _model.QueueBind(errorQueue, errorExchange, string.Empty, _utilityQueueArguments);
             }
 
             // Configure Audit Queue/Exchange
@@ -86,7 +86,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
                 if (!string.IsNullOrEmpty(auditExchange))
                 {
-                    _model.QueueBind(auditQueue, auditExchange, string.Empty, null);
+                    _model.QueueBind(auditQueue, auditExchange, string.Empty, _utilityQueueArguments);
                 }
             }
 
@@ -158,7 +158,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             try
             {
-                _model.QueueBind(queueName, retryDeadLetterExchangeName, retryQueueName); // only redeliver to the original queue (use _queueName as routing key)
+                _model.QueueBind(queueName, retryDeadLetterExchangeName, retryQueueName, _retryQueueArguments); // only redeliver to the original queue (use _queueName as routing key)
             }
             catch (Exception ex)
             {
