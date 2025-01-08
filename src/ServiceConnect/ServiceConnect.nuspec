@@ -17,7 +17,7 @@
         <dependency id="Common.Logging" version="3.4.1" />
         <dependency id="Newtonsoft.Json" version="13.0.3" />
         <dependency id="ServiceConnect.Interfaces" version="6.0.0" />
-        <dependency id="ServiceConnect.Client.RabbitMQ" version="6.0.0" />
+        <dependency id="ServiceConnect.Client.RabbitMQ" version="6.0.6" />
         <dependency id="Microsoft.Extensions.DependencyModel" version="7.0.0" />
         <dependency id="System.Diagnostics.Process" version="4.3.0" />
         <dependency id="System.Reflection.Extensions" version="4.3.0" />
