@@ -35,7 +35,6 @@ namespace ServiceConnect.Client.RabbitMQ
         private ConsumerEventHandler _consumerEventHandler;
         private readonly ITransportSettings _transportSettings;
         private readonly ILogger _logger;
-        private readonly ManualResetEventSlim _messagesProcessedEvent = new ManualResetEventSlim(false);
 
         private bool _autoDelete;
         private string _queueName;
