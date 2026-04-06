@@ -1,92 +1,148 @@
-[![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+# ServiceConnect
 
-**_ServiceConnect 5.0.0 is available at [https://www.nuget.org/packages/ServiceConnect](https://www.nuget.org/packages/ServiceConnect/)_**
-* **New in ServiceConnect 5.0.0**
-    - Async consumers
-    - Priority Queues support
-    - Bug Fixes
+[![NuGet](https://img.shields.io/nuget/v/ServiceConnect.svg)](https://www.nuget.org/packages/ServiceConnect/)
 
-ServiceConnect is a simple, easy to use asynchronous messaging framework for .NET.
+ServiceConnect is a simple, easy-to-use asynchronous messaging framework for .NET. Built on top of RabbitMQ, it provides a clean abstraction for building distributed systems using well-known Enterprise Integration Patterns.
 
-## Features
+## What is it for?
 
-* Support for many well-known Enterprise Integration Patterns
-    - Point to Point
-    - Publish/Subscribe
-    - Process Manager
-    - Recipient List
-    - Scatter Gather
-    - Routing Slip
-    - Message Aggregation
-    - Content-Based Router
-* Streaming
-* Retries
-* Auditing
-* .NET Core
-* SSL Support
-* Polymorphic message dispatch
-* Multi-threaded consumers
-* Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/ServiceConnect/tree/master/samples/Filters) sample application for a complete example.
+ServiceConnect enables you to build loosely-coupled, asynchronous applications in .NET. It's ideal for:
 
-## Project Maturity
-ServiceConnect (recently renamed from R.MessageBus) has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.
+- **Microservices Communication** - Send messages between services without direct dependencies
+- **Event-Driven Architecture** - Publish events to multiple subscribers
+- **Distributed Systems** - Build systems that span multiple processes or machines
+- **CQRS Implementation** - Separate read and write concerns through messaging
 
+## Installation
 
-## Simple example
+Install via NuGet:
 
-In this example we simply send a message from one endpoint and consume the same message on another endpoint.
-See [Point To Point](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/samples/PointToPoint) sample application for a complete example.
+```bash
+dotnet add package ServiceConnect
+dotnet add package ServiceConnect.Client.RabbitMQ
+```
 
-##### 1. Define your message
+## Quick Start
 
-```YourMessage``` is a .Net class that inherits from
-```ServiceConnect.Interfaces.Message``` base class
+### 1. Define a Message
 
-```c#
+```csharp
+using ServiceConnect.Interfaces;
+
 public class YourMessage : Message
 {
-    public YourMessage(Guid correlationId) : base(correlationId){}
+    public YourMessage(Guid correlationId) : base(correlationId) { }
+    
+    public string Content { get; set; }
 }
 ```
 
-##### 2. Send your message
+### 2. Create a Consumer
 
-In the standard command line ```Main``` method we start the bus with ```var bus = Bus.Initialize();```. Calling initialize with no parameters will create an instance of the Bus with default configuration options. Next, we simply send ```YourMessage``` using ```bus.Send(new YourMessage(id), "YourConsumer");```  - where the first argument is an instance of ```YourMessage```, the second argument, "YourConsumer", is the receiving enpoint name.  (We are going to configure "YourConsumer" next).
+```csharp
+using ServiceConnect.Interfaces;
 
-```c#
-public class Program
-{
-    public static void Main()
-    {
-        var bus = Bus.Initialize();
-
-        bus.Send(new YourMessage(Guid.NewGuid()), "YourConsumer");
-    }
-}
-```
-
-##### 3. Receive your message
-
-Again,  we start the bus in the standard command line ```Main``` method. This time, however, with ```var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));```. Because the method initialize can also take a single lambda/action parameter for custom configuration, we explicitly set the name of the receiving endpoint to "YourConsumer".
-
-```c#
-public class Program
-{
-    public static void Main()
-    {
-        var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));
-    }
-}
-```
-
-Finally, we define a "handler" that will receive the message. The handler is a .NET class that implements ```ServiceConnect.Interfaces.IMessageHandler<T>``` where the generic parameter ```T``` is the type of the message being consumed.
-
-```c#
 public class YourMessageHandler : IMessageHandler<YourMessage>
 {
     public void Execute(YourMessage message)
     {
-        Console.WriteLine("Received message - {0}", message.CorrelationId);
+        Console.WriteLine($"Received: {message.Content}");
     }
 }
 ```
+
+### 3. Send a Message
+
+```csharp
+var bus = Bus.Initialize();
+bus.Send(new YourMessage(Guid.NewGuid()), "YourEndpoint");
+```
+
+### 4. Receive Messages
+
+```csharp
+var bus = Bus.Initialize(config => 
+    config.SetEndpoint("YourEndpoint")
+          .ScanForMessageHandlers());
+```
+
+## Features
+
+### Enterprise Integration Patterns
+
+- **Point-to-Point** - Send messages to a specific endpoint
+- **Publish/Subscribe** - Broadcast messages to multiple consumers
+- **Process Manager** - Coordinate multi-step workflows
+- **Routing Slip** - Route messages through a sequence of endpoints
+- **Scatter-Gather** - Send to multiple recipients and collect responses
+- **Message Aggregation** - Combine multiple messages into one
+- **Content-Based Routing** - Route based on message content
+
+### Additional Features
+
+- Asynchronous message handlers
+- Priority queue support
+- Automatic retries with configurable delays
+- Message auditing
+- SSL/TLS support
+- Polymorphic message dispatch
+- Multi-threaded consumers
+- Message filtering pipeline
+- Streaming support
+
+## Configuration
+
+```csharp
+var bus = Bus.Initialize(config =>
+{
+    config.SetEndpoint("MyEndpoint");
+    config.SetHost("localhost");
+    config.SetUsername("guest");
+    config.SetPassword("guest");
+    config.ScanForMessageHandlers();
+    config.SetMaxRetries(3);
+    config.SetRetryDelay(3000);
+    config.EnableAuditing();
+});
+```
+
+## Container Support
+
+ServiceConnect supports multiple IoC containers:
+
+- `ServiceConnect.Container.Default` - Built-in container
+- `ServiceConnect.Container.ServiceCollection` - Microsoft.Extensions.DependencyInjection
+- `ServiceConnect.Container.StructureMap` - StructureMap
+- `ServiceConnect.Container.Ninject` - Ninject
+
+## Persistence
+
+Choose a persistence store for process managers and aggregators:
+
+- `ServiceConnect.Persistance.InMemory` - In-memory storage (development)
+- `ServiceConnect.Persistance.MongoDb` - MongoDB
+- `ServiceConnect.Persistance.SqlServer` - SQL Server
+- `ServiceConnect.Persistance.MongoDbSsl` - MongoDB with SSL
+
+## Samples
+
+Check out the [samples](samples) directory for complete examples:
+
+- [PointToPoint](samples/PointToPoint%20-%20Copy) - Basic send/receive
+- [PublishSubscribe](samples/PublishSubscribe) - Pub/Sub messaging
+- [RequestResponse](samples/RequestResponse) - Request/reply pattern
+- [ProcessManager](samples/ProcessManager) - Multi-step workflows
+- [RoutingSlip](samples/RoutingSlip) - Sequential routing
+- [ScatterGather](samples/ScatterGather) - Multicast with aggregation
+- [Aggregator](samples/Aggregator) - Message aggregation
+- [Filters](samples/Filters) - Custom message processing pipeline
+- [Streaming](samples/Streaming) - Large message handling
+
+## Requirements
+
+- .NET 10.0+
+- RabbitMQ 3.7+
+
+## License
+
+Licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
