@@ -14,15 +14,17 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
-using ConsumerEventHandler = ServiceConnect.Interfaces.ConsumerEventHandler;
 
 namespace ServiceConnect.Client.RabbitMQ
 {
@@ -33,6 +35,7 @@ namespace ServiceConnect.Client.RabbitMQ
         private ConsumerEventHandler _consumerEventHandler;
         private readonly ITransportSettings _transportSettings;
         private readonly ILogger _logger;
+        private readonly ManualResetEventSlim _messagesProcessedEvent = new ManualResetEventSlim(false);
 
         private bool _autoDelete;
         private string _queueName;
@@ -77,11 +80,13 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 _messagesBeingProcessed++;
 
-                if (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
-                    !args.BasicProperties.Headers.ContainsKey("FullTypeName"))
+                if (args.BasicProperties.Headers == null ||
+                    (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
+                     !args.BasicProperties.Headers.ContainsKey("FullTypeName")))
                 {
                     const string errMsg = "Error processing message, Message headers must contain type name.";
                     _logger.Error(errMsg);
+                    return;
                 }
 
                 if (args.Redelivered)
@@ -316,7 +321,7 @@ namespace ServiceConnect.Client.RabbitMQ
             int timeout = 0;
             while (_messagesBeingProcessed > 0 && timeout < 6000)
             {
-                System.Threading.Thread.Sleep(100);
+                Thread.Sleep(100);
                 timeout++;
             }
         }

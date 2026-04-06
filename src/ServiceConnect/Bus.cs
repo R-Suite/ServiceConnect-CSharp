@@ -60,7 +60,7 @@ namespace ServiceConnect
                 _container.AddBus(this);
             }
 
-            if (configuration.ScanForMesssageHandlers)
+            if (configuration.ScanForMessageHandlers)
             {
                 _container.ScanForHandlers();
             }

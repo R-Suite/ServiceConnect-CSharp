@@ -18,6 +18,7 @@ using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 using System;
 using System.Collections.Concurrent;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -63,7 +64,6 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 VirtualHost = "/",
                 Port = AmqpTcpEndpoint.UseDefaultPort,
-                UseBackgroundThreadsForIO = true,
                 AutomaticRecoveryEnabled = true,
                 TopologyRecoveryEnabled = true
             };
@@ -80,18 +80,7 @@ namespace ServiceConnect.Client.RabbitMQ
 
             if (_transportSettings.SslEnabled)
             {
-                _connectionFactory.Ssl = new SslOption
-                {
-                    Version = _transportSettings.Version,
-                    Enabled = true,
-                    AcceptablePolicyErrors = _transportSettings.AcceptablePolicyErrors,
-                    ServerName = _transportSettings.ServerName,
-                    CertPassphrase = _transportSettings.CertPassphrase,
-                    CertPath = _transportSettings.CertPath,
-                    Certs = _transportSettings.Certs,
-                    CertificateSelectionCallback = _transportSettings.CertificateSelectionCallback,
-                    CertificateValidationCallback = _transportSettings.CertificateValidationCallback
-                };
+                _connectionFactory.Ssl = SslConfigurationBuilder.BuildSslOptions(_transportSettings);
                 _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
             }
 
@@ -134,7 +123,10 @@ namespace ServiceConnect.Client.RabbitMQ
                 };
 
                 basicProperties.Headers = envelope.Headers;
-                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
+                if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
+                {
+                    basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
+                }
                 basicProperties.Persistent = true;
                 if (envelope.Headers != null && envelope.Headers.ContainsKey("Priority"))
                 {
@@ -192,7 +184,10 @@ namespace ServiceConnect.Client.RabbitMQ
                     Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
                     basicProperties.Headers = messageHeaders;
-                    basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
+                    if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
+                    {
+                        basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
+                    }
 
                     Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
                     ex =>
@@ -232,7 +227,10 @@ namespace ServiceConnect.Client.RabbitMQ
                 Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
 
                 basicProperties.Headers = messageHeaders;
-                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
+                if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
+                {
+                    basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
+                }
 
                 Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
                 ex =>
@@ -288,7 +286,7 @@ namespace ServiceConnect.Client.RabbitMQ
             int timeout = 0;
             while (_messagesSent.Count != 0 && timeout < 6000)
             {
-                System.Threading.Thread.Sleep(100);
+                Task.Delay(100).GetAwaiter().GetResult();
                 timeout++;
             }
 
@@ -341,7 +339,10 @@ namespace ServiceConnect.Client.RabbitMQ
                 };
 
                 basicProperties.Headers = envelope.Headers;
-                basicProperties.MessageId = basicProperties.Headers["MessageId"].ToString(); // keep track of retries
+                if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
+                {
+                    basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
+                }
 
                 Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, envelope.Body),
                 ex =>

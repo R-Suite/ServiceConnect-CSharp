@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net6.0</TargetFrameworks>
+	  <TargetFrameworks>net10.0</TargetFrameworks>
     <AssemblyName>ServiceConnect.Container.StructureMap</AssemblyName>
     <PackageId>ServiceConnect.Container.StructureMap</PackageId>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>

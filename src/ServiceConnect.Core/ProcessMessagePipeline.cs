@@ -79,12 +79,18 @@ namespace ServiceConnect.Core
         {
             lock (_busState.RequestLock)
             {
-                if (!context.Headers.ContainsKey("ResponseMessageId"))
+                if (context.Headers == null || !context.Headers.ContainsKey("ResponseMessageId"))
                 {
                     return;
                 }
 
-                string messageId = Encoding.UTF8.GetString((byte[])context.Headers["ResponseMessageId"]);
+                var responseMessageIdHeader = context.Headers["ResponseMessageId"];
+                if (!(responseMessageIdHeader is byte[]))
+                {
+                    return;
+                }
+
+                string messageId = Encoding.UTF8.GetString((byte[])responseMessageIdHeader);
                 if (!_busState.RequestConfigurations.ContainsKey(messageId))
                 {
                     return;

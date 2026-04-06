@@ -263,7 +263,7 @@ namespace ServiceConnect.UnitTests
             bus.Send(new FakeMessage1(Guid.NewGuid()), null);
 
             // Assert
-            mockConfiguration.Verify(x => x.GetProducer(), Times.Once());
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null), Times.Once);
         }
 
         [Fact]
@@ -286,7 +286,7 @@ namespace ServiceConnect.UnitTests
             bus.Send("EndPoint", new FakeMessage1(Guid.NewGuid()), null);
 
             // Assert
-            mockConfiguration.Verify(x => x.GetProducer(), Times.Once()); 
+            mockSendMessagePipeline.Verify(x => x.ExecuteSendMessagePipeline(typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "EndPoint"), Times.Once);
         }
 
         [Fact]
@@ -731,8 +731,8 @@ namespace ServiceConnect.UnitTests
             // Assert
             mockRequestConfiguration.Verify(x => x.SetHandler(It.IsAny<Action<object>>()), Times.Exactly(1));
             Assert.Equal(2, count);
-            Assert.True(responses.Contains(r1));
-            Assert.True(responses.Contains(r2));
+            Assert.Contains(r1, responses);
+            Assert.Contains(r2, responses);
         }
 
         [Fact]
@@ -816,8 +816,8 @@ namespace ServiceConnect.UnitTests
 
             // Assert
             Assert.Equal(2, responses.Count);
-            Assert.True(responses.Contains(r1));
-            Assert.True(responses.Contains(r2));
+            Assert.Contains(r1, responses);
+            Assert.Contains(r2, responses);
         }
 
         [Fact]
@@ -906,8 +906,8 @@ namespace ServiceConnect.UnitTests
             
             // Assert
             Assert.Equal(2, responses.Count);
-            Assert.True(responses.Contains(r1));
-            Assert.True(responses.Contains(r2));
+            Assert.Contains(r1, responses);
+            Assert.Contains(r2, responses);
         }
 
         [Fact]

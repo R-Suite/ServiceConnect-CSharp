@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net6.0</TargetFrameworks>
+	  <TargetFrameworks>net10.0</TargetFrameworks>
     <AssemblyName>ServiceConnect.Persistance.SqlServer</AssemblyName>
     <PackageId>ServiceConnect.Persistance.SqlServer</PackageId>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
@@ -16,12 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Data.SqlClient" Version="4.8.5" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="System.Xml.XmlSerializer" Version="4.3.0" />
-    <PackageReference Include="System.Xml.XPath" Version="4.3.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
   </ItemGroup>
 
 </Project>

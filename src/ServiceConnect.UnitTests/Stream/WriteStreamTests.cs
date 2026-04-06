@@ -27,9 +27,6 @@ namespace ServiceConnect.UnitTests.Stream
 {
     public class WriteStreamTests
     {
-        [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
-        static extern int memcmp(byte[] b1, byte[] b2, long count);
-
         private readonly Mock<IProducer> _producer;
         private Mock<IConfiguration> _mockConfigurtaion;
 
@@ -74,7 +71,13 @@ namespace ServiceConnect.UnitTests.Stream
 
         public bool CompareByteArrays(byte[] b1, byte[] b2)
         {
-            return b1.Length == b2.Length && memcmp(b1, b2, b1.Length) == 0;
+            if (b1 == null || b2 == null) return b1 == b2;
+            if (b1.Length != b2.Length) return false;
+            for (int i = 0; i < b1.Length; i++)
+            {
+                if (b1[i] != b2[i]) return false;
+            }
+            return true;
         }
 
         [Fact]

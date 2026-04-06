@@ -28,7 +28,7 @@ namespace ServiceConnect.Interfaces
         Type MessageBusReadStream { get; set; }
         Type MessageBusWriteStream { get; set; }
         Type AggregatorProcessor { get; set; }
-        bool ScanForMesssageHandlers { get; set; }
+        bool ScanForMessageHandlers { get; set; }
         bool AutoStartConsuming { get; set; }
         string PersistenceStoreConnectionString { get; set; }
         string PersistenceStoreDatabaseName { get; set; }

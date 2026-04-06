@@ -14,8 +14,7 @@ namespace ServiceConnect.Container.ServiceCollection
                 var busContainer = newConfig.GetContainer();
                 busContainer.Initialize(services);
 
-            }
-            + config);
+            } + config);
         }
     }
 }

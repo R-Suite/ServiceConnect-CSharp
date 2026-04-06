@@ -37,7 +37,7 @@ namespace ServiceConnect.Core
             var complete = LastPacketNumber == _currentPacket;
             if (complete)
             {
-                CompleteEventHandler(SequenceId);
+                CompleteEventHandler?.Invoke(SequenceId);
             }
             return complete;
         }

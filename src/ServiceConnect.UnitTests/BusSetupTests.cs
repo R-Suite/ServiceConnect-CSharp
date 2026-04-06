@@ -39,7 +39,7 @@ namespace ServiceConnect.UnitTests
                 config.PersistenceStoreDatabaseName = "TestDatabaseName";
                 config.PersistenceStoreConnectionString = "TestConnectionString";
                 config.AutoStartConsuming = false;
-                config.ScanForMesssageHandlers = false;
+                config.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -60,7 +60,7 @@ namespace ServiceConnect.UnitTests
                 config.SetContainerType<FakeContainer>();
                 config.SetProducer<FakePublisher>();
                 config.AutoStartConsuming = false;
-                config.ScanForMesssageHandlers = false;
+                config.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -80,7 +80,7 @@ namespace ServiceConnect.UnitTests
                 config.SetProcessManagerFinder<FakeProcessManagerFinder>();
                 config.SetContainerType<FakeContainer>();
                 config.SetProducer<FakePublisher>();
-                config.ScanForMesssageHandlers = true;
+                config.ScanForMessageHandlers = true;
                 config.AutoStartConsuming = false;
             });
 
@@ -88,7 +88,7 @@ namespace ServiceConnect.UnitTests
             IConfiguration configuration = bus.Configuration;
 
             // Assert
-            Assert.True(configuration.ScanForMesssageHandlers);
+            Assert.True(configuration.ScanForMessageHandlers);
         }
 
         //[Fact]
@@ -100,7 +100,7 @@ namespace ServiceConnect.UnitTests
         //        config.SetContainerType<FakeContainer>();
         //        config.SetProducer<FakePublisher>();
         //        config.AutoStartConsuming = false;
-        //        config.ScanForMesssageHandlers = false;
+        //        config.ScanForMessageHandlers = false;
         //    });
 
         //    // Act
@@ -119,7 +119,7 @@ namespace ServiceConnect.UnitTests
                 config.SetConsumer<FakeConsumer>();
                 config.SetProducer<FakePublisher>();
                 config.AutoStartConsuming = false;
-                config.ScanForMesssageHandlers = false;
+                config.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -138,7 +138,7 @@ namespace ServiceConnect.UnitTests
                 config.SetProducer<FakePublisher>();
                 config.SetContainerType<FakeContainer>();
                 config.AutoStartConsuming = false;
-                config.ScanForMesssageHandlers = false;
+                config.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -158,7 +158,7 @@ namespace ServiceConnect.UnitTests
                 config.SetContainerType<FakeContainer>();
                 config.SetProducer<FakePublisher>();
                 config.AutoStartConsuming = false;
-                config.ScanForMesssageHandlers = false;
+                config.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -196,7 +196,7 @@ namespace ServiceConnect.UnitTests
                 conf.SetContainerType<FakeContainer>();
                 conf.SetProducer<FakePublisher>();
                 conf.AutoStartConsuming = false;
-                conf.ScanForMesssageHandlers = false;
+                conf.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -217,7 +217,7 @@ namespace ServiceConnect.UnitTests
                 c.SetContainerType<FakeContainer>();
                 c.SetProducer<FakePublisher>();
                 c.AutoStartConsuming = false;
-                c.ScanForMesssageHandlers = false;
+                c.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -237,7 +237,7 @@ namespace ServiceConnect.UnitTests
                 c.SetContainerType<FakeContainer>();
                 c.SetProducer<FakePublisher>();
                 c.AutoStartConsuming = false;
-                c.ScanForMesssageHandlers = false;
+                c.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -257,7 +257,7 @@ namespace ServiceConnect.UnitTests
                 c.SetContainerType<FakeContainer>();
                 c.SetProducer<FakePublisher>();
                 c.AutoStartConsuming = false;
-                c.ScanForMesssageHandlers = false;
+                c.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -277,7 +277,7 @@ namespace ServiceConnect.UnitTests
                 c.SetContainerType<FakeContainer>();
                 c.SetProducer<FakePublisher>();
                 c.AutoStartConsuming = false;
-                c.ScanForMesssageHandlers = false;
+                c.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -297,7 +297,7 @@ namespace ServiceConnect.UnitTests
                 c.SetContainerType<FakeContainer>();
                 c.SetProducer<FakePublisher>();
                 c.AutoStartConsuming = false;
-                c.ScanForMesssageHandlers = false;
+                c.ScanForMessageHandlers = false;
             });
 
             // Act
@@ -341,7 +341,7 @@ namespace ServiceConnect.UnitTests
             var config = bus.Configuration;
 
             // Assert
-            Assert.True(config.ScanForMesssageHandlers);
+            Assert.True(config.ScanForMessageHandlers);
         }
 
         public class FakeContainer : IBusContainer

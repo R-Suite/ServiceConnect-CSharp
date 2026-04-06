@@ -59,7 +59,7 @@ namespace ServiceConnect.UnitTests
         {
             // Arrange
             _mockConfiguration.SetupGet(x => x.AutoStartConsuming).Returns(true);
-            _mockConfiguration.SetupGet(x => x.ScanForMesssageHandlers).Returns(false);
+            _mockConfiguration.SetupGet(x => x.ScanForMessageHandlers).Returns(false);
             _mockConfiguration.Setup(x => x.SetAuditingEnabled(false));
             _mockConfiguration.Setup(x => x.Clients).Returns(1);
             _mockConsumer.Setup(x => x.StartConsuming(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<IConfiguration>()));

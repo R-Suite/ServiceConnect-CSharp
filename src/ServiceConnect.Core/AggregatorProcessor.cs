@@ -160,7 +160,7 @@ namespace ServiceConnect.Core
         /// </summary>
         public void Dispose()
         {
-            _timer.Dispose();
+            _timer?.Dispose();
         }
     }
 }

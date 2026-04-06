@@ -29,10 +29,7 @@ namespace ServiceConnect.Persistance.InMemory
     /// </summary>
     public class InMemoryProcessManagerFinder : IProcessManagerFinder
     {
-        //private static readonly ObjectCache Cache = MemoryCache.Default;
-        //readonly CacheItemPolicy _policy = new CacheItemPolicy { Priority = CacheItemPriority.Default };
         private readonly object _memoryCacheLock = new object();
-        ReaderWriterLockSlim _readerWriterLock = new ReaderWriterLockSlim();
 
         private ICacheProvider _provider = new CacheProvider();
         private DateTime _absoluteExpiry = DateTime.Now.AddDays(2);

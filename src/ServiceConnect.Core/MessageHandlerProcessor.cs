@@ -77,7 +77,11 @@ namespace ServiceConnect.Core
             string messageType = string.Empty;
             if (null != context && null != context.Headers && context.Headers.ContainsKey("MessageType"))
             {
-                messageType = Encoding.UTF8.GetString((byte[]) context.Headers["MessageType"]);
+                var messageTypeHeader = context.Headers["MessageType"] as byte[];
+                if (messageTypeHeader != null)
+                {
+                    messageType = Encoding.UTF8.GetString(messageTypeHeader);
+                }
             }
 
             // If the message was published (rather than sent), no need to scan for handlers interested in the BaseType messages...
@@ -103,7 +107,8 @@ namespace ServiceConnect.Core
             // Ignore irelevant handlers
             if (null != context && null != context.Headers && context.Headers.ContainsKey("RoutingKey"))
             {
-                string msgRoutingKey = Encoding.UTF8.GetString((byte[])context.Headers["RoutingKey"]);
+                var routingKeyHeader = context.Headers["RoutingKey"] as byte[];
+                string msgRoutingKey = routingKeyHeader != null ? Encoding.UTF8.GetString(routingKeyHeader) : string.Empty;
                 
                 if (!routingKeys.Contains(msgRoutingKey) && !routingKeys.Contains("#"))
                 {

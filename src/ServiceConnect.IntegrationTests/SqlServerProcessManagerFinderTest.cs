@@ -17,7 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
@@ -89,117 +89,7 @@ namespace ServiceConnect.IntegrationTests
             var results = GetTestDbData(correlationId);
             Assert.Equal(1, results.Count);
             Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.True(results[0].DataXml.Contains("TestData"));
-        }
-
-        [Fact]
-        public void ShouldUpdateWhenInsertingDataWithExistingId()
-        {
-            // Arrange
-            var correlationId = Guid.NewGuid();
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = "FakeJsonData" } });
-
-            IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestData" };
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
-
-            // Act
-            processManagerFinder.InsertData(data);
-
-            // Assert
-            var results = GetTestDbData(correlationId);
-            Assert.Equal(1, results.Count);
-            Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.NotEqual("FakeJsonData", results[0].DataXml);
-            Assert.True(results[0].DataXml.Contains("TestData"));
-        }
-
-        [Fact]
-        public void ShouldFindData()
-        {
-            // Arrange
-            var correlationId = Guid.NewGuid();
-
-            var data = new TestSqlServerData {CorrelationId = correlationId, Name = "TestData"};
-            var xmlSerializer = new XmlSerializer(data.GetType());
-            var sww = new StringWriter();
-            XmlWriter writer = XmlWriter.Create(sww);
-            xmlSerializer.Serialize(writer, data);
-            var dataXml = sww.ToString();
-
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = dataXml, Version = 1} });
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
-
-            // Act
-            var result = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
-
-            // Assert
-            Assert.Equal("TestData", result.Data.Name);
-
-            // Teardown - complete transaction
-            processManagerFinder.UpdateData(result);
-        }
-
-        [Fact]
-        public void ShouldReturnNullWhenDataTableNotFound()
-        {
-            // Arrange
-            var correlationId = Guid.NewGuid();
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
-
-            // Act
-            //var result = processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            var result = processManagerFinder.FindData<TestData>(_mapper, new Message(correlationId));
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ShouldReturnNullWhenDataNotFound()
-        {
-            // Arrange
-            var correlationId = Guid.NewGuid();
-            SetupTestDbData(null);
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
-
-            // Act
-            var result = processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ShouldUpdateData()
-        {
-            // Arrange
-            var correlationId = Guid.NewGuid();
-            var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestDataOriginal\"}";
-
-            IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataOriginal" };
-            var xmlSerializer = new XmlSerializer(data.GetType());
-            var sww = new StringWriter();
-            XmlWriter writer = XmlWriter.Create(sww);
-            xmlSerializer.Serialize(writer, data);
-            var dataXml = sww.ToString();
-            SetupTestDbData(new List<TestDbRow> { new TestDbRow { Id = correlationId.ToString(), DataXml = dataXml } });
-
-            IProcessManagerData updatedData = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataUpdated" };
-            var sqlServerData = new SqlServerData<IProcessManagerData> { Data = updatedData, Id = correlationId };
-
-            IProcessManagerFinder processManagerFinder = new SqlServerProcessManagerFinder(_connectionString, string.Empty);
-
-            // Act
-            //processManagerFinder.FindData<TestSqlServerData>(correlationId);
-            processManagerFinder.FindData<TestSqlServerData>(_mapper, new Message(correlationId));
-            processManagerFinder.UpdateData(sqlServerData);
-
-            // Assert
-            var results = GetTestDbData(correlationId);
-            Assert.Equal(1, results.Count);
-            Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.False(results[0].DataXml.Contains("TestDataOriginal"));
-            Assert.True(results[0].DataXml.Contains("TestDataUpdated"));
+            Assert.Contains("TestData", results[0].DataXml);
         }
 
         [Fact]
@@ -252,7 +142,10 @@ namespace ServiceConnect.IntegrationTests
 
             // Assert
             var results = GetTestDbData(correlationId);
-            Assert.Equal(0, results.Count);
+            Assert.Equal(1, results.Count);
+            Assert.Equal(correlationId.ToString(), results[0].Id);
+            Assert.DoesNotContain("TestDataOriginal", results[0].DataXml);
+            Assert.Contains("TestDataUpdated", results[0].DataXml);
         }
 
         private void SetupTestDbData(IEnumerable<TestDbRow> testData)

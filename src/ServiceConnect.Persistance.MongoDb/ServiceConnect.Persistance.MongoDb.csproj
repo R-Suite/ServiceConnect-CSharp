@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <VersionPrefix>4.0.0-pre</VersionPrefix>
-	  <TargetFrameworks>net6.0</TargetFrameworks>
+	  <TargetFrameworks>net10.0</TargetFrameworks>
     <AssemblyName>ServiceConnect.Persistance.MongoDb</AssemblyName>
     <PackageId>ServiceConnect.Persistance.MongoDb</PackageId>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="mongocsharpdriver" Version="2.19.2" />
+    <PackageReference Include="mongocsharpdriver" Version="2.23.1" />
   </ItemGroup>
 
 </Project>

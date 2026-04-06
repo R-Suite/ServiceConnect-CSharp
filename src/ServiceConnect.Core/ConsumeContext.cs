@@ -34,11 +34,31 @@ namespace ServiceConnect.Core
 
         public void Reply<TReply>(TReply message, Dictionary<string, string> headers) where TReply : Message
         {
-            headers["ResponseMessageId"] = Encoding.ASCII.GetString((byte[]) Headers["RequestMessageId"]);
+            if (Headers == null || !Headers.ContainsKey("RequestMessageId"))
+            {
+                throw new ArgumentException("RequestMessageId not found in message headers.");
+            }
+
+            var requestMessageId = Headers["RequestMessageId"] as byte[];
+            if (requestMessageId == null)
+            {
+                throw new ArgumentException("RequestMessageId is not a byte array.");
+            }
+
+            headers["ResponseMessageId"] = Encoding.ASCII.GetString(requestMessageId);
+
+            if (_bus == null)
+            {
+                throw new InvalidOperationException("Bus is not set on ConsumeContext.");
+            }
 
             if (Headers.ContainsKey("SourceAddress"))
             {
-                _bus.Send(Encoding.ASCII.GetString((byte[])Headers["SourceAddress"]), message, headers);
+                var sourceAddress = Headers["SourceAddress"] as byte[];
+                if (sourceAddress != null)
+                {
+                    _bus.Send(Encoding.ASCII.GetString(sourceAddress), message, headers);
+                }
             }
             else
             {

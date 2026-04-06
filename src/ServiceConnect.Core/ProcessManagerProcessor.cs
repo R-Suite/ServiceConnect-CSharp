@@ -72,10 +72,14 @@ namespace ServiceConnect.Core
 
                     // Set Process Manager Finder property
                     PropertyInfo processManagerFinderProp = processManagerInstance.HandlerType.GetProperty("ProcessManagerFinder");
-                    processManagerFinderProp.SetValue(processManager, _processManagerFinder, null);
+                    if (processManagerFinderProp != null)
+                    {
+                        processManagerFinderProp.SetValue(processManager, _processManagerFinder, null);
+                    }
 
                     // Execute FindProcessManagerData - see if already exists
-                    object persistanceData = processManagerInstance.HandlerType.GetMethod("FindProcessManagerData").Invoke(processManager, new[] { messageObject });
+                    MethodInfo findMethod = processManagerInstance.HandlerType.GetMethod("FindProcessManagerData");
+                    object persistanceData = findMethod != null ? findMethod.Invoke(processManager, new[] { messageObject }) : null;
 
                     // Get Data Type
                     Type dataType = processManagerInstance.HandlerType.GetTypeInfo().BaseType.GetGenericArguments()[0];
@@ -99,14 +103,21 @@ namespace ServiceConnect.Core
 
                     // Set data on process manager
                     PropertyInfo prop = processManagerInstance.HandlerType.GetProperty("Data", dataType);
-                    prop.SetValue(processManager, data, null);
+                    if (prop != null)
+                    {
+                        prop.SetValue(processManager, data, null);
+                    }
 
                     // Set context property value
                     PropertyInfo contextProp = processManagerInstance.HandlerType.GetProperty("Context", typeof (IConsumeContext));
-                    contextProp.SetValue(processManager, context, null);
+                    if (contextProp != null)
+                    {
+                        contextProp.SetValue(processManager, context, null);
+                    }
 
                     // Execute process manager execute method
-                    var result = processManagerInstance.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new[] { messageObject });
+                    MethodInfo executeMethod = processManagerInstance.HandlerType.GetMethod("Execute", new[] { msgType });
+                    var result = executeMethod != null ? executeMethod.Invoke(processManager, new[] { messageObject }) : null;
 
                     if (result != null && result is Task handlerTask)
                     {
@@ -185,10 +196,14 @@ namespace ServiceConnect.Core
 
                     // Set Process Manager Finder property
                     PropertyInfo processManagerFinderProp = handlerReference.HandlerType.GetProperty("ProcessManagerFinder");
-                    processManagerFinderProp.SetValue(processManager, _processManagerFinder, null);
+                    if (processManagerFinderProp != null)
+                    {
+                        processManagerFinderProp.SetValue(processManager, _processManagerFinder, null);
+                    }
 
                     // Execute FindProcessManagerData
-                    object persistanceData = handlerReference.HandlerType.GetMethod("FindProcessManagerData").Invoke(processManager, new[] {messageObject});
+                    MethodInfo findMethod = handlerReference.HandlerType.GetMethod("FindProcessManagerData");
+                    object persistanceData = findMethod != null ? findMethod.Invoke(processManager, new[] {messageObject}) : null;
 
                     // Get data type
                     Type dataType = handlerReference.HandlerType.GetTypeInfo().BaseType.GetGenericArguments()[0];
@@ -206,14 +221,21 @@ namespace ServiceConnect.Core
 
                     // Set data property value
                     PropertyInfo prop = handlerReference.HandlerType.GetProperty("Data", dataType);
-                    prop.SetValue(processManager, data, null);
+                    if (prop != null)
+                    {
+                        prop.SetValue(processManager, data, null);
+                    }
 
                     // Set context property value
                     PropertyInfo contextProp = handlerReference.HandlerType.GetProperty("Context", typeof (IConsumeContext));
-                    contextProp.SetValue(processManager, context, null);
+                    if (contextProp != null)
+                    {
+                        contextProp.SetValue(processManager, context, null);
+                    }
 
                     // ***Execute handler***
-                    var result = handlerReference.HandlerType.GetMethod("Execute", new[] { msgType }).Invoke(processManager, new object[] { messageObject });
+                    MethodInfo executeMethod = handlerReference.HandlerType.GetMethod("Execute", new[] { msgType });
+                    var result = executeMethod != null ? executeMethod.Invoke(processManager, new object[] { messageObject }) : null;
 
                     if (result != null && result is Task handlerTask)
                     {

@@ -37,13 +37,16 @@ namespace ServiceConnect
     {
         private const string DefaultDatabaseName = "RMessageBusPersistantStore";
         private const string DefaultConnectionString = "mongodb://localhost/";
-        private const string DefaultHost= "localhost";
+        private const string DefaultHost = "localhost";
         private const string DefaultAggregatorCollectionName = "Aggregator";
+        private const int DefaultMaxRetries = 3;
+        private const int DefaultRetryDelayMs = 3000;
+        private const string DefaultErrorQueueName = "errors";
+        private const string DefaultAuditQueueName = "audit";
+        private const string DefaultHeartbeatQueueName = "heartbeat";
 
         #region Private Fields
 
-        //private string _configurationPath;
-        private string _endPoint;
         private string _queueName;
         private string _errorQueueName;
         private string _auditQueueName;
@@ -65,7 +68,7 @@ namespace ServiceConnect
         public Type MessageBusWriteStream { get; set; }
         public Type AggregatorProcessor { get; set; }
         public Type ConsumerPoolType { get; set; }
-        public bool ScanForMesssageHandlers { get; set; }
+        public bool ScanForMessageHandlers { get; set; }
         public bool AutoStartConsuming { get; set; }
         public string PersistenceStoreConnectionString { get; set; }
         public string PersistenceStoreDatabaseName { get; set; }
@@ -86,7 +89,7 @@ namespace ServiceConnect
 
         public Configuration()
         {
-            ScanForMesssageHandlers = true;
+            ScanForMessageHandlers = true;
             AddBusToContainer = true;
             AutoStartConsuming = true;
 
@@ -358,7 +361,7 @@ namespace ServiceConnect
         /// <returns></returns>
         public IProcessManagerFinder GetProcessManagerFinder()
         {
-            if (null == _processManagerFinder)
+            if (_processManagerFinder == null)
             {
                 _processManagerFinder = (IProcessManagerFinder)Activator.CreateInstance(ProcessManagerFinder, PersistenceStoreConnectionString, PersistenceStoreDatabaseName);
             }
@@ -426,16 +429,16 @@ namespace ServiceConnect
         {
             ITransportSettings transportSettings = new TransportSettings();
             transportSettings.Host = DefaultHost;
-            transportSettings.MaxRetries = 3;
-            transportSettings.RetryDelay = 3000;
+            transportSettings.MaxRetries = DefaultMaxRetries;
+            transportSettings.RetryDelay = DefaultRetryDelayMs;
             transportSettings.Username = null;
             transportSettings.Password = null;
             transportSettings.QueueName = TransportSettings.QueueName;
             transportSettings.MachineName = Environment.MachineName;
-            transportSettings.ErrorQueueName = "errors";
+            transportSettings.ErrorQueueName = DefaultErrorQueueName;
             transportSettings.AuditingEnabled = false;
-            transportSettings.AuditQueueName = "audit";
-            transportSettings.HeartbeatQueueName = "heartbeat";
+            transportSettings.AuditQueueName = DefaultAuditQueueName;
+            transportSettings.HeartbeatQueueName = DefaultHeartbeatQueueName;
             transportSettings.ClientSettings = new Dictionary<string, object>();
 
             return transportSettings;

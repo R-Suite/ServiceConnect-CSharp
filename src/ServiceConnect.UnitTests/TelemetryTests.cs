@@ -40,7 +40,7 @@ public class TelemetryTests
         configurationMock.Setup(c => c.GetProcessMessagePipeline(It.IsAny<BusState>())).Returns(new Mock<IProcessMessagePipeline>().Object);
         configurationMock.Setup(c => c.GetSendMessagePipeline()).Returns(new Mock<ISendMessagePipeline>().Object);
         configurationMock.Setup(c => c.AddBusToContainer).Returns(false);
-        configurationMock.Setup(c => c.ScanForMesssageHandlers).Returns(false);
+        configurationMock.Setup(c => c.ScanForMessageHandlers).Returns(false);
         configurationMock.Setup(c => c.AutoStartConsuming).Returns(false);
         configurationMock.Setup(c => c.EnableProcessManagerTimeouts).Returns(false);
         configurationMock.Setup(c => c.TransportSettings.QueueName).Returns("TestQueue");

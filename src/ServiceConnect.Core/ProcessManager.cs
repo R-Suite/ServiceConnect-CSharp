@@ -51,11 +51,24 @@ namespace ServiceConnect.Core
 
         protected virtual void RequestTimeout(TimeSpan timeout)
         {
+            if (ProcessManagerFinder == null)
+            {
+                throw new InvalidOperationException("ProcessManagerFinder is not set.");
+            }
+
+            object destinationAddressObj = Context?.Headers != null ? Context.Headers["DestinationAddress"] : null;
+            string destinationAddress = destinationAddressObj?.ToString();
+
+            if (string.IsNullOrEmpty(destinationAddress))
+            {
+                throw new InvalidOperationException("DestinationAddress not found in message headers.");
+            }
+
             var timeoutData = new TimeoutData
             {
-                Destination = Context.Headers["DestinationAddress"].ToString(),
+                Destination = destinationAddress,
                 ProcessManagerId = Data.CorrelationId,
-                Headers = Context.Headers,
+                Headers = Context?.Headers,
                 Id = Guid.NewGuid(),
                 Time = DateTime.UtcNow.Add(timeout)
             };

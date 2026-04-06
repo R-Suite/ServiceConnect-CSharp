@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net6.0</TargetFrameworks>
+	  <TargetFrameworks>net10.0</TargetFrameworks>
     <AssemblyName>ServiceConnect.Persistance.MongoDbSsl</AssemblyName>
     <PackageId>ServiceConnect.Persistance.MongoDbSsl</PackageId>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="MongoDB.Driver">
-      <Version>2.19.2</Version>
+      <Version>2.23.1</Version>
     </PackageReference>
   </ItemGroup>
 
