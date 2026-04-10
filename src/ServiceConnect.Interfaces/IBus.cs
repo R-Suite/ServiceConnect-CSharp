@@ -13,6 +13,7 @@ public interface IBus : IDisposable
     void Route<T>(T message, IList<string> destinations) where T : Message;
     IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message;
     void StartConsuming();
+    Task StartConsumingAsync();
     void StopConsuming();
     bool IsConnected { get; }
 }
