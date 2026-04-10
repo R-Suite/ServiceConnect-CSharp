@@ -1,4 +1,4 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
+//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
 
 //This program is free software; you can redistribute it and/or
 //modify it under the terms of the GNU General Public License
@@ -14,10 +14,8 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
-using ServiceConnect.Client.RabbitMQ;
-using ServiceConnect.Container.Default;
+using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Interfaces;
-using ServiceConnect.Persistance.SqlServer;
 using Xunit;
 
 namespace ServiceConnect.IntegrationTests.Bus
@@ -26,43 +24,27 @@ namespace ServiceConnect.IntegrationTests.Bus
     {
         public class TestHandler : IMessageHandler<Message>
         {
-            public IConsumeContext Context { get; set; }
-            public void Execute(Message message)
+            public IConsumeContext? Context { get; set; }
+            public Task HandleAsync(Message message)
             {
                 throw new System.NotImplementedException();
             }
         }
 
         [Fact]
-        public void ShouldSetupBusWithDefaultConfiguration()
-        {
-            // Arrange / Act
-            IBus bus = ServiceConnect.Bus.Initialize();
-
-            // Assert
-            Assert.Equal(typeof(Consumer), bus.Configuration.ConsumerType);
-            Assert.Equal(typeof(Producer), bus.Configuration.ProducerType);
-            Assert.Same(typeof(DefaultBusContainer), bus.Configuration.GetContainer().GetType());
-            Assert.Equal(typeof(SqlServerProcessManagerFinder), bus.Configuration.ProcessManagerFinder);
-
-            bus.StopConsuming();
-            bus.Dispose();
-        }
-
-        [Fact]
-        public void ShouldResolveHandlerFromDefaultContainer()
+        public void ShouldSetupBusViaServiceCollection()
         {
             // Arrange
-            IBus bus = ServiceConnect.Bus.Initialize();
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddServiceConnect(_ => { });
 
-            // Act 
-            var result = bus.Configuration.GetContainer().GetInstance<IMessageHandler<Message>>();
+            // Act
+            var provider = services.BuildServiceProvider();
+            var bus = provider.GetRequiredService<IBus>();
 
             // Assert
-            Assert.NotNull(result);
-
-            bus.StopConsuming();
-            bus.Dispose();
+            Assert.NotNull(bus);
         }
     }
 }
