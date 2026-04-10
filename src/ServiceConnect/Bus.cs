@@ -160,6 +160,12 @@ public sealed class Bus : IBus
         _consuming = true;
     }
 
+    public Task StartConsumingAsync()
+    {
+        StartConsuming();
+        return Task.CompletedTask;
+    }
+
     public void StopConsuming()
     {
         _logger.LogInformation("Bus stopping message consumption.");
