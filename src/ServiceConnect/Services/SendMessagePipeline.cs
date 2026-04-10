@@ -8,18 +8,19 @@ namespace ServiceConnect.Services;
 public class SendMessagePipeline : ISendMessagePipeline
 {
     private readonly IProducer _producer;
+    private bool _disposed;
 
     public SendMessagePipeline(IProducer producer)
     {
         _producer = producer ?? throw new ArgumentNullException(nameof(producer));
     }
 
-    public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers = null!, string endPoint = null!)
+    public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null)
     {
         return _producer.PublishAsync(typeObject, messageBytes, headers);
     }
 
-    public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers = null!, string endPoint = null!)
+    public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null)
     {
         if (!string.IsNullOrEmpty(endPoint))
             return _producer.SendAsync(endPoint, typeObject, messageBytes, headers);
@@ -29,6 +30,8 @@ public class SendMessagePipeline : ISendMessagePipeline
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         _producer.Dispose();
     }
 }

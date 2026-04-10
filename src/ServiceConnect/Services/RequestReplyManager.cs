@@ -23,10 +23,11 @@ public class RequestReplyManager : IRequestReplyManager
         where TReply : Message
     {
         var messageId = Guid.NewGuid();
+        var messageIdStr = messageId.ToString();
         var tcs = new TaskCompletionSource<object>();
-        _pendingRequests[messageId.ToString()] = new RequestState(tcs, 1);
+        _pendingRequests[messageIdStr] = new RequestState(tcs, 1);
 
-        headers["RequestMessageId"] = messageId.ToString();
+        headers["RequestMessageId"] = messageIdStr;
 
         if (!string.IsNullOrEmpty(options.EndPoint))
             await sendAction(typeof(TRequest), messageBytes, headers, options.EndPoint);
@@ -47,7 +48,7 @@ public class RequestReplyManager : IRequestReplyManager
         }
         finally
         {
-            _pendingRequests.TryRemove(messageId.ToString(), out _);
+            _pendingRequests.TryRemove(messageIdStr, out _);
         }
     }
 
@@ -60,18 +61,19 @@ public class RequestReplyManager : IRequestReplyManager
         where TReply : Message
     {
         var messageId = Guid.NewGuid();
+        var messageIdStr = messageId.ToString();
         var responses = new ConcurrentBag<TReply>();
         int expectedCount = options.ExpectedReplyCount ?? options.EndPoints?.Count ?? -1;
         var tcs = new TaskCompletionSource<object>();
 
-        _pendingRequests[messageId.ToString()] = new RequestState(tcs, expectedCount, reply =>
+        _pendingRequests[messageIdStr] = new RequestState(tcs, expectedCount, reply =>
         {
             responses.Add((TReply)reply);
             if (expectedCount > 0 && responses.Count >= expectedCount)
                 tcs.TrySetResult(null!);
         });
 
-        headers["RequestMessageId"] = messageId.ToString();
+        headers["RequestMessageId"] = messageIdStr;
 
         if (options.EndPoints != null)
         {
@@ -83,13 +85,17 @@ public class RequestReplyManager : IRequestReplyManager
             await sendAction(typeof(TRequest), messageBytes, headers, null);
         }
 
-        using var cts = new CancellationTokenSource(options.Timeout);
-        cts.Token.Register(() => tcs.TrySetResult(null!)); // timeout returns what we have
-
-        await tcs.Task;
-        _pendingRequests.TryRemove(messageId.ToString(), out _);
-
-        return responses.ToList();
+        try
+        {
+            using var cts = new CancellationTokenSource(options.Timeout);
+            cts.Token.Register(() => tcs.TrySetResult(null!)); // timeout returns what we have
+            await tcs.Task;
+            return responses.ToList();
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(messageIdStr, out _);
+        }
     }
 
     public void ProcessReply(string messageId, byte[] messageBytes, Type type)

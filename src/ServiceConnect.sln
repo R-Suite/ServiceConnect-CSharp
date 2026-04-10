@@ -22,8 +22,6 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect", "ServiceCo
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect.Client.RabbitMQ", "ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj", "{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ServiceConnect.IntegrationTests", "ServiceConnect.IntegrationTests\ServiceConnect.IntegrationTests.csproj", "{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Persistence.MongoDb", "ServiceConnect.Persistence.MongoDb\ServiceConnect.Persistence.MongoDb.csproj", "{B76ADC5A-B9E2-4DB9-AB98-182AEF1EF804}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceConnect.Persistence.InMemory", "ServiceConnect.Persistence.InMemory\ServiceConnect.Persistence.InMemory.csproj", "{3525A442-9C30-4826-961B-9F3775FB2E81}"
@@ -108,22 +106,6 @@ Global
 		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|x64.Build.0 = Release|Any CPU
 		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|x86.ActiveCfg = Release|Any CPU
 		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F}.Release|x86.Build.0 = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|Mixed Platforms.Build.0 = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|x64.Build.0 = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Debug|x86.Build.0 = Debug|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|Mixed Platforms.ActiveCfg = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|Mixed Platforms.Build.0 = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|x64.ActiveCfg = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|x64.Build.0 = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|x86.ActiveCfg = Release|Any CPU
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD}.Release|x86.Build.0 = Release|Any CPU
 		{B76ADC5A-B9E2-4DB9-AB98-182AEF1EF804}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B76ADC5A-B9E2-4DB9-AB98-182AEF1EF804}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B76ADC5A-B9E2-4DB9-AB98-182AEF1EF804}.Debug|Mixed Platforms.ActiveCfg = Debug|Any CPU
@@ -195,7 +177,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{631FBA4F-B47D-49AC-BABB-F925008AE2E7} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
 		{A9F6C561-0D41-4BBF-82E0-64A0BAC4A74F} = {3055CCE6-1EF9-49D4-A3E8-39E4F6D6E135}
-		{A40766BC-B143-4223-8A1C-CC4EDCE49EDD} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
 		{F01967AE-9C13-4B12-864F-98933FFEC6CC} = {AAED4869-7897-4FB4-B55C-8903D0EB321F}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
