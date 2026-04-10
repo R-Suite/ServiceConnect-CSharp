@@ -1,0 +1,236 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes.Messages;
+using Xunit;
+
+namespace ServiceConnect.UnitTests;
+
+file class TestDispatchHandler : IMessageHandler<FakeMessage1>
+{
+    public IConsumeContext? Context { get; set; }
+
+    private readonly Action<FakeMessage1>? _onHandle;
+    private readonly Action<IConsumeContext?>? _onContextSet;
+    private readonly Exception? _throwOnHandle;
+
+    public TestDispatchHandler(
+        Action<FakeMessage1>? onHandle = null,
+        Action<IConsumeContext?>? onContextSet = null,
+        Exception? throwOnHandle = null)
+    {
+        _onHandle = onHandle;
+        _onContextSet = onContextSet;
+        _throwOnHandle = throwOnHandle;
+    }
+
+    public Task HandleAsync(FakeMessage1 message)
+    {
+        _onContextSet?.Invoke(Context);
+        if (_throwOnHandle != null)
+            throw _throwOnHandle;
+        _onHandle?.Invoke(message);
+        return Task.CompletedTask;
+    }
+}
+
+public class MessageDispatcherTests
+{
+    private readonly Mock<IMessageSerializer> _mockSerializer;
+    private readonly Mock<IFilterPipeline> _mockFilterPipeline;
+    private readonly Mock<IRequestReplyManager> _mockReplyManager;
+    private readonly Mock<IBus> _mockBus;
+
+    private static IDictionary<string, object> MakeHeaders(string? responseMessageId = null)
+    {
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes(typeof(FakeMessage1).AssemblyQualifiedName!)
+        };
+        if (responseMessageId != null)
+            headers["ResponseMessageId"] = Encoding.UTF8.GetBytes(responseMessageId);
+        return headers;
+    }
+
+    public MessageDispatcherTests()
+    {
+        _mockSerializer = new Mock<IMessageSerializer>();
+        _mockFilterPipeline = new Mock<IFilterPipeline>();
+        _mockReplyManager = new Mock<IRequestReplyManager>();
+        _mockBus = new Mock<IBus>();
+
+        // Default: filters don't block
+        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFilters(It.IsAny<Envelope>())).Returns(false);
+        _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFilters(It.IsAny<Envelope>())).Returns(false);
+    }
+
+    private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider)
+    {
+        return new MessageDispatcher(
+            serviceProvider,
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockReplyManager.Object,
+            _mockBus.Object,
+            NullLogger<MessageDispatcher>.Instance);
+    }
+
+    [Fact]
+    public async Task Dispatch_DeserializesAndCallsHandler()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "TestUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+
+        FakeMessage1? receivedMessage = null;
+        var handler = new TestDispatchHandler(onHandle: m => receivedMessage = m);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.NotNull(receivedMessage);
+        Assert.Equal("TestUser", receivedMessage.Username);
+        _mockSerializer.Verify(s => s.Deserialize(messageBytes, typeof(FakeMessage1)), Times.Once);
+    }
+
+    [Fact]
+    public async Task Dispatch_SetsConsumeContextOnHandler()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "ContextUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+
+        IConsumeContext? capturedContext = null;
+        var handler = new TestDispatchHandler(onContextSet: ctx => capturedContext = ctx);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.NotNull(capturedContext);
+        Assert.Same(headers, capturedContext.Headers);
+    }
+
+    [Fact]
+    public async Task Dispatch_BeforeConsumingFilterBlocks_HandlerNotCalled()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "BlockedUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFilters(It.IsAny<Envelope>())).Returns(true);
+
+        bool handlerCalled = false;
+        var handler = new TestDispatchHandler(onHandle: _ => handlerCalled = true);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.False(handlerCalled);
+    }
+
+    [Fact]
+    public async Task Dispatch_ResponseMessage_RoutesToReplyManager()
+    {
+        // Arrange
+        var replyId = Guid.NewGuid().ToString();
+        var messageBytes = new byte[] { 1, 2, 3 };
+        var headers = MakeHeaders(responseMessageId: replyId);
+
+        var services = new ServiceCollection();
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+
+        // Act
+        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.True(result.Success);
+        _mockReplyManager.Verify(r => r.ProcessReply(replyId, messageBytes, typeof(FakeMessage1)), Times.Once);
+        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<byte[]>(), It.IsAny<Type>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Dispatch_HandlerThrows_ReturnsFailure()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "ErrorUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+
+        var thrownException = new InvalidOperationException("Handler failure");
+        var handler = new TestDispatchHandler(throwOnHandle: thrownException);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.NotNull(result.Exception);
+    }
+
+    [Fact]
+    public async Task Dispatch_NoHandler_ReturnsSuccess()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "NoHandler" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+
+        // No handlers registered
+        var services = new ServiceCollection();
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.True(result.Success);
+    }
+}
