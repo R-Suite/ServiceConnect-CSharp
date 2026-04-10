@@ -57,7 +57,7 @@ public class Client
     {
         try
         {
-            _messagesBeingProcessed++;
+            Interlocked.Increment(ref _messagesBeingProcessed);
 
             if (args.BasicProperties.Headers == null ||
                 (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
@@ -91,7 +91,7 @@ public class Client
                 _logger.LogWarning(ex, "Error acking the message");
             }
 
-            _messagesBeingProcessed--;
+            Interlocked.Decrement(ref _messagesBeingProcessed);
         }
     }
 
@@ -272,6 +272,14 @@ public class Client
             }
         }
 
+        // Wait until all messages have been processed.
+        int timeout = 0;
+        while (_messagesBeingProcessed > 0 && timeout < 6000)
+        {
+            Thread.Sleep(100);
+            timeout++;
+        }
+
         if (_autoDelete && _model != null)
         {
             _logger.LogDebug("Deleting retry queue");
@@ -291,14 +299,6 @@ public class Client
             {
                 _logger.LogError(ex, "Error disposing consumer");
             }
-        }
-
-        // Wait until all messages have been processed.
-        int timeout = 0;
-        while (_messagesBeingProcessed > 0 && timeout < 6000)
-        {
-            Thread.Sleep(100);
-            timeout++;
         }
     }
 }

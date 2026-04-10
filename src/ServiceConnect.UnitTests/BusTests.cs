@@ -29,8 +29,8 @@ namespace ServiceConnect.UnitTests
             _mockConfig = new Mock<IBusConfiguration>();
             _mockLogger = new Mock<ILogger<Bus>>();
 
-            // Default: filters pass through
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(true);
+            // Default: filters pass through (false = not stopped)
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(false);
             _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns(new byte[] { 1, 2, 3 });
 
             _bus = new Bus(
@@ -96,7 +96,7 @@ namespace ServiceConnect.UnitTests
         public async Task PublishAsync_ShouldNotPublish_WhenFilterBlocksMessage()
         {
             // Arrange
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(false);
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(true);
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
             // Act
@@ -194,7 +194,7 @@ namespace ServiceConnect.UnitTests
         public async Task SendAsync_ShouldNotSend_WhenFilterBlocksMessage()
         {
             // Arrange
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(false);
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(true);
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
             // Act

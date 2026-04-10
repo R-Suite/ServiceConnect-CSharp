@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistence.MongoDb;
@@ -11,7 +12,15 @@ public static class MongoDbPersistenceExtensions
     {
         var options = new MongoDbPersistenceOptions();
         configure(options);
-        // Register in DI - extend builder to support additional registrations
+
+        builder.AdditionalRegistrations.Add(services =>
+        {
+            services.TryAddSingleton(options);
+            services.TryAddSingleton(_ => MongoClientFactory.Create(options));
+            services.TryAddSingleton<IAggregatorPersistor, MongoDbAggregatorPersistor>();
+            services.TryAddSingleton<IProcessManagerFinder, MongoDbProcessManagerFinder>();
+        });
+
         return builder;
     }
 }

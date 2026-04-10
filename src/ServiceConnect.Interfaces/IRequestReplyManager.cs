@@ -18,5 +18,5 @@ public interface IRequestReplyManager
         where TRequest : Message
         where TReply : Message;
 
-    void ProcessReply(string messageId, string messageJson, Type type);
+    void ProcessReply(string messageId, byte[] messageBytes, Type type);
 }

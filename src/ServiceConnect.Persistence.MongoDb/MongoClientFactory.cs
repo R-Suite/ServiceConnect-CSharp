@@ -6,7 +6,7 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// <summary>
 /// Factory that builds MongoClient with or without SSL based on configuration options.
 /// </summary>
-internal static class MongoClientFactory
+public static class MongoClientFactory
 {
     public static MongoClient Create(MongoDbPersistenceOptions options)
     {

@@ -38,7 +38,7 @@ public sealed class Bus : IBus
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
-        if (!_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
             return;
 
         var headers = ExtractHeaders(envelope);
@@ -54,7 +54,7 @@ public sealed class Bus : IBus
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
-        if (!_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
             return;
 
         var headers = ExtractHeaders(envelope);
@@ -79,7 +79,7 @@ public sealed class Bus : IBus
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
 
-        if (!_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
             throw new InvalidOperationException("Outgoing filters blocked the request message.");
 
         var headers = ExtractHeaders(envelope);
@@ -98,7 +98,7 @@ public sealed class Bus : IBus
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
 
-        if (!_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
             throw new InvalidOperationException("Outgoing filters blocked the request message.");
 
         var headers = ExtractHeaders(envelope);
@@ -130,7 +130,7 @@ public sealed class Bus : IBus
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes);
 
-        if (!_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
             return;
 
         var headers = ExtractHeaders(envelope);
@@ -144,8 +144,7 @@ public sealed class Bus : IBus
             headers[HeaderKeys.RoutingSlip] = string.Join(",", remainingDestinations);
         }
 
-        _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination)
-            .ConfigureAwait(false)
+        Task.Run(() => _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination))
             .GetAwaiter()
             .GetResult();
     }

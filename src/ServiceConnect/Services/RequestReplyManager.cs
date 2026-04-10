@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 
@@ -8,6 +7,12 @@ namespace ServiceConnect.Services;
 public class RequestReplyManager : IRequestReplyManager
 {
     private readonly ConcurrentDictionary<string, RequestState> _pendingRequests = new();
+    private readonly IMessageSerializer _serializer;
+
+    public RequestReplyManager(IMessageSerializer serializer)
+    {
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    }
 
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
@@ -38,8 +43,11 @@ public class RequestReplyManager : IRequestReplyManager
         }
         catch (OperationCanceledException)
         {
-            _pendingRequests.TryRemove(messageId.ToString(), out _);
             throw new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout));
+        }
+        finally
+        {
+            _pendingRequests.TryRemove(messageId.ToString(), out _);
         }
     }
 
@@ -52,7 +60,7 @@ public class RequestReplyManager : IRequestReplyManager
         where TReply : Message
     {
         var messageId = Guid.NewGuid();
-        var responses = new List<TReply>();
+        var responses = new ConcurrentBag<TReply>();
         int expectedCount = options.ExpectedReplyCount ?? options.EndPoints?.Count ?? -1;
         var tcs = new TaskCompletionSource<object>();
 
@@ -81,15 +89,15 @@ public class RequestReplyManager : IRequestReplyManager
         await tcs.Task;
         _pendingRequests.TryRemove(messageId.ToString(), out _);
 
-        return responses;
+        return responses.ToList();
     }
 
-    public void ProcessReply(string messageId, string messageJson, Type type)
+    public void ProcessReply(string messageId, byte[] messageBytes, Type type)
     {
         if (!_pendingRequests.TryGetValue(messageId, out var state))
             return;
 
-        object reply = JsonConvert.DeserializeObject(messageJson, type)!;
+        object reply = _serializer.Deserialize(messageBytes, type);
 
         if (state.OnReply != null)
         {

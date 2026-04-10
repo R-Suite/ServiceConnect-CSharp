@@ -27,6 +27,13 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IMessageSerializer, NewtonsoftJsonMessageSerializer>();
         services.TryAddSingleton<IFilterPipeline, FilterPipeline>();
         services.TryAddSingleton<IRequestReplyManager, RequestReplyManager>();
+        services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
+
+        // Apply additional registrations from builder extensions (e.g., persistence providers)
+        foreach (var registration in builder.AdditionalRegistrations)
+        {
+            registration(services);
+        }
 
         // Bus
         services.TryAddSingleton<IBus, Bus>();

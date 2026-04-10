@@ -7,6 +7,7 @@ namespace ServiceConnect;
 public class ServiceConnectBuilder
 {
     internal BusConfiguration BusConfig { get; } = new();
+    public List<Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>> AdditionalRegistrations { get; } = new();
 
     public ServiceConnectBuilder ConfigureTransport(Action<ITransportConfiguration> configure)
     {

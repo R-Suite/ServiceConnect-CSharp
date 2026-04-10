@@ -273,7 +273,7 @@ public class Producer : IProducer
         int timeout = 0;
         while (_messagesSent.Count != 0 && timeout < 6000)
         {
-            Task.Delay(100).GetAwaiter().GetResult();
+            Thread.Sleep(100);
             timeout++;
         }
 
