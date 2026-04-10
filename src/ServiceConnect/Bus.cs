@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Services;
 
 namespace ServiceConnect;
 
@@ -12,6 +13,10 @@ public sealed class Bus : IBus
     private readonly IRequestReplyManager _requestReplyManager;
     private readonly IBusConfiguration _config;
     private readonly ILogger<Bus> _logger;
+    private readonly IQueueConfiguration _queueConfig;
+    private readonly MessageDispatcher _dispatcher;
+    private readonly IList<HandlerReference> _handlerReferences;
+    private IConsumer? _consumer;
     private bool _consuming;
     private bool _disposed;
 
@@ -21,7 +26,11 @@ public sealed class Bus : IBus
         ISendMessagePipeline sendPipeline,
         IRequestReplyManager requestReplyManager,
         IBusConfiguration config,
-        ILogger<Bus> logger)
+        ILogger<Bus> logger,
+        IQueueConfiguration queueConfig,
+        MessageDispatcher dispatcher,
+        IList<HandlerReference> handlerReferences,
+        IConsumer? consumer = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -29,6 +38,10 @@ public sealed class Bus : IBus
         _requestReplyManager = requestReplyManager ?? throw new ArgumentNullException(nameof(requestReplyManager));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _queueConfig = queueConfig ?? throw new ArgumentNullException(nameof(queueConfig));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
+        _consumer = consumer;
     }
 
     public bool IsConnected => _consuming;
@@ -156,19 +169,33 @@ public sealed class Bus : IBus
 
     public void StartConsuming()
     {
-        _logger.LogInformation("Bus starting to consume messages.");
-        _consuming = true;
+        StartConsumingAsync().GetAwaiter().GetResult();
     }
 
-    public Task StartConsumingAsync()
+    public async Task StartConsumingAsync()
     {
-        StartConsuming();
-        return Task.CompletedTask;
+        if (_consumer == null)
+            throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
+
+        var messageTypeNames = _handlerReferences
+            .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
+            .Distinct()
+            .ToList();
+
+        _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
+            _queueConfig.QueueName, messageTypeNames.Count);
+
+        await _consumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch);
+        _consuming = true;
     }
 
     public void StopConsuming()
     {
         _logger.LogInformation("Bus stopping message consumption.");
+        if (_consumer != null)
+        {
+            _consumer.Dispose();
+        }
         _consuming = false;
     }
 

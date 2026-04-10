@@ -29,6 +29,23 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IRequestReplyManager, RequestReplyManager>();
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
 
+        // Message dispatcher and handler scanning
+        services.TryAddSingleton<MessageDispatcher>();
+
+        IList<HandlerReference> handlerReferences;
+        if (builder.BusConfig.ScanForMessageHandlers)
+            handlerReferences = HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies());
+        else
+            handlerReferences = new List<HandlerReference>();
+
+        foreach (var handlerRef in handlerReferences)
+        {
+            var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(handlerRef.MessageType);
+            services.TryAddTransient(handlerInterfaceType, handlerRef.HandlerType);
+        }
+
+        services.TryAddSingleton<IList<HandlerReference>>(handlerReferences);
+
         // Apply additional registrations from builder extensions (e.g., persistence providers)
         foreach (var registration in builder.AdditionalRegistrations)
         {

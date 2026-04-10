@@ -77,7 +77,6 @@ public class MessageDispatcherTests
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
             _mockReplyManager.Object,
-            _mockBus.Object,
             NullLogger<MessageDispatcher>.Instance);
     }
 
@@ -93,6 +92,7 @@ public class MessageDispatcherTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
         var sp = services.BuildServiceProvider();
 
         var dispatcher = CreateDispatcher(sp);
@@ -150,6 +150,7 @@ public class MessageDispatcherTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
         var sp = services.BuildServiceProvider();
 
         var dispatcher = CreateDispatcher(sp);
@@ -198,6 +199,7 @@ public class MessageDispatcherTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
         var sp = services.BuildServiceProvider();
 
         var dispatcher = CreateDispatcher(sp);
@@ -221,6 +223,7 @@ public class MessageDispatcherTests
 
         // No handlers registered
         var services = new ServiceCollection();
+        services.AddSingleton(_mockBus.Object);
         var sp = services.BuildServiceProvider();
 
         var dispatcher = CreateDispatcher(sp);

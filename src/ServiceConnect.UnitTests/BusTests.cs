@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Services;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -18,6 +20,9 @@ namespace ServiceConnect.UnitTests
         private readonly Mock<IRequestReplyManager> _mockRequestReplyManager;
         private readonly Mock<IBusConfiguration> _mockConfig;
         private readonly Mock<ILogger<Bus>> _mockLogger;
+        private readonly Mock<IQueueConfiguration> _mockQueueConfig;
+        private readonly MessageDispatcher _dispatcher;
+        private readonly IList<HandlerReference> _handlerReferences;
         private readonly Bus _bus;
 
         public BusTests()
@@ -28,10 +33,24 @@ namespace ServiceConnect.UnitTests
             _mockRequestReplyManager = new Mock<IRequestReplyManager>();
             _mockConfig = new Mock<IBusConfiguration>();
             _mockLogger = new Mock<ILogger<Bus>>();
+            _mockQueueConfig = new Mock<IQueueConfiguration>();
+            _mockQueueConfig.Setup(x => x.QueueName).Returns("test-queue");
 
             // Default: filters pass through (false = not stopped)
             _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(false);
             _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns(new byte[] { 1, 2, 3 });
+
+            var testServices = new ServiceCollection();
+            testServices.AddLogging();
+            var testProvider = testServices.BuildServiceProvider();
+            _dispatcher = new MessageDispatcher(
+                testProvider,
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockRequestReplyManager.Object,
+                testProvider.GetRequiredService<ILogger<MessageDispatcher>>());
+
+            _handlerReferences = new List<HandlerReference>();
 
             _bus = new Bus(
                 _mockSerializer.Object,
@@ -39,7 +58,10 @@ namespace ServiceConnect.UnitTests
                 _mockSendPipeline.Object,
                 _mockRequestReplyManager.Object,
                 _mockConfig.Object,
-                _mockLogger.Object);
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _dispatcher,
+                _handlerReferences);
         }
 
         [Fact]
@@ -49,16 +71,48 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void StartConsuming_ShouldSetIsConnectedToTrue()
+        public void StartConsuming_ShouldThrow_WhenNoConsumerRegistered()
         {
-            _bus.StartConsuming();
-            Assert.True(_bus.IsConnected);
+            Assert.Throws<InvalidOperationException>(() => _bus.StartConsuming());
+        }
+
+        [Fact]
+        public async Task StartConsumingAsync_ShouldThrow_WhenNoConsumerRegistered()
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => _bus.StartConsumingAsync());
+        }
+
+        [Fact]
+        public async Task StartConsumingAsync_ShouldSetIsConnectedToTrue_WhenConsumerRegistered()
+        {
+            // Arrange
+            var mockConsumer = new Mock<IConsumer>();
+            mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+                .Returns(Task.CompletedTask);
+
+            var bus = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockConfig.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _dispatcher,
+                _handlerReferences,
+                mockConsumer.Object);
+
+            // Act
+            await bus.StartConsumingAsync();
+
+            // Assert
+            Assert.True(bus.IsConnected);
         }
 
         [Fact]
         public void StopConsuming_ShouldSetIsConnectedToFalse()
         {
-            _bus.StartConsuming();
+            // StopConsuming can be called even without starting (no consumer needed)
             _bus.StopConsuming();
             Assert.False(_bus.IsConnected);
         }
@@ -66,7 +120,6 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Dispose_ShouldSetIsConnectedToFalse()
         {
-            _bus.StartConsuming();
             _bus.Dispose();
             Assert.False(_bus.IsConnected);
         }
@@ -241,12 +294,15 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Constructor_ShouldThrow_WhenDependencyIsNull()
         {
-            Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockConfig.Object, _mockLogger.Object));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockLogger.Object));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, null!));
+            Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object, _mockQueueConfig.Object, _dispatcher, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object, _mockQueueConfig.Object, _dispatcher, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object, _mockQueueConfig.Object, _dispatcher, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockConfig.Object, _mockLogger.Object, _mockQueueConfig.Object, _dispatcher, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockLogger.Object, _mockQueueConfig.Object, _dispatcher, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, null!, _mockQueueConfig.Object, _dispatcher, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object, null!, _dispatcher, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object, _mockQueueConfig.Object, null!, _handlerReferences));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockConfig.Object, _mockLogger.Object, _mockQueueConfig.Object, _dispatcher, null!));
         }
     }
 }

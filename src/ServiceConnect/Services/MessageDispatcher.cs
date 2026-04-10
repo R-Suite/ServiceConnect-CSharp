@@ -14,7 +14,6 @@ public class MessageDispatcher
     private readonly IMessageSerializer _serializer;
     private readonly IFilterPipeline _filterPipeline;
     private readonly IRequestReplyManager _replyManager;
-    private readonly IBus _bus;
     private readonly ILogger<MessageDispatcher> _logger;
 
     public MessageDispatcher(
@@ -22,14 +21,12 @@ public class MessageDispatcher
         IMessageSerializer serializer,
         IFilterPipeline filterPipeline,
         IRequestReplyManager replyManager,
-        IBus bus,
         ILogger<MessageDispatcher> logger)
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
         _replyManager = replyManager ?? throw new ArgumentNullException(nameof(replyManager));
-        _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -76,7 +73,8 @@ public class MessageDispatcher
             var handlers = _serviceProvider.GetServices(handlerInterfaceType);
 
             // 6. Create ConsumeContext and dispatch to each handler
-            var context = new ConsumeContext(_bus, headers);
+            var bus = _serviceProvider.GetRequiredService<IBus>();
+            var context = new ConsumeContext(bus, headers);
             var contextProperty = handlerInterfaceType.GetProperty("Context");
             var handleAsyncMethod = handlerInterfaceType.GetMethod("HandleAsync");
 
