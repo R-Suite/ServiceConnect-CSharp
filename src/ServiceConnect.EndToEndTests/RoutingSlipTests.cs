@@ -37,7 +37,7 @@ public class RoutingSlipTests
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IBus>();
 
-        var message = new StepMessage(Guid.NewGuid()) { Step = 1, Content = "routing slip test" };
+        var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
         bus.Route(message, new List<string> { "Step1", "Step2", "Step3" });
 
@@ -74,7 +74,7 @@ public class RoutingSlipTests
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IBus>();
 
-        var message = new StepMessage(Guid.NewGuid()) { Step = 1, Content = "single destination test" };
+        var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
         bus.Route(message, new List<string> { "OnlyDest" });
 
@@ -99,7 +99,7 @@ public class RoutingSlipTests
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IBus>();
 
-        var message = new StepMessage(Guid.NewGuid()) { Step = 1, Content = "empty destinations test" };
+        var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
         Assert.Throws<ArgumentException>(() => bus.Route(message, new List<string>()));
     }

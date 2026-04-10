@@ -33,7 +33,7 @@ public class RequestReplyTests
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IBus>();
 
-        var request = new TestRequest(Guid.NewGuid()) { RequestData = "test request" };
+        var request = new TestRequest(Guid.NewGuid()) { Question = "test request" };
 
         await Assert.ThrowsAsync<RequestTimeoutException>(() =>
             bus.SendRequestAsync<TestRequest, TestResponse>(
@@ -54,7 +54,7 @@ public class RequestReplyTests
             {
                 if (h.TryGetValue("RequestMessageId", out var messageId) && replyManager != null && serializer != null)
                 {
-                    var response = new TestResponse(Guid.NewGuid()) { ResponseData = "reply data" };
+                    var response = new TestResponse(Guid.NewGuid()) { Answer = "reply data" };
                     var responseBytes = serializer.Serialize(response);
                     Task.Run(() => replyManager.ProcessReply(messageId, responseBytes, typeof(TestResponse)));
                 }
@@ -75,14 +75,14 @@ public class RequestReplyTests
 
         var bus = provider.GetRequiredService<IBus>();
 
-        var request = new TestRequest(Guid.NewGuid()) { RequestData = "test request" };
+        var request = new TestRequest(Guid.NewGuid()) { Question = "test request" };
 
         var response = await bus.SendRequestAsync<TestRequest, TestResponse>(
             request,
             new RequestOptions { EndPoint = "responder-queue", Timeout = 5000 });
 
         Assert.NotNull(response);
-        Assert.Equal("reply data", response.ResponseData);
+        Assert.Equal("reply data", response.Answer);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class RequestReplyTests
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IBus>();
 
-        var request = new TestRequest(Guid.NewGuid()) { RequestData = "blocked request" };
+        var request = new TestRequest(Guid.NewGuid()) { Question = "blocked request" };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             bus.SendRequestAsync<TestRequest, TestResponse>(
