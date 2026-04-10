@@ -42,10 +42,14 @@ public class Producer : IProducer
 
     private void CreateConnection()
     {
+        var port = _transportConfiguration.ClientSettings.ContainsKey("Port")
+            ? Convert.ToInt32(_transportConfiguration.ClientSettings["Port"])
+            : AmqpTcpEndpoint.UseDefaultPort;
+
         _connectionFactory = new ConnectionFactory
         {
             VirtualHost = "/",
-            Port = AmqpTcpEndpoint.UseDefaultPort,
+            Port = port,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = true
         };

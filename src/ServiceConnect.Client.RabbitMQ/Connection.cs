@@ -62,10 +62,14 @@ public class Connection : IDisposable, IServiceConnectConnection
 
     private ConnectionFactory BuildConnectionFactory()
     {
+        var port = _transportSettings.ClientSettings.ContainsKey("Port")
+            ? Convert.ToInt32(_transportSettings.ClientSettings["Port"])
+            : AmqpTcpEndpoint.UseDefaultPort;
+
         var factory = new ConnectionFactory
         {
             VirtualHost = "/",
-            Port = AmqpTcpEndpoint.UseDefaultPort,
+            Port = port,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = true,
             RequestedHeartbeat = _heartbeatEnabled ? _heartbeatTime : TimeSpan.Zero

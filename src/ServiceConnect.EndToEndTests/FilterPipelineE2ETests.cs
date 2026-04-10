@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using ServiceConnect.Client.RabbitMQ;
-using ServiceConnect.EndToEndTests.Fixtures;
+using Moq;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using Xunit;
@@ -32,66 +31,60 @@ file sealed class HeaderAddingFilter : IFilter
     }
 }
 
-[Collection(nameof(MessagingCollection))]
 public class FilterPipelineE2ETests
 {
-    private readonly MessagingFixture _fixture;
-
-    public FilterPipelineE2ETests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
-
-    private (IBus bus, IServiceProvider provider) CreateBusWithFilter<TFilter>(string queueName)
-        where TFilter : class, IFilter
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton<IProducer, Producer>();
-        services.AddSingleton<TFilter>();
-        services.AddServiceConnect(builder =>
-        {
-            builder.ConfigureTransport(t =>
-            {
-                t.Host = $"{_fixture.RabbitMqHostname}:{_fixture.RabbitMqPort}";
-                t.Username = _fixture.RabbitMqUsername;
-                t.Password = _fixture.RabbitMqPassword;
-            });
-            builder.ConfigureQueues(q => q.QueueName = queueName);
-            builder.AddOutgoingFilter<TFilter>();
-        });
-
-        var provider = services.BuildServiceProvider();
-        return (provider.GetRequiredService<IBus>(), provider);
-    }
-
     [Fact]
     public async Task OutgoingFilter_CanBlockMessage()
     {
-        var queueName = _fixture.GetUniqueQueueName("filter");
-        var (bus, provider) = CreateBusWithFilter<BlockingFilter>(queueName);
+        var mockProducer = new Mock<IProducer>();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IProducer>(mockProducer.Object);
+        services.AddSingleton<BlockingFilter>();
+        services.AddServiceConnect(builder =>
+        {
+            builder.AddOutgoingFilter<BlockingFilter>();
+        });
+
+        var provider = services.BuildServiceProvider();
+        var bus = provider.GetRequiredService<IBus>();
         var filter = provider.GetRequiredService<BlockingFilter>();
 
         var message = new TestMessage(Guid.NewGuid()) { Content = "blocked message" };
 
-        var exception = await Record.ExceptionAsync(() => bus.PublishAsync(message));
+        await bus.PublishAsync(message);
 
-        Assert.Null(exception);
         Assert.True(filter.WasCalled);
+        // Producer should NOT have been called since filter blocked
+        mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Never);
     }
 
     [Fact]
     public async Task OutgoingFilter_CanModifyHeaders()
     {
-        var queueName = _fixture.GetUniqueQueueName("filter");
-        var (bus, provider) = CreateBusWithFilter<HeaderAddingFilter>(queueName);
+        var mockProducer = new Mock<IProducer>();
+        mockProducer
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
+            .Returns(Task.CompletedTask);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IProducer>(mockProducer.Object);
+        services.AddSingleton<HeaderAddingFilter>();
+        services.AddServiceConnect(builder =>
+        {
+            builder.AddOutgoingFilter<HeaderAddingFilter>();
+        });
+
+        var provider = services.BuildServiceProvider();
+        var bus = provider.GetRequiredService<IBus>();
         var filter = provider.GetRequiredService<HeaderAddingFilter>();
 
         var message = new TestMessage(Guid.NewGuid()) { Content = "header-modified message" };
 
-        var exception = await Record.ExceptionAsync(() => bus.SendAsync(message, new SendOptions { EndPoint = queueName }));
+        await bus.SendAsync(message, new SendOptions { EndPoint = "test-queue" });
 
-        Assert.Null(exception);
         Assert.True(filter.WasCalled);
+        mockProducer.Verify(p => p.SendAsync("test-queue", It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
     }
 }

@@ -1,45 +1,27 @@
 using Microsoft.Extensions.DependencyInjection;
-using ServiceConnect.Client.RabbitMQ;
-using ServiceConnect.EndToEndTests.Fixtures;
+using Moq;
 using ServiceConnect.Interfaces;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
-[Collection(nameof(MessagingCollection))]
 public class BusLifecycleTests
 {
-    private readonly MessagingFixture _fixture;
-
-    public BusLifecycleTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
-
-    private (IBus bus, IServiceProvider provider) CreateBus(string queueName)
+    private IBus CreateBus()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IProducer, Producer>();
-        services.AddServiceConnect(builder =>
-        {
-            builder.ConfigureTransport(t =>
-            {
-                t.Host = $"{_fixture.RabbitMqHostname}:{_fixture.RabbitMqPort}";
-                t.Username = _fixture.RabbitMqUsername;
-                t.Password = _fixture.RabbitMqPassword;
-            });
-            builder.ConfigureQueues(q => q.QueueName = queueName);
-        });
+        services.AddSingleton<IProducer>(new Mock<IProducer>().Object);
+        services.AddServiceConnect(_ => { });
 
         var provider = services.BuildServiceProvider();
-        return (provider.GetRequiredService<IBus>(), provider);
+        return provider.GetRequiredService<IBus>();
     }
 
     [Fact]
     public void Bus_StartsAndStopsConsuming()
     {
-        var (bus, _) = CreateBus(_fixture.GetUniqueQueueName("lifecycle"));
+        var bus = CreateBus();
 
         Assert.False(bus.IsConnected);
 
@@ -53,7 +35,7 @@ public class BusLifecycleTests
     [Fact]
     public void Bus_DisposesCleanly()
     {
-        var (bus, _) = CreateBus(_fixture.GetUniqueQueueName("lifecycle"));
+        var bus = CreateBus();
 
         bus.StartConsuming();
         Assert.True(bus.IsConnected);
@@ -65,7 +47,7 @@ public class BusLifecycleTests
     [Fact]
     public void Bus_DoubleDispose_DoesNotThrow()
     {
-        var (bus, _) = CreateBus(_fixture.GetUniqueQueueName("lifecycle"));
+        var bus = CreateBus();
 
         bus.StartConsuming();
 

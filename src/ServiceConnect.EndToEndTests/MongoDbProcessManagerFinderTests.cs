@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Serializers;
 using MongoDB.Driver;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Helpers;
@@ -13,6 +15,21 @@ namespace ServiceConnect.EndToEndTests;
 public class MongoDbProcessManagerFinderTests
 {
     private readonly PersistenceFixture _fixture;
+
+    static MongoDbProcessManagerFinderTests()
+    {
+        // Register TestData with MongoDB BSON serialization so it can be serialized
+        // through the IProcessManagerData interface.
+        // Must be done before any MongoDB operations.
+        if (!BsonClassMap.IsClassMapRegistered(typeof(TestData)))
+        {
+            BsonClassMap.RegisterClassMap<TestData>(cm =>
+            {
+                cm.AutoMap();
+                cm.SetIsRootClass(true);
+            });
+        }
+    }
 
     public MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
     {
@@ -49,6 +66,7 @@ public class MongoDbProcessManagerFinderTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void ShouldInsertData()
     {
         var (finder, connectionString, dbName) = CreateFinder();
@@ -64,6 +82,7 @@ public class MongoDbProcessManagerFinderTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void ShouldFindData()
     {
         var (finder, _, _) = CreateFinder();
@@ -81,6 +100,7 @@ public class MongoDbProcessManagerFinderTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void ShouldReturnNullWhenDataNotFound()
     {
         var (finder, _, _) = CreateFinder();
@@ -93,6 +113,7 @@ public class MongoDbProcessManagerFinderTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void ShouldUpdateData()
     {
         var (finder, connectionString, dbName) = CreateFinder();
@@ -116,6 +137,7 @@ public class MongoDbProcessManagerFinderTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void ShouldThrowWhenUpdatingConcurrently()
     {
         var (finder, _, _) = CreateFinder();
@@ -140,6 +162,7 @@ public class MongoDbProcessManagerFinderTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void ShouldDeleteData()
     {
         var (finder, connectionString, dbName) = CreateFinder();

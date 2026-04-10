@@ -26,9 +26,12 @@ public class PointToPointTests
         {
             builder.ConfigureTransport(t =>
             {
-                t.Host = $"{_fixture.RabbitMqHostname}:{_fixture.RabbitMqPort}";
+                t.Host = _fixture.RabbitMqHostname;
                 t.Username = _fixture.RabbitMqUsername;
                 t.Password = _fixture.RabbitMqPassword;
+                t.ClientSettings["Port"] = _fixture.RabbitMqPort;
+                t.ClientSettings["RetryCount"] = 3;
+                t.ClientSettings["RetrySeconds"] = 1;
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
         });
@@ -38,6 +41,7 @@ public class PointToPointTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public async Task SendAsync_MessageIsPublishedToRabbitMQ()
     {
         var queueName = _fixture.GetUniqueQueueName("send");
@@ -52,6 +56,7 @@ public class PointToPointTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public async Task PublishAsync_MessageIsPublishedToExchange()
     {
         var queueName = _fixture.GetUniqueQueueName("publish");

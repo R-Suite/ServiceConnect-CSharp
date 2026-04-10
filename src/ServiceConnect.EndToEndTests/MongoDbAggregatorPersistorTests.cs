@@ -27,6 +27,7 @@ public class MongoDbAggregatorPersistorTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void InsertData_AndGetData_ReturnsInsertedItems()
     {
         var persistor = CreatePersistor();
@@ -42,6 +43,7 @@ public class MongoDbAggregatorPersistorTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void Count_ReturnsCorrectCount()
     {
         var persistor = CreatePersistor();
@@ -57,6 +59,7 @@ public class MongoDbAggregatorPersistorTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void RemoveData_RemovesByCorrelationId()
     {
         var persistor = CreatePersistor();
@@ -73,6 +76,7 @@ public class MongoDbAggregatorPersistorTests
     }
 
     [Fact]
+    [Trait("Category", "Docker")]
     public void GetData_ReturnsEmptyList_WhenNoData()
     {
         var persistor = CreatePersistor();

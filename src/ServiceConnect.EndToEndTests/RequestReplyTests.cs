@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
-using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
@@ -8,7 +7,6 @@ using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
-[Collection(nameof(MessagingCollection))]
 public class RequestReplyTests
 {
     [Fact]
