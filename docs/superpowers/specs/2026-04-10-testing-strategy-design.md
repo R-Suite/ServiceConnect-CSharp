@@ -67,6 +67,11 @@ Overhaul the ServiceConnect-CSharp test suite to achieve 80%+ combined coverage 
 - Ensures complete isolation between tests
 - Short GUID suffix handles parallel test runs
 
+### Test Messages and Handlers
+- The E2E project defines its own test message types (e.g., `TestMessage : Message`, `TestRequest : Message`, `TestResponse : Message`) in a `Messages/` folder
+- Test message handlers are defined inline in test classes or as small nested classes, using `TaskCompletionSource` to signal receipt back to the test
+- Process manager tests define a simple test process manager with known state transitions
+
 ### Timeout Handling
 - Each E2E test uses a `CancellationTokenSource` with a 30-second timeout
 - Tests use `TaskCompletionSource<T>` with the cancellation token to await message arrival
