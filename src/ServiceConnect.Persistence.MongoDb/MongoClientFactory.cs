@@ -1,0 +1,46 @@
+using System.Security.Cryptography.X509Certificates;
+using MongoDB.Driver;
+
+namespace ServiceConnect.Persistence.MongoDb;
+
+/// <summary>
+/// Factory that builds MongoClient with or without SSL based on configuration options.
+/// </summary>
+internal static class MongoClientFactory
+{
+    public static MongoClient Create(MongoDbPersistenceOptions options)
+    {
+        if (options.Ssl is null)
+        {
+            return new MongoClient(options.ConnectionString);
+        }
+
+        return CreateSslClient(options);
+    }
+
+    private static MongoClient CreateSslClient(MongoDbPersistenceOptions options)
+    {
+        var sslOptions = options.Ssl!;
+        var settings = MongoClientSettings.FromConnectionString(options.ConnectionString);
+
+        settings.UseTls = true;
+        settings.AllowInsecureTls = sslOptions.AllowInsecureTls;
+
+        if (!string.IsNullOrEmpty(sslOptions.CertPath))
+        {
+            var cert = string.IsNullOrEmpty(sslOptions.CertPassphrase)
+                ? new X509Certificate2(sslOptions.CertPath)
+                : new X509Certificate2(sslOptions.CertPath, sslOptions.CertPassphrase);
+
+            settings.SslSettings = new SslSettings
+            {
+                ClientCertificates = new[] { cert },
+                ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
+                CheckCertificateRevocation = false,
+                EnabledSslProtocols = sslOptions.SslProtocol
+            };
+        }
+
+        return new MongoClient(settings);
+    }
+}
