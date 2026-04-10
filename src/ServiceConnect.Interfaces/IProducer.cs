@@ -7,5 +7,5 @@ public interface IProducer : IAsyncDisposable, IDisposable
     Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null);
     Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null);
     long MaximumMessageSize { get; }
-    void Disconnect();
+    Task DisconnectAsync();
 }

@@ -14,11 +14,13 @@
 //along with this program; if not, write to the Free Software
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+using System.Threading.Tasks;
+
 namespace ServiceConnect.Interfaces
 {
     public interface IStartProcessManager<TMessage> where TMessage : Message
     {
         IConsumeContext Context { get; set; }
-        void Execute(TMessage message);
+        Task ExecuteAsync(TMessage message);
     }
 }

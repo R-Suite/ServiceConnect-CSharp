@@ -1,10 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace ServiceConnect.Interfaces
 {
     public class Envelope
     {
-        public IDictionary<string, object> Headers { get; set; }
-        public byte[] Body { get; set; }
+        public IDictionary<string, object> Headers { get; set; } = new Dictionary<string, object>();
+        public byte[] Body { get; set; } = Array.Empty<byte>();
     }
 }

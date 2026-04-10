@@ -5,7 +5,7 @@ public interface IRequestReplyManager
     Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
-        Action<Type, byte[], Dictionary<string, string>, string?> sendAction,
+        Func<Type, byte[], Dictionary<string, string>, string?, Task> sendAction,
         RequestOptions options)
         where TRequest : Message
         where TReply : Message;
@@ -13,7 +13,7 @@ public interface IRequestReplyManager
     Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
-        Action<Type, byte[], Dictionary<string, string>, string?> sendAction,
+        Func<Type, byte[], Dictionary<string, string>, string?, Task> sendAction,
         RequestOptions options)
         where TRequest : Message
         where TReply : Message;
