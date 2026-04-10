@@ -1,24 +1,6 @@
-﻿//Copyright (C) 2015  Timothy Watson, Jakub Pachansky
-
-//This program is free software; you can redistribute it and/or
-//modify it under the terms of the GNU General Public License
-//as published by the Free Software Foundation; either version 2
-//of the License, or (at your option) any later version.
-
-//This program is distributed in the hope that it will be useful,
-//but WITHOUT ANY WARRANTY; without even the implied warranty of
-//MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//GNU General Public License for more details.
-
-//You should have received a copy of the GNU General Public License
-//along with this program; if not, write to the Free Software
-//Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-
 using System;
-using Moq;
-using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
-using ServiceConnect.Persistance.InMemory;
+using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
 namespace ServiceConnect.UnitTests
@@ -26,9 +8,9 @@ namespace ServiceConnect.UnitTests
     public class TestData : IProcessManagerData
     {
         public Guid CorrelationId { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = "";
     }
-    
+
     public class InMemoryProcessManagerFinderTests
     {
         readonly Guid _correlationId = Guid.NewGuid();
@@ -36,7 +18,7 @@ namespace ServiceConnect.UnitTests
 
         public InMemoryProcessManagerFinderTests()
         {
-            _mapper = new ProcessManagerPropertyMapper();
+            _mapper = new TestProcessManagerPropertyMapper();
             _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
         }
 
@@ -44,14 +26,17 @@ namespace ServiceConnect.UnitTests
         public void ShouldInsertData()
         {
             // Arrange
-            IProcessManagerData data = new TestData {CorrelationId = _correlationId, Name = "TestData"};
+            IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act
             processManagerFinder.InsertData(data);
 
             // Assert
-            Assert.Equal("TestData", processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId)).Data.Name);
+            // InsertData wraps as MemoryData<IProcessManagerData>, so FindData must use IProcessManagerData
+            var found = processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
+            Assert.NotNull(found);
+            Assert.Equal("TestData", ((TestData)found.Data).Name);
         }
 
         [Fact]
@@ -77,10 +62,12 @@ namespace ServiceConnect.UnitTests
             processManagerFinder.InsertData(data);
 
             // Act
-            processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = dataUpdated, Version = 1});
+            processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = dataUpdated, Version = 1 });
 
             // Assert
-            Assert.Equal("TestDataUpdated", processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId)).Data.Name);
+            var found = processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
+            Assert.NotNull(found);
+            Assert.Equal("TestDataUpdated", ((TestData)found.Data).Name);
         }
 
         [Fact]
@@ -102,10 +89,10 @@ namespace ServiceConnect.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             processManagerFinder.InsertData(data1);
 
-            var foundData1 = (MemoryData<TestData>) processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
-            var foundData2 = (MemoryData<TestData>) processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
+            var foundData1 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
+            var foundData2 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
 
-            var foundData1Temp = new MemoryData<IProcessManagerData> { Data = foundData1.Data, Version = foundData1.Version};
+            var foundData1Temp = new MemoryData<IProcessManagerData> { Data = foundData1.Data, Version = foundData1.Version };
             var foundData2Temp = new MemoryData<IProcessManagerData> { Data = foundData2.Data, Version = foundData2.Version };
 
             processManagerFinder.UpdateData(foundData1Temp); // first update should be fine
@@ -140,6 +127,48 @@ namespace ServiceConnect.UnitTests
 
             // Assert
             Assert.Null(result);
+        }
+    }
+
+    /// <summary>
+    /// Minimal IProcessManagerPropertyMapper implementation for tests,
+    /// replacing the old ProcessManagerPropertyMapper from ServiceConnect.Core.
+    /// </summary>
+    public class TestProcessManagerPropertyMapper : IProcessManagerPropertyMapper
+    {
+        public List<ProcessManagerToMessageMap> Mappings { get; set; } = new();
+
+        public void ConfigureMapping<TProcessManagerData, TMessage>(
+            System.Linq.Expressions.Expression<Func<TProcessManagerData, object>> processManagerProperty,
+            System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
+            where TProcessManagerData : IProcessManagerData
+        {
+            var map = new ProcessManagerToMessageMap
+            {
+                MessageType = typeof(TMessage),
+                PropertiesHierarchy = new Dictionary<string, Type>(),
+                MessageProp = BuildMessageFunc(messageExpression)
+            };
+
+            // Extract property hierarchy from processManagerProperty
+            var body = processManagerProperty.Body;
+            if (body is System.Linq.Expressions.UnaryExpression unary)
+                body = unary.Operand;
+
+            if (body is System.Linq.Expressions.MemberExpression member)
+            {
+                var propInfo = (System.Reflection.PropertyInfo)member.Member;
+                map.PropertiesHierarchy[propInfo.Name] = propInfo.PropertyType;
+            }
+
+            Mappings.Add(map);
+        }
+
+        private static Func<object, object> BuildMessageFunc<TMessage>(
+            System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
+        {
+            var compiled = messageExpression.Compile();
+            return obj => compiled((TMessage)obj);
         }
     }
 }
