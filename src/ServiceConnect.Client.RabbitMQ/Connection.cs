@@ -72,7 +72,8 @@ public class Connection : IDisposable, IServiceConnectConnection
             Port = port,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = true,
-            RequestedHeartbeat = _heartbeatEnabled ? _heartbeatTime : TimeSpan.Zero
+            RequestedHeartbeat = _heartbeatEnabled ? _heartbeatTime : TimeSpan.Zero,
+            DispatchConsumersAsync = true
         };
 
         if (!string.IsNullOrEmpty(_transportSettings.Username))
