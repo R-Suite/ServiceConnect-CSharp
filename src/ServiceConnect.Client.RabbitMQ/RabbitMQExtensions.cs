@@ -1,3 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Client.RabbitMQ;
@@ -12,6 +15,12 @@ public static class RabbitMQExtensions
         {
             builder.ConfigureTransport(configure);
         }
+
+        builder.AdditionalRegistrations.Add(services =>
+        {
+            services.TryAddSingleton<IProducer, Producer>();
+            services.TryAddSingleton<IConsumer, Consumer>();
+        });
 
         return builder;
     }
