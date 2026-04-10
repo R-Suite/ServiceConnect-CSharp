@@ -51,7 +51,8 @@ public class Producer : IProducer
             VirtualHost = "/",
             Port = port,
             AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true
+            TopologyRecoveryEnabled = true,
+            DispatchConsumersAsync = true
         };
 
         if (!string.IsNullOrEmpty(_transportConfiguration.Username))
