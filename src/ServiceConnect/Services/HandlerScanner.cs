@@ -18,7 +18,7 @@ public static class HandlerScanner
 
             foreach (var type in types)
             {
-                if (type.IsAbstract || type.IsInterface) continue;
+                if (type.IsAbstract || type.IsInterface || type.IsGenericTypeDefinition) continue;
 
                 var handlerInterfaces = type.GetInterfaces()
                     .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == handlerInterfaceType);
@@ -26,6 +26,7 @@ public static class HandlerScanner
                 foreach (var handlerInterface in handlerInterfaces)
                 {
                     var messageType = handlerInterface.GetGenericArguments()[0];
+                    if (messageType.IsGenericParameter) continue;
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
