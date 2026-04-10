@@ -463,7 +463,9 @@ namespace ServiceConnect.UnitTests
         }
 
         public class FakeProcessManagerFinder : IProcessManagerFinder
-        {
+    {
+        public event TimeoutInsertedDelegate TimeoutInserted;
+
             public FakeProcessManagerFinder(string connectionString, string databaseName)
             {}
 
@@ -472,7 +474,7 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
-            public event TimeoutInsertedDelegate TimeoutInserted;
+
 
             public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
             {

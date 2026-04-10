@@ -147,6 +147,6 @@ namespace ServiceConnect.UnitTests
             Assert.Single(mapper.Mappings);
         }
 
-        public void TestMethod() { }
+
     }
 }
