@@ -33,6 +33,9 @@ public class PolymorphicMessageTests
                 MessageType = typeof(TestMessage),
                 RoutingKeys = new List<string>()
             },
+            // HandlerReference for DerivedTestMessage is needed so the bus subscribes
+            // to this message type's exchange in RabbitMQ. Handler resolution happens
+            // via DI + type hierarchy walking in the dispatcher.
             new HandlerReference
             {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
@@ -87,7 +90,7 @@ public class PolymorphicMessageTests
             await bus.PublishAsync(sent);
 
             // Assert: wait up to 30 seconds for the handler to be called
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             cts.Token.Register(() => tcs.TrySetCanceled());
 
             var received = await tcs.Task;

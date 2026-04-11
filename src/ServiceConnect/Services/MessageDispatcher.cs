@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -69,8 +69,9 @@ public class MessageDispatcher
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
-            // 5. Resolve handlers — check exact type, then walk up base types
-            // (interface-based handlers like IMessageHandler<IEvent> are not supported)
+            // 5. Resolve handlers — check exact type, then walk up base types.
+            // All matching handlers in the hierarchy are invoked (not just the most specific).
+            // Interface-based handlers (e.g. IMessageHandler<IEvent>) are not supported.
             var allHandlers = new List<(object Handler, Type InterfaceType)>();
             var checkedType = type;
             while (checkedType != null && checkedType != typeof(Message) && checkedType != typeof(object))
