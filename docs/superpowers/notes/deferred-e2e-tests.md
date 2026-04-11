@@ -1,46 +1,46 @@
 # Deferred E2E Tests
 
-## StreamingTests
+## DONE
+
+### CompetingConsumersTests ✅
+- Implemented in `CompetingConsumersTests.cs`
+- Two bus instances share same queue, 10 messages sent, all received exactly once
+
+### PriorityQueueTests ✅
+- Implemented in `PriorityQueueTests.cs`
+- Pre-declared priority queue with `x-max-priority`, messages with alternating priorities, higher consumed first
+
+### ScatterGatherTests ✅
+- Implemented in `ScatterGatherTests.cs`
+- Two responder buses, one requester, `SendRequestMultiAsync` collects both replies
+
+### MessageDeduplicationTests ✅
+- Implemented in `MessageDeduplicationTests.cs`
+- Test-local `IFilter` implementation (legacy filter project uses incompatible `Common.Logging` + NuGet interfaces)
+- Tracks seen MessageIds, blocks redelivered duplicates
+
+### PolymorphicMessageTests ✅
+- Implemented in `PolymorphicMessageTests.cs`
+- `MessageDispatcher` now walks type hierarchy (base types) when resolving handlers
+- Handler for base type receives derived message
+
+---
+
+## REMAINING (blocked on feature implementation)
+
+### StreamingTests
 - `Bus.CreateStream<T>()` currently throws `NotImplementedException`
 - Needs a design for how streaming integrates with the RabbitMQ transport (chunked messages via `SendBytesAsync`, `IMessageBusWriteStream`, `IStreamHandler`)
 - The `IProducer.SendBytesAsync()` and header keys (`SequenceId`, `PacketNumber`, `LastPacketNumber`) suggest a chunking protocol was planned
 - **Blocked on**: implementing `CreateStream<T>()` in Bus and a corresponding stream receiver on the consumer side
 
-## ScatterGatherTests
-- Requires `SendRequestMultiAsync<T, TReply>` to work end-to-end with real RabbitMQ consumers
-- Multiple responder bus instances must each receive the request (via pub/sub), call `context.Reply()`, and the requester must collect all replies
-- `RequestReplyManager.SendRequestMultiAsync` exists and uses `ExpectedReplyCount` + `ConcurrentBag<TReply>` — the logic is there
-- **Blocked on**: basic request/reply E2E working first, then spinning up multiple responder bus instances in a single test
-
-## MessageDeduplicationTests
-- Needs the `ServiceConnect.Filters.MessageDeduplication` filter project wired into the E2E test
-- Tests would verify: send same message twice with `Redelivered` header, handler only invoked once
-- **Blocked on**: consumer wiring (in progress) + adding the dedup filter project as a dependency of the E2E test project
-
-## ProcessManagerTests
+### ProcessManagerTests
 - Multi-step saga/workflow: send start message, handler creates process manager state in MongoDB, send second message, handler reads and updates state, verify final state
 - Requires `MessageDispatcher` to integrate with `IProcessManagerFinder` — currently the dispatcher routes to `IMessageHandler<T>` but doesn't know about process managers
 - Needs: a way for the dispatcher to detect process manager handlers (implement `IProcessManagerHandler<T>` or similar), call `IProcessManagerFinder.FindData()` before invoking, and `UpdateData()` / `InsertData()` after
-- **Blocked on**: consumer wiring + process manager dispatcher integration design
+- **Blocked on**: process manager dispatcher integration design
 
-## AggregatorTests
+### AggregatorTests
 - Partial messages collected, aggregated result emitted when batch complete
 - Requires `MessageDispatcher` to integrate with `IAggregatorPersistor` — the dispatcher must detect `Aggregator<T>` handlers, store partial messages, and invoke the aggregator's `Execute()` when `BatchSize()` is reached or `Timeout()` expires
-- **Blocked on**: consumer wiring + aggregator dispatcher integration design
-
-## CompetingConsumersTests
-- Multiple bus instances (separate ServiceProviders) consume from the same queue name
-- Each published message should be delivered to exactly one consumer (competing consumer pattern)
-- Verify that across N messages sent, each consumer receives a subset and the union equals all N messages with no duplicates
-- **Blocked on**: nothing, can be implemented now
-
-## PriorityQueueTests
-- Messages published with different priorities (e.g., 1 and 10) to a priority-enabled queue
-- Higher-priority messages should be consumed before lower-priority ones when both are queued
-- Requires the RabbitMQ queue to be declared with the `x-max-priority` argument
-- **Blocked on**: nothing, can be implemented now
-
-## PolymorphicMessageTests
-- Handler registered for base type receives derived message type
-- Requires `MessageDispatcher` to resolve handlers not just for the exact message type but also for base types in the hierarchy
-- **Blocked on**: consumer wiring + enhancing MessageDispatcher handler resolution to walk the type hierarchy
+- **Blocked on**: aggregator dispatcher integration design
