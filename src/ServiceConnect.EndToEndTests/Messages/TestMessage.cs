@@ -39,3 +39,10 @@ public class DerivedTestMessage : TestMessage
     public DerivedTestMessage(Guid correlationId) : base(correlationId) { }
     public string Extra { get; set; } = string.Empty;
 }
+
+public class TestProcessData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+    public int Counter { get; set; }
+    public string LastContent { get; set; } = string.Empty;
+}
