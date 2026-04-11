@@ -1,0 +1,140 @@
+using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.EndToEndTests.Messages;
+using ServiceConnect.Interfaces;
+using Xunit;
+
+namespace ServiceConnect.EndToEndTests;
+
+[Collection(nameof(MessagingCollection))]
+public class StreamingTests
+{
+    private readonly MessagingFixture _fixture;
+
+    public StreamingTests(MessagingFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task CreateStream_WritesChunks_HandlerReceivesCompleteData()
+    {
+        // Arrange
+        var completed = new TaskCompletionSource<byte[]>();
+        var consumerQueue = _fixture.GetUniqueQueueName("stream-consumer");
+        var producerQueue = _fixture.GetUniqueQueueName("stream-producer");
+
+        // Serialize a TestMessage so the StreamProcessor can deserialize the reassembled bytes
+        var originalMessage = new TestMessage(Guid.NewGuid()) { Content = "streamed-content" };
+        var serializedBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(originalMessage));
+
+        // Split serialized bytes into 3 chunks
+        var chunkSize = serializedBytes.Length / 3;
+        var chunk1 = serializedBytes[..chunkSize];
+        var chunk2 = serializedBytes[chunkSize..(chunkSize * 2)];
+        var chunk3 = serializedBytes[(chunkSize * 2)..];
+
+        // Consumer bus with IStreamHandler<TestMessage>
+        var handlerRefs = new List<HandlerReference>
+        {
+            new()
+            {
+                HandlerType = typeof(TestStreamHandler),
+                MessageType = typeof(TestMessage),
+                RoutingKeys = new List<string>()
+            }
+        };
+
+        var consumerServices = new ServiceCollection();
+        consumerServices.AddLogging();
+        consumerServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        consumerServices.AddSingleton(completed);
+        consumerServices.AddTransient<IStreamHandler<TestMessage>, TestStreamHandler>();
+
+        consumerServices.AddServiceConnect(builder =>
+        {
+            builder.UseRabbitMQ(t =>
+            {
+                t.Host = _fixture.RabbitMqHostname;
+                t.Username = _fixture.RabbitMqUsername;
+                t.Password = _fixture.RabbitMqPassword;
+                t.ClientSettings["Port"] = _fixture.RabbitMqPort;
+                t.ClientSettings["RetryCount"] = 3;
+                t.ClientSettings["RetrySeconds"] = 1;
+            });
+            builder.ConfigureQueues(q => q.QueueName = consumerQueue);
+            builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
+        });
+
+        var consumerProvider = consumerServices.BuildServiceProvider();
+        var consumerBus = consumerProvider.GetRequiredService<IBus>();
+        await consumerBus.StartConsumingAsync();
+        await Task.Delay(500);
+
+        // Producer bus
+        var producerServices = new ServiceCollection();
+        producerServices.AddLogging();
+        producerServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        producerServices.AddServiceConnect(builder =>
+        {
+            builder.UseRabbitMQ(t =>
+            {
+                t.Host = _fixture.RabbitMqHostname;
+                t.Username = _fixture.RabbitMqUsername;
+                t.Password = _fixture.RabbitMqPassword;
+                t.ClientSettings["Port"] = _fixture.RabbitMqPort;
+                t.ClientSettings["RetryCount"] = 3;
+                t.ClientSettings["RetrySeconds"] = 1;
+            });
+            builder.ConfigureQueues(q => q.QueueName = producerQueue);
+            builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
+        });
+
+        var producerProvider = producerServices.BuildServiceProvider();
+        var producerBus = producerProvider.GetRequiredService<IBus>();
+
+        try
+        {
+            // Act: create stream, write chunks, close
+            using var stream = producerBus.CreateStream(consumerQueue, originalMessage);
+
+            stream.Write(chunk1, 0, chunk1.Length);
+            stream.Write(chunk2, 0, chunk2.Length);
+            stream.Write(chunk3, 0, chunk3.Length);
+            stream.Close();
+
+            // Assert: wait for handler to receive the complete reassembled data
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            cts.Token.Register(() => completed.TrySetCanceled());
+            var receivedBytes = await completed.Task;
+
+            Assert.Equal(serializedBytes, receivedBytes);
+        }
+        finally
+        {
+            consumerBus.Dispose();
+            producerBus.Dispose();
+            (consumerProvider as IDisposable)?.Dispose();
+            (producerProvider as IDisposable)?.Dispose();
+        }
+    }
+}
+
+file class TestStreamHandler : IStreamHandler<TestMessage>
+{
+    private readonly TaskCompletionSource<byte[]> _tcs;
+
+    public TestStreamHandler(TaskCompletionSource<byte[]> tcs) => _tcs = tcs;
+
+    public IMessageBusReadStream Stream { get; set; } = null!;
+
+    public void Execute(TestMessage message)
+    {
+        var data = Stream.Read();
+        _tcs.TrySetResult(data);
+    }
+}
