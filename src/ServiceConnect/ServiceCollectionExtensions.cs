@@ -114,6 +114,9 @@ public static class ServiceCollectionExtensions
         // Hosted service for auto-start consuming
         services.AddHostedService<BusHostedService>();
 
+        // Hosted service for process manager timeout polling
+        services.AddHostedService<ProcessManagerTimeoutService>();
+
         return services;
     }
 }
