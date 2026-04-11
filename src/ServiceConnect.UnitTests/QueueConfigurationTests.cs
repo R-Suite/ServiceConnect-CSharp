@@ -29,13 +29,6 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void DefaultHeartbeatQueueNameIsHeartbeat()
-        {
-            var config = new QueueConfiguration();
-            Assert.Equal("heartbeat", config.HeartbeatQueueName);
-        }
-
-        [Fact]
         public void DefaultAuditingEnabledIsFalse()
         {
             var config = new QueueConfiguration();
@@ -135,7 +128,6 @@ namespace ServiceConnect.UnitTests
                 QueueName = "my-queue",
                 ErrorQueueName = "my-errors",
                 AuditQueueName = "my-audit",
-                HeartbeatQueueName = "my-heartbeat",
                 AuditingEnabled = true,
                 DisableErrors = true,
                 PurgeQueueOnStartup = true
@@ -144,7 +136,6 @@ namespace ServiceConnect.UnitTests
             Assert.Equal("my-queue", config.QueueName);
             Assert.Equal("my-errors", config.ErrorQueueName);
             Assert.Equal("my-audit", config.AuditQueueName);
-            Assert.Equal("my-heartbeat", config.HeartbeatQueueName);
             Assert.True(config.AuditingEnabled);
             Assert.True(config.DisableErrors);
             Assert.True(config.PurgeQueueOnStartup);

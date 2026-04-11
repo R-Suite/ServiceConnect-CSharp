@@ -7,7 +7,6 @@ public class QueueConfiguration : IQueueConfiguration
     public string QueueName { get; set; } = "";
     public string ErrorQueueName { get; set; } = "errors";
     public string AuditQueueName { get; set; } = "audit";
-    public string HeartbeatQueueName { get; set; } = "heartbeat";
     public bool AuditingEnabled { get; set; }
     public bool DisableErrors { get; set; }
     public bool PurgeQueueOnStartup { get; set; }

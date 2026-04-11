@@ -13,7 +13,7 @@ public class BusConfigurationTests
         Assert.True(config.ScanForMessageHandlers);
         Assert.True(config.AutoStartConsuming);
         Assert.False(config.EnableProcessManagerTimeouts);
-        Assert.Equal(1, config.Clients);
+        Assert.Equal(1, config.ConsumerCount);
         Assert.Null(config.ExceptionHandler);
     }
 

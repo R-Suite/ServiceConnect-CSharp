@@ -7,7 +7,7 @@ public class BusConfiguration : IBusConfiguration
     public bool ScanForMessageHandlers { get; set; } = true;
     public bool AutoStartConsuming { get; set; } = true;
     public bool EnableProcessManagerTimeouts { get; set; }
-    public int Clients { get; set; } = 1;
+    public int ConsumerCount { get; set; } = 1;
     public Action<Exception>? ExceptionHandler { get; set; }
     public ITransportConfiguration Transport { get; } = new TransportConfiguration();
     public IQueueConfiguration Queues { get; } = new QueueConfiguration();
