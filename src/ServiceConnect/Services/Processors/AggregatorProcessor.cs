@@ -98,12 +98,17 @@ public class AggregatorProcessor : IMessageProcessor, IDisposable
             if (aggregator == null) return;
 
             var executeMethod = aggregatorBaseType.GetMethod("Execute");
-            executeMethod?.Invoke(aggregator, new object[] { typedList });
-
-            foreach (var msg in rawMessages)
+            try
             {
-                if (msg is Message m)
-                    persistor.RemoveData(aggregatorName, m.CorrelationId);
+                executeMethod?.Invoke(aggregator, new object[] { typedList });
+            }
+            finally
+            {
+                foreach (var msg in rawMessages)
+                {
+                    if (msg is Message m)
+                        persistor.RemoveData(aggregatorName, m.CorrelationId);
+                }
             }
 
             if (_timers.TryRemove(aggregatorName, out var activeTimer))

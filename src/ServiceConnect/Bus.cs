@@ -52,6 +52,7 @@ public sealed class Bus : IBus
 
     public async Task PublishAsync<T>(T message, PublishOptions? options = null) where T : Message
     {
+        ThrowIfDisposed();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
@@ -68,6 +69,7 @@ public sealed class Bus : IBus
 
     public async Task SendAsync<T>(T message, SendOptions? options = null) where T : Message
     {
+        ThrowIfDisposed();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
@@ -92,6 +94,7 @@ public sealed class Bus : IBus
     public async Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null)
         where T : Message where TReply : Message
     {
+        ThrowIfDisposed();
         var requestOptions = options ?? new RequestOptions();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
@@ -111,6 +114,7 @@ public sealed class Bus : IBus
     public async Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null)
         where T : Message where TReply : Message
     {
+        ThrowIfDisposed();
         var requestOptions = options ?? new RequestOptions();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
@@ -140,6 +144,7 @@ public sealed class Bus : IBus
 
     public async Task RouteAsync<T>(T message, IList<string> destinations) where T : Message
     {
+        ThrowIfDisposed();
         if (destinations == null || destinations.Count == 0)
             throw new ArgumentException("At least one destination is required.", nameof(destinations));
 
@@ -166,6 +171,7 @@ public sealed class Bus : IBus
 
     public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
     {
+        ThrowIfDisposed();
         if (_producer == null)
             throw new InvalidOperationException("No producer registered. Cannot create stream.");
         return new MessageBusWriteStream(_producer, endpoint, typeof(T));
@@ -228,6 +234,12 @@ public sealed class Bus : IBus
 
         StopConsuming();
         _sendPipeline.Dispose();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(Bus));
     }
 
     private static Envelope CreateEnvelope(Type messageType, byte[] body, Dictionary<string, string>? additionalHeaders = null)
