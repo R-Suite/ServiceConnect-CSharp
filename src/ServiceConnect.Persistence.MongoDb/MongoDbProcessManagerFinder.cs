@@ -85,7 +85,7 @@ public class MongoDbProcessManagerFinder : IProcessManagerFinder
             }
 
             var lambda = Expression.Lambda<Func<MongoDbData<T>, bool>>(expression, pe);
-            return collection.AsQueryable().FirstOrDefault(lambda)!;
+            return collection.Find(lambda).FirstOrDefault()!;
         }
         catch (PersistenceException)
         {
@@ -101,28 +101,45 @@ public class MongoDbProcessManagerFinder : IProcessManagerFinder
     public void InsertData(IProcessManagerData data)
     {
         var collectionName = GetCollectionName(data);
+        var dataType = data.GetType();
 
         try
         {
-            var collection = _mongoDatabase.GetCollection<MongoDbData<IProcessManagerData>>(collectionName);
-            EnsureCorrelationIdIndex(collection);
-
-            var mongoDbData = new MongoDbData<IProcessManagerData>
-            {
-                Data = data,
-                Version = 1,
-                Id = Guid.NewGuid()
-            };
-
-            var filter = Builders<MongoDbData<IProcessManagerData>>.Filter
-                .Eq(x => x.Data.CorrelationId, mongoDbData.Data.CorrelationId);
-            collection.ReplaceOne(filter, mongoDbData, new ReplaceOptions { IsUpsert = true });
+            // Use reflection to call the generic InsertDataTyped<T> method with the actual
+            // data type rather than the interface, so MongoDB serializes/deserializes with
+            // a consistent generic type parameter across Insert and Find operations.
+            var method = GetType().GetMethod(nameof(InsertDataTyped),
+                BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var genericMethod = method.MakeGenericMethod(dataType);
+            genericMethod.Invoke(this, new object[] { data, collectionName });
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is MongoException mongoEx)
+        {
+            throw new PersistenceException(
+                $"Failed to insert process manager data with CorrelationId '{data.CorrelationId}'.", mongoEx);
         }
         catch (MongoException ex)
         {
             throw new PersistenceException(
                 $"Failed to insert process manager data with CorrelationId '{data.CorrelationId}'.", ex);
         }
+    }
+
+    private void InsertDataTyped<T>(T data, string collectionName) where T : class, IProcessManagerData
+    {
+        var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
+        EnsureCorrelationIdIndex(collection);
+
+        var mongoDbData = new MongoDbData<T>
+        {
+            Data = data,
+            Version = 1,
+            Id = Guid.NewGuid()
+        };
+
+        var filter = Builders<MongoDbData<T>>.Filter
+            .Eq(x => x.Data.CorrelationId, mongoDbData.Data.CorrelationId);
+        collection.ReplaceOne(filter, mongoDbData, new ReplaceOptions { IsUpsert = true });
     }
 
     public void UpdateData<T>(IPersistenceData<T> persistenceData) where T : class, IProcessManagerData

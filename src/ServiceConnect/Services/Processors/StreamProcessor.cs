@@ -18,6 +18,8 @@ public class StreamProcessor : IMessageProcessor
         _logger = logger;
     }
 
+    public bool RunBeforeDeserialization => true;
+
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope)

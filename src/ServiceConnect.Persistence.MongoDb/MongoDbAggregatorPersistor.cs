@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
@@ -13,6 +15,11 @@ public class MongoDbAggregatorPersistor : IAggregatorPersistor
 {
     private readonly IMongoCollection<AggregatorDocument> _collection;
     private readonly ILogger<MongoDbAggregatorPersistor> _logger;
+
+    public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger)
+        : this(options, "Aggregator", logger)
+    {
+    }
 
     public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger)
     {
@@ -34,10 +41,14 @@ public class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
+            var dataType = data.GetType();
+            var dataBson = data.ToBsonDocument(dataType);
+
             _collection.InsertOne(new AggregatorDocument
             {
                 Name = name,
-                Data = data,
+                DataBson = dataBson,
+                DataTypeName = dataType.AssemblyQualifiedName!,
                 Version = 1
             });
         }
@@ -52,7 +63,23 @@ public class MongoDbAggregatorPersistor : IAggregatorPersistor
         try
         {
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
-            return _collection.Find(filter).ToList().Select(x => x.Data).ToList();
+            var docs = _collection.Find(filter).ToList();
+            var result = new List<object>();
+
+            foreach (var doc in docs)
+            {
+                var type = Type.GetType(doc.DataTypeName);
+                if (type != null)
+                {
+                    result.Add(BsonSerializer.Deserialize(doc.DataBson, type));
+                }
+                else
+                {
+                    _logger.LogWarning("Cannot resolve type '{TypeName}' for aggregator data", doc.DataTypeName);
+                }
+            }
+
+            return result;
         }
         catch (MongoException ex)
         {
@@ -66,7 +93,7 @@ public class MongoDbAggregatorPersistor : IAggregatorPersistor
         {
             var filter = Builders<AggregatorDocument>.Filter.And(
                 Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
-                Builders<AggregatorDocument>.Filter.Eq("Data.CorrelationId", correlationId)
+                Builders<AggregatorDocument>.Filter.Eq("DataBson.CorrelationId", new BsonBinaryData(correlationId, GuidRepresentation.Standard))
             );
             _collection.DeleteMany(filter);
         }
@@ -96,7 +123,8 @@ public class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         public Guid Id { get; set; }
         public int Version { get; set; }
-        public object Data { get; set; } = default!;
+        public BsonDocument DataBson { get; set; } = default!;
+        public string DataTypeName { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
     }
 }

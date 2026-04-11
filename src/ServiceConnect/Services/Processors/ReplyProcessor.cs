@@ -14,6 +14,8 @@ public class ReplyProcessor : IMessageProcessor
         _serializer = serializer;
     }
 
+    public bool RunBeforeDeserialization => true;
+
     public Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope)

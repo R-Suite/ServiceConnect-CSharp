@@ -90,18 +90,33 @@ namespace ServiceConnect.Persistence.InMemory
 
                 Expression<Func<MemoryData<T>, bool>> lambda = Expression.Lambda<Func<MemoryData<T>, bool>>(expression, pe);
 
-                IList<object> cacheItems = new List<object>();
+                var newCacheItems = new List<MemoryData<T>>();
 
                 foreach (var key in _provider.Keys())
                 {
                     var value = _provider.Get<string, object>(key.ToString()!);
                     if (value.GetType() == typeof(MemoryData<T>))
                     {
-                        cacheItems.Add(value);
+                        var typed = (MemoryData<T>)value;
+                        newCacheItems.Add(new MemoryData<T> { Data = typed.Data, Version = typed.Version });
+                    }
+                    else
+                    {
+                        // Support case where data was stored with a different generic parameter
+                        // (e.g., stored as MemoryData<ConcreteType>, queried as MemoryData<IProcessManagerData>)
+                        dynamic dyn = value;
+                        try
+                        {
+                            object data = dyn.Data;
+                            if (data is T typedData)
+                            {
+                                newCacheItems.Add(new MemoryData<T> { Data = typedData, Version = (int)dyn.Version });
+                            }
+                        }
+                        catch { /* not a MemoryData-like object, skip */ }
                     }
                 }
 
-                var newCacheItems = Enumerable.ToList((from dynamic cacheItem in cacheItems select new MemoryData<T> { Data = cacheItem.Data, Version = cacheItem.Version }));
                 MemoryData<T>? retval = newCacheItems.FirstOrDefault(lambda.Compile());
 
                 return retval;
@@ -113,7 +128,7 @@ namespace ServiceConnect.Persistence.InMemory
             Type typeParameterType = data.GetType();
 
             MethodInfo md = GetType().GetTypeInfo().GetMethods().First(m => m.Name == "GetMemoryData" && m.GetParameters()[0].Name == "data");
-            MethodInfo genericMd = md.MakeGenericMethod(typeof(IProcessManagerData));
+            MethodInfo genericMd = md.MakeGenericMethod(typeParameterType);
 
             lock (_memoryCacheLock)
             {
@@ -154,7 +169,10 @@ namespace ServiceConnect.Persistence.InMemory
 
                 if (_provider.Contains(key))
                 {
-                    var currentVersion = ((MemoryData<T>)(_provider.Get<string, object>(key))).Version;
+                    // Use dynamic to read the version, since the stored MemoryData<X>
+                    // generic parameter may differ from T (e.g., concrete vs interface).
+                    dynamic storedData = _provider.Get<string, object>(key);
+                    int currentVersion = (int)storedData.Version;
 
                     var updatedData = new MemoryData<T>
                     {

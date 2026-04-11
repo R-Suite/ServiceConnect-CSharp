@@ -276,8 +276,12 @@ public class Producer : IProducer
         headers["SourceAddress"] = _queueConfiguration.QueueName;
         headers["TimeSent"] = DateTime.UtcNow.ToString("O");
         headers["SourceMachine"] = Environment.MachineName;
-        headers["TypeName"] = type.FullName!;
-        headers["FullTypeName"] = type.AssemblyQualifiedName!;
+
+        if (!headers.ContainsKey("TypeName"))
+            headers["TypeName"] = type.FullName!;
+        if (!headers.ContainsKey("FullTypeName"))
+            headers["FullTypeName"] = type.AssemblyQualifiedName!;
+
         headers["ConsumerType"] = "RabbitMQ";
         headers["Language"] = "C#";
 

@@ -41,11 +41,13 @@ public class MessageDispatcher
             // 2. Build envelope
             var envelope = new Envelope { Headers = headers, Body = messageBytes };
 
-            // 3. Run ReplyProcessor first (before deserialization) — first in chain
-            if (_processors.Count > 0)
+            // 3. Run pre-deserialization processors (e.g., ReplyProcessor, StreamProcessor)
+            //    These processors can handle messages without the deserialized body.
+            foreach (var proc in _processors)
             {
-                var replyResult = await _processors[0].ProcessAsync(messageBytes, type, null, headers, envelope);
-                if (replyResult == ProcessResult.Handled)
+                if (!proc.RunBeforeDeserialization) continue;
+                var preResult = await proc.ProcessAsync(messageBytes, type, null, headers, envelope);
+                if (preResult == ProcessResult.Handled)
                     return new ConsumeEventResult { Success = true };
             }
 
@@ -57,10 +59,11 @@ public class MessageDispatcher
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
-            // 6. Iterate remaining processors
-            for (int i = 1; i < _processors.Count; i++)
+            // 6. Run post-deserialization processors
+            foreach (var proc in _processors)
             {
-                var result = await _processors[i].ProcessAsync(messageBytes, type, message, headers, envelope);
+                if (proc.RunBeforeDeserialization) continue;
+                var result = await proc.ProcessAsync(messageBytes, type, message, headers, envelope);
                 if (result == ProcessResult.Handled)
                 {
                     _filterPipeline.ExecuteAfterConsumingFilters(envelope);

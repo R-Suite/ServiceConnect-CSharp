@@ -85,6 +85,9 @@ public class ProcessManagerMongoDbTests
             cts.Token.Register(() => secondHandled.TrySetCanceled());
             await secondHandled.Task;
 
+            // Allow time for the ProcessManagerProcessor to persist after handler completes
+            await Task.Delay(500);
+
             // Assert: verify persisted state
             var finder = provider.GetRequiredService<IProcessManagerFinder>();
             var mapper = new TestProcessManagerPropertyMapper();
