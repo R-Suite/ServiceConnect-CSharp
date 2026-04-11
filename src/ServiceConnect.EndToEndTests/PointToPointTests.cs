@@ -46,13 +46,19 @@ public class PointToPointTests
     {
         var queueName = _fixture.GetUniqueQueueName("send");
         var bus = CreateBus(queueName);
+        try
+        {
+            var message = new TestMessage(Guid.NewGuid()) { Content = "point-to-point test" };
 
-        var message = new TestMessage(Guid.NewGuid()) { Content = "point-to-point test" };
+            var exception = await Record.ExceptionAsync(() =>
+                bus.SendAsync(message, new SendOptions { EndPoint = queueName }));
 
-        var exception = await Record.ExceptionAsync(() =>
-            bus.SendAsync(message, new SendOptions { EndPoint = queueName }));
-
-        Assert.Null(exception);
+            Assert.Null(exception);
+        }
+        finally
+        {
+            bus.Dispose();
+        }
     }
 
     [Fact]
@@ -61,11 +67,17 @@ public class PointToPointTests
     {
         var queueName = _fixture.GetUniqueQueueName("publish");
         var bus = CreateBus(queueName);
+        try
+        {
+            var message = new TestMessage(Guid.NewGuid()) { Content = "publish test" };
 
-        var message = new TestMessage(Guid.NewGuid()) { Content = "publish test" };
+            var exception = await Record.ExceptionAsync(() => bus.PublishAsync(message));
 
-        var exception = await Record.ExceptionAsync(() => bus.PublishAsync(message));
-
-        Assert.Null(exception);
+            Assert.Null(exception);
+        }
+        finally
+        {
+            bus.Dispose();
+        }
     }
 }

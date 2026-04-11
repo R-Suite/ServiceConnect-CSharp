@@ -27,7 +27,7 @@ public class RequestReplyManager : IRequestReplyManager
         var tcs = new TaskCompletionSource<object>();
         _pendingRequests[messageIdStr] = new RequestState(tcs, 1);
 
-        headers["RequestMessageId"] = messageIdStr;
+        headers[HeaderKeys.RequestMessageId] = messageIdStr;
 
         if (!string.IsNullOrEmpty(options.EndPoint))
             await sendAction(typeof(TRequest), messageBytes, headers, options.EndPoint);
@@ -73,7 +73,7 @@ public class RequestReplyManager : IRequestReplyManager
                 tcs.TrySetResult(null!);
         });
 
-        headers["RequestMessageId"] = messageIdStr;
+        headers[HeaderKeys.RequestMessageId] = messageIdStr;
 
         if (options.EndPoints != null)
         {

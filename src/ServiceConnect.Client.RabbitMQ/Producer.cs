@@ -22,7 +22,8 @@ public class Producer : IProducer
     private readonly bool _publisherAcks;
     private readonly ConcurrentDictionary<ulong, string> _messagesSent = new();
     private readonly object _connectionLock = new();
-    private bool _connected;
+    private volatile bool _connected;
+    private volatile bool _disposed;
 
     public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, ILogger<Producer> logger)
     {
@@ -38,6 +39,7 @@ public class Producer : IProducer
 
     private void EnsureConnected()
     {
+        if (_disposed) throw new ObjectDisposedException(nameof(Producer));
         if (_connected) return;
 
         lock (_connectionLock)
@@ -291,6 +293,9 @@ public class Producer : IProducer
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+
         // Wait for outstanding publisher confirms (max 5 seconds).
         int timeout = 0;
         while (_messagesSent.Count != 0 && timeout < 50)
