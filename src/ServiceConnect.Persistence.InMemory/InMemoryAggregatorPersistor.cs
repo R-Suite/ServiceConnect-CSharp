@@ -44,20 +44,11 @@ namespace ServiceConnect.Persistence.InMemory
                 if (_provider.Contains(name))
                 {
                     var cacheItem = _provider.Get<string, object>(name);
-                    ((IList<MemoryData<IProcessManagerData>>)cacheItem).Add(new MemoryData<IProcessManagerData>
-                    {
-                        Data = (IProcessManagerData)data
-                    });
+                    ((IList<object>)cacheItem).Add(data);
                 }
                 else
                 {
-                    _provider.Add(name, new List<MemoryData<IProcessManagerData>>
-                    {
-                        new MemoryData<IProcessManagerData>
-                        {
-                            Data = (IProcessManagerData)data
-                        }
-                    }, _absoluteExpiry);
+                    _provider.Add(name, new List<object> { data }, _absoluteExpiry);
                 }
             }
         }
@@ -69,7 +60,7 @@ namespace ServiceConnect.Persistence.InMemory
                 if (_provider.Contains(name))
                 {
                     var cacheItem = _provider.Get<string, object>(name);
-                    return ((List<MemoryData<IProcessManagerData>>)cacheItem).Select(x => (object)x.Data!).ToList();
+                    return ((List<object>)cacheItem).ToList();
                 }
                 return new List<object>();
             }
@@ -81,9 +72,10 @@ namespace ServiceConnect.Persistence.InMemory
             {
                 if (_provider.Contains(name))
                 {
-                    var cacheItem = (List<MemoryData<IProcessManagerData>>)_provider.Get<string, object>(name);
-                    var message = cacheItem.FirstOrDefault(x => ((Message)x.Data!).CorrelationId == correlationsId);
-                    cacheItem.Remove(message!);
+                    var cacheItem = (List<object>)_provider.Get<string, object>(name);
+                    var message = cacheItem.FirstOrDefault(x => x is Message m && m.CorrelationId == correlationsId);
+                    if (message != null)
+                        cacheItem.Remove(message);
                 }
             }
         }
@@ -105,7 +97,7 @@ namespace ServiceConnect.Persistence.InMemory
             {
                 if (_provider.Contains(name))
                 {
-                    var cacheItem = (List<MemoryData<IProcessManagerData>>)_provider.Get<string, object>(name);
+                    var cacheItem = (List<object>)_provider.Get<string, object>(name);
                     return cacheItem.Count;
                 }
                 return 0;
