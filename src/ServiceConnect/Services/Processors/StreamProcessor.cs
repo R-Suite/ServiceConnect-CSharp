@@ -6,16 +6,20 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public class StreamProcessor : IMessageProcessor
+public class StreamProcessor : IMessageProcessor, IDisposable
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<StreamProcessor> _logger;
     private readonly ConcurrentDictionary<string, MessageBusReadStream> _activeStreams = new();
+    private readonly ConcurrentDictionary<string, DateTime> _streamTimestamps = new();
+    private readonly Timer _cleanupTimer;
+    private static readonly TimeSpan StreamTimeout = TimeSpan.FromMinutes(5);
 
     public StreamProcessor(IServiceProvider serviceProvider, ILogger<StreamProcessor> logger)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _cleanupTimer = new Timer(_ => EvictStaleStreams(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
 
     public bool RunBeforeDeserialization => true;
@@ -42,6 +46,7 @@ public class StreamProcessor : IMessageProcessor
         var stream = _activeStreams.GetOrAdd(sequenceId, _ => new MessageBusReadStream { SequenceId = sequenceId });
 
         stream.Write(messageBytes, packetNumber);
+        _streamTimestamps[sequenceId] = DateTime.UtcNow;
 
         if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
         {
@@ -52,6 +57,7 @@ public class StreamProcessor : IMessageProcessor
         if (stream.IsComplete())
         {
             _activeStreams.TryRemove(sequenceId, out _);
+            _streamTimestamps.TryRemove(sequenceId, out _);
 
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))
             {
@@ -87,5 +93,24 @@ public class StreamProcessor : IMessageProcessor
         }
 
         return ProcessResult.Handled;
+    }
+
+    private void EvictStaleStreams()
+    {
+        var cutoff = DateTime.UtcNow - StreamTimeout;
+        foreach (var kvp in _streamTimestamps)
+        {
+            if (kvp.Value < cutoff)
+            {
+                _activeStreams.TryRemove(kvp.Key, out _);
+                _streamTimestamps.TryRemove(kvp.Key, out _);
+                _logger.LogWarning("Evicted incomplete stream {SequenceId} after timeout", kvp.Key);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _cleanupTimer.Dispose();
     }
 }

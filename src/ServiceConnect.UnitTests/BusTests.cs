@@ -46,7 +46,7 @@ namespace ServiceConnect.UnitTests
             var testProvider = testServices.BuildServiceProvider();
             var processors = new List<IMessageProcessor>
             {
-                new ReplyProcessor(_mockRequestReplyManager.Object, _mockSerializer.Object),
+                new ReplyProcessor(_mockRequestReplyManager.Object),
                 new HandlerProcessor(testProvider, testProvider.GetRequiredService<ILogger<HandlerProcessor>>())
             };
             _dispatcher = new MessageDispatcher(

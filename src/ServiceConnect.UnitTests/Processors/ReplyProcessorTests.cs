@@ -8,12 +8,11 @@ namespace ServiceConnect.UnitTests.Processors;
 public class ReplyProcessorTests
 {
     private readonly Mock<IRequestReplyManager> _mockReplyManager = new();
-    private readonly Mock<IMessageSerializer> _mockSerializer = new();
 
     [Fact]
     public async Task ProcessAsync_WithResponseMessageId_RoutesToReplyManager()
     {
-        var processor = new ReplyProcessor(_mockReplyManager.Object, _mockSerializer.Object);
+        var processor = new ReplyProcessor(_mockReplyManager.Object);
         var headers = new Dictionary<string, object>
         {
             [HeaderKeys.ResponseMessageId] = "reply-123",
@@ -30,7 +29,7 @@ public class ReplyProcessorTests
     [Fact]
     public async Task ProcessAsync_WithoutResponseMessageId_ReturnsNotHandled()
     {
-        var processor = new ReplyProcessor(_mockReplyManager.Object, _mockSerializer.Object);
+        var processor = new ReplyProcessor(_mockReplyManager.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -42,7 +41,7 @@ public class ReplyProcessorTests
     [Fact]
     public async Task ProcessAsync_WithEmptyResponseMessageId_ReturnsNotHandled()
     {
-        var processor = new ReplyProcessor(_mockReplyManager.Object, _mockSerializer.Object);
+        var processor = new ReplyProcessor(_mockReplyManager.Object);
         var headers = new Dictionary<string, object> { [HeaderKeys.ResponseMessageId] = "" };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 

@@ -75,7 +75,7 @@ public class MessageDispatcherTests
     {
         var processors = new List<IMessageProcessor>
         {
-            new ReplyProcessor(_mockReplyManager.Object, _mockSerializer.Object),
+            new ReplyProcessor(_mockReplyManager.Object),
             new HandlerProcessor(serviceProvider, NullLogger<HandlerProcessor>.Instance)
         };
 

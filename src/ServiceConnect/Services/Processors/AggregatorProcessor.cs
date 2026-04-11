@@ -105,6 +105,9 @@ public class AggregatorProcessor : IMessageProcessor, IDisposable
                 if (msg is Message m)
                     persistor.RemoveData(aggregatorName, m.CorrelationId);
             }
+
+            if (_timers.TryRemove(aggregatorName, out var activeTimer))
+                activeTimer.Dispose();
         }
     }
 

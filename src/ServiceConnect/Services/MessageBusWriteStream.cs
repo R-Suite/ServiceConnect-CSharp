@@ -37,7 +37,7 @@ public class MessageBusWriteStream : IMessageBusWriteStream
             [HeaderKeys.PacketNumber] = _packetNumber.ToString()
         };
 
-        _producer.SendBytesAsync(_endpoint, packet, headers).GetAwaiter().GetResult();
+        Task.Run(() => _producer.SendBytesAsync(_endpoint, packet, headers)).GetAwaiter().GetResult();
         _packetNumber++;
     }
 
@@ -52,7 +52,7 @@ public class MessageBusWriteStream : IMessageBusWriteStream
             [HeaderKeys.LastPacketNumber] = _packetNumber.ToString()
         };
 
-        _producer.SendBytesAsync(_endpoint, Array.Empty<byte>(), headers).GetAwaiter().GetResult();
+        Task.Run(() => _producer.SendBytesAsync(_endpoint, Array.Empty<byte>(), headers)).GetAwaiter().GetResult();
     }
 
     public void Dispose()

@@ -6,12 +6,10 @@ namespace ServiceConnect.Services.Processors;
 public class ReplyProcessor : IMessageProcessor
 {
     private readonly IRequestReplyManager _replyManager;
-    private readonly IMessageSerializer _serializer;
 
-    public ReplyProcessor(IRequestReplyManager replyManager, IMessageSerializer serializer)
+    public ReplyProcessor(IRequestReplyManager replyManager)
     {
         _replyManager = replyManager;
-        _serializer = serializer;
     }
 
     public bool RunBeforeDeserialization => true;
