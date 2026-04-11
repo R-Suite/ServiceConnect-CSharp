@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
@@ -12,19 +13,25 @@ public class MessageDispatcher
     private readonly IList<IMessageProcessor> _processors;
     private readonly ILogger<MessageDispatcher> _logger;
     private readonly IBusConfiguration _config;
+    private readonly IPipelineConfiguration _pipelineConfig;
+    private readonly IServiceProvider _serviceProvider;
 
     public MessageDispatcher(
         IMessageSerializer serializer,
         IFilterPipeline filterPipeline,
         IList<IMessageProcessor> processors,
         ILogger<MessageDispatcher> logger,
-        IBusConfiguration config)
+        IBusConfiguration config,
+        IPipelineConfiguration pipelineConfig,
+        IServiceProvider serviceProvider)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
         _processors = processors ?? throw new ArgumentNullException(nameof(processors));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _config = config ?? throw new ArgumentNullException(nameof(config));
+        _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     }
 
     public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers)
@@ -63,23 +70,38 @@ public class MessageDispatcher
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
-            // 6. Run post-deserialization processors
-            foreach (var proc in _processors)
+            // 6. Run post-deserialization processors, wrapped in processing middleware
+            async Task<ConsumeEventResult> RunProcessors(byte[] mb, Type mt, object m, IDictionary<string, object> h, Envelope e)
             {
-                if (proc.RunBeforeDeserialization) continue;
-                var result = await proc.ProcessAsync(messageBytes, type, message, headers, envelope);
-                if (result == ProcessResult.Handled)
+                foreach (var proc in _processors)
                 {
-                    _filterPipeline.ExecuteAfterConsumingFilters(envelope);
-                    return new ConsumeEventResult { Success = true };
+                    if (proc.RunBeforeDeserialization) continue;
+                    var result = await proc.ProcessAsync(mb, mt, m, h, e);
+                    if (result == ProcessResult.Handled)
+                    {
+                        _filterPipeline.ExecuteAfterConsumingFilters(e);
+                        return new ConsumeEventResult { Success = true };
+                    }
                 }
+
+                _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
+                _filterPipeline.ExecuteAfterConsumingFilters(e);
+                return new ConsumeEventResult { Success = true };
             }
 
-            // No processor handled the message
-            _logger.LogWarning("No processor handled message of type {MessageType}", type.FullName);
-            _filterPipeline.ExecuteAfterConsumingFilters(envelope);
+            var middlewareTypes = _pipelineConfig.MessageProcessingMiddleware;
+            if (middlewareTypes.Count == 0)
+                return await RunProcessors(messageBytes, type, message, headers, envelope);
 
-            return new ConsumeEventResult { Success = true };
+            MessageProcessingDelegate chain = (mb, mt, m, h, e) => RunProcessors(mb, mt, m, h, e);
+            for (int i = middlewareTypes.Count - 1; i >= 0; i--)
+            {
+                var mw = (IMessageProcessingMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
+                mw.Next = chain;
+                var current = mw;
+                chain = (mb, mt, m, h, e) => current.Process(mb, mt, m, h, e);
+            }
+            return await chain(messageBytes, type, message, headers, envelope);
         }
         catch (Exception ex)
         {

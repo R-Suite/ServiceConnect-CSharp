@@ -49,12 +49,16 @@ namespace ServiceConnect.UnitTests
                 new ReplyProcessor(_mockRequestReplyManager.Object),
                 new HandlerProcessor(testProvider, testProvider.GetRequiredService<ILogger<HandlerProcessor>>())
             };
+            var mockPipelineConfig = new Mock<IPipelineConfiguration>();
+            mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware).Returns(new List<Type>());
             _dispatcher = new MessageDispatcher(
                 _mockSerializer.Object,
                 _mockFilterPipeline.Object,
                 processors,
                 testProvider.GetRequiredService<ILogger<MessageDispatcher>>(),
-                _mockConfig.Object);
+                _mockConfig.Object,
+                mockPipelineConfig.Object,
+                testProvider);
 
             _handlerReferences = new List<HandlerReference>();
 

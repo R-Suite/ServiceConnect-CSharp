@@ -56,4 +56,16 @@ public class ServiceConnectBuilder
         BusConfig.Pipeline.AfterConsumingFilters.Add(typeof(T));
         return this;
     }
+
+    public ServiceConnectBuilder AddSendMessageMiddleware<T>() where T : class, ISendMessageMiddleware
+    {
+        BusConfig.Pipeline.SendMessageMiddleware.Add(typeof(T));
+        return this;
+    }
+
+    public ServiceConnectBuilder AddMessageProcessingMiddleware<T>() where T : class, IMessageProcessingMiddleware
+    {
+        BusConfig.Pipeline.MessageProcessingMiddleware.Add(typeof(T));
+        return this;
+    }
 }

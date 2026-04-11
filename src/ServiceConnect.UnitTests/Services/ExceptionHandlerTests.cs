@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
@@ -39,12 +40,17 @@ public class ExceptionHandlerTests
 
     private MessageDispatcher CreateDispatcher(IList<IMessageProcessor> processors)
     {
+        var mockPipelineConfig = new Mock<IPipelineConfiguration>();
+        mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware).Returns(new List<Type>());
+        var sp = new ServiceCollection().BuildServiceProvider();
         return new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
             processors,
             NullLogger<MessageDispatcher>.Instance,
-            _mockConfig.Object);
+            _mockConfig.Object,
+            mockPipelineConfig.Object,
+            sp);
     }
 
     [Fact]

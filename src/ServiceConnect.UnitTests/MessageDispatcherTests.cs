@@ -72,6 +72,13 @@ public class MessageDispatcherTests
         _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFilters(It.IsAny<Envelope>())).Returns(false);
     }
 
+    private static Mock<IPipelineConfiguration> CreateEmptyPipelineConfig()
+    {
+        var mock = new Mock<IPipelineConfiguration>();
+        mock.Setup(p => p.MessageProcessingMiddleware).Returns(new List<Type>());
+        return mock;
+    }
+
     private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider)
     {
         var processors = new List<IMessageProcessor>
@@ -85,17 +92,22 @@ public class MessageDispatcherTests
             _mockFilterPipeline.Object,
             processors,
             NullLogger<MessageDispatcher>.Instance,
-            new Mock<IBusConfiguration>().Object);
+            new Mock<IBusConfiguration>().Object,
+            CreateEmptyPipelineConfig().Object,
+            serviceProvider);
     }
 
     private MessageDispatcher CreateDispatcherWithProcessors(IList<IMessageProcessor> processors)
     {
+        var sp = new ServiceCollection().BuildServiceProvider();
         return new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
             processors,
             NullLogger<MessageDispatcher>.Instance,
-            new Mock<IBusConfiguration>().Object);
+            new Mock<IBusConfiguration>().Object,
+            CreateEmptyPipelineConfig().Object,
+            sp);
     }
 
     [Fact]
