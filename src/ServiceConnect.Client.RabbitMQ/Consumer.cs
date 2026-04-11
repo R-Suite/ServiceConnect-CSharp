@@ -21,19 +21,22 @@ public class Consumer : IConsumer
     private IDictionary<string, object> _retryQueueArguments = new Dictionary<string, object>();
     private IDictionary<string, object> _utilityQueueArguments = new Dictionary<string, object>();
     private readonly ConcurrentBag<Client> _clients = new();
+    private readonly IBusConfiguration _busConfiguration;
 
-    public Consumer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, ILogger<Consumer> logger)
+    public Consumer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Consumer> logger)
     {
         _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
+        _busConfiguration = busConfiguration;
         _logger = logger;
     }
 
-    public Consumer(IServiceConnectConnection connection, ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, ILogger<Consumer> logger)
+    public Consumer(IServiceConnectConnection connection, ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Consumer> logger)
     {
         _connection = connection;
         _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
+        _busConfiguration = busConfiguration;
         _logger = logger;
     }
 
@@ -98,7 +101,7 @@ public class Consumer : IConsumer
             }
         }
 
-        int clientCount = 1; // Default; can be made configurable via IBusConfiguration if needed
+        int clientCount = _busConfiguration.ConsumerCount;
 
         for (int i = 0; i < clientCount; i++)
         {
