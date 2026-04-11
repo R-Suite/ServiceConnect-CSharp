@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using ServiceConnect.UnitTests.Fakes.Messages;
@@ -83,7 +84,8 @@ public class MessageDispatcherTests
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
             processors,
-            NullLogger<MessageDispatcher>.Instance);
+            NullLogger<MessageDispatcher>.Instance,
+            new Mock<IBusConfiguration>().Object);
     }
 
     private MessageDispatcher CreateDispatcherWithProcessors(IList<IMessageProcessor> processors)
@@ -92,7 +94,8 @@ public class MessageDispatcherTests
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
             processors,
-            NullLogger<MessageDispatcher>.Instance);
+            NullLogger<MessageDispatcher>.Instance,
+            new Mock<IBusConfiguration>().Object);
     }
 
     [Fact]

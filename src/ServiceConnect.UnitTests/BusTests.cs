@@ -53,7 +53,8 @@ namespace ServiceConnect.UnitTests
                 _mockSerializer.Object,
                 _mockFilterPipeline.Object,
                 processors,
-                testProvider.GetRequiredService<ILogger<MessageDispatcher>>());
+                testProvider.GetRequiredService<ILogger<MessageDispatcher>>(),
+                _mockConfig.Object);
 
             _handlerReferences = new List<HandlerReference>();
 

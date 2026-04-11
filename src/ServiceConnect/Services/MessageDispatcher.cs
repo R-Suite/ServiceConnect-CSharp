@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Services;
 
@@ -10,17 +11,20 @@ public class MessageDispatcher
     private readonly IFilterPipeline _filterPipeline;
     private readonly IList<IMessageProcessor> _processors;
     private readonly ILogger<MessageDispatcher> _logger;
+    private readonly IBusConfiguration _config;
 
     public MessageDispatcher(
         IMessageSerializer serializer,
         IFilterPipeline filterPipeline,
         IList<IMessageProcessor> processors,
-        ILogger<MessageDispatcher> logger)
+        ILogger<MessageDispatcher> logger,
+        IBusConfiguration config)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
         _processors = processors ?? throw new ArgumentNullException(nameof(processors));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _config = config ?? throw new ArgumentNullException(nameof(config));
     }
 
     public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers)
@@ -80,6 +84,14 @@ public class MessageDispatcher
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error dispatching message of type {MessageType}", messageType);
+            try
+            {
+                _config.ExceptionHandler?.Invoke(ex);
+            }
+            catch (Exception handlerEx)
+            {
+                _logger.LogWarning(handlerEx, "ExceptionHandler threw while handling dispatch error");
+            }
             return new ConsumeEventResult { Success = false, Exception = ex };
         }
     }
