@@ -236,4 +236,53 @@ public class MessageDispatcherTests
         // Assert
         Assert.True(result.Success);
     }
+
+    [Fact]
+    public async Task Dispatch_DerivedMessageType_InvokesBaseTypeHandler()
+    {
+        // Arrange
+        var message = new PolyDerivedMessage(Guid.NewGuid()) { Content = "base", Extra = "derived" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(PolyDerivedMessage))).Returns(message);
+
+        var handler = new PolyBaseHandler();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<PolyBaseMessage>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes(typeof(PolyDerivedMessage).AssemblyQualifiedName!)
+        };
+
+        var dispatcher = CreateDispatcher(sp);
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.Dispatch(messageBytes, "PolyDerivedMessage", headers);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.True(handler.Invoked);
+    }
+}
+
+file class PolyBaseMessage : Message
+{
+    public PolyBaseMessage(Guid correlationId) : base(correlationId) { }
+    public string Content { get; set; } = string.Empty;
+}
+
+file class PolyDerivedMessage : PolyBaseMessage
+{
+    public PolyDerivedMessage(Guid correlationId) : base(correlationId) { }
+    public string Extra { get; set; } = string.Empty;
+}
+
+file class PolyBaseHandler : IMessageHandler<PolyBaseMessage>
+{
+    public bool Invoked { get; private set; }
+    public IConsumeContext? Context { get; set; }
+    public Task HandleAsync(PolyBaseMessage message) { Invoked = true; return Task.CompletedTask; }
 }

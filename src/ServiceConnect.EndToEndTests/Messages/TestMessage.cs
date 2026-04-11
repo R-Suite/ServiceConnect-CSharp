@@ -33,3 +33,9 @@ public class StepMessage : Message
     public List<string> VisitedSteps { get; set; } = new();
     public string CurrentStep { get; set; } = string.Empty;
 }
+
+public class DerivedTestMessage : TestMessage
+{
+    public DerivedTestMessage(Guid correlationId) : base(correlationId) { }
+    public string Extra { get; set; } = string.Empty;
+}

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,33 +69,48 @@ public class MessageDispatcher
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
-            // 5. Resolve handlers
-            var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(type);
-            var handlers = _serviceProvider.GetServices(handlerInterfaceType);
+            // 5. Resolve handlers — check exact type, then walk up base types
+            // (interface-based handlers like IMessageHandler<IEvent> are not supported)
+            var allHandlers = new List<(object Handler, Type InterfaceType)>();
+            var checkedType = type;
+            while (checkedType != null && checkedType != typeof(Message) && checkedType != typeof(object))
+            {
+                var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(checkedType);
+                var handlers = _serviceProvider.GetServices(handlerInterfaceType);
+                foreach (var h in handlers)
+                {
+                    if (h != null)
+                        allHandlers.Add((h, handlerInterfaceType));
+                }
+                checkedType = checkedType.BaseType;
+            }
+
+            if (allHandlers.Count == 0)
+            {
+                _logger.LogWarning("No handlers found for message type {MessageType}", type.FullName);
+                return new ConsumeEventResult { Success = true };
+            }
 
             // 6. Create ConsumeContext and dispatch to each handler
             var bus = _serviceProvider.GetRequiredService<IBus>();
             var context = new ConsumeContext(bus, headers);
-            var contextProperty = handlerInterfaceType.GetProperty("Context");
-            var handleAsyncMethod = handlerInterfaceType.GetMethod("HandleAsync");
 
-            foreach (var handler in handlers)
+            foreach (var (handler, resolvedInterface) in allHandlers)
             {
-                if (handler == null) continue;
+                var contextProperty = resolvedInterface.GetProperty("Context");
+                var handleAsyncMethod = resolvedInterface.GetMethod("HandleAsync");
 
-                // Set context via reflection
                 contextProperty?.SetValue(handler, context);
 
-                // Call HandleAsync via reflection
                 var task = (Task?)handleAsyncMethod?.Invoke(handler, new[] { message });
                 if (task != null)
                     await task;
             }
 
-            // 8. Run AfterConsumingFilters
+            // 7. Run AfterConsumingFilters
             _filterPipeline.ExecuteAfterConsumingFilters(envelope);
 
-            // 9. Return success
+            // 8. Return success
             return new ConsumeEventResult { Success = true };
         }
         catch (Exception ex)
