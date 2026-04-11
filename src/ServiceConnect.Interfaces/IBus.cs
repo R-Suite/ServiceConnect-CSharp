@@ -10,7 +10,7 @@ public interface IBus : IDisposable
         where T : Message where TReply : Message;
     Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null)
         where TRequest : Message where TReply : Message;
-    void Route<T>(T message, IList<string> destinations) where T : Message;
+    Task RouteAsync<T>(T message, IList<string> destinations) where T : Message;
     IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message;
     void StartConsuming();
     Task StartConsumingAsync();

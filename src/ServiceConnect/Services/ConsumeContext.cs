@@ -21,10 +21,7 @@ public class ConsumeContext : IConsumeContext
         Headers = headers;
     }
 
-    // Note: Reply is synchronous (IConsumeContext interface constraint). This blocks the
-    // consumer thread while sending. Consider adding ReplyAsync to IConsumeContext in a
-    // future iteration to avoid thread blocking on the RabbitMQ dispatch thread.
-    public void Reply<TReply>(TReply message, Dictionary<string, string>? headers = null) where TReply : Message
+    public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null) where TReply : Message
     {
         var sourceAddress = Headers.TryGetValue(HeaderKeys.SourceAddress, out var sa) ? DecodeHeaderValue(sa) : null;
         if (string.IsNullOrEmpty(sourceAddress))
@@ -37,7 +34,7 @@ public class ConsumeContext : IConsumeContext
             replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;
 
         var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
-        Bus.SendAsync(message, options).GetAwaiter().GetResult();
+        await Bus.SendAsync(message, options).ConfigureAwait(false);
     }
 
     /// <summary>

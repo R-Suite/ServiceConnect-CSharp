@@ -260,7 +260,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Route_ShouldSendToFirstDestination_WithRoutingSlipForRemaining()
+        public async Task RouteAsync_ShouldSendToFirstDestination_WithRoutingSlipForRemaining()
         {
             // Arrange
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
@@ -271,7 +271,7 @@ namespace ServiceConnect.UnitTests
                 .Returns(Task.CompletedTask);
 
             // Act
-            _bus.Route(message, destinations);
+            await _bus.RouteAsync(message, destinations);
 
             // Assert
             _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
@@ -282,13 +282,13 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Route_ShouldThrow_WhenNoDestinations()
+        public async Task RouteAsync_ShouldThrow_WhenNoDestinations()
         {
             // Arrange
             var message = new FakeMessage1(Guid.NewGuid());
 
             // Act & Assert
-            Assert.Throws<ArgumentException>(() => _bus.Route(message, new List<string>()));
+            await Assert.ThrowsAsync<ArgumentException>(() => _bus.RouteAsync(message, new List<string>()));
         }
 
         [Fact]

@@ -55,6 +55,7 @@ public class Client
     /// </summary>
     public async Task Event(object consumer, BasicDeliverEventArgs args)
     {
+        bool processed = false;
         try
         {
             Interlocked.Increment(ref _messagesBeingProcessed);
@@ -65,6 +66,7 @@ public class Client
             {
                 const string errMsg = "Error processing message, Message headers must contain type name.";
                 _logger.LogError(errMsg);
+                processed = true; // no retry possible for malformed messages, ack to discard
                 return;
             }
 
@@ -74,21 +76,24 @@ public class Client
             }
 
             await ProcessMessage(args);
+            processed = true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing message");
-            throw;
         }
         finally
         {
             try
             {
-                _model!.BasicAck(args.DeliveryTag, false);
+                if (processed)
+                    _model!.BasicAck(args.DeliveryTag, false);
+                else
+                    _model!.BasicNack(args.DeliveryTag, false, true); // requeue
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error acking the message");
+                _logger.LogWarning(ex, "Error acking/nacking the message");
             }
 
             Interlocked.Decrement(ref _messagesBeingProcessed);

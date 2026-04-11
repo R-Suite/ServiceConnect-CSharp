@@ -9,7 +9,7 @@ namespace ServiceConnect.EndToEndTests;
 public class RoutingSlipTests
 {
     [Fact]
-    public void Route_SetsRoutingSlipHeaders()
+    public async Task RouteAsync_SetsRoutingSlipHeaders()
     {
         string? capturedEndpoint = null;
         Dictionary<string, string>? capturedHeaders = null;
@@ -37,7 +37,7 @@ public class RoutingSlipTests
 
         var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
-        bus.Route(message, new List<string> { "Step1", "Step2", "Step3" });
+        await bus.RouteAsync(message, new List<string> { "Step1", "Step2", "Step3" });
 
         Assert.Equal("Step1", capturedEndpoint);
         Assert.NotNull(capturedHeaders);
@@ -46,7 +46,7 @@ public class RoutingSlipTests
     }
 
     [Fact]
-    public void Route_SingleDestination_NoRoutingSlipHeader()
+    public async Task RouteAsync_SingleDestination_NoRoutingSlipHeader()
     {
         string? capturedEndpoint = null;
         Dictionary<string, string>? capturedHeaders = null;
@@ -74,7 +74,7 @@ public class RoutingSlipTests
 
         var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
-        bus.Route(message, new List<string> { "OnlyDest" });
+        await bus.RouteAsync(message, new List<string> { "OnlyDest" });
 
         Assert.Equal("OnlyDest", capturedEndpoint);
         Assert.NotNull(capturedHeaders);
@@ -82,7 +82,7 @@ public class RoutingSlipTests
     }
 
     [Fact]
-    public void Route_EmptyDestinations_Throws()
+    public async Task RouteAsync_EmptyDestinations_Throws()
     {
         var mockProducer = new Mock<IProducer>();
 
@@ -99,6 +99,6 @@ public class RoutingSlipTests
 
         var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
-        Assert.Throws<ArgumentException>(() => bus.Route(message, new List<string>()));
+        await Assert.ThrowsAsync<ArgumentException>(() => bus.RouteAsync(message, new List<string>()));
     }
 }

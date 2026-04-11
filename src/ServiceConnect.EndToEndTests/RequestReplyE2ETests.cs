@@ -115,9 +115,8 @@ file class ReplyHandler : IMessageHandler<TestRequest>
 {
     public IConsumeContext? Context { get; set; }
 
-    public Task HandleAsync(TestRequest message)
+    public async Task HandleAsync(TestRequest message)
     {
-        Context!.Reply(new TestResponse(Guid.NewGuid()) { Answer = "The answer is 4" });
-        return Task.CompletedTask;
+        await Context!.ReplyAsync(new TestResponse(Guid.NewGuid()) { Answer = "The answer is 4" });
     }
 }

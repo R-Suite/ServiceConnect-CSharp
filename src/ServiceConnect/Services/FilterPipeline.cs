@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
@@ -36,8 +37,7 @@ public class FilterPipeline : IFilterPipeline
 
         foreach (Type filterType in filterTypes)
         {
-            var filter = (IFilter)(_serviceProvider.GetService(filterType)
-                ?? throw new InvalidOperationException($"Filter of type {filterType.Name} not registered in DI container."));
+            var filter = (IFilter)_serviceProvider.GetRequiredService(filterType);
 
             bool continueProcessing = filter.Process(envelope);
             if (!continueProcessing)

@@ -135,7 +135,7 @@ public sealed class Bus : IBus
         }
     }
 
-    public void Route<T>(T message, IList<string> destinations) where T : Message
+    public async Task RouteAsync<T>(T message, IList<string> destinations) where T : Message
     {
         if (destinations == null || destinations.Count == 0)
             throw new ArgumentException("At least one destination is required.", nameof(destinations));
@@ -158,9 +158,7 @@ public sealed class Bus : IBus
             headers[HeaderKeys.RoutingSlip] = string.Join(",", remainingDestinations);
         }
 
-        Task.Run(() => _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination))
-            .GetAwaiter()
-            .GetResult();
+        await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination).ConfigureAwait(false);
     }
 
     public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message

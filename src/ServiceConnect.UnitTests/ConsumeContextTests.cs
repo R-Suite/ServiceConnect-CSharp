@@ -74,7 +74,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Reply_SendsToSourceAddress()
+        public async Task ReplyAsync_SendsToSourceAddress()
         {
             var requestMessageId = Guid.NewGuid().ToString();
             var headers = new Dictionary<string, object>
@@ -86,7 +86,7 @@ namespace ServiceConnect.UnitTests
             var context = new ConsumeContext(_mockBus.Object, headers);
             var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
 
-            context.Reply(reply);
+            await context.ReplyAsync(reply);
 
             _mockBus.Verify(b => b.SendAsync(
                 reply,

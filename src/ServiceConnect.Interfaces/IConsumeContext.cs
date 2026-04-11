@@ -6,5 +6,5 @@ public interface IConsumeContext
     IDictionary<string, object> Headers { get; set; }
     string? MessageId { get; }
     Guid CorrelationId { get; }
-    void Reply<TReply>(TReply message, Dictionary<string, string>? headers = null) where TReply : Message;
+    Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null) where TReply : Message;
 }

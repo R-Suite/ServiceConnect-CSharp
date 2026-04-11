@@ -21,6 +21,8 @@ public class Producer : IProducer
     private readonly ushort _retryTimeInSeconds;
     private readonly bool _publisherAcks;
     private readonly ConcurrentDictionary<ulong, string> _messagesSent = new();
+    private readonly object _connectionLock = new();
+    private bool _connected;
 
     public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, ILogger<Producer> logger)
     {
@@ -32,12 +34,24 @@ public class Producer : IProducer
         _hosts = transportConfiguration.Host.Split(',');
         _retryCount = transportConfiguration.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
         _retryTimeInSeconds = transportConfiguration.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
+    }
 
-        Retry.Do(CreateConnection, ex =>
+    private void EnsureConnected()
+    {
+        if (_connected) return;
+
+        lock (_connectionLock)
         {
-            _logger.LogError(ex, "Error creating connection");
-            DisposeConnection();
-        }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+            if (_connected) return;
+
+            Retry.Do(CreateConnection, ex =>
+            {
+                _logger.LogError(ex, "Error creating connection");
+                DisposeConnection();
+            }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+
+            _connected = true;
+        }
     }
 
     private void CreateConnection()
@@ -98,6 +112,7 @@ public class Producer : IProducer
 
     private void DoPublish(Type type, byte[] message, Dictionary<string, string>? headers)
     {
+        EnsureConnected();
         lock (_lock)
         {
             IBasicProperties basicProperties = _model!.CreateBasicProperties();
@@ -149,6 +164,7 @@ public class Producer : IProducer
 
     public Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
     {
+        EnsureConnected();
         lock (_lock)
         {
             IBasicProperties basicProperties = _model!.CreateBasicProperties();
@@ -198,6 +214,7 @@ public class Producer : IProducer
             throw new ArgumentException($"Cannot send message of type {type} to empty endpoint");
         }
 
+        EnsureConnected();
         lock (_lock)
         {
             IBasicProperties basicProperties = _model!.CreateBasicProperties();
@@ -321,6 +338,7 @@ public class Producer : IProducer
 
     public Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null)
     {
+        EnsureConnected();
         lock (_lock)
         {
             IBasicProperties basicProperties = _model!.CreateBasicProperties();
@@ -396,45 +414,41 @@ public class Producer : IProducer
         return exchangeName;
     }
 
+    private readonly object _disposeLock = new();
+
     private void DisposeConnection()
     {
-        try
+        lock (_disposeLock)
         {
-            if (_connection != null)
+            try
             {
-                lock (_connection)
+                if (_connection != null && _connection.IsOpen)
                 {
-                    if (_connection != null && _connection.IsOpen)
-                    {
-                        _connection.Close();
-                        _connection.Dispose();
-                        _connection = null;
-                    }
+                    _connection.Close();
+                    _connection.Dispose();
+                    _connection = null;
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Exception trying to close connection");
-        }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Exception trying to close connection");
+            }
 
-        try
-        {
-            if (_model != null)
+            try
             {
-                lock (_model)
+                if (_model != null && _model.IsOpen)
                 {
-                    if (_model != null && _model.IsOpen)
-                    {
-                        _model.Close();
-                        _model.Dispose();
-                    }
+                    _model.Close();
+                    _model.Dispose();
+                    _model = null;
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Exception trying to close model");
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Exception trying to close model");
+            }
+
+            _connected = false;
         }
     }
 }
