@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
@@ -109,6 +110,9 @@ public static class ServiceCollectionExtensions
 
         // Bus
         services.TryAddSingleton<IBus, Bus>();
+
+        // Hosted service for auto-start consuming
+        services.AddHostedService<BusHostedService>();
 
         return services;
     }
