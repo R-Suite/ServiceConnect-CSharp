@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
+using ServiceConnect.Services.Processors;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -72,11 +73,25 @@ public class MessageDispatcherTests
 
     private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider)
     {
+        var processors = new List<IMessageProcessor>
+        {
+            new ReplyProcessor(_mockReplyManager.Object, _mockSerializer.Object),
+            new HandlerProcessor(serviceProvider, NullLogger<HandlerProcessor>.Instance)
+        };
+
         return new MessageDispatcher(
-            serviceProvider,
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
-            _mockReplyManager.Object,
+            processors,
+            NullLogger<MessageDispatcher>.Instance);
+    }
+
+    private MessageDispatcher CreateDispatcherWithProcessors(IList<IMessageProcessor> processors)
+    {
+        return new MessageDispatcher(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            processors,
             NullLogger<MessageDispatcher>.Instance);
     }
 
@@ -221,7 +236,7 @@ public class MessageDispatcherTests
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "NoHandler" };
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
 
-        // No handlers registered
+        // No handlers registered — use empty service provider with HandlerProcessor
         var services = new ServiceCollection();
         services.AddSingleton(_mockBus.Object);
         var sp = services.BuildServiceProvider();

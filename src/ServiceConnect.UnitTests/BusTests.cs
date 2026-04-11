@@ -7,6 +7,7 @@ using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
+using ServiceConnect.Services.Processors;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -43,11 +44,15 @@ namespace ServiceConnect.UnitTests
             var testServices = new ServiceCollection();
             testServices.AddLogging();
             var testProvider = testServices.BuildServiceProvider();
+            var processors = new List<IMessageProcessor>
+            {
+                new ReplyProcessor(_mockRequestReplyManager.Object, _mockSerializer.Object),
+                new HandlerProcessor(testProvider, testProvider.GetRequiredService<ILogger<HandlerProcessor>>())
+            };
             _dispatcher = new MessageDispatcher(
-                testProvider,
                 _mockSerializer.Object,
                 _mockFilterPipeline.Object,
-                _mockRequestReplyManager.Object,
+                processors,
                 testProvider.GetRequiredService<ILogger<MessageDispatcher>>());
 
             _handlerReferences = new List<HandlerReference>();

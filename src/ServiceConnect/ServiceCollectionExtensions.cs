@@ -4,6 +4,7 @@ using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
+using ServiceConnect.Services.Processors;
 
 namespace ServiceConnect;
 
@@ -28,6 +29,15 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IFilterPipeline, FilterPipeline>();
         services.TryAddSingleton<IRequestReplyManager, RequestReplyManager>();
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
+
+        // Message processors (order matters: ReplyProcessor first, then HandlerProcessor)
+        services.TryAddSingleton<ReplyProcessor>();
+        services.TryAddSingleton<HandlerProcessor>();
+        services.TryAddSingleton<IList<IMessageProcessor>>(sp => new List<IMessageProcessor>
+        {
+            sp.GetRequiredService<ReplyProcessor>(),
+            sp.GetRequiredService<HandlerProcessor>()
+        });
 
         // Message dispatcher and handler scanning
         services.TryAddSingleton<MessageDispatcher>();

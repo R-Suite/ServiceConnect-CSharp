@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
-
 using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 
@@ -11,23 +6,20 @@ namespace ServiceConnect.Services;
 
 public class MessageDispatcher
 {
-    private readonly IServiceProvider _serviceProvider;
     private readonly IMessageSerializer _serializer;
     private readonly IFilterPipeline _filterPipeline;
-    private readonly IRequestReplyManager _replyManager;
+    private readonly IList<IMessageProcessor> _processors;
     private readonly ILogger<MessageDispatcher> _logger;
 
     public MessageDispatcher(
-        IServiceProvider serviceProvider,
         IMessageSerializer serializer,
         IFilterPipeline filterPipeline,
-        IRequestReplyManager replyManager,
+        IList<IMessageProcessor> processors,
         ILogger<MessageDispatcher> logger)
     {
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
-        _replyManager = replyManager ?? throw new ArgumentNullException(nameof(replyManager));
+        _processors = processors ?? throw new ArgumentNullException(nameof(processors));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -35,7 +27,7 @@ public class MessageDispatcher
     {
         try
         {
-            // 1. Resolve CLR Type from FullTypeName header (RabbitMQ sends header values as byte[])
+            // 1. Resolve CLR Type from FullTypeName header
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var fullTypeNameRaw))
                 throw new InvalidOperationException("Message is missing FullTypeName header.");
 
@@ -46,72 +38,40 @@ public class MessageDispatcher
             var type = Type.GetType(fullTypeName)
                 ?? throw new InvalidOperationException($"Cannot resolve type '{fullTypeName}'.");
 
-            // 2. Check for ResponseMessageId header — route to reply manager
-            if (headers.TryGetValue(HeaderKeys.ResponseMessageId, out var responseMessageIdRaw))
-            {
-                var responseMessageId = responseMessageIdRaw is byte[] rmidBytes
-                    ? Encoding.UTF8.GetString(rmidBytes)
-                    : responseMessageIdRaw?.ToString();
+            // 2. Build envelope
+            var envelope = new Envelope { Headers = headers, Body = messageBytes };
 
-                if (!string.IsNullOrEmpty(responseMessageId))
-                {
-                    _replyManager.ProcessReply(responseMessageId, messageBytes, type);
+            // 3. Run ReplyProcessor first (before deserialization) — first in chain
+            if (_processors.Count > 0)
+            {
+                var replyResult = await _processors[0].ProcessAsync(messageBytes, type, null, headers, envelope);
+                if (replyResult == ProcessResult.Handled)
                     return new ConsumeEventResult { Success = true };
-                }
             }
 
-            // 3. Deserialize the message
+            // 4. Deserialize the message
             var message = _serializer.Deserialize(messageBytes, type);
 
-            // 4. Build Envelope and run BeforeConsumingFilters
-            var envelope = new Envelope { Headers = headers, Body = messageBytes };
+            // 5. Run BeforeConsumingFilters
             bool blocked = _filterPipeline.ExecuteBeforeConsumingFilters(envelope);
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
-            // 5. Resolve handlers — check exact type, then walk up base types.
-            // All matching handlers in the hierarchy are invoked (not just the most specific).
-            // Interface-based handlers (e.g. IMessageHandler<IEvent>) are not supported.
-            var allHandlers = new List<(object Handler, Type InterfaceType)>();
-            var checkedType = type;
-            while (checkedType != null && checkedType != typeof(Message) && checkedType != typeof(object))
+            // 6. Iterate remaining processors
+            for (int i = 1; i < _processors.Count; i++)
             {
-                var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(checkedType);
-                var handlers = _serviceProvider.GetServices(handlerInterfaceType);
-                foreach (var h in handlers)
+                var result = await _processors[i].ProcessAsync(messageBytes, type, message, headers, envelope);
+                if (result == ProcessResult.Handled)
                 {
-                    if (h != null)
-                        allHandlers.Add((h, handlerInterfaceType));
+                    _filterPipeline.ExecuteAfterConsumingFilters(envelope);
+                    return new ConsumeEventResult { Success = true };
                 }
-                checkedType = checkedType.BaseType;
             }
 
-            if (allHandlers.Count == 0)
-            {
-                _logger.LogWarning("No handlers found for message type {MessageType}", type.FullName);
-                return new ConsumeEventResult { Success = true };
-            }
-
-            // 6. Create ConsumeContext and dispatch to each handler
-            var bus = _serviceProvider.GetRequiredService<IBus>();
-            var context = new ConsumeContext(bus, headers);
-
-            foreach (var (handler, resolvedInterface) in allHandlers)
-            {
-                var contextProperty = resolvedInterface.GetProperty("Context");
-                var handleAsyncMethod = resolvedInterface.GetMethod("HandleAsync");
-
-                contextProperty?.SetValue(handler, context);
-
-                var task = (Task?)handleAsyncMethod?.Invoke(handler, new[] { message });
-                if (task != null)
-                    await task;
-            }
-
-            // 7. Run AfterConsumingFilters
+            // No processor handled the message
+            _logger.LogWarning("No processor handled message of type {MessageType}", type.FullName);
             _filterPipeline.ExecuteAfterConsumingFilters(envelope);
 
-            // 8. Return success
             return new ConsumeEventResult { Success = true };
         }
         catch (Exception ex)
