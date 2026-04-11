@@ -97,6 +97,7 @@ public class ContentRoutingTests
         finally
         {
             bus.Dispose();
+            (provider as IDisposable)?.Dispose();
         }
     }
 }

@@ -101,6 +101,7 @@ public class FilterPipelineConsumerTests
         finally
         {
             bus.Dispose();
+            (provider as IDisposable)?.Dispose();
         }
     }
 
@@ -166,6 +167,7 @@ public class FilterPipelineConsumerTests
         finally
         {
             bus.Dispose();
+            (provider as IDisposable)?.Dispose();
         }
     }
 }

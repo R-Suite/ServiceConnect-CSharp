@@ -46,7 +46,7 @@ public class MessageDispatcher
                 ?? throw new InvalidOperationException($"Cannot resolve type '{fullTypeName}'.");
 
             // 2. Check for ResponseMessageId header — route to reply manager
-            if (headers.TryGetValue("ResponseMessageId", out var responseMessageIdRaw))
+            if (headers.TryGetValue(HeaderKeys.ResponseMessageId, out var responseMessageIdRaw))
             {
                 var responseMessageId = responseMessageIdRaw is byte[] rmidBytes
                     ? Encoding.UTF8.GetString(rmidBytes)

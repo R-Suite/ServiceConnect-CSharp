@@ -103,6 +103,7 @@ public class PublishSubscribeTests
         finally
         {
             bus.Dispose();
+            (provider as IDisposable)?.Dispose();
         }
     }
 }

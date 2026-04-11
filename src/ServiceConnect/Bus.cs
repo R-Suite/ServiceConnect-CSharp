@@ -16,6 +16,7 @@ public sealed class Bus : IBus
     private readonly IQueueConfiguration _queueConfig;
     private readonly MessageDispatcher _dispatcher;
     private readonly IList<HandlerReference> _handlerReferences;
+    private readonly object _stateLock = new();
     private IConsumer? _consumer;
     private bool _consuming;
     private bool _disposed;
@@ -174,35 +175,53 @@ public sealed class Bus : IBus
 
     public async Task StartConsumingAsync()
     {
-        if (_consumer == null)
-            throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
+        IConsumer consumer;
+        List<string> messageTypeNames;
 
-        var messageTypeNames = _handlerReferences
-            .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
-            .Distinct()
-            .ToList();
+        lock (_stateLock)
+        {
+            if (_consumer == null)
+                throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
+
+            messageTypeNames = _handlerReferences
+                .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
+                .Distinct()
+                .ToList();
+
+            consumer = _consumer;
+        }
 
         _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
             _queueConfig.QueueName, messageTypeNames.Count);
 
-        await _consumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch);
-        _consuming = true;
+        await consumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch);
+
+        lock (_stateLock)
+        {
+            _consuming = true;
+        }
     }
 
     public void StopConsuming()
     {
-        _logger.LogInformation("Bus stopping message consumption.");
-        if (_consuming)
+        lock (_stateLock)
         {
-            _consuming = false;
-            _consumer?.Dispose();
+            _logger.LogInformation("Bus stopping message consumption.");
+            if (_consuming)
+            {
+                _consuming = false;
+                _consumer?.Dispose();
+            }
         }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_stateLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
 
         StopConsuming();
         _sendPipeline.Dispose();

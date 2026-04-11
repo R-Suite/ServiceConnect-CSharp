@@ -104,7 +104,9 @@ public class RequestReplyE2ETests
         finally
         {
             responderBus.Dispose();
+            (responderProvider as IDisposable)?.Dispose();
             requesterBus.Dispose();
+            (requesterProvider as IDisposable)?.Dispose();
         }
     }
 }
