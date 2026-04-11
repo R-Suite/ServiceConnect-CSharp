@@ -45,8 +45,8 @@ public class Client
         _errorsDisabled = queueConfiguration.DisableErrors;
         _prefetchCount = transportConfiguration.ClientSettings.ContainsKey("PrefetchCount") ? Convert.ToUInt16((int)transportConfiguration.ClientSettings["PrefetchCount"]) : transportConfiguration.PrefetchCount;
         _disablePrefetch = transportConfiguration.ClientSettings.ContainsKey("DisablePrefetch") && (bool)transportConfiguration.ClientSettings["DisablePrefetch"];
-        _retryCount = transportConfiguration.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportConfiguration.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
-        _retryTimeInSeconds = transportConfiguration.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportConfiguration.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
+        _retryCount = transportConfiguration.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
+        _retryTimeInSeconds = transportConfiguration.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
         _queueArguments = transportConfiguration.ClientSettings.ContainsKey("Arguments") ? (IDictionary<string, object>)transportConfiguration.ClientSettings["Arguments"] : new Dictionary<string, object>();
     }
 
@@ -272,9 +272,9 @@ public class Client
             }
         }
 
-        // Wait until all messages have been processed.
+        // Wait until all messages have been processed (max 5 seconds).
         int timeout = 0;
-        while (_messagesBeingProcessed > 0 && timeout < 6000)
+        while (_messagesBeingProcessed > 0 && timeout < 50)
         {
             Thread.Sleep(100);
             timeout++;

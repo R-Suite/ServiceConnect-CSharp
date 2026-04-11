@@ -30,8 +30,8 @@ public class Producer : IProducer
         MaximumMessageSize = transportConfiguration.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportConfiguration.ClientSettings["MessageSize"]) : 65536;
         _publisherAcks = transportConfiguration.ClientSettings.ContainsKey("PublisherAcknowledgements") && Convert.ToBoolean(_transportConfiguration.ClientSettings["PublisherAcknowledgements"]);
         _hosts = transportConfiguration.Host.Split(',');
-        _retryCount = transportConfiguration.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16((int)transportConfiguration.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
-        _retryTimeInSeconds = transportConfiguration.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16((int)transportConfiguration.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
+        _retryCount = transportConfiguration.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
+        _retryTimeInSeconds = transportConfiguration.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
 
         Retry.Do(CreateConnection, ex =>
         {
@@ -274,9 +274,9 @@ public class Producer : IProducer
 
     public void Dispose()
     {
-        // Wait until all messages have been processed.
+        // Wait for outstanding publisher confirms (max 5 seconds).
         int timeout = 0;
-        while (_messagesSent.Count != 0 && timeout < 6000)
+        while (_messagesSent.Count != 0 && timeout < 50)
         {
             Thread.Sleep(100);
             timeout++;
