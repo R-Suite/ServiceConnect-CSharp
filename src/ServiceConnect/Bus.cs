@@ -16,6 +16,7 @@ public sealed class Bus : IBus
     private readonly IQueueConfiguration _queueConfig;
     private readonly MessageDispatcher _dispatcher;
     private readonly IList<HandlerReference> _handlerReferences;
+    private readonly IProducer? _producer;
     private readonly object _stateLock = new();
     private IConsumer? _consumer;
     private bool _consuming;
@@ -31,7 +32,8 @@ public sealed class Bus : IBus
         IQueueConfiguration queueConfig,
         MessageDispatcher dispatcher,
         IList<HandlerReference> handlerReferences,
-        IConsumer? consumer = null)
+        IConsumer? consumer = null,
+        IProducer? producer = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -43,6 +45,7 @@ public sealed class Bus : IBus
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
         _consumer = consumer;
+        _producer = producer;
     }
 
     public bool IsConnected => _consuming;
@@ -163,7 +166,9 @@ public sealed class Bus : IBus
 
     public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
     {
-        throw new NotImplementedException("Stream support will be wired in a later task.");
+        if (_producer == null)
+            throw new InvalidOperationException("No producer registered. Cannot create stream.");
+        return new MessageBusWriteStream(_producer, endpoint, typeof(T));
     }
 
     public void StartConsuming()

@@ -8,7 +8,10 @@ public static class HandlerScanner
     public static IList<HandlerReference> ScanForHandlers(IEnumerable<Assembly> assemblies)
     {
         var handlerReferences = new List<HandlerReference>();
-        var handlerInterfaceType = typeof(IMessageHandler<>);
+        var messageHandlerType = typeof(IMessageHandler<>);
+        var processHandlerType = typeof(IProcessHandler<,>);
+        var streamHandlerType = typeof(IStreamHandler<>);
+        var aggregatorType = typeof(Aggregator<>);
 
         foreach (var assembly in assemblies)
         {
@@ -20,12 +23,11 @@ public static class HandlerScanner
             {
                 if (type.IsAbstract || type.IsInterface || type.IsGenericTypeDefinition) continue;
 
-                var handlerInterfaces = type.GetInterfaces()
-                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == handlerInterfaceType);
-
-                foreach (var handlerInterface in handlerInterfaces)
+                // Scan IMessageHandler<T>
+                foreach (var iface in type.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == messageHandlerType))
                 {
-                    var messageType = handlerInterface.GetGenericArguments()[0];
+                    var messageType = iface.GetGenericArguments()[0];
                     if (messageType.IsGenericParameter) continue;
                     handlerReferences.Add(new HandlerReference
                     {
@@ -33,6 +35,50 @@ public static class HandlerScanner
                         MessageType = messageType,
                         RoutingKeys = new List<string>()
                     });
+                }
+
+                // Scan IProcessHandler<TData, TMessage> — message type is the last generic arg
+                foreach (var iface in type.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == processHandlerType))
+                {
+                    var messageType = iface.GetGenericArguments()[1];
+                    if (messageType.IsGenericParameter) continue;
+                    handlerReferences.Add(new HandlerReference
+                    {
+                        HandlerType = type,
+                        MessageType = messageType,
+                        RoutingKeys = new List<string>()
+                    });
+                }
+
+                // Scan IStreamHandler<T>
+                foreach (var iface in type.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == streamHandlerType))
+                {
+                    var messageType = iface.GetGenericArguments()[0];
+                    if (messageType.IsGenericParameter) continue;
+                    handlerReferences.Add(new HandlerReference
+                    {
+                        HandlerType = type,
+                        MessageType = messageType,
+                        RoutingKeys = new List<string>()
+                    });
+                }
+
+                // Scan Aggregator<T> subclasses
+                if (type.BaseType is { IsGenericType: true } baseType &&
+                    baseType.GetGenericTypeDefinition() == aggregatorType)
+                {
+                    var messageType = baseType.GetGenericArguments()[0];
+                    if (!messageType.IsGenericParameter)
+                    {
+                        handlerReferences.Add(new HandlerReference
+                        {
+                            HandlerType = type,
+                            MessageType = messageType,
+                            RoutingKeys = new List<string>()
+                        });
+                    }
                 }
             }
         }
