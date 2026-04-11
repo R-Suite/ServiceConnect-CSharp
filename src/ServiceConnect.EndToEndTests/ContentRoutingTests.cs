@@ -65,34 +65,38 @@ public class ContentRoutingTests
         await bus.StartConsumingAsync();
         await Task.Delay(500);
 
-        // Act: publish one of each message type
-        var testCorrelationId = Guid.NewGuid();
-        var stepCorrelationId = Guid.NewGuid();
-
-        var testMsg = new TestMessage(testCorrelationId) { Content = "routed-test-message" };
-        var stepMsg = new StepMessage(stepCorrelationId) { CurrentStep = "RouteStep1" };
-
-        await bus.PublishAsync(testMsg);
-        await bus.PublishAsync(stepMsg);
-
-        // Assert: each handler receives exactly its own message type
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        cts.Token.Register(() =>
+        try
         {
-            testMessageTcs.TrySetCanceled();
-            stepMessageTcs.TrySetCanceled();
-        });
+            // Act: publish one of each message type
+            var testCorrelationId = Guid.NewGuid();
+            var stepCorrelationId = Guid.NewGuid();
 
-        var receivedTest = await testMessageTcs.Task;
-        var receivedStep = await stepMessageTcs.Task;
+            var testMsg = new TestMessage(testCorrelationId) { Content = "routed-test-message" };
+            var stepMsg = new StepMessage(stepCorrelationId) { CurrentStep = "RouteStep1" };
 
-        Assert.Equal("routed-test-message", receivedTest.Content);
-        Assert.Equal(testCorrelationId, receivedTest.CorrelationId);
+            await bus.PublishAsync(testMsg);
+            await bus.PublishAsync(stepMsg);
 
-        Assert.Equal("RouteStep1", receivedStep.CurrentStep);
-        Assert.Equal(stepCorrelationId, receivedStep.CorrelationId);
+            // Assert: each handler receives exactly its own message type
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            cts.Token.Register(() =>
+            {
+                testMessageTcs.TrySetCanceled();
+                stepMessageTcs.TrySetCanceled();
+            });
 
-        // Cleanup
-        bus.Dispose();
+            var receivedTest = await testMessageTcs.Task;
+            var receivedStep = await stepMessageTcs.Task;
+
+            Assert.Equal("routed-test-message", receivedTest.Content);
+            Assert.Equal(testCorrelationId, receivedTest.CorrelationId);
+
+            Assert.Equal("RouteStep1", receivedStep.CurrentStep);
+            Assert.Equal(stepCorrelationId, receivedStep.CorrelationId);
+        }
+        finally
+        {
+            bus.Dispose();
+        }
     }
 }

@@ -41,7 +41,7 @@ public static class ServiceCollectionExtensions
         foreach (var handlerRef in handlerReferences)
         {
             var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(handlerRef.MessageType);
-            services.TryAddTransient(handlerInterfaceType, handlerRef.HandlerType);
+            services.AddTransient(handlerInterfaceType, handlerRef.HandlerType);
         }
 
         services.TryAddSingleton<IList<HandlerReference>>(handlerReferences);

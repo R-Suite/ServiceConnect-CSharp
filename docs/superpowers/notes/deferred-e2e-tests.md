@@ -28,6 +28,18 @@
 - Requires `MessageDispatcher` to integrate with `IAggregatorPersistor` — the dispatcher must detect `Aggregator<T>` handlers, store partial messages, and invoke the aggregator's `Execute()` when `BatchSize()` is reached or `Timeout()` expires
 - **Blocked on**: consumer wiring + aggregator dispatcher integration design
 
+## CompetingConsumersTests
+- Multiple bus instances (separate ServiceProviders) consume from the same queue name
+- Each published message should be delivered to exactly one consumer (competing consumer pattern)
+- Verify that across N messages sent, each consumer receives a subset and the union equals all N messages with no duplicates
+- **Blocked on**: nothing, can be implemented now
+
+## PriorityQueueTests
+- Messages published with different priorities (e.g., 1 and 10) to a priority-enabled queue
+- Higher-priority messages should be consumed before lower-priority ones when both are queued
+- Requires the RabbitMQ queue to be declared with the `x-max-priority` argument
+- **Blocked on**: nothing, can be implemented now
+
 ## PolymorphicMessageTests
 - Handler registered for base type receives derived message type
 - Requires `MessageDispatcher` to resolve handlers not just for the exact message type but also for base types in the hierarchy

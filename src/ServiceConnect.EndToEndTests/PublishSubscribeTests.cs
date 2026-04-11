@@ -84,21 +84,25 @@ public class PublishSubscribeTests
         // Give the consumer time to set up
         await Task.Delay(500);
 
-        // Act
-        var correlationId = Guid.NewGuid();
-        var sent = new TestMessage(correlationId) { Content = "hello publish-subscribe" };
-        await bus.PublishAsync(sent);
+        try
+        {
+            // Act
+            var correlationId = Guid.NewGuid();
+            var sent = new TestMessage(correlationId) { Content = "hello publish-subscribe" };
+            await bus.PublishAsync(sent);
 
-        // Assert: wait up to 30 seconds for the handler to be called
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        cts.Token.Register(() => tcs.TrySetCanceled());
+            // Assert: wait up to 30 seconds for the handler to be called
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            cts.Token.Register(() => tcs.TrySetCanceled());
 
-        var received = await tcs.Task;
+            var received = await tcs.Task;
 
-        Assert.Equal("hello publish-subscribe", received.Content);
-        Assert.Equal(correlationId, received.CorrelationId);
-
-        // Cleanup
-        bus.Dispose();
+            Assert.Equal("hello publish-subscribe", received.Content);
+            Assert.Equal(correlationId, received.CorrelationId);
+        }
+        finally
+        {
+            bus.Dispose();
+        }
     }
 }

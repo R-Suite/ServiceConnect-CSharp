@@ -192,11 +192,11 @@ public sealed class Bus : IBus
     public void StopConsuming()
     {
         _logger.LogInformation("Bus stopping message consumption.");
-        if (_consumer != null)
+        if (_consuming)
         {
-            _consumer.Dispose();
+            _consuming = false;
+            _consumer?.Dispose();
         }
-        _consuming = false;
     }
 
     public void Dispose()

@@ -86,17 +86,22 @@ public class FilterPipelineConsumerTests
         await bus.StartConsumingAsync();
         await Task.Delay(500);
 
-        // Act
-        var message = new TestMessage(Guid.NewGuid()) { Content = "should-be-blocked" };
-        await bus.PublishAsync(message);
+        try
+        {
+            // Act
+            var message = new TestMessage(Guid.NewGuid()) { Content = "should-be-blocked" };
+            await bus.PublishAsync(message);
 
-        // Wait 2 seconds — the handler should NOT fire
-        var handlerWasCalled = await Task.WhenAny(handlerInvokedTcs.Task, Task.Delay(TimeSpan.FromSeconds(2))) == handlerInvokedTcs.Task;
+            // Wait 2 seconds — the handler should NOT fire
+            var handlerWasCalled = await Task.WhenAny(handlerInvokedTcs.Task, Task.Delay(TimeSpan.FromSeconds(2))) == handlerInvokedTcs.Task;
 
-        // Assert
-        Assert.False(handlerWasCalled, "Handler should not have been invoked because the before-consuming filter blocked the message.");
-
-        bus.Dispose();
+            // Assert
+            Assert.False(handlerWasCalled, "Handler should not have been invoked because the before-consuming filter blocked the message.");
+        }
+        finally
+        {
+            bus.Dispose();
+        }
     }
 
     [Fact]
@@ -146,16 +151,21 @@ public class FilterPipelineConsumerTests
         await bus.StartConsumingAsync();
         await Task.Delay(500);
 
-        // Act
-        var message = new TestMessage(Guid.NewGuid()) { Content = "after-filter-test" };
-        await bus.PublishAsync(message);
+        try
+        {
+            // Act
+            var message = new TestMessage(Guid.NewGuid()) { Content = "after-filter-test" };
+            await bus.PublishAsync(message);
 
-        // Assert: filter signals within 30 seconds
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        cts.Token.Register(() => filterSignalTcs.TrySetCanceled());
+            // Assert: filter signals within 30 seconds
+            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            cts.Token.Register(() => filterSignalTcs.TrySetCanceled());
 
-        await filterSignalTcs.Task; // throws if cancelled
-
-        bus.Dispose();
+            await filterSignalTcs.Task; // throws if cancelled
+        }
+        finally
+        {
+            bus.Dispose();
+        }
     }
 }
