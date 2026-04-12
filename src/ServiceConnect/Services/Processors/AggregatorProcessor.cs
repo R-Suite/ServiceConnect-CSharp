@@ -108,17 +108,21 @@ public sealed class AggregatorProcessor(IServiceProvider serviceProvider, ILogge
 
             executeMethod = aggregatorBaseType.GetMethod("Execute");
 
-            // Remove data inside the lock before executing
-            foreach (var msg in rawMessages)
-            {
-                if (msg is Message m)
-                    persistor.RemoveData(aggregatorName, m.CorrelationId);
-            }
-
             if (_timers.TryRemove(aggregatorName, out var activeTimer))
                 activeTimer.Dispose();
         }
+
         executeMethod?.Invoke(aggregator, [typedList]);
+
+        var postFlushPersistor = serviceProvider.GetService<IAggregatorPersistor>();
+        if (postFlushPersistor != null)
+        {
+            foreach (var msg in rawMessages)
+            {
+                if (msg is Message m)
+                    postFlushPersistor.RemoveData(aggregatorName, m.CorrelationId);
+            }
+        }
     }
 
     private Type? FindAggregatorType(Type messageType)
