@@ -13,7 +13,7 @@ namespace ServiceConnect.Filters.GzipCompression
             {
                 using (var gzipStream = new GZipStream(compressedMessageMemoryStream, CompressionMode.Compress))
                 {
-                    MemoryStreamUtilities.CopyTo(messageMemoryStream, gzipStream);
+                    messageMemoryStream.CopyTo(gzipStream);
                 }
 
                 envelope.Body = compressedMessageMemoryStream.ToArray();
