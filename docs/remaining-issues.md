@@ -7,9 +7,9 @@ Issues verified against source code on 2026-04-12. Tackle after the critical asy
 | ID | Category | Description | Breaking? | Notes |
 |----|----------|-------------|-----------|-------|
 | B-01 | .NET Best Practices | Missing CancellationToken on all IBus async methods | **Yes** | Requires major version bump; touches IBus, Bus, Client, all processors |
-| B-02 | CLEAN | Mutable `IDictionary<string, object>` exposure in TransportConfiguration (line 37) | No | Change to IReadOnlyDictionary + setter method |
-| T-01 | Security | `CheckCertificateRevocation = false` in MessageDeduplicationPersistorMongoDbSsl | No | One-line fix but needs integration testing with real certs |
-| T-02 | Tech Debt | Inconsistent exception types in InMemoryProcessManagerFinder — mix of InvalidOperationException and PersistenceException | No | Standardize on PersistenceException |
+| B-02 | CLEAN | Mutable `IDictionary<string, object>` exposure in TransportConfiguration (line 37) | No | **Done** (Group A) — IReadOnlyDictionary + SetClientSetting method |
+| T-01 | Security | `CheckCertificateRevocation = false` in MessageDeduplicationPersistorMongoDbSsl | No | **Done** (Group A) — flipped to true |
+| T-02 | Tech Debt | Inconsistent exception types in InMemoryProcessManagerFinder — mix of InvalidOperationException and PersistenceException | No | **Done** (Group A) — standardized on PersistenceException |
 
 ## From Deferred Issues (Confirmed Real)
 
@@ -17,12 +17,12 @@ Issues verified against source code on 2026-04-12. Tackle after the critical asy
 |----|----------|-------------|-------|
 | R-009 | Architecture | Service locator anti-pattern in all Processors (HandlerProcessor, ProcessManagerProcessor, StreamProcessor, AggregatorProcessor) | Large — inherent to message dispatch design |
 | R-016 | .NET Best Practices | Missing CancellationToken on public async APIs | Same as B-01 above |
-| R-017/R-018 | Error Handling | Silent exception swallowing in dedup filter persistors (OutgoingFilter, MongoDb persistors) | Medium — needs IFilter interface change for async |
+| R-017/R-018 | Error Handling | Silent exception swallowing in dedup filter persistors (OutgoingFilter, MongoDb persistors) | Large — needs IFilter interface change for async; moved to Group C |
 | R-020/R-021 | SRP | ProcessManagerProcessor and Client have too many responsibilities | Large — internal structure refactor |
-| R-022 | Architecture | Dedup filter combinatorial explosion | Large — filter project restructuring |
-| R-027 | Tech Debt | MongoDbSsl manual connection string parsing | Large — full rewrite of MongoDB SSL dedup filter |
+| R-022 | Architecture | Dedup filter combinatorial explosion | Large — Group B: collapse 8 filter variants to 2, add PersistorFactory + PersistorType enum, remove Redis support entirely |
+| R-027 | Tech Debt | MongoDbSsl manual connection string parsing | Large — Group B: merge MongoDbSsl into MongoDb persistor, use driver-native MongoUrl parsing, add cert settings properties |
 | R-028 | Testing | Zero unit test coverage | Large — ongoing effort |
-| R-032 | Architecture | DeduplicationFilterSettings singleton pattern | Medium — requires DI migration of filter project |
+| R-032 | Architecture | DeduplicationFilterSettings singleton pattern | Medium — deferred to Group C; requires DI migration of filter project (depends on R-009 core DI) |
 | R-034 | Async/Threading | Race condition in Bus.StartConsumingAsync — lock released before long-running await | Medium — mitigated by local consumer copy; full fix needs CancellationToken (R-016) |
 
 ## Not Real (Removed)
