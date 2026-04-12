@@ -7,17 +7,24 @@ public static class SslConfigurationBuilder
 {
     public static SslOption BuildSslOptions(ITransportConfiguration transportSettings)
     {
-        return new SslOption
+        if (string.IsNullOrWhiteSpace(transportSettings.ServerName))
+            throw new ArgumentException("ServerName is required when SSL is enabled. Configure ITransportConfiguration.ServerName.", nameof(transportSettings));
+
+        var sslOption = new SslOption
         {
-            Version = transportSettings.SslProtocol,
             Enabled = true,
-            AcceptablePolicyErrors = transportSettings.AcceptablePolicyErrors,
             ServerName = transportSettings.ServerName!,
-            CertPassphrase = transportSettings.CertPassphrase,
-            CertPath = transportSettings.CertPath!,
+            CertPath = transportSettings.CertPath ?? string.Empty,
+            AcceptablePolicyErrors = transportSettings.AcceptablePolicyErrors,
             Certs = transportSettings.Certs,
-            CertificateSelectionCallback = transportSettings.CertificateSelectionCallback,
-            CertificateValidationCallback = transportSettings.CertificateValidationCallback
+            Version = transportSettings.SslProtocol,
+            CertPassphrase = transportSettings.CertPassphrase,
+            CertificateSelectionCallback = transportSettings.CertificateSelectionCallback
         };
+
+        if (transportSettings.CertificateValidationCallback != null)
+            sslOption.CertificateValidationCallback = transportSettings.CertificateValidationCallback;
+
+        return sslOption;
     }
 }

@@ -36,6 +36,7 @@ public class SslConfigurationBuilderTests
         var mock = new Mock<ITransportConfiguration>();
         mock.Setup(t => t.SslEnabled).Returns(false);
         mock.Setup(t => t.SslProtocol).Returns(SslProtocols.Tls12);
+        mock.Setup(t => t.ServerName).Returns("localhost");
 
         var result = SslConfigurationBuilder.BuildSslOptions(mock.Object);
 
@@ -49,6 +50,7 @@ public class SslConfigurationBuilderTests
         RemoteCertificateValidationCallback validationCallback = (_, _, _, _) => true;
 
         var mock = new Mock<ITransportConfiguration>();
+        mock.Setup(t => t.ServerName).Returns("localhost");
         mock.Setup(t => t.CertificateSelectionCallback).Returns(selectionCallback);
         mock.Setup(t => t.CertificateValidationCallback).Returns(validationCallback);
 
@@ -59,10 +61,29 @@ public class SslConfigurationBuilderTests
     }
 
     [Fact]
+    public void BuildSslOptions_ThrowsWhenServerNameIsNull()
+    {
+        var mock = new Mock<ITransportConfiguration>();
+        mock.Setup(t => t.ServerName).Returns((string?)null);
+
+        Assert.Throws<ArgumentException>(() => SslConfigurationBuilder.BuildSslOptions(mock.Object));
+    }
+
+    [Fact]
+    public void BuildSslOptions_ThrowsWhenServerNameIsEmpty()
+    {
+        var mock = new Mock<ITransportConfiguration>();
+        mock.Setup(t => t.ServerName).Returns(string.Empty);
+
+        Assert.Throws<ArgumentException>(() => SslConfigurationBuilder.BuildSslOptions(mock.Object));
+    }
+
+    [Fact]
     public void BuildSslOptions_SetsCertificateCollection()
     {
         var certs = new X509CertificateCollection();
         var mock = new Mock<ITransportConfiguration>();
+        mock.Setup(t => t.ServerName).Returns("localhost");
         mock.Setup(t => t.Certs).Returns(certs);
 
         var result = SslConfigurationBuilder.BuildSslOptions(mock.Object);
