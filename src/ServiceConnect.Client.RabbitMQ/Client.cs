@@ -119,7 +119,15 @@ public sealed class Client : IAsyncDisposable
             var typeNameRaw = headers.ContainsKey(HeaderKeys.FullTypeName) ? headers[HeaderKeys.FullTypeName] : headers[HeaderKeys.TypeName];
             string typeName = HeaderDecoder.Decode(typeNameRaw) ?? "";
 
-            result = await _consumerEventHandler!(args.Body.ToArray(), typeName, headers);
+            if (_consumerEventHandler == null)
+            {
+                _logger.LogError("Consumer event handler not set — message will be nacked for redelivery. Queue: {Queue}", _queueConfiguration.QueueName);
+                result = new ConsumeEventResult { Success = false };
+            }
+            else
+            {
+                result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers);
+            }
 
             SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));
         }
