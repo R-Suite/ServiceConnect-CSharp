@@ -5,16 +5,12 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
 {
     public class IncomingDeduplicationFilterMongoDbSsl : IFilter
     {
-        private static IncomingFilter _incomingFilter;
+        private static readonly Lazy<IncomingFilter> _incomingFilter = new(() =>
+            new IncomingFilter(new MessageDeduplicationPersistorMongoDbSsl()));
 
         public bool Process(Envelope envelope)
         {
-            if (null == _incomingFilter)
-            {
-                _incomingFilter = new IncomingFilter(new MessageDeduplicationPersistorMongoDbSsl());
-            }
-
-            return _incomingFilter.Process(envelope);
+            return _incomingFilter.Value.Process(envelope);
         }
 
         public IBus Bus { get; set; }

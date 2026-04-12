@@ -5,16 +5,12 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
 {
     public class IncomingDeduplicationFilterRedis : IFilter
     {
-        private static IncomingFilter _incomingFilter;
+        private static readonly Lazy<IncomingFilter> _incomingFilter = new(() =>
+            new IncomingFilter(new MessageDeduplicationPersistorRedis()));
 
         public bool Process(Envelope envelope)
         {
-            if (null == _incomingFilter)
-            {
-                _incomingFilter = new IncomingFilter(new MessageDeduplicationPersistorRedis());
-            }
-           
-            return _incomingFilter.Process(envelope);
+            return _incomingFilter.Value.Process(envelope);
         }
 
         public IBus Bus { get; set; }
