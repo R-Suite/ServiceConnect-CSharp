@@ -34,5 +34,13 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// Only use this in development/testing with full understanding of the risks.
     /// </summary>
     public RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
-    public IDictionary<string, object> ClientSettings { get; set; } = new Dictionary<string, object>();
+    private readonly Dictionary<string, object> _clientSettings = new();
+    public IReadOnlyDictionary<string, object> ClientSettings => _clientSettings;
+
+    public void SetClientSetting(string key, object value)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(value);
+        _clientSettings[key] = value;
+    }
 }

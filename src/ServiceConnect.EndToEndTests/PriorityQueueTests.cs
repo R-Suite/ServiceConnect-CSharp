@@ -59,9 +59,9 @@ public class PriorityQueueTests
                 t.Host = _fixture.RabbitMqHostname;
                 t.Username = _fixture.RabbitMqUsername;
                 t.Password = _fixture.RabbitMqPassword;
-                t.ClientSettings["Port"] = _fixture.RabbitMqPort;
-                t.ClientSettings["RetryCount"] = 3;
-                t.ClientSettings["RetrySeconds"] = 1;
+                t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3);
+                t.SetClientSetting("RetrySeconds", 1);
             });
             builder.ConfigureQueues(q => q.QueueName = _fixture.GetUniqueQueueName("priority-producer"));
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
@@ -116,10 +116,10 @@ public class PriorityQueueTests
                 t.Host = _fixture.RabbitMqHostname;
                 t.Username = _fixture.RabbitMqUsername;
                 t.Password = _fixture.RabbitMqPassword;
-                t.ClientSettings["Port"] = _fixture.RabbitMqPort;
-                t.ClientSettings["RetryCount"] = 3;
-                t.ClientSettings["RetrySeconds"] = 1;
-                t.ClientSettings["Arguments"] = new Dictionary<string, object> { { "x-max-priority", 10 } };
+                t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3);
+                t.SetClientSetting("RetrySeconds", 1);
+                t.SetClientSetting("Arguments", new Dictionary<string, object> { { "x-max-priority", 10 } });
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);

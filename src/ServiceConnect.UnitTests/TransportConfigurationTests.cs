@@ -155,15 +155,26 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ClientSettingsCanStoreValues()
+        public void SetClientSetting_StoresValues()
         {
             var config = new TransportConfiguration();
-            config.ClientSettings["key1"] = "value1";
-            config.ClientSettings["key2"] = 42;
+            config.SetClientSetting("key1", "value1");
+            config.SetClientSetting("key2", 42);
 
             Assert.Equal(2, config.ClientSettings.Count);
             Assert.Equal("value1", config.ClientSettings["key1"]);
             Assert.Equal(42, config.ClientSettings["key2"]);
+        }
+
+        [Fact]
+        public void SetClientSetting_OverwritesExistingValue()
+        {
+            var config = new TransportConfiguration();
+            config.SetClientSetting("key", "original");
+            config.SetClientSetting("key", "updated");
+
+            Assert.Single(config.ClientSettings);
+            Assert.Equal("updated", config.ClientSettings["key"]);
         }
     }
 }

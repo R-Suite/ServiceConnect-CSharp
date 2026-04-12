@@ -61,9 +61,9 @@ public class PolymorphicMessageTests
                 t.Host = _fixture.RabbitMqHostname;
                 t.Username = _fixture.RabbitMqUsername;
                 t.Password = _fixture.RabbitMqPassword;
-                t.ClientSettings["Port"] = _fixture.RabbitMqPort;
-                t.ClientSettings["RetryCount"] = 3;
-                t.ClientSettings["RetrySeconds"] = 1;
+                t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3);
+                t.SetClientSetting("RetrySeconds", 1);
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);

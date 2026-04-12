@@ -35,8 +35,8 @@ public class QueueMappingTests
             builder.UseRabbitMQ(t =>
             {
                 t.Host = _fixture.RabbitMqHostname; t.Username = _fixture.RabbitMqUsername;
-                t.Password = _fixture.RabbitMqPassword; t.ClientSettings["Port"] = _fixture.RabbitMqPort;
-                t.ClientSettings["RetryCount"] = 3; t.ClientSettings["RetrySeconds"] = 1;
+                t.Password = _fixture.RabbitMqPassword; t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3); t.SetClientSetting("RetrySeconds", 1);
             });
             builder.ConfigureQueues(q => q.QueueName = mappedQueue);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
@@ -54,8 +54,8 @@ public class QueueMappingTests
             builder.UseRabbitMQ(t =>
             {
                 t.Host = _fixture.RabbitMqHostname; t.Username = _fixture.RabbitMqUsername;
-                t.Password = _fixture.RabbitMqPassword; t.ClientSettings["Port"] = _fixture.RabbitMqPort;
-                t.ClientSettings["RetryCount"] = 3; t.ClientSettings["RetrySeconds"] = 1;
+                t.Password = _fixture.RabbitMqPassword; t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3); t.SetClientSetting("RetrySeconds", 1);
             });
             builder.ConfigureQueues(q =>
             {

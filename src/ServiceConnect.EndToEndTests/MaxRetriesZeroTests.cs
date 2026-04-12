@@ -55,9 +55,9 @@ public class MaxRetriesZeroTests
                 t.Username = _fixture.RabbitMqUsername;
                 t.Password = _fixture.RabbitMqPassword;
                 t.MaxRetries = 0;
-                t.ClientSettings["Port"] = _fixture.RabbitMqPort;
-                t.ClientSettings["RetryCount"] = 3;
-                t.ClientSettings["RetrySeconds"] = 1;
+                t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3);
+                t.SetClientSetting("RetrySeconds", 1);
             });
             builder.ConfigureQueues(q =>
             {

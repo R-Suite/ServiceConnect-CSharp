@@ -22,5 +22,6 @@ public interface ITransportConfiguration
     SslProtocols SslProtocol { get; set; }
     LocalCertificateSelectionCallback? CertificateSelectionCallback { get; set; }
     RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
-    IDictionary<string, object> ClientSettings { get; set; }
+    IReadOnlyDictionary<string, object> ClientSettings { get; }
+    void SetClientSetting(string key, object value);
 }

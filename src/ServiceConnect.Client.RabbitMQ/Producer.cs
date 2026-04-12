@@ -41,7 +41,7 @@ public sealed class Producer : IProducer
         _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, DefaultRetryTimeInSeconds, v => Convert.ToUInt16(v));
     }
 
-    private static T GetSetting<T>(IDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)
+    private static T GetSetting<T>(IReadOnlyDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)
     {
         return settings.TryGetValue(key, out var value) ? converter(value) : defaultValue;
     }
