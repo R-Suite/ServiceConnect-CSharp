@@ -215,6 +215,7 @@ public sealed class Bus(
 
         StopConsuming();
         _sendPipeline.Dispose();
+        _producer?.Dispose();
     }
 
     private void ThrowIfDisposed()
