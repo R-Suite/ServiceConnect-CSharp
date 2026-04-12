@@ -31,9 +31,9 @@ public static class ServiceCollectionExtensions
 
         // Message processors (order matters: ReplyProcessor first, then HandlerProcessor last)
         services.TryAddSingleton<ReplyProcessor>();
-        services.TryAddSingleton<StreamProcessor>();
+        services.AddSingleton<StreamProcessor>();
         services.TryAddSingleton<ProcessManagerProcessor>();
-        services.TryAddSingleton<AggregatorProcessor>();
+        services.AddSingleton<AggregatorProcessor>();
         services.TryAddSingleton<HandlerProcessor>();
         services.TryAddSingleton<IList<IMessageProcessor>>(sp =>
         [
