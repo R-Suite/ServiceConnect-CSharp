@@ -23,11 +23,7 @@ public sealed class Producer : IProducer
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
     private readonly bool _publisherAcks;
-#if NET9_0_OR_GREATER
-    private readonly Lock _connectionLock = new();
-#else
-    private readonly object _connectionLock = new();
-#endif
+    private readonly SemaphoreSlim _connectionSemaphore = new(1, 1);
     private volatile bool _connected;
     private volatile bool _disposed;
 
@@ -50,26 +46,31 @@ public sealed class Producer : IProducer
         return settings.TryGetValue(key, out var value) ? converter(value) : defaultValue;
     }
 
-    private void EnsureConnected()
+    private async Task EnsureConnectedAsync()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_connected) return;
 
-        lock (_connectionLock)
+        await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_connected) return;
 
-            Retry.Do(CreateConnection, ex =>
+            await Retry.DoAsync(CreateConnectionAsync, async ex =>
             {
                 _logger.LogError(ex, "Error creating connection");
-                DisposeConnection();
-            }, TimeSpan.FromSeconds(_retryTimeInSeconds), _retryCount);
+                await DisposeConnectionAsync().ConfigureAwait(false);
+            }, TimeSpan.FromSeconds(_retryTimeInSeconds), _retryCount).ConfigureAwait(false);
 
             _connected = true;
         }
+        finally
+        {
+            _connectionSemaphore.Release();
+        }
     }
 
-    private void CreateConnection()
+    private async Task CreateConnectionAsync()
     {
         var port = _transportConfiguration.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal)
             ? Convert.ToInt32(portVal)
@@ -101,24 +102,24 @@ public sealed class Producer : IProducer
         string producerName = Assembly.GetEntryAssembly()?.GetName().Name
             ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
-        _connection = _connectionFactory.CreateConnectionAsync(_hosts, producerName).GetAwaiter().GetResult();
+        _connection = await _connectionFactory.CreateConnectionAsync(_hosts, producerName).ConfigureAwait(false);
 
         if (_publisherAcks)
         {
             var channelOptions = new CreateChannelOptions(
                 publisherConfirmationsEnabled: true,
                 publisherConfirmationTrackingEnabled: true);
-            _model = _connection.CreateChannelAsync(channelOptions).GetAwaiter().GetResult();
+            _model = await _connection.CreateChannelAsync(channelOptions).ConfigureAwait(false);
         }
         else
         {
-            _model = _connection.CreateChannelAsync().GetAwaiter().GetResult();
+            _model = await _connection.CreateChannelAsync().ConfigureAwait(false);
         }
     }
 
     public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
     {
-        EnsureConnected();
+        await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -133,7 +134,7 @@ public sealed class Producer : IProducer
 
     public async Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
     {
-        EnsureConnected();
+        await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -155,7 +156,7 @@ public sealed class Producer : IProducer
         if (string.IsNullOrWhiteSpace(endPoint))
             throw new ArgumentException($"Cannot send message of type {type} to empty endpoint");
 
-        EnsureConnected();
+        await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -168,7 +169,7 @@ public sealed class Producer : IProducer
 
     public async Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null)
     {
-        EnsureConnected();
+        await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -188,19 +189,29 @@ public sealed class Producer : IProducer
 
     public void Dispose()
     {
-        DisposeAsync().AsTask().GetAwaiter().GetResult();
+        if (_disposed) return;
+        _ = Task.Run(async () =>
+        {
+            try { await DisposeAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Error during fire-and-forget dispose"); }
+        });
     }
 
     public async ValueTask DisposeAsync()
     {
-        lock (_connectionLock)
+        await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_disposed) return;
             _disposed = true;
         }
+        finally
+        {
+            _connectionSemaphore.Release();
+        }
 
-        await DisposeModelAsync();
-        await DisposeConnectionInstanceAsync();
+        await DisposeModelAsync().ConfigureAwait(false);
+        await DisposeConnectionInstanceAsync().ConfigureAwait(false);
     }
 
     public long MaximumMessageSize { get; }
@@ -319,15 +330,16 @@ public sealed class Producer : IProducer
         }
     }
 
-    private void DisposeConnection()
+    private async Task DisposeConnectionAsync()
     {
-        lock (_connectionLock)
+        await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
+        try
         {
             try
             {
                 if (_connection != null && _connection.IsOpen)
                 {
-                    _connection.CloseAsync().GetAwaiter().GetResult();
+                    await _connection.CloseAsync().ConfigureAwait(false);
                     _connection.Dispose();
                     _connection = null;
                 }
@@ -341,7 +353,7 @@ public sealed class Producer : IProducer
             {
                 if (_model != null && _model.IsOpen)
                 {
-                    _model.CloseAsync().GetAwaiter().GetResult();
+                    await _model.CloseAsync().ConfigureAwait(false);
                     _model.Dispose();
                     _model = null;
                 }
@@ -352,6 +364,10 @@ public sealed class Producer : IProducer
             }
 
             _connected = false;
+        }
+        finally
+        {
+            _connectionSemaphore.Release();
         }
     }
 }

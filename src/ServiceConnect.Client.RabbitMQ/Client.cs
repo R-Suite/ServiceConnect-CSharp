@@ -8,7 +8,7 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-public sealed class Client : IDisposable
+public sealed class Client : IDisposable, IAsyncDisposable
 {
     private const ushort DefaultRetryCount = 60;
     private const ushort DefaultRetryTimeInSeconds = 10;
@@ -266,7 +266,29 @@ public sealed class Client : IDisposable
 
     public void Dispose()
     {
-        // Wait until all messages have been processed (max 5 seconds).
+        var deadline = Environment.TickCount64 + 5000;
+        var wait = new SpinWait();
+        while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
+        {
+            wait.SpinOnce();
+        }
+
+        if (_autoDelete && _model != null)
+        {
+            var model = _model;
+            var queueName = _queueName;
+            _ = Task.Run(async () =>
+            {
+                try { await model.QueueDeleteAsync(queueName + ".Retries").ConfigureAwait(false); }
+                catch { }
+            });
+        }
+
+        _model = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
         var deadline = Environment.TickCount64 + 5000;
         var wait = new SpinWait();
         while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
@@ -279,7 +301,7 @@ public sealed class Client : IDisposable
             try
             {
                 _logger.LogDebug("Deleting retry queue");
-                _model.QueueDeleteAsync(_queueName + ".Retries").GetAwaiter().GetResult();
+                await _model.QueueDeleteAsync(_queueName + ".Retries").ConfigureAwait(false);
             }
             catch (ObjectDisposedException) { }
             catch (Exception ex)

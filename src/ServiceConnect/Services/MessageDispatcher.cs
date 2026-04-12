@@ -29,7 +29,7 @@ public sealed class MessageDispatcher(
     {
         try
         {
-            // 1. Resolve CLR Type from FullTypeName header
+            // 1. Extract FullTypeName header
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var fullTypeNameRaw))
                 throw new InvalidOperationException("Message is missing FullTypeName header.");
 
@@ -37,34 +37,48 @@ public sealed class MessageDispatcher(
                 ? Encoding.UTF8.GetString(bytes)
                 : fullTypeNameRaw?.ToString() ?? throw new InvalidOperationException("FullTypeName header is null.");
 
-            if (!_typeRegistry.TryResolve(fullTypeName, out var type))
+            // 2. Attempt type resolution from registry.
+            //    For pre-deserialization processors (ReplyProcessor, StreamProcessor),
+            //    we allow unregistered types — they use Type.GetType as fallback since
+            //    reply types may not be in the requester's registry.
+            //    For post-deserialization (handler dispatch), we enforce strict registry.
+            _typeRegistry.TryResolve(fullTypeName, out var type);
+            type ??= Type.GetType(fullTypeName);
+
+            // 3. Build envelope
+            var envelope = new Envelope { Headers = headers, Body = messageBytes };
+
+            // 4. Run pre-deserialization processors (e.g., ReplyProcessor, StreamProcessor)
+            //    These may handle the message entirely via headers, or need the type for
+            //    deserialization (ReplyProcessor deserializes reply messages).
+            if (type != null)
+            {
+                foreach (var proc in _processors)
+                {
+                    if (!proc.RunBeforeDeserialization) continue;
+                    var preResult = await proc.ProcessAsync(messageBytes, type, null, headers, envelope);
+                    if (preResult == ProcessResult.Handled)
+                        return new ConsumeEventResult { Success = true };
+                }
+            }
+
+            // 5. For post-deserialization processing, enforce strict type registry.
+            //    If the type wasn't in the registry, reject it.
+            if (type == null || !_typeRegistry.TryResolve(fullTypeName, out _))
             {
                 _logger.LogWarning("Unregistered message type '{TypeName}'. Rejecting", fullTypeName);
                 return new ConsumeEventResult { Success = false };
             }
 
-            // 2. Build envelope
-            var envelope = new Envelope { Headers = headers, Body = messageBytes };
-
-            // 3. Run pre-deserialization processors (e.g., ReplyProcessor, StreamProcessor)
-            //    These processors can handle messages without the deserialized body.
-            foreach (var proc in _processors)
-            {
-                if (!proc.RunBeforeDeserialization) continue;
-                var preResult = await proc.ProcessAsync(messageBytes, type, null, headers, envelope);
-                if (preResult == ProcessResult.Handled)
-                    return new ConsumeEventResult { Success = true };
-            }
-
-            // 4. Deserialize the message
+            // 5. Deserialize the message
             var message = _serializer.Deserialize(messageBytes, type);
 
-            // 5. Run BeforeConsumingFilters
+            // 6. Run BeforeConsumingFilters
             bool blocked = _filterPipeline.ExecuteBeforeConsumingFilters(envelope);
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
-            // 6. Run post-deserialization processors, wrapped in processing middleware
+            // 7. Run post-deserialization processors, wrapped in processing middleware
             async Task<ConsumeEventResult> RunProcessors(byte[] mb, Type mt, object m, IDictionary<string, object> h, Envelope e)
             {
                 foreach (var proc in _processors)

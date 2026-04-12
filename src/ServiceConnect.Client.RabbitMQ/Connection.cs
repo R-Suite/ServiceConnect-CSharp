@@ -13,15 +13,15 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private readonly TimeSpan _heartbeatTime = transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var hbTime) ? new TimeSpan(0, 0, (int)hbTime) : new TimeSpan(0, 0, 120);
     private readonly string[] _hosts = transportSettings.Host.Split(',');
 
-    public void Connect()
+    public async Task ConnectAsync()
     {
         if (_connection != null) return;
 
-        _connectionLock.Wait();
+        await _connectionLock.WaitAsync().ConfigureAwait(false);
         try
         {
             if (_connection == null)
-                CreateConnectionCore();
+                await CreateConnectionCoreAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -29,12 +29,11 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         }
     }
 
-    private void CreateConnectionCore()
+    private async Task CreateConnectionCoreAsync()
     {
         logger.LogDebug("Creating connection to queue {QueueName}", queueName);
-
         var connectionFactory = BuildConnectionFactory();
-        _connection = connectionFactory.CreateConnectionAsync(_hosts, queueName).GetAwaiter().GetResult();
+        _connection = await connectionFactory.CreateConnectionAsync(_hosts, queueName).ConfigureAwait(false);
     }
 
     private ConnectionFactory BuildConnectionFactory()
@@ -84,9 +83,9 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     public async Task<IChannel> CreateChannelAsync()
     {
         if (_connection == null)
-            Connect();
+            await ConnectAsync().ConfigureAwait(false);
 
-        return await _connection!.CreateChannelAsync();
+        return await _connection!.CreateChannelAsync().ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()
