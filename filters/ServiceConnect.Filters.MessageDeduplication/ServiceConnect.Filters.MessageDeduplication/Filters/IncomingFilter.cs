@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Text;
 using Common.Logging;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
@@ -36,12 +35,12 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
                  * https://www.rabbitmq.com/reliability.html
                  * "...if the redelivered flag is not set then it is guaranteed that the message has not been seen before..."  
                  */
-                if (envelope.Headers.ContainsKey("Redelivered") && Convert.ToBoolean(envelope.Headers["Redelivered"].ToString()))
+                if (envelope.Headers.ContainsKey("Redelivered") && bool.TryParse(HeaderDecoder.Decode(envelope.Headers["Redelivered"]), out var redelivered) && redelivered)
                 {
                     // if exists in persistant storage
                     bool msgAlreadyProcessed =
                         _messageDeduplicationPersistor.GetMessageExists(
-                            new Guid(Encoding.UTF8.GetString((byte[]) (envelope.Headers["MessageId"]))));
+                            new Guid(HeaderDecoder.Decode(envelope.Headers["MessageId"]) ?? string.Empty));
                     if (msgAlreadyProcessed)
                     {
                         processMessage = false;

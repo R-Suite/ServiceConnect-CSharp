@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Text;
 using Common.Logging;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
@@ -68,7 +67,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             try
             {
                 _messageDeduplicationPersistor.Insert(
-                    new Guid(Encoding.UTF8.GetString((byte[]) envelope.Headers["MessageId"])),
+                    new Guid(HeaderDecoder.Decode(envelope.Headers["MessageId"]) ?? string.Empty),
                     DateTime.UtcNow.AddHours(_settings.MsgExpiryHours));
             }
             catch (Exception ex)
