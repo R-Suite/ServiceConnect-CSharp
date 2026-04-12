@@ -1,7 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Hosting;
-using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
@@ -37,23 +35,23 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ProcessManagerProcessor>();
         services.TryAddSingleton<AggregatorProcessor>();
         services.TryAddSingleton<HandlerProcessor>();
-        services.TryAddSingleton<IList<IMessageProcessor>>(sp => new List<IMessageProcessor>
-        {
+        services.TryAddSingleton<IList<IMessageProcessor>>(sp =>
+        [
             sp.GetRequiredService<ReplyProcessor>(),
             sp.GetRequiredService<StreamProcessor>(),
             sp.GetRequiredService<ProcessManagerProcessor>(),
             sp.GetRequiredService<AggregatorProcessor>(),
             sp.GetRequiredService<HandlerProcessor>()
-        });
+        ]);
 
         // Message dispatcher and handler scanning
-        services.TryAddSingleton<MessageDispatcher>();
+        services.TryAddSingleton<IMessageDispatcher, MessageDispatcher>();
 
         IList<HandlerReference> handlerReferences;
         if (builder.BusConfig.ScanForMessageHandlers)
             handlerReferences = HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies());
         else
-            handlerReferences = new List<HandlerReference>();
+            handlerReferences = [];
 
         foreach (var handlerRef in handlerReferences)
         {

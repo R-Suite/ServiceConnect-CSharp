@@ -1,52 +1,36 @@
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
 
 namespace ServiceConnect;
 
-public sealed class Bus : IBus
+public sealed class Bus(
+    IMessageSerializer serializer,
+    IFilterPipeline filterPipeline,
+    ISendMessagePipeline sendPipeline,
+    IRequestReplyManager requestReplyManager,
+    ILogger<Bus> logger,
+    IQueueConfiguration queueConfig,
+    IMessageDispatcher dispatcher,
+    IList<HandlerReference> handlerReferences,
+    IConsumer? consumer = null,
+    IProducer? producer = null) : IBus
 {
-    private readonly IMessageSerializer _serializer;
-    private readonly IFilterPipeline _filterPipeline;
-    private readonly ISendMessagePipeline _sendPipeline;
-    private readonly IRequestReplyManager _requestReplyManager;
-    private readonly IBusConfiguration _config;
-    private readonly ILogger<Bus> _logger;
-    private readonly IQueueConfiguration _queueConfig;
-    private readonly MessageDispatcher _dispatcher;
-    private readonly IList<HandlerReference> _handlerReferences;
-    private readonly IProducer? _producer;
+    private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
+    private readonly ISendMessagePipeline _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
+    private readonly IRequestReplyManager _requestReplyManager = requestReplyManager ?? throw new ArgumentNullException(nameof(requestReplyManager));
+    private readonly ILogger<Bus> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IQueueConfiguration _queueConfig = queueConfig ?? throw new ArgumentNullException(nameof(queueConfig));
+    private readonly IMessageDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+    private readonly IList<HandlerReference> _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
+    private readonly IConsumer? _consumer = consumer;
+    private readonly IProducer? _producer = producer;
     private readonly object _stateLock = new();
-    private IConsumer? _consumer;
     private bool _consuming;
-    private bool _disposed;
-
-    public Bus(
-        IMessageSerializer serializer,
-        IFilterPipeline filterPipeline,
-        ISendMessagePipeline sendPipeline,
-        IRequestReplyManager requestReplyManager,
-        IBusConfiguration config,
-        ILogger<Bus> logger,
-        IQueueConfiguration queueConfig,
-        MessageDispatcher dispatcher,
-        IList<HandlerReference> handlerReferences,
-        IConsumer? consumer = null,
-        IProducer? producer = null)
-    {
-        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
-        _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
-        _requestReplyManager = requestReplyManager ?? throw new ArgumentNullException(nameof(requestReplyManager));
-        _config = config ?? throw new ArgumentNullException(nameof(config));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _queueConfig = queueConfig ?? throw new ArgumentNullException(nameof(queueConfig));
-        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-        _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
-        _consumer = consumer;
-        _producer = producer;
-    }
+    private volatile bool _disposed;
 
     public bool IsConnected => _consuming;
 
@@ -159,11 +143,7 @@ public sealed class Bus : IBus
 
         if (destinations.Count > 1)
         {
-            var remainingDestinations = new List<string>();
-            for (var i = 1; i < destinations.Count; i++)
-                remainingDestinations.Add(destinations[i]);
-
-            headers[HeaderKeys.RoutingSlip] = string.Join(",", remainingDestinations);
+            headers[HeaderKeys.RoutingSlip] = string.Join(",", destinations.Skip(1));
         }
 
         await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination).ConfigureAwait(false);
@@ -177,14 +157,9 @@ public sealed class Bus : IBus
         return new MessageBusWriteStream(_producer, endpoint, typeof(T));
     }
 
-    public void StartConsuming()
-    {
-        StartConsumingAsync().GetAwaiter().GetResult();
-    }
-
     public async Task StartConsumingAsync()
     {
-        IConsumer consumer;
+        IConsumer localConsumer;
         List<string> messageTypeNames;
 
         lock (_stateLock)
@@ -192,18 +167,20 @@ public sealed class Bus : IBus
             if (_consumer == null)
                 throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
 
-            messageTypeNames = _handlerReferences
-                .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
-                .Distinct()
-                .ToList();
+            messageTypeNames =
+            [
+                .. _handlerReferences
+                    .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
+                    .Distinct()
+            ];
 
-            consumer = _consumer;
+            localConsumer = _consumer;
         }
 
         _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
             _queueConfig.QueueName, messageTypeNames.Count);
 
-        await consumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch);
+        await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch).ConfigureAwait(false);
 
         lock (_stateLock)
         {
@@ -213,15 +190,19 @@ public sealed class Bus : IBus
 
     public void StopConsuming()
     {
+        bool shouldDispose = false;
         lock (_stateLock)
         {
             _logger.LogInformation("Bus stopping message consumption.");
             if (_consuming)
             {
                 _consuming = false;
-                _consumer?.Dispose();
+                shouldDispose = true;
             }
         }
+        // Dispose outside the lock to avoid deadlock with consumer callback chain
+        if (shouldDispose)
+            _consumer?.Dispose();
     }
 
     public void Dispose()
@@ -238,8 +219,7 @@ public sealed class Bus : IBus
 
     private void ThrowIfDisposed()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(Bus));
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
     private static Envelope CreateEnvelope(Type messageType, byte[] body, Dictionary<string, string>? additionalHeaders = null)

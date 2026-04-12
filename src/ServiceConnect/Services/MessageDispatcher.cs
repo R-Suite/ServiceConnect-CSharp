@@ -6,33 +6,22 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Services;
 
-public class MessageDispatcher
+public sealed class MessageDispatcher(
+    IMessageSerializer serializer,
+    IFilterPipeline filterPipeline,
+    IList<IMessageProcessor> processors,
+    ILogger<MessageDispatcher> logger,
+    IBusConfiguration config,
+    IPipelineConfiguration pipelineConfig,
+    IServiceProvider serviceProvider) : IMessageDispatcher
 {
-    private readonly IMessageSerializer _serializer;
-    private readonly IFilterPipeline _filterPipeline;
-    private readonly IList<IMessageProcessor> _processors;
-    private readonly ILogger<MessageDispatcher> _logger;
-    private readonly IBusConfiguration _config;
-    private readonly IPipelineConfiguration _pipelineConfig;
-    private readonly IServiceProvider _serviceProvider;
-
-    public MessageDispatcher(
-        IMessageSerializer serializer,
-        IFilterPipeline filterPipeline,
-        IList<IMessageProcessor> processors,
-        ILogger<MessageDispatcher> logger,
-        IBusConfiguration config,
-        IPipelineConfiguration pipelineConfig,
-        IServiceProvider serviceProvider)
-    {
-        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
-        _processors = processors ?? throw new ArgumentNullException(nameof(processors));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _config = config ?? throw new ArgumentNullException(nameof(config));
-        _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-    }
+    private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
+    private readonly IList<IMessageProcessor> _processors = processors ?? throw new ArgumentNullException(nameof(processors));
+    private readonly ILogger<MessageDispatcher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IBusConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
+    private readonly IPipelineConfiguration _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
+    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
     public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers)
     {
@@ -48,6 +37,10 @@ public class MessageDispatcher
 
             var type = Type.GetType(fullTypeName)
                 ?? throw new InvalidOperationException($"Cannot resolve type '{fullTypeName}'.");
+
+            if (!typeof(Message).IsAssignableFrom(type))
+                throw new InvalidOperationException(
+                    $"Type '{fullTypeName}' does not derive from Message. Refusing to deserialize untrusted type.");
 
             // 2. Build envelope
             var envelope = new Envelope { Headers = headers, Body = messageBytes };
@@ -97,9 +90,8 @@ public class MessageDispatcher
             for (int i = middlewareTypes.Count - 1; i >= 0; i--)
             {
                 var mw = (IMessageProcessingMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
-                mw.Next = chain;
-                var current = mw;
-                chain = (mb, mt, m, h, e) => current.Process(mb, mt, m, h, e);
+                var next = chain;
+                chain = (mb, mt, m, h, e) => mw.Process(mb, mt, m, h, e, next);
             }
             return await chain(messageBytes, type, message, headers, envelope);
         }
