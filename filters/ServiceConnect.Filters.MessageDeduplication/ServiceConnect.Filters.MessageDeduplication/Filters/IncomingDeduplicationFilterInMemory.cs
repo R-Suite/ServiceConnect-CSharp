@@ -1,17 +1,17 @@
-﻿using ServiceConnect.Filters.MessageDeduplication.Persistors;
+using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 
-namespace ServiceConnect.Filters.MessageDeduplication.Filters
-{
-    public class IncomingDeduplicationFilterInMemory : IFilter
-    {
-        public bool Process(Envelope envelope)
-        {
-            var incomingFilter = new IncomingFilter(new MessageDeduplicationPersistorInMemory());
-            
-            return incomingFilter.Process(envelope);
-        }
+namespace ServiceConnect.Filters.MessageDeduplication.Filters;
 
-        public IBus Bus { get; set; }
+public class IncomingDeduplicationFilterInMemory : IFilter
+{
+    private static readonly Lazy<IncomingFilter> _incomingFilter = new(() =>
+        new IncomingFilter(new MessageDeduplicationPersistorInMemory()));
+
+    public IBus Bus { get; set; } = null!;
+
+    public bool Process(Envelope envelope)
+    {
+        return _incomingFilter.Value.Process(envelope);
     }
 }
