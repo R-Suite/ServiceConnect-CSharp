@@ -120,9 +120,9 @@ public class CompetingConsumersTests
             await bus1.DisposeAsync();
             await bus2.DisposeAsync();
             await producerBus.DisposeAsync();
-            (consumerProvider1 as IDisposable)?.Dispose();
-            (consumerProvider2 as IDisposable)?.Dispose();
-            (producerProvider as IDisposable)?.Dispose();
+            if (consumerProvider1 is IAsyncDisposable asyncConsumerProvider1) await asyncConsumerProvider1.DisposeAsync();
+            if (consumerProvider2 is IAsyncDisposable asyncConsumerProvider2) await asyncConsumerProvider2.DisposeAsync();
+            if (producerProvider is IAsyncDisposable asyncProducerProvider) await asyncProducerProvider.DisposeAsync();
         }
     }
 }

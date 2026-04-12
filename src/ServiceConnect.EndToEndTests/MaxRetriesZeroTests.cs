@@ -106,7 +106,7 @@ public class MaxRetriesZeroTests
         finally
         {
             await bus.DisposeAsync();
-            (provider as IDisposable)?.Dispose();
+            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
         }
     }
 }

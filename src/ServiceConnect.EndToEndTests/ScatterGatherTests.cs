@@ -150,11 +150,11 @@ public class ScatterGatherTests
         finally
         {
             await responder1Bus.DisposeAsync();
-            (responder1Provider as IDisposable)?.Dispose();
+            if (responder1Provider is IAsyncDisposable asyncResponder1Provider) await asyncResponder1Provider.DisposeAsync();
             await responder2Bus.DisposeAsync();
-            (responder2Provider as IDisposable)?.Dispose();
+            if (responder2Provider is IAsyncDisposable asyncResponder2Provider) await asyncResponder2Provider.DisposeAsync();
             await requesterBus.DisposeAsync();
-            (requesterProvider as IDisposable)?.Dispose();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
         }
     }
 }

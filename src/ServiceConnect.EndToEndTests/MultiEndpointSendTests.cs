@@ -158,11 +158,11 @@ public class MultiEndpointSendTests
         finally
         {
             await consumer1Bus.DisposeAsync();
-            (consumer1Provider as IDisposable)?.Dispose();
+            if (consumer1Provider is IAsyncDisposable asyncConsumer1Provider) await asyncConsumer1Provider.DisposeAsync();
             await consumer2Bus.DisposeAsync();
-            (consumer2Provider as IDisposable)?.Dispose();
+            if (consumer2Provider is IAsyncDisposable asyncConsumer2Provider) await asyncConsumer2Provider.DisposeAsync();
             await senderBus.DisposeAsync();
-            (senderProvider as IDisposable)?.Dispose();
+            if (senderProvider is IAsyncDisposable asyncSenderProvider) await asyncSenderProvider.DisposeAsync();
         }
     }
 }

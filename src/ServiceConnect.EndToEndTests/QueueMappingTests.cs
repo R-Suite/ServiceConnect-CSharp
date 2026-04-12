@@ -82,8 +82,8 @@ public class QueueMappingTests
         }
         finally
         {
-            await consumerBus.DisposeAsync(); (consumerProvider as IDisposable)?.Dispose();
-            await senderBus.DisposeAsync(); (senderProvider as IDisposable)?.Dispose();
+            await consumerBus.DisposeAsync(); if (consumerProvider is IAsyncDisposable asyncConsumerProvider) await asyncConsumerProvider.DisposeAsync();
+            await senderBus.DisposeAsync(); if (senderProvider is IAsyncDisposable asyncSenderProvider) await asyncSenderProvider.DisposeAsync();
         }
     }
 }

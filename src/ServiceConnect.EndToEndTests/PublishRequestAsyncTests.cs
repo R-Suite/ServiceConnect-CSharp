@@ -118,9 +118,9 @@ public class PublishRequestAsyncTests
         finally
         {
             await responderBus.DisposeAsync();
-            (responderProvider as IDisposable)?.Dispose();
+            if (responderProvider is IAsyncDisposable asyncResponderProvider) await asyncResponderProvider.DisposeAsync();
             await requesterBus.DisposeAsync();
-            (requesterProvider as IDisposable)?.Dispose();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
         }
     }
 }

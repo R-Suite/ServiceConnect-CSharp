@@ -147,11 +147,11 @@ public class ScatterGatherPartialTests
         finally
         {
             await responderBus.DisposeAsync();
-            (responderProvider as IDisposable)?.Dispose();
+            if (responderProvider is IAsyncDisposable asyncResponderProvider) await asyncResponderProvider.DisposeAsync();
             await silentBus.DisposeAsync();
-            (silentProvider as IDisposable)?.Dispose();
+            if (silentProvider is IAsyncDisposable asyncSilentProvider) await asyncSilentProvider.DisposeAsync();
             await requesterBus.DisposeAsync();
-            (requesterProvider as IDisposable)?.Dispose();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
         }
     }
 }

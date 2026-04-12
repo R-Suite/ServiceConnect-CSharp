@@ -88,7 +88,7 @@ public class CustomHeaderTests
         finally
         {
             await bus.DisposeAsync();
-            (provider as IDisposable)?.Dispose();
+            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
         }
     }
 
@@ -183,9 +183,9 @@ public class CustomHeaderTests
         finally
         {
             await responderBus.DisposeAsync();
-            (responderProvider as IDisposable)?.Dispose();
+            if (responderProvider is IAsyncDisposable asyncResponderProvider) await asyncResponderProvider.DisposeAsync();
             await requesterBus.DisposeAsync();
-            (requesterProvider as IDisposable)?.Dispose();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
         }
     }
 }

@@ -122,8 +122,8 @@ public class StreamOutOfOrderTests
         {
             await consumerBus.DisposeAsync();
             await producerBus.DisposeAsync();
-            (consumerProvider as IDisposable)?.Dispose();
-            (producerProvider as IDisposable)?.Dispose();
+            if (consumerProvider is IAsyncDisposable asyncConsumerProvider) await asyncConsumerProvider.DisposeAsync();
+            if (producerProvider is IAsyncDisposable asyncProducerProvider) await asyncProducerProvider.DisposeAsync();
         }
     }
 }

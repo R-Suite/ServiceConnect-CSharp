@@ -127,8 +127,8 @@ public class RoutingSlipForwardingTests
         {
             await step1Bus.DisposeAsync();
             await step2Bus.DisposeAsync();
-            (step1Provider as IDisposable)?.Dispose();
-            (step2Provider as IDisposable)?.Dispose();
+            if (step1Provider is IAsyncDisposable asyncStep1Provider) await asyncStep1Provider.DisposeAsync();
+            if (step2Provider is IAsyncDisposable asyncStep2Provider) await asyncStep2Provider.DisposeAsync();
         }
     }
 }
