@@ -39,6 +39,30 @@ namespace ServiceConnect.Filters.MessageDeduplication
         public string CollectionNameMongoDb { get; set; }
 
         /// <summary>
+        /// Path to X509 certificate file for MongoDB SSL client authentication.
+        /// If set, TLS is auto-enabled on the connection.
+        /// Takes precedence over MongoDbCertBase64 if both are set.
+        /// </summary>
+        public string MongoDbCertPath { get; set; }
+
+        /// <summary>
+        /// Base64-encoded X509 certificate for MongoDB SSL client authentication.
+        /// Alternative to MongoDbCertPath for environments where file paths are impractical.
+        /// </summary>
+        public string MongoDbCertBase64 { get; set; }
+
+        /// <summary>
+        /// Password for the X509 certificate (optional).
+        /// Used with both MongoDbCertPath and MongoDbCertBase64.
+        /// </summary>
+        public string MongoDbCertPassphrase { get; set; }
+
+        /// <summary>
+        /// Which persistor backend to use for message deduplication.
+        /// </summary>
+        public PersistorType PersistorType { get; set; }
+
+        /// <summary>
         /// Disable message expiry.
         /// Processed messages in the persistance store won't get deleted.
         /// </summary>
@@ -77,6 +101,7 @@ namespace ServiceConnect.Filters.MessageDeduplication
             CollectionNameMongoDb = "ProcessedMessages";
             ConnectionStringRedis = "localhost,abortConnect=false";
             DatabaseIndexRedis = 0;
+            PersistorType = PersistorType.InMemory;
         }
     }
 }

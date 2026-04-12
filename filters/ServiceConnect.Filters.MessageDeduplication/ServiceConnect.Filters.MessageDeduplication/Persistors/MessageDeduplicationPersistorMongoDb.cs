@@ -1,5 +1,6 @@
 using System;
-using System.Reflection;
+using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 using Common.Logging;
 using MongoDB.Driver;
 
@@ -12,17 +13,48 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 
         public MessageDeduplicationPersistorMongoDb()
         {
-            var settings = DeduplicationFilterSettings.Instance;
-            var mongoClient = new MongoClient(settings.ConnectionStringMongoDb);
-            var mongoDatabase = mongoClient.GetDatabase(settings.DatabaseNameMongoDb);
-            _collection = mongoDatabase.GetCollection<ProcessedMessage>(settings.CollectionNameMongoDb);
+            var filterSettings = DeduplicationFilterSettings.Instance;
+
+            var url = new MongoUrl(filterSettings.ConnectionStringMongoDb);
+            var clientSettings = MongoClientSettings.FromUrl(url);
+
+            if (!string.IsNullOrEmpty(filterSettings.MongoDbCertPath) ||
+                !string.IsNullOrEmpty(filterSettings.MongoDbCertBase64))
+            {
+                X509Certificate2 cert;
+                if (!string.IsNullOrEmpty(filterSettings.MongoDbCertPath))
+                {
+                    cert = string.IsNullOrEmpty(filterSettings.MongoDbCertPassphrase)
+                        ? new X509Certificate2(filterSettings.MongoDbCertPath)
+                        : new X509Certificate2(filterSettings.MongoDbCertPath, filterSettings.MongoDbCertPassphrase);
+                }
+                else
+                {
+                    var certBytes = Convert.FromBase64String(filterSettings.MongoDbCertBase64);
+                    cert = string.IsNullOrEmpty(filterSettings.MongoDbCertPassphrase)
+                        ? new X509Certificate2(certBytes)
+                        : new X509Certificate2(certBytes, filterSettings.MongoDbCertPassphrase);
+                }
+
+                clientSettings.UseSsl = true;
+                clientSettings.SslSettings = new SslSettings
+                {
+                    ClientCertificates = new List<X509Certificate> { cert },
+                    ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
+                    CheckCertificateRevocation = true
+                };
+            }
+
+            var mongoClient = new MongoClient(clientSettings);
+            var mongoDatabase = mongoClient.GetDatabase(filterSettings.DatabaseNameMongoDb);
+            _collection = mongoDatabase.GetCollection<ProcessedMessage>(filterSettings.CollectionNameMongoDb);
             _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id));
             _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.ExpiryDateTime));
         }
 
         public bool GetMessageExists(Guid messageId)
         {
-            IAsyncCursor<ProcessedMessage> result = _collection.FindAsync(i=>i.Id == messageId).Result;
+            IAsyncCursor<ProcessedMessage> result = _collection.FindAsync(i => i.Id == messageId).Result;
             return result.Any();
         }
 
