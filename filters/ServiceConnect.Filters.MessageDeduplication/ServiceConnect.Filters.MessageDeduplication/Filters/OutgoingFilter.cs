@@ -38,8 +38,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             // setup timer for cleaning up expired messages
             lock (Padlock)
             {
-                // note: no need to timer with Redis persistor
-                if (_timer == null && !_settings.DisableMsgExpiry && messageDeduplicationPersistor.GetType() != typeof(MessageDeduplicationPersistorRedis))
+                if (_timer == null && !_settings.DisableMsgExpiry)
                 {
                     _timer = new Timer(Callback, null, 0, _settings.MsgCleanupIntervalMinutes * 60 * 1000);
                 }

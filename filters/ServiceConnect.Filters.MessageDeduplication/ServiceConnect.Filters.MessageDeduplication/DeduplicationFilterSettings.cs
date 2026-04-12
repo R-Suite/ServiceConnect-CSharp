@@ -14,16 +14,6 @@ namespace ServiceConnect.Filters.MessageDeduplication
         /// </summary>
         public int MsgCleanupIntervalMinutes { get; set; }
         /// <summary>
-        /// Redis persistance store connection string
-        /// </summary>
-        public string ConnectionStringRedis { get; set; }
-
-        /// <summary>
-        /// Database index (0-15)
-        /// </summary>
-        public int DatabaseIndexRedis { get; set; }
-
-        /// <summary>
         /// MongoDb(Ssl) persistance store connection string
         /// </summary>
         public string ConnectionStringMongoDb { get; set; }
@@ -99,8 +89,6 @@ namespace ServiceConnect.Filters.MessageDeduplication
             ConnectionStringMongoDb = "mongodb://localhost";
             DatabaseNameMongoDb = "ServiceConnect-Filters-MessageDeduplication";
             CollectionNameMongoDb = "ProcessedMessages";
-            ConnectionStringRedis = "localhost,abortConnect=false";
-            DatabaseIndexRedis = 0;
             PersistorType = PersistorType.InMemory;
         }
     }
