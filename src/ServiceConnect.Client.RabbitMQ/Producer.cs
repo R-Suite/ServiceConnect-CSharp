@@ -190,27 +190,23 @@ public sealed class Producer : IProducer
     public void Dispose()
     {
         if (_disposed) return;
-        _disposed = true; // Set immediately so concurrent operations see disposed state
+        _disposed = true;
         _ = Task.Run(async () =>
         {
-            try { await DisposeAsync().ConfigureAwait(false); }
+            try { await DisposeAsyncCore().ConfigureAwait(false); }
             catch (Exception ex) { _logger.LogDebug(ex, "Error during fire-and-forget dispose"); }
         });
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (_disposed) return;
-            _disposed = true;
-        }
-        finally
-        {
-            _connectionSemaphore.Release();
-        }
+        if (_disposed) return;
+        _disposed = true;
+        await DisposeAsyncCore().ConfigureAwait(false);
+    }
 
+    private async Task DisposeAsyncCore()
+    {
         await DisposeModelAsync().ConfigureAwait(false);
         await DisposeConnectionInstanceAsync().ConfigureAwait(false);
     }
