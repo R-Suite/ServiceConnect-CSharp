@@ -119,7 +119,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
                 {
                     ClientCertificates = certs,
                     ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
-                    CheckCertificateRevocation = false
+                    CheckCertificateRevocation = true
                 }
             };
 
