@@ -1,4 +1,3 @@
-using System.Text;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 
@@ -10,19 +9,19 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
     public IDictionary<string, object> Headers { get; } = headers;
 
     public string? MessageId =>
-        Headers.TryGetValue(HeaderKeys.MessageId, out var value) ? DecodeHeaderValue(value) : null;
+        Headers.TryGetValue(HeaderKeys.MessageId, out var value) ? HeaderDecoder.Decode(value) : null;
 
     public Guid CorrelationId =>
-        Headers.TryGetValue(HeaderKeys.CorrelationId, out var value) && Guid.TryParse(DecodeHeaderValue(value), out var id)
+        Headers.TryGetValue(HeaderKeys.CorrelationId, out var value) && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
             ? id : Guid.Empty;
 
     public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null) where TReply : Message
     {
-        var sourceAddress = Headers.TryGetValue(HeaderKeys.SourceAddress, out var sa) ? DecodeHeaderValue(sa) : null;
+        var sourceAddress = Headers.TryGetValue(HeaderKeys.SourceAddress, out var sa) ? HeaderDecoder.Decode(sa) : null;
         if (string.IsNullOrEmpty(sourceAddress))
             throw new InvalidOperationException("Cannot reply: incoming message has no SourceAddress header.");
 
-        var requestMessageId = Headers.TryGetValue(HeaderKeys.RequestMessageId, out var rmi) ? DecodeHeaderValue(rmi) : null;
+        var requestMessageId = Headers.TryGetValue(HeaderKeys.RequestMessageId, out var rmi) ? HeaderDecoder.Decode(rmi) : null;
 
         var replyHeaders = headers ?? [];
         if (!string.IsNullOrEmpty(requestMessageId))
@@ -30,15 +29,5 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
 
         var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
         await Bus.SendAsync(message, options).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Decodes a header value that may be a byte array (as returned by RabbitMQ) or already a string.
-    /// </summary>
-    private static string? DecodeHeaderValue(object? value)
-    {
-        if (value is byte[] bytes)
-            return Encoding.UTF8.GetString(bytes);
-        return value?.ToString();
     }
 }

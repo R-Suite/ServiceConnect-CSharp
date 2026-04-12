@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -33,17 +32,17 @@ public sealed class StreamProcessor : IMessageProcessor, IDisposable
         if (!headers.TryGetValue(HeaderKeys.MessageType, out var msgTypeRaw))
             return ProcessResult.NotHandled;
 
-        var msgType = msgTypeRaw is byte[] mtBytes ? Encoding.UTF8.GetString(mtBytes) : msgTypeRaw?.ToString();
+        var msgType = HeaderDecoder.Decode(msgTypeRaw);
         if (msgType != HeaderKeys.ByteStream)
             return ProcessResult.NotHandled;
 
         if (!headers.TryGetValue(HeaderKeys.SequenceId, out var seqIdRaw))
             return ProcessResult.NotHandled;
-        var sequenceId = seqIdRaw is byte[] siBytes ? Encoding.UTF8.GetString(siBytes) : seqIdRaw?.ToString()!;
+        var sequenceId = HeaderDecoder.Decode(seqIdRaw)!;
 
         if (!headers.TryGetValue(HeaderKeys.PacketNumber, out var pnRaw))
             return ProcessResult.NotHandled;
-        var pnString = pnRaw is byte[] pnBytes ? Encoding.UTF8.GetString(pnBytes) : pnRaw?.ToString();
+        var pnString = HeaderDecoder.Decode(pnRaw);
         if (!long.TryParse(pnString, out var packetNumber))
         {
             _logger.LogWarning("Stream packet has invalid PacketNumber header '{Value}'; discarding", pnString);
@@ -57,7 +56,7 @@ public sealed class StreamProcessor : IMessageProcessor, IDisposable
 
         if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
         {
-            var lpnString = lpnRaw is byte[] lpnBytes ? Encoding.UTF8.GetString(lpnBytes) : lpnRaw?.ToString();
+            var lpnString = HeaderDecoder.Decode(lpnRaw);
             if (!long.TryParse(lpnString, out var lastPacketNumber))
             {
                 _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
@@ -77,7 +76,7 @@ public sealed class StreamProcessor : IMessageProcessor, IDisposable
                 return ProcessResult.Handled;
             }
 
-            var fullTypeName = ftnRaw is byte[] ftnBytes ? Encoding.UTF8.GetString(ftnBytes) : ftnRaw?.ToString();
+            var fullTypeName = HeaderDecoder.Decode(ftnRaw);
             if (!_typeRegistry.TryResolve(fullTypeName!, out var resolvedType))
             {
                 _logger.LogWarning("Unregistered type '{TypeName}' for completed stream. Rejecting", fullTypeName);

@@ -1,4 +1,3 @@
-using System.Text;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
@@ -14,9 +13,7 @@ public sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessage
         if (!headers.TryGetValue(HeaderKeys.ResponseMessageId, out var responseMessageIdRaw))
             return Task.FromResult(ProcessResult.NotHandled);
 
-        var responseMessageId = responseMessageIdRaw is byte[] bytes
-            ? Encoding.UTF8.GetString(bytes)
-            : responseMessageIdRaw?.ToString();
+        var responseMessageId = HeaderDecoder.Decode(responseMessageIdRaw);
 
         if (string.IsNullOrEmpty(responseMessageId))
             return Task.FromResult(ProcessResult.NotHandled);

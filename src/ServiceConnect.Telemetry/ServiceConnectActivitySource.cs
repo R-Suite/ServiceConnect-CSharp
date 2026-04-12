@@ -1,5 +1,5 @@
 ﻿using System.Diagnostics;
-using System.Text;
+using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Telemetry;
 
@@ -96,13 +96,7 @@ public static class ServiceConnectActivitySource
         Dictionary<string, string?> readableHeaders = [];
         foreach (var kvp in eventArgs.Headers.ToList())
         {
-            if (kvp.Value is byte[])
-            {
-                readableHeaders[kvp.Key] = Encoding.UTF8.GetString((byte[])kvp.Value);
-                continue;
-            }
-
-            readableHeaders[kvp.Key] = kvp.Value?.ToString();
+            readableHeaders[kvp.Key] = HeaderDecoder.Decode(kvp.Value);
         }
 
         readableHeaders.TryGetValue("DestinationAddress", out string? destinationAddress);
@@ -220,18 +214,9 @@ public static class ServiceConnectActivitySource
     {
         if (eventArgs is Dictionary<string, object> headers && headers.TryGetValue(name, out object? propsVal))
         {
-            if (propsVal is byte[] bytes)
-            {
-                value = Encoding.UTF8.GetString(bytes);
-                values = default;
-                return;
-            }
-            if (propsVal is string stringValue)
-            {
-                value = stringValue;
-                values = default;
-                return;
-            }
+            value = HeaderDecoder.Decode(propsVal);
+            values = default;
+            return;
         }
 
         value = default;

@@ -117,7 +117,7 @@ public sealed class Client : IDisposable, IAsyncDisposable
             SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
 
             var typeNameRaw = headers.ContainsKey(HeaderKeys.FullTypeName) ? headers[HeaderKeys.FullTypeName] : headers[HeaderKeys.TypeName];
-            string typeName = typeNameRaw is byte[] tnBytes ? Encoding.UTF8.GetString(tnBytes) : typeNameRaw?.ToString() ?? "";
+            string typeName = HeaderDecoder.Decode(typeNameRaw) ?? "";
 
             result = await _consumerEventHandler!(args.Body.ToArray(), typeName, headers);
 
@@ -179,7 +179,7 @@ public sealed class Client : IDisposable, IAsyncDisposable
             string? messageType = null;
             if (headers.TryGetValue(HeaderKeys.MessageType, out var mtRaw))
             {
-                messageType = mtRaw is byte[] mtBytes ? Encoding.UTF8.GetString(mtBytes) : mtRaw?.ToString();
+                messageType = HeaderDecoder.Decode(mtRaw);
             }
 
             if (_queueConfiguration.AuditingEnabled && messageType != HeaderKeys.ByteStream)

@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -33,9 +32,7 @@ public sealed class MessageDispatcher(
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var fullTypeNameRaw))
                 throw new InvalidOperationException("Message is missing FullTypeName header.");
 
-            var fullTypeName = fullTypeNameRaw is byte[] bytes
-                ? Encoding.UTF8.GetString(bytes)
-                : fullTypeNameRaw?.ToString() ?? throw new InvalidOperationException("FullTypeName header is null.");
+            var fullTypeName = HeaderDecoder.Decode(fullTypeNameRaw) ?? throw new InvalidOperationException("FullTypeName header is null.");
 
             // 2. Build envelope
             var envelope = new Envelope { Headers = headers, Body = messageBytes };

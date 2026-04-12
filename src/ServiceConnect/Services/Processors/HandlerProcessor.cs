@@ -1,4 +1,3 @@
-using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Interfaces;
 
@@ -56,9 +55,7 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
         if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
             return;
 
-        var routingSlip = routingSlipRaw is byte[] bytes
-            ? Encoding.UTF8.GetString(bytes)
-            : routingSlipRaw?.ToString();
+        var routingSlip = HeaderDecoder.Decode(routingSlipRaw);
 
         if (string.IsNullOrWhiteSpace(routingSlip))
             return;
