@@ -7,21 +7,29 @@ using System.Reflection;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-public class Producer : IProducer
+public sealed class Producer : IProducer
 {
+    private const long DefaultMaxMessageSize = 65536;
+    private const ushort DefaultRetryCount = 60;
+    private const ushort DefaultRetryTimeInSeconds = 10;
+
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
     private readonly ILogger<Producer> _logger;
-    private IModel? _model;
+    private volatile IChannel? _model;
     private IConnection? _connection;
-    private readonly object _lock = new();
+    private readonly SemaphoreSlim _publishLock = new(1, 1);
     private ConnectionFactory? _connectionFactory;
     private readonly string[] _hosts;
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
     private readonly bool _publisherAcks;
     private readonly ConcurrentDictionary<ulong, string> _messagesSent = new();
+#if NET9_0_OR_GREATER
+    private readonly Lock _connectionLock = new();
+#else
     private readonly object _connectionLock = new();
+#endif
     private volatile bool _connected;
     private volatile bool _disposed;
 
@@ -30,16 +38,23 @@ public class Producer : IProducer
         _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
         _logger = logger;
-        MaximumMessageSize = transportConfiguration.ClientSettings.ContainsKey("MessageSize") ? Convert.ToInt64(_transportConfiguration.ClientSettings["MessageSize"]) : 65536;
-        _publisherAcks = transportConfiguration.ClientSettings.ContainsKey("PublisherAcknowledgements") && Convert.ToBoolean(_transportConfiguration.ClientSettings["PublisherAcknowledgements"]);
+
+        var settings = transportConfiguration.ClientSettings;
+        MaximumMessageSize = GetSetting(settings, RabbitMQSettingKeys.MessageSize, DefaultMaxMessageSize, Convert.ToInt64);
+        _publisherAcks = GetSetting(settings, RabbitMQSettingKeys.PublisherAcknowledgements, false, Convert.ToBoolean);
         _hosts = transportConfiguration.Host.Split(',');
-        _retryCount = transportConfiguration.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
-        _retryTimeInSeconds = transportConfiguration.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
+        _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, DefaultRetryCount, v => Convert.ToUInt16(v));
+        _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, DefaultRetryTimeInSeconds, v => Convert.ToUInt16(v));
+    }
+
+    private static T GetSetting<T>(IDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)
+    {
+        return settings.TryGetValue(key, out var value) ? converter(value) : defaultValue;
     }
 
     private void EnsureConnected()
     {
-        if (_disposed) throw new ObjectDisposedException(nameof(Producer));
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (_connected) return;
 
         lock (_connectionLock)
@@ -50,7 +65,7 @@ public class Producer : IProducer
             {
                 _logger.LogError(ex, "Error creating connection");
                 DisposeConnection();
-            }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+            }, TimeSpan.FromSeconds(_retryTimeInSeconds), _retryCount);
 
             _connected = true;
         }
@@ -58,8 +73,8 @@ public class Producer : IProducer
 
     private void CreateConnection()
     {
-        var port = _transportConfiguration.ClientSettings.ContainsKey("Port")
-            ? Convert.ToInt32(_transportConfiguration.ClientSettings["Port"])
+        var port = _transportConfiguration.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal)
+            ? Convert.ToInt32(portVal)
             : AmqpTcpEndpoint.UseDefaultPort;
 
         _connectionFactory = new ConnectionFactory
@@ -67,19 +82,14 @@ public class Producer : IProducer
             VirtualHost = "/",
             Port = port,
             AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true,
-            DispatchConsumersAsync = true
+            TopologyRecoveryEnabled = true
         };
 
         if (!string.IsNullOrEmpty(_transportConfiguration.Username))
-        {
             _connectionFactory.UserName = _transportConfiguration.Username;
-        }
 
         if (!string.IsNullOrEmpty(_transportConfiguration.Password))
-        {
             _connectionFactory.Password = _transportConfiguration.Password;
-        }
 
         if (_transportConfiguration.SslEnabled)
         {
@@ -88,204 +98,98 @@ public class Producer : IProducer
         }
 
         if (!string.IsNullOrEmpty(_transportConfiguration.VirtualHost))
-        {
             _connectionFactory.VirtualHost = _transportConfiguration.VirtualHost;
-        }
 
-        string producerName = Assembly.GetEntryAssembly() != null ? Assembly.GetEntryAssembly()!.GetName().Name! : System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+        string producerName = Assembly.GetEntryAssembly()?.GetName().Name
+            ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
-        _connection = _connectionFactory.CreateConnection(_hosts, producerName);
-        _model = _connection.CreateModel();
+        _connection = _connectionFactory.CreateConnectionAsync(_hosts, producerName).GetAwaiter().GetResult();
 
-        _model.ConfirmSelect();
-        _model.BasicAcks += (o, e) => CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
-        _model.BasicNacks += (o, e) =>
+        if (_publisherAcks)
         {
-            _logger.LogWarning("Message with delivery tag {DeliveryTag} was not acknowledged by the broker", e.DeliveryTag);
-            CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
-        };
-    }
-
-    public Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
-    {
-        DoPublish(type, message, headers);
-        return Task.CompletedTask;
-    }
-
-    private void DoPublish(Type type, byte[] message, Dictionary<string, string>? headers)
-    {
-        EnsureConnected();
-        lock (_lock)
-        {
-            IBasicProperties basicProperties = _model!.CreateBasicProperties();
-
-            Dictionary<string, object> messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
-
-            Envelope envelope = new()
+            var channelOptions = new CreateChannelOptions(
+                publisherConfirmationsEnabled: true,
+                publisherConfirmationTrackingEnabled: true);
+            _model = _connection.CreateChannelAsync(channelOptions).GetAwaiter().GetResult();
+            _model.BasicAcksAsync += (o, e) =>
             {
-                Body = message,
-                Headers = messageHeaders
+                CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
+                return Task.CompletedTask;
             };
-
-            basicProperties.Headers = envelope.Headers;
-            if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
+            _model.BasicNacksAsync += (o, e) =>
             {
-                basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
-            }
-            basicProperties.Persistent = true;
-            if (envelope.Headers != null && envelope.Headers.ContainsKey("Priority"))
-            {
-                try
-                {
-                    basicProperties.Priority = Convert.ToByte(envelope.Headers["Priority"]);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error setting message priority");
-                }
-            }
-
-            string exchName = type.FullName!.Replace(".", string.Empty);
-            string exchangeName = ConfigureExchange(exchName, "fanout");
-
-            Retry.Do(() => ClientPublish(exchangeName, "", basicProperties, envelope.Body),
-            ex =>
-            {
-                _logger.LogError(ex, "Error publishing message");
-                DisposeConnection();
-                RetryConnection();
-            }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+                _logger.LogWarning("Message with delivery tag {DeliveryTag} was not acknowledged by the broker", e.DeliveryTag);
+                CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
+                return Task.CompletedTask;
+            };
+        }
+        else
+        {
+            _model = _connection.CreateChannelAsync().GetAwaiter().GetResult();
         }
     }
 
-    private void RetryConnection()
-    {
-        _logger.LogDebug("In Producer.RetryConnection()");
-        CreateConnection();
-    }
-
-    public Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
+    public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
     {
         EnsureConnected();
-        lock (_lock)
+        await _publishLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            IBasicProperties basicProperties = _model!.CreateBasicProperties();
-            basicProperties.Persistent = true;
-            if (headers != null && headers.ContainsKey("Priority"))
-            {
-                try
-                {
-                    basicProperties.Priority = Convert.ToByte(headers["Priority"]);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error setting message priority");
-                }
-            }
+            var messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
+            var basicProperties = CreateBasicProperties(messageHeaders);
 
-            IList<string> endPoints = _queueConfiguration.QueueMappings[type.FullName!];
+            string exchangeName = await ConfigureExchangeAsync(type.FullName!.Replace(".", string.Empty), "fanout").ConfigureAwait(false);
+            await PublishWithRetryAsync(exchangeName, "", basicProperties, message).ConfigureAwait(false);
+        }
+        finally { _publishLock.Release(); }
+    }
+
+    public async Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
+    {
+        EnsureConnected();
+        await _publishLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (!_queueConfiguration.QueueMappings.TryGetValue(type.FullName!, out IList<string>? endPoints))
+                throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via QueueMappings.");
 
             foreach (string endPoint in endPoints)
             {
-                Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-
-                basicProperties.Headers = messageHeaders;
-                if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
-                {
-                    basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
-                }
-
-                Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
-                ex =>
-                {
-                    _logger.LogError(ex, "Error sending message");
-                    DisposeConnection();
-                    RetryConnection();
-                },
-                new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+                var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
+                var basicProperties = CreateBasicProperties(messageHeaders);
+                await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message).ConfigureAwait(false);
             }
         }
-
-        return Task.CompletedTask;
+        finally { _publishLock.Release(); }
     }
 
-    public Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null)
+    public async Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null)
     {
         if (string.IsNullOrWhiteSpace(endPoint))
-        {
             throw new ArgumentException($"Cannot send message of type {type} to empty endpoint");
-        }
 
         EnsureConnected();
-        lock (_lock)
+        await _publishLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            IBasicProperties basicProperties = _model!.CreateBasicProperties();
-            basicProperties.Persistent = true;
-            if (headers != null && headers.ContainsKey("Priority"))
-            {
-                try
-                {
-                    basicProperties.Priority = Convert.ToByte(headers["Priority"]);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error setting message priority");
-                }
-            }
-
-            Dictionary<string, object> messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-
-            basicProperties.Headers = messageHeaders;
-            if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
-            {
-                basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
-            }
-
-            Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, message),
-            ex =>
-            {
-                _logger.LogError(ex, "Error sending message");
-                DisposeConnection();
-                RetryConnection();
-            },
-            new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+            var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
+            var basicProperties = CreateBasicProperties(messageHeaders);
+            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message).ConfigureAwait(false);
         }
-
-        return Task.CompletedTask;
+        finally { _publishLock.Release(); }
     }
 
-    private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string>? headers, string queueName, string messageType)
+    public async Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null)
     {
-        headers ??= new Dictionary<string, string>();
-
-        if (!headers.ContainsKey("DestinationAddress"))
+        EnsureConnected();
+        await _publishLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            headers["DestinationAddress"] = queueName;
+            var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, HeaderKeys.ByteStream);
+            var basicProperties = CreateBasicProperties(messageHeaders);
+            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, packet).ConfigureAwait(false);
         }
-
-        if (!headers.ContainsKey("MessageId"))
-        {
-            headers["MessageId"] = Guid.NewGuid().ToString();
-        }
-
-        if (!headers.ContainsKey("MessageType"))
-        {
-            headers["MessageType"] = messageType;
-        }
-
-        headers["SourceAddress"] = _queueConfiguration.QueueName;
-        headers["TimeSent"] = DateTime.UtcNow.ToString("O");
-        headers["SourceMachine"] = Environment.MachineName;
-
-        if (!headers.ContainsKey("TypeName"))
-            headers["TypeName"] = type.FullName!;
-        if (!headers.ContainsKey("FullTypeName"))
-            headers["FullTypeName"] = type.AssemblyQualifiedName!;
-
-        headers["ConsumerType"] = "RabbitMQ";
-        headers["Language"] = "C#";
-
-        return headers.ToDictionary(x => x.Key, x => (object)x.Value);
+        finally { _publishLock.Release(); }
     }
 
     public Task DisconnectAsync()
@@ -297,111 +201,91 @@ public class Producer : IProducer
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-
-        // Wait for outstanding publisher confirms (max 5 seconds).
-        int timeout = 0;
-        while (_messagesSent.Count != 0 && timeout < 50)
-        {
-            Thread.Sleep(100);
-            timeout++;
-        }
-
-        if (_model != null)
-        {
-            try
-            {
-                _logger.LogDebug("Disposing Model");
-                _model.Dispose();
-                _model = null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error disposing model");
-            }
-        }
-
-        if (_connection != null)
-        {
-            try
-            {
-                _logger.LogDebug("Disposing connection");
-                _connection.Dispose();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error disposing connection");
-            }
-            _connection = null;
-        }
+        DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        Dispose();
-        return ValueTask.CompletedTask;
+        lock (_connectionLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
+
+        WaitForOutstandingConfirms();
+
+        await DisposeModelAsync();
+        await DisposeConnectionInstanceAsync();
     }
 
     public long MaximumMessageSize { get; }
 
-    public Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null)
+    private BasicProperties CreateBasicProperties(Dictionary<string, object> messageHeaders)
     {
-        EnsureConnected();
-        lock (_lock)
+        var basicProperties = new BasicProperties
         {
-            IBasicProperties basicProperties = _model!.CreateBasicProperties();
-            basicProperties.Persistent = true;
+            Headers = new Dictionary<string, object?>(messageHeaders.Select(kvp => new KeyValuePair<string, object?>(kvp.Key, kvp.Value))),
+            Persistent = true
+        };
 
-            Dictionary<string, object> messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, "ByteStream");
+        if (messageHeaders.TryGetValue(HeaderKeys.MessageId, out var messageId))
+            basicProperties.MessageId = messageId?.ToString();
 
-            Envelope envelope = new()
+        if (messageHeaders.TryGetValue(HeaderKeys.Priority, out var priority))
+        {
+            try
             {
-                Body = packet,
-                Headers = messageHeaders
-            };
-
-            basicProperties.Headers = envelope.Headers;
-            if (basicProperties.Headers != null && basicProperties.Headers.ContainsKey("MessageId"))
-            {
-                basicProperties.MessageId = basicProperties.Headers["MessageId"]?.ToString();
+                basicProperties.Priority = Convert.ToByte(priority);
             }
-
-            Retry.Do(() => ClientPublish(string.Empty, endPoint, basicProperties, envelope.Body),
-            ex =>
+            catch (Exception ex)
             {
-                _logger.LogError(ex, "Error sending message");
-                DisposeConnection();
-                RetryConnection();
-            },
-            new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+                _logger.LogError(ex, "Error setting message priority");
+            }
         }
 
-        return Task.CompletedTask;
+        return basicProperties;
     }
 
-    private void ClientPublish(string exchange, string routingKey, IBasicProperties basicProperties, byte[] message)
+    private async Task PublishWithRetryAsync(string exchange, string routingKey, BasicProperties basicProperties, byte[] message)
     {
-        ulong sequenceNumber = _model!.NextPublishSeqNo;
-        _ = _messagesSent.TryAdd(sequenceNumber, string.Empty);
+        await _model!.BasicPublishAsync(exchange, routingKey, mandatory: false, basicProperties, (ReadOnlyMemory<byte>)message).ConfigureAwait(false);
+    }
 
-        _model.BasicPublish(exchange, routingKey, basicProperties, message);
+    private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string>? headers, string queueName, string messageType)
+    {
+        headers ??= new Dictionary<string, string>();
 
-        if (_publisherAcks)
-        {
-            _ = _model.WaitForConfirms();
-        }
+        if (!headers.ContainsKey(HeaderKeys.DestinationAddress))
+            headers[HeaderKeys.DestinationAddress] = queueName;
+
+        if (!headers.ContainsKey(HeaderKeys.MessageId))
+            headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+
+        if (!headers.ContainsKey(HeaderKeys.MessageType))
+            headers[HeaderKeys.MessageType] = messageType;
+
+        headers[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
+        headers[HeaderKeys.TimeSent] = DateTime.UtcNow.ToString("O");
+        headers[HeaderKeys.SourceMachine] = Environment.MachineName;
+
+        if (!headers.ContainsKey(HeaderKeys.TypeName))
+            headers[HeaderKeys.TypeName] = type.FullName!;
+        if (!headers.ContainsKey(HeaderKeys.FullTypeName))
+            headers[HeaderKeys.FullTypeName] = type.AssemblyQualifiedName!;
+
+        headers[HeaderKeys.ConsumerType] = "RabbitMQ";
+        headers[HeaderKeys.Language] = "C#";
+
+        return headers.ToDictionary(x => x.Key, x => (object)x.Value);
     }
 
     private void CleanOutstandingConfirms(ulong sequenceNumber, bool multiple)
     {
         if (multiple)
         {
-            IEnumerable<KeyValuePair<ulong, string>> confirmed = _messagesSent.Where(k => k.Key <= sequenceNumber);
-            foreach (KeyValuePair<ulong, string> entry in confirmed)
-            {
+            var confirmed = _messagesSent.Where(k => k.Key <= sequenceNumber).ToList();
+            foreach (var entry in confirmed)
                 _ = _messagesSent.TryRemove(entry.Key, out _);
-            }
         }
         else
         {
@@ -409,11 +293,11 @@ public class Producer : IProducer
         }
     }
 
-    private string ConfigureExchange(string exchangeName, string type)
+    private async Task<string> ConfigureExchangeAsync(string exchangeName, string type)
     {
         try
         {
-            _model!.ExchangeDeclare(exchangeName, type, true, false, null);
+            await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -423,17 +307,66 @@ public class Producer : IProducer
         return exchangeName;
     }
 
-    private readonly object _disposeLock = new();
+    private void WaitForOutstandingConfirms()
+    {
+        var deadline = Environment.TickCount64 + 5000;
+        var wait = new SpinWait();
+        while (!_messagesSent.IsEmpty && Environment.TickCount64 < deadline)
+        {
+            wait.SpinOnce();
+        }
+    }
+
+    private async Task DisposeModelAsync()
+    {
+        if (_model != null)
+        {
+            try
+            {
+                _logger.LogDebug("Disposing Model");
+                if (_model.IsOpen)
+                    await _model.CloseAsync();
+                _model.Dispose();
+                _model = null;
+            }
+            catch (ObjectDisposedException) { _model = null; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error disposing model");
+                _model = null;
+            }
+        }
+    }
+
+    private async Task DisposeConnectionInstanceAsync()
+    {
+        if (_connection != null)
+        {
+            try
+            {
+                _logger.LogDebug("Disposing connection");
+                if (_connection.IsOpen)
+                    await _connection.CloseAsync();
+                _connection.Dispose();
+            }
+            catch (ObjectDisposedException) { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error disposing connection");
+            }
+            _connection = null;
+        }
+    }
 
     private void DisposeConnection()
     {
-        lock (_disposeLock)
+        lock (_connectionLock)
         {
             try
             {
                 if (_connection != null && _connection.IsOpen)
                 {
-                    _connection.Close();
+                    _connection.CloseAsync().GetAwaiter().GetResult();
                     _connection.Dispose();
                     _connection = null;
                 }
@@ -447,7 +380,7 @@ public class Producer : IProducer
             {
                 if (_model != null && _model.IsOpen)
                 {
-                    _model.Close();
+                    _model.CloseAsync().GetAwaiter().GetResult();
                     _model.Dispose();
                     _model = null;
                 }

@@ -6,9 +6,9 @@ using System.Collections.Concurrent;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-public class Consumer : IConsumer
+public sealed class Consumer : IConsumer
 {
-    private IModel? _model;
+    private IChannel? _model;
     private bool _durable;
     private int _retryDelay;
     private bool _exclusive;
@@ -17,9 +17,9 @@ public class Consumer : IConsumer
     private readonly ILogger<Consumer> _logger;
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
-    private IDictionary<string, object> _queueArguments = new Dictionary<string, object>();
-    private IDictionary<string, object> _retryQueueArguments = new Dictionary<string, object>();
-    private IDictionary<string, object> _utilityQueueArguments = new Dictionary<string, object>();
+    private Dictionary<string, object?> _queueArguments = [];
+    private Dictionary<string, object?> _retryQueueArguments = [];
+    private Dictionary<string, object?> _utilityQueueArguments = [];
     private readonly ConcurrentBag<Client> _clients = new();
     private readonly IBusConfiguration _busConfiguration;
 
@@ -42,62 +42,62 @@ public class Consumer : IConsumer
 
     public bool IsConnected => _connection?.IsConnected() ?? false;
 
-    public Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler)
+    public async Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler)
     {
         var clientSettings = _transportConfiguration.ClientSettings;
 
-        _durable = !clientSettings.ContainsKey("Durable") || (bool)clientSettings["Durable"];
-        _exclusive = clientSettings.ContainsKey("Exclusive") && (bool)clientSettings["Exclusive"];
-        _autoDelete = clientSettings.ContainsKey("AutoDelete") && (bool)clientSettings["AutoDelete"];
-        _queueArguments = clientSettings.ContainsKey("Arguments") ? (IDictionary<string, object>)clientSettings["Arguments"] : new Dictionary<string, object>();
-        _retryQueueArguments = clientSettings.ContainsKey("RetryQueueArguments") ? (IDictionary<string, object>)clientSettings["RetryQueueArguments"] : new Dictionary<string, object>();
-        _utilityQueueArguments = clientSettings.ContainsKey("UtilityQueueArguments") ? (IDictionary<string, object>)clientSettings["UtilityQueueArguments"] : new Dictionary<string, object>();
+        _durable = !clientSettings.TryGetValue(RabbitMQSettingKeys.Durable, out var durableVal) || (bool)durableVal;
+        _exclusive = clientSettings.TryGetValue(RabbitMQSettingKeys.Exclusive, out var exclusiveVal) && (bool)exclusiveVal;
+        _autoDelete = clientSettings.TryGetValue(RabbitMQSettingKeys.AutoDelete, out var autoDeleteVal) && (bool)autoDeleteVal;
+        _queueArguments = clientSettings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal) ? (Dictionary<string, object?>)argsVal : [];
+        _retryQueueArguments = clientSettings.TryGetValue(RabbitMQSettingKeys.RetryQueueArguments, out var retryArgsVal) ? (Dictionary<string, object?>)retryArgsVal : [];
+        _utilityQueueArguments = clientSettings.TryGetValue(RabbitMQSettingKeys.UtilityQueueArguments, out var utilArgsVal) ? (Dictionary<string, object?>)utilArgsVal : [];
         _retryDelay = _transportConfiguration.RetryDelay;
 
         _connection ??= new Connection(_transportConfiguration, queueName, _logger);
 
-        _model ??= _connection.CreateModel();
+        _model ??= await _connection.CreateChannelAsync();
 
         // Configure exchanges
         foreach (string messageType in messageTypes)
         {
-            ConfigureExchange(messageType, "fanout");
+            await ConfigureExchangeAsync(messageType, "fanout");
         }
 
         // Configure queue
-        ConfigureQueue(queueName);
+        await ConfigureQueueAsync(queueName);
 
         // Purge all messages on queue
         if (_queueConfiguration.PurgeQueueOnStartup)
         {
             _logger.LogDebug("Purging queue");
-            _ = _model.QueuePurge(queueName);
+            await _model.QueuePurgeAsync(queueName);
         }
 
         // Configure retry queue (but only if retries are expected)
         if (_transportConfiguration.MaxRetries > 0)
         {
-            ConfigureRetryQueue(queueName);
+            await ConfigureRetryQueueAsync(queueName);
         }
 
         // Configure Error Queue/Exchange
-        string errorExchange = ConfigureErrorExchange();
-        string errorQueue = ConfigureErrorQueue();
+        string errorExchange = await ConfigureErrorExchangeAsync();
+        string errorQueue = await ConfigureErrorQueueAsync();
 
         if (!string.IsNullOrEmpty(errorExchange))
         {
-            _model.QueueBind(errorQueue, errorExchange, string.Empty, _utilityQueueArguments);
+            await _model.QueueBindAsync(errorQueue, errorExchange, string.Empty, _utilityQueueArguments);
         }
 
         // Configure Audit Queue/Exchange
         if (_queueConfiguration.AuditingEnabled)
         {
-            string auditExchange = ConfigureAuditExchange();
-            string auditQueue = ConfigureAuditQueue();
+            string auditExchange = await ConfigureAuditExchangeAsync();
+            string auditQueue = await ConfigureAuditQueueAsync();
 
             if (!string.IsNullOrEmpty(auditExchange))
             {
-                _model.QueueBind(auditQueue, auditExchange, string.Empty, _utilityQueueArguments);
+                await _model.QueueBindAsync(auditQueue, auditExchange, string.Empty, _utilityQueueArguments);
             }
         }
 
@@ -106,25 +106,24 @@ public class Consumer : IConsumer
         for (int i = 0; i < clientCount; i++)
         {
             Client client = new(_connection, _transportConfiguration, _queueConfiguration, _logger);
-            client.StartConsuming(eventHandler, queueName);
+            await client.StartConsumingAsync(eventHandler, queueName);
             foreach (string messageType in messageTypes)
             {
-                client.ConsumeMessageType(messageType);
+                await client.ConsumeMessageTypeAsync(messageType);
             }
             _clients.Add(client);
         }
-
-        return Task.CompletedTask;
     }
 
     public void Dispose()
     {
         foreach (Client consumer in _clients)
         {
-            consumer.Dispose();
+            try { consumer.Dispose(); }
+            catch (ObjectDisposedException) { }
         }
 
-        _model?.Dispose();
+        _model = null;
         _connection?.Dispose();
     }
 
@@ -134,12 +133,12 @@ public class Consumer : IConsumer
         return ValueTask.CompletedTask;
     }
 
-    private void ConfigureExchange(string exchangeName, string type)
+    private async Task ConfigureExchangeAsync(string exchangeName, string type)
     {
         try
         {
             // Hard code auto delete and durable to sensible defaults so that producers and consumers dont try to declare exchanges with different settings.
-            _model!.ExchangeDeclare(exchangeName, type, true, false, null);
+            await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null);
         }
         catch (Exception ex)
         {
@@ -147,19 +146,12 @@ public class Consumer : IConsumer
         }
     }
 
-    private void ConfigureQueue(string queueName)
+    private async Task ConfigureQueueAsync(string queueName)
     {
-        try
-        {
-            _ = _model!.QueueDeclare(queueName, _durable, _exclusive, _autoDelete, _queueArguments);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Error declaring queue - {Message}", ex.Message);
-        }
+        await _model!.QueueDeclareAsync(queueName, _durable, _exclusive, _autoDelete, _queueArguments);
     }
 
-    private void ConfigureRetryQueue(string queueName)
+    private async Task ConfigureRetryQueueAsync(string queueName)
     {
         // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
         // dead-letter exchange is of type "direct" and bound to the original queue.
@@ -168,7 +160,7 @@ public class Consumer : IConsumer
 
         try
         {
-            _model!.ExchangeDeclare(retryDeadLetterExchangeName, "direct", _durable, _autoDelete, null);
+            await _model!.ExchangeDeclareAsync(retryDeadLetterExchangeName, "direct", _durable, _autoDelete, null);
         }
         catch (Exception ex)
         {
@@ -177,14 +169,14 @@ public class Consumer : IConsumer
 
         try
         {
-            _model!.QueueBind(queueName, retryDeadLetterExchangeName, retryQueueName, _retryQueueArguments); // only redeliver to the original queue (use _queueName as routing key)
+            await _model!.QueueBindAsync(queueName, retryDeadLetterExchangeName, retryQueueName, _retryQueueArguments); // only redeliver to the original queue (use _queueName as routing key)
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Error binding dead letter queue - {Message}", ex.Message);
         }
 
-        Dictionary<string, object> arguments = new(_retryQueueArguments)
+        Dictionary<string, object?> arguments = new(_retryQueueArguments)
         {
             {"x-dead-letter-exchange", retryDeadLetterExchangeName},
             {"x-message-ttl", _retryDelay}
@@ -193,7 +185,7 @@ public class Consumer : IConsumer
         try
         {
             // We never have consumers on the retry queue.  Therefore set autodelete to false.
-            _ = _model!.QueueDeclare(retryQueueName, _durable, false, false, arguments);
+            await _model!.QueueDeclareAsync(retryQueueName, _durable, false, false, arguments);
         }
         catch (Exception ex)
         {
@@ -201,11 +193,11 @@ public class Consumer : IConsumer
         }
     }
 
-    private string ConfigureErrorExchange()
+    private async Task<string> ConfigureErrorExchangeAsync()
     {
         try
         {
-            _model!.ExchangeDeclare(_queueConfiguration.ErrorQueueName, "direct");
+            await _model!.ExchangeDeclareAsync(_queueConfiguration.ErrorQueueName, "direct");
         }
         catch (Exception ex)
         {
@@ -215,11 +207,11 @@ public class Consumer : IConsumer
         return _queueConfiguration.ErrorQueueName;
     }
 
-    private string ConfigureErrorQueue()
+    private async Task<string> ConfigureErrorQueueAsync()
     {
         try
         {
-            _ = _model!.QueueDeclare(_queueConfiguration.ErrorQueueName, true, false, false, _utilityQueueArguments);
+            await _model!.QueueDeclareAsync(_queueConfiguration.ErrorQueueName, true, false, false, _utilityQueueArguments);
         }
         catch (Exception ex)
         {
@@ -229,11 +221,11 @@ public class Consumer : IConsumer
         return _queueConfiguration.ErrorQueueName;
     }
 
-    private string ConfigureAuditExchange()
+    private async Task<string> ConfigureAuditExchangeAsync()
     {
         try
         {
-            _model!.ExchangeDeclare(_queueConfiguration.AuditQueueName, "direct");
+            await _model!.ExchangeDeclareAsync(_queueConfiguration.AuditQueueName, "direct");
         }
         catch (Exception ex)
         {
@@ -243,11 +235,11 @@ public class Consumer : IConsumer
         return _queueConfiguration.AuditQueueName;
     }
 
-    private string ConfigureAuditQueue()
+    private async Task<string> ConfigureAuditQueueAsync()
     {
         try
         {
-            _ = _model!.QueueDeclare(_queueConfiguration.AuditQueueName, true, false, false, _utilityQueueArguments);
+            await _model!.QueueDeclareAsync(_queueConfiguration.AuditQueueName, true, false, false, _utilityQueueArguments);
         }
         catch (Exception ex)
         {

@@ -8,24 +8,24 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-public class Client
+public sealed class Client : IDisposable
 {
-    private IModel? _model;
+    private const ushort DefaultRetryCount = 60;
+    private const ushort DefaultRetryTimeInSeconds = 10;
+
+    private IChannel? _model;
     private readonly IServiceConnectConnection _connection;
     private ConsumerEventHandler? _consumerEventHandler;
-    private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
     private readonly ILogger _logger;
 
     private bool _autoDelete;
     private string _queueName = "";
     private readonly int _maxRetries;
-    private readonly ushort _retryCount;
     private readonly bool _errorsDisabled;
     private readonly ushort _prefetchCount;
     private readonly bool _disablePrefetch;
-    private readonly ushort _retryTimeInSeconds;
-    private readonly IDictionary<string, object> _queueArguments;
+    private readonly IDictionary<string, object?> _queueArguments;
     private string _retryQueueName = "";
     private string _errorExchange = "";
     private string _auditExchange = "";
@@ -36,18 +36,16 @@ public class Client
     public Client(IServiceConnectConnection connection, ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, ILogger logger)
     {
         _connection = connection;
-        _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
         _logger = logger;
 
+        var settings = transportConfiguration.ClientSettings;
         _maxRetries = transportConfiguration.MaxRetries;
-        _autoDelete = transportConfiguration.ClientSettings.ContainsKey("AutoDelete") && (bool)transportConfiguration.ClientSettings["AutoDelete"];
+        _autoDelete = settings.TryGetValue(RabbitMQSettingKeys.AutoDelete, out var autoDeleteVal) && (bool)autoDeleteVal;
         _errorsDisabled = queueConfiguration.DisableErrors;
-        _prefetchCount = transportConfiguration.ClientSettings.ContainsKey("PrefetchCount") ? Convert.ToUInt16((int)transportConfiguration.ClientSettings["PrefetchCount"]) : transportConfiguration.PrefetchCount;
-        _disablePrefetch = transportConfiguration.ClientSettings.ContainsKey("DisablePrefetch") && (bool)transportConfiguration.ClientSettings["DisablePrefetch"];
-        _retryCount = transportConfiguration.ClientSettings.ContainsKey("RetryCount") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetryCount"]) : Convert.ToUInt16(60);
-        _retryTimeInSeconds = transportConfiguration.ClientSettings.ContainsKey("RetrySeconds") ? Convert.ToUInt16(transportConfiguration.ClientSettings["RetrySeconds"]) : Convert.ToUInt16(10);
-        _queueArguments = transportConfiguration.ClientSettings.ContainsKey("Arguments") ? (IDictionary<string, object>)transportConfiguration.ClientSettings["Arguments"] : new Dictionary<string, object>();
+        _prefetchCount = settings.TryGetValue(RabbitMQSettingKeys.PrefetchCount, out var prefetchVal) ? Convert.ToUInt16((int)prefetchVal) : transportConfiguration.PrefetchCount;
+        _disablePrefetch = settings.TryGetValue(RabbitMQSettingKeys.DisablePrefetch, out var disablePrefetchVal) && (bool)disablePrefetchVal;
+        _queueArguments = settings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal) ? (IDictionary<string, object?>)argsVal : new Dictionary<string, object?>();
     }
 
     /// <summary>
@@ -61,18 +59,13 @@ public class Client
             Interlocked.Increment(ref _messagesBeingProcessed);
 
             if (args.BasicProperties.Headers == null ||
-                (!args.BasicProperties.Headers.ContainsKey("TypeName") &&
-                 !args.BasicProperties.Headers.ContainsKey("FullTypeName")))
+                (!args.BasicProperties.Headers.ContainsKey(HeaderKeys.TypeName) &&
+                 !args.BasicProperties.Headers.ContainsKey(HeaderKeys.FullTypeName)))
             {
                 const string errMsg = "Error processing message, Message headers must contain type name.";
                 _logger.LogError(errMsg);
                 processed = true; // no retry possible for malformed messages, ack to discard
                 return;
-            }
-
-            if (args.Redelivered)
-            {
-                SetHeader(args.BasicProperties.Headers, "Redelivered", true);
             }
 
             await ProcessMessage(args);
@@ -87,9 +80,9 @@ public class Client
             try
             {
                 if (processed)
-                    _model!.BasicAck(args.DeliveryTag, false);
+                    await _model!.BasicAckAsync(args.DeliveryTag, false);
                 else
-                    _model!.BasicNack(args.DeliveryTag, false, true); // requeue
+                    await _model!.BasicNackAsync(args.DeliveryTag, false, true); // requeue
             }
             catch (Exception ex)
             {
@@ -103,19 +96,32 @@ public class Client
     private async Task ProcessMessage(BasicDeliverEventArgs args)
     {
         ConsumeEventResult result;
-        IDictionary<string, object> headers = args.BasicProperties.Headers;
+        
+        var headers = new Dictionary<string, object>();
+        if (args.BasicProperties.Headers != null)
+        {
+            foreach (var kvp in args.BasicProperties.Headers)
+            {
+                if (kvp.Value is not null)
+                    headers[kvp.Key] = kvp.Value;
+            }
+        }
+
+        if (args.Redelivered)
+            SetHeader(headers, HeaderKeys.Redelivered, true);
 
         try
         {
-            SetHeader(args.BasicProperties.Headers, "TimeReceived", DateTime.UtcNow.ToString("O"));
-            SetHeader(args.BasicProperties.Headers, "DestinationMachine", Environment.MachineName);
-            SetHeader(args.BasicProperties.Headers, "DestinationAddress", _queueConfiguration.QueueName);
+            SetHeader(headers, HeaderKeys.TimeReceived, DateTime.UtcNow.ToString("O"));
+            SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
+            SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
 
-            string typeName = Encoding.UTF8.GetString((byte[])(headers.ContainsKey("FullTypeName") ? headers["FullTypeName"] : headers["TypeName"]));
+            var typeNameRaw = headers.ContainsKey(HeaderKeys.FullTypeName) ? headers[HeaderKeys.FullTypeName] : headers[HeaderKeys.TypeName];
+            string typeName = typeNameRaw is byte[] tnBytes ? Encoding.UTF8.GetString(tnBytes) : typeNameRaw?.ToString() ?? "";
 
             result = await _consumerEventHandler!(args.Body.ToArray(), typeName, headers);
 
-            SetHeader(args.BasicProperties.Headers, "TimeProcessed", DateTime.UtcNow.ToString("O"));
+            SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));
         }
         catch (Exception ex)
         {
@@ -130,63 +136,61 @@ public class Client
         {
             int retryCount = 0;
 
-            if (args.BasicProperties.Headers.ContainsKey("RetryCount"))
+            if (headers.TryGetValue(HeaderKeys.RetryCount, out var retryCountVal)
+                && int.TryParse(retryCountVal?.ToString(), out int parsedRetry)
+                && parsedRetry >= 0 && parsedRetry <= _maxRetries + 1)
             {
-                retryCount = (int)args.BasicProperties.Headers["RetryCount"];
+                retryCount = parsedRetry;
             }
 
             if (retryCount < _maxRetries)
             {
                 retryCount++;
-                SetHeader(args.BasicProperties.Headers, "RetryCount", retryCount);
+                SetHeader(headers, HeaderKeys.RetryCount, retryCount);
 
-                _model!.BasicPublish(string.Empty, _retryQueueName, args.BasicProperties, args.Body);
+                var retryProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
+                await _model!.BasicPublishAsync(string.Empty, _retryQueueName, mandatory: false, retryProps, args.Body);
             }
             else
             {
                 if (result.Exception != null)
                 {
-                    string jsonException = string.Empty;
-                    try
+                    // Only include type + message in headers — no stack traces or internal details
+                    // that could leak sensitive information to error queue consumers.
+                    // Full diagnostics are logged server-side below.
+                    SetHeader(headers, HeaderKeys.Exception, JsonConvert.SerializeObject(new
                     {
-                        jsonException = JsonConvert.SerializeObject(result.Exception);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Error serializing exception");
-                    }
-
-                    SetHeader(args.BasicProperties.Headers, "Exception", JsonConvert.SerializeObject(new
-                    {
-                        TimeStamp = DateTime.Now,
+                        TimeStamp = DateTime.UtcNow,
                         ExceptionType = result.Exception.GetType().FullName,
-                        Message = GetErrorMessage(result.Exception),
-                        result.Exception.StackTrace,
-                        result.Exception.Source,
-                        Exception = jsonException
+                        Message = GetErrorMessage(result.Exception)
                     }));
+
+                    _logger.LogError(result.Exception, "Max retries exceeded for MessageId {MessageId}",
+                        args.BasicProperties.MessageId);
                 }
 
                 _logger.LogError("Max number of retries exceeded. MessageId: {MessageId}", args.BasicProperties.MessageId);
-                _model!.BasicPublish(_errorExchange, string.Empty, args.BasicProperties, args.Body);
+                var errorProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
+                await _model!.BasicPublishAsync(_errorExchange, string.Empty, mandatory: false, errorProps, args.Body);
             }
         }
         else if (!_errorsDisabled)
         {
             string? messageType = null;
-            if (headers.ContainsKey("MessageType"))
+            if (headers.TryGetValue(HeaderKeys.MessageType, out var mtRaw))
             {
-                messageType = Encoding.UTF8.GetString((byte[])headers["MessageType"]);
+                messageType = mtRaw is byte[] mtBytes ? Encoding.UTF8.GetString(mtBytes) : mtRaw?.ToString();
             }
 
-            if (_queueConfiguration.AuditingEnabled && messageType != "ByteStream")
+            if (_queueConfiguration.AuditingEnabled && messageType != HeaderKeys.ByteStream)
             {
-                _model!.BasicPublish(_auditExchange, string.Empty, args.BasicProperties, args.Body);
+                var auditProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
+                await _model!.BasicPublishAsync(_auditExchange, string.Empty, mandatory: false, auditProps, args.Body);
             }
         }
     }
 
-    public void StartConsuming(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null)
+    public async Task StartConsumingAsync(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null)
     {
         _consumerEventHandler = messageReceived;
         _queueName = queueName;
@@ -199,58 +203,59 @@ public class Client
             _autoDelete = autoDelete.Value;
         }
 
-        Retry.Do(CreateConsumer, ex =>
-        {
-            _logger.LogError(ex, "Error creating model - queueName: {QueueName}", queueName);
-        }, new TimeSpan(0, 0, 0, _retryTimeInSeconds), _retryCount);
+        await CreateConsumerAsync();
     }
 
-    private void CreateConsumer()
+    private async Task CreateConsumerAsync()
     {
-        _model = _connection.CreateModel();
+        _model = await _connection.CreateChannelAsync();
 
         if (!_disablePrefetch)
         {
-            _model.BasicQos(0, _prefetchCount, false);
+            await _model.BasicQosAsync(0, _prefetchCount, false);
         }
 
         _consumer = new AsyncEventingBasicConsumer(_model);
-        _consumer.Received += Event;
+        _consumer.ReceivedAsync += Event;
 
-        _ = _model.BasicConsume(_queueName, false, _consumer);
+        var consumerTag = await _model.BasicConsumeAsync(_queueName, false, _consumer);
 
-        _logger.LogDebug("Started consuming");
+        _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, consumerTag);
     }
 
-    public void ConsumeMessageType(string messageTypeName)
+    public async Task ConsumeMessageTypeAsync(string messageTypeName)
     {
         // messageTypeName is the name of the exchange
-        _model!.QueueBind(_queueName, messageTypeName, string.Empty, _queueArguments);
+        await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments);
     }
 
-    private string GetErrorMessage(Exception exception)
+    private static string GetErrorMessage(Exception exception)
     {
-        StringBuilder sbMessage = new();
-        _ = sbMessage.Append(exception.Message + Environment.NewLine);
-        Exception? ie = exception.InnerException;
+        var sbMessage = new StringBuilder();
+        sbMessage.AppendLine(exception.Message);
+        var ie = exception.InnerException;
         while (ie != null)
         {
-            _ = sbMessage.Append(ie.Message + Environment.NewLine);
+            sbMessage.AppendLine(ie.Message);
             ie = ie.InnerException;
         }
-
         return sbMessage.ToString();
+    }
+
+    private static Dictionary<string, object?> ToNullableHeaders(IDictionary<string, object> headers)
+    {
+        return headers.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value);
     }
 
     private static void SetHeader<T>(IDictionary<string, object> headers, string key, T value)
     {
-        if (Equals(value, default(T)))
+        if (value is null)
         {
             _ = headers.Remove(key);
         }
         else
         {
-            headers[key] = value!;
+            headers[key] = value;
         }
     }
 
@@ -261,49 +266,28 @@ public class Client
 
     public void Dispose()
     {
-        // Stop consuming
-        if (_consumer != null)
-        {
-            foreach (string tag in _consumer.ConsumerTags)
-            {
-                try
-                {
-                    _model!.BasicCancel(tag);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error cancelling consumer");
-                }
-            }
-        }
-
         // Wait until all messages have been processed (max 5 seconds).
-        int timeout = 0;
-        while (_messagesBeingProcessed > 0 && timeout < 50)
+        var deadline = Environment.TickCount64 + 5000;
+        var wait = new SpinWait();
+        while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
         {
-            Thread.Sleep(100);
-            timeout++;
+            wait.SpinOnce();
         }
 
         if (_autoDelete && _model != null)
         {
-            _logger.LogDebug("Deleting retry queue");
-            _ = _model.QueueDelete(_queueName + ".Retries");
-        }
-
-        // Dispose model
-        if (_model != null)
-        {
             try
             {
-                _logger.LogDebug("Disposing Model");
-                _model.Dispose();
-                _model = null;
+                _logger.LogDebug("Deleting retry queue");
+                _model.QueueDeleteAsync(_queueName + ".Retries").GetAwaiter().GetResult();
             }
+            catch (ObjectDisposedException) { }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error disposing consumer");
+                _logger.LogWarning(ex, "Error deleting retry queue");
             }
         }
+
+        _model = null;
     }
 }
