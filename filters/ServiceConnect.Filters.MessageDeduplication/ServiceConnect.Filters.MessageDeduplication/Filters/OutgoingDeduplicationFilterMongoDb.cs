@@ -1,4 +1,5 @@
-﻿using ServiceConnect.Filters.MessageDeduplication.Persistors;
+﻿using System;
+using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Filters.MessageDeduplication.Filters

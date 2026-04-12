@@ -1,3 +1,4 @@
+using System;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 
