@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
-using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace ServiceConnect.Client.RabbitMQ;
@@ -24,7 +23,6 @@ public sealed class Producer : IProducer
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
     private readonly bool _publisherAcks;
-    private readonly ConcurrentDictionary<ulong, string> _messagesSent = new();
 #if NET9_0_OR_GREATER
     private readonly Lock _connectionLock = new();
 #else
@@ -111,17 +109,6 @@ public sealed class Producer : IProducer
                 publisherConfirmationsEnabled: true,
                 publisherConfirmationTrackingEnabled: true);
             _model = _connection.CreateChannelAsync(channelOptions).GetAwaiter().GetResult();
-            _model.BasicAcksAsync += (o, e) =>
-            {
-                CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
-                return Task.CompletedTask;
-            };
-            _model.BasicNacksAsync += (o, e) =>
-            {
-                _logger.LogWarning("Message with delivery tag {DeliveryTag} was not acknowledged by the broker", e.DeliveryTag);
-                CleanOutstandingConfirms(e.DeliveryTag, e.Multiple);
-                return Task.CompletedTask;
-            };
         }
         else
         {
@@ -212,8 +199,6 @@ public sealed class Producer : IProducer
             _disposed = true;
         }
 
-        WaitForOutstandingConfirms();
-
         await DisposeModelAsync();
         await DisposeConnectionInstanceAsync();
     }
@@ -279,20 +264,6 @@ public sealed class Producer : IProducer
         return headers.ToDictionary(x => x.Key, x => (object)x.Value);
     }
 
-    private void CleanOutstandingConfirms(ulong sequenceNumber, bool multiple)
-    {
-        if (multiple)
-        {
-            var confirmed = _messagesSent.Where(k => k.Key <= sequenceNumber).ToList();
-            foreach (var entry in confirmed)
-                _ = _messagesSent.TryRemove(entry.Key, out _);
-        }
-        else
-        {
-            _ = _messagesSent.TryRemove(sequenceNumber, out _);
-        }
-    }
-
     private async Task<string> ConfigureExchangeAsync(string exchangeName, string type)
     {
         try
@@ -305,16 +276,6 @@ public sealed class Producer : IProducer
         }
 
         return exchangeName;
-    }
-
-    private void WaitForOutstandingConfirms()
-    {
-        var deadline = Environment.TickCount64 + 5000;
-        var wait = new SpinWait();
-        while (!_messagesSent.IsEmpty && Environment.TickCount64 < deadline)
-        {
-            wait.SpinOnce();
-        }
     }
 
     private async Task DisposeModelAsync()
