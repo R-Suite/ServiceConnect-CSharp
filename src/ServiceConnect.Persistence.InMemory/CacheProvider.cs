@@ -142,9 +142,9 @@ public class CacheProvider : ICacheProvider
 
     private void TryPurgeItem<TKey>(TKey key)
     {
-        if (_slidingTime.ContainsKey(key!))
+        if (_slidingTime.TryGetValue(key!, out var details))
         {
-            if (!_slidingTime[key!].CanExpire(out TimeSpan tryAfter))
+            if (!details.CanExpire(out TimeSpan tryAfter))
             {
                 StartObserving(key, tryAfter);
                 return;

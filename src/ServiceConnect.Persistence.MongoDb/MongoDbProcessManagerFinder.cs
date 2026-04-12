@@ -17,7 +17,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
     private readonly IMongoDatabase _mongoDatabase;
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
-    private bool _timeoutIndexEnsured;
+    private volatile bool _timeoutIndexEnsured;
     private const string TimeoutsCollectionName = "Timeouts";
 
     public event TimeoutInsertedDelegate? TimeoutInserted;
