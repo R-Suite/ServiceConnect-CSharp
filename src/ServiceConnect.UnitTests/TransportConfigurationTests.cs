@@ -176,5 +176,19 @@ namespace ServiceConnect.UnitTests
             Assert.Single(config.ClientSettings);
             Assert.Equal("updated", config.ClientSettings["key"]);
         }
+
+        [Fact]
+        public void SetClientSetting_ThrowsOnNullKey()
+        {
+            var config = new TransportConfiguration();
+            Assert.Throws<ArgumentNullException>(() => config.SetClientSetting(null!, "value"));
+        }
+
+        [Fact]
+        public void SetClientSetting_ThrowsOnNullValue()
+        {
+            var config = new TransportConfiguration();
+            Assert.Throws<ArgumentNullException>(() => config.SetClientSetting("key", null!));
+        }
     }
 }
