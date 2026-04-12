@@ -11,6 +11,9 @@ public class IncomingGzipCompressionFilter : IFilter
 
     public bool Process(Envelope envelope)
     {
+        if (envelope.Body.Length < 2 || envelope.Body[0] != 0x1f || envelope.Body[1] != 0x8b)
+            return true;
+
         using var compressedMessageMemoryStream = new MemoryStream(envelope.Body);
         using var messageMemoryStream = new MemoryStream();
         using (var gzipStream = new GZipStream(compressedMessageMemoryStream, CompressionMode.Decompress))
