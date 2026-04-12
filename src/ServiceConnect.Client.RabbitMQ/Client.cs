@@ -275,8 +275,6 @@ public sealed class Client : IAsyncDisposable
             await Task.Delay(50).ConfigureAwait(false);
         }
 
-        await CloseChannelAsync().ConfigureAwait(false);
-
         if (_autoDelete && _model != null)
         {
             try
@@ -290,6 +288,8 @@ public sealed class Client : IAsyncDisposable
                 _logger.LogWarning(ex, "Error deleting retry queue");
             }
         }
+
+        await CloseChannelAsync().ConfigureAwait(false);
     }
 
     private async Task CloseChannelAsync()
