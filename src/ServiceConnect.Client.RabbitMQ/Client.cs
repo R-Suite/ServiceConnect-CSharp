@@ -68,7 +68,7 @@ public sealed class Client : IAsyncDisposable
                 return;
             }
 
-            await ProcessMessage(args);
+            await ProcessMessage(args).ConfigureAwait(false);
             processed = true;
         }
         catch (Exception ex)
@@ -80,9 +80,9 @@ public sealed class Client : IAsyncDisposable
             try
             {
                 if (processed)
-                    await _model!.BasicAckAsync(args.DeliveryTag, false);
+                    await _model!.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
                 else
-                    await _model!.BasicNackAsync(args.DeliveryTag, false, true); // requeue
+                    await _model!.BasicNackAsync(args.DeliveryTag, false, true).ConfigureAwait(false); // requeue
             }
             catch (Exception ex)
             {
@@ -126,7 +126,7 @@ public sealed class Client : IAsyncDisposable
             }
             else
             {
-                result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers);
+                result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers).ConfigureAwait(false);
             }
 
             SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));
@@ -157,7 +157,7 @@ public sealed class Client : IAsyncDisposable
                 SetHeader(headers, HeaderKeys.RetryCount, retryCount);
 
                 var retryProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
-                await _model!.BasicPublishAsync(string.Empty, _retryQueueName, mandatory: false, retryProps, args.Body);
+                await _model!.BasicPublishAsync(string.Empty, _retryQueueName, mandatory: false, retryProps, args.Body).ConfigureAwait(false);
             }
             else
             {
@@ -179,7 +179,7 @@ public sealed class Client : IAsyncDisposable
 
                 _logger.LogError("Max number of retries exceeded. MessageId: {MessageId}", args.BasicProperties.MessageId);
                 var errorProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
-                await _model!.BasicPublishAsync(_errorExchange, string.Empty, mandatory: false, errorProps, args.Body);
+                await _model!.BasicPublishAsync(_errorExchange, string.Empty, mandatory: false, errorProps, args.Body).ConfigureAwait(false);
             }
         }
         else if (!_errorsDisabled)
@@ -193,7 +193,7 @@ public sealed class Client : IAsyncDisposable
             if (_queueConfiguration.AuditingEnabled && messageType != HeaderKeys.ByteStream)
             {
                 var auditProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
-                await _model!.BasicPublishAsync(_auditExchange, string.Empty, mandatory: false, auditProps, args.Body);
+                await _model!.BasicPublishAsync(_auditExchange, string.Empty, mandatory: false, auditProps, args.Body).ConfigureAwait(false);
             }
         }
     }
@@ -211,22 +211,22 @@ public sealed class Client : IAsyncDisposable
             _autoDelete = autoDelete.Value;
         }
 
-        await CreateConsumerAsync();
+        await CreateConsumerAsync().ConfigureAwait(false);
     }
 
     private async Task CreateConsumerAsync()
     {
-        _model = await _connection.CreateChannelAsync();
+        _model = await _connection.CreateChannelAsync().ConfigureAwait(false);
 
         if (!_disablePrefetch)
         {
-            await _model.BasicQosAsync(0, _prefetchCount, false);
+            await _model.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
         }
 
         _consumer = new AsyncEventingBasicConsumer(_model);
         _consumer.ReceivedAsync += Event;
 
-        var consumerTag = await _model.BasicConsumeAsync(_queueName, false, _consumer);
+        var consumerTag = await _model.BasicConsumeAsync(_queueName, false, _consumer).ConfigureAwait(false);
 
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, consumerTag);
     }
@@ -234,7 +234,7 @@ public sealed class Client : IAsyncDisposable
     public async Task ConsumeMessageTypeAsync(string messageTypeName)
     {
         // messageTypeName is the name of the exchange
-        await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments);
+        await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments).ConfigureAwait(false);
     }
 
     private static string GetErrorMessage(Exception exception)
