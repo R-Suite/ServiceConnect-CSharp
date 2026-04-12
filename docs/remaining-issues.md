@@ -19,8 +19,8 @@ Issues verified against source code on 2026-04-12. Tackle after the critical asy
 | R-016 | .NET Best Practices | Missing CancellationToken on public async APIs | Same as B-01 above |
 | R-017/R-018 | Error Handling | Silent exception swallowing in dedup filter persistors (OutgoingFilter, MongoDb persistors) | Large — needs IFilter interface change for async; moved to Group C |
 | R-020/R-021 | SRP | ProcessManagerProcessor and Client have too many responsibilities | Large — internal structure refactor |
-| R-022 | Architecture | Dedup filter combinatorial explosion | Large — Group B: collapse 8 filter variants to 2, add PersistorFactory + PersistorType enum, remove Redis support entirely |
-| R-027 | Tech Debt | MongoDbSsl manual connection string parsing | Large — Group B: merge MongoDbSsl into MongoDb persistor, use driver-native MongoUrl parsing, add cert settings properties |
+| R-022 | Architecture | Dedup filter combinatorial explosion | **Done** (Group B) — collapsed 8 filter variants to 2 + PersistorFactory, removed Redis support |
+| R-027 | Tech Debt | MongoDbSsl manual connection string parsing | **Done** (Group B) — merged MongoDbSsl into MongoDb persistor with driver-native MongoUrl parsing |
 | R-028 | Testing | Zero unit test coverage | Large — ongoing effort |
 | R-032 | Architecture | DeduplicationFilterSettings singleton pattern | Medium — deferred to Group C; requires DI migration of filter project (depends on R-009 core DI) |
 | R-034 | Async/Threading | Race condition in Bus.StartConsumingAsync — lock released before long-running await | Medium — mitigated by local consumer copy; full fix needs CancellationToken (R-016) |
