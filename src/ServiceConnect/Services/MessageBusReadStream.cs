@@ -5,7 +5,9 @@ namespace ServiceConnect.Services;
 
 public sealed class MessageBusReadStream : IMessageBusReadStream
 {
+    private const long MaxTotalStreamSize = 100 * 1024 * 1024;
     private readonly ConcurrentDictionary<long, byte[]> _packets = new();
+    private long _totalBytesWritten;
 
     public string SequenceId { get; set; } = string.Empty;
     public long LastPacketNumber { get; set; } = -1;
@@ -14,6 +16,8 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
 
     public void Write(byte[] data, long packetNumber)
     {
+        if (Interlocked.Add(ref _totalBytesWritten, data.Length) > MaxTotalStreamSize)
+            throw new InvalidOperationException($"Stream exceeds maximum size of {MaxTotalStreamSize / (1024 * 1024)} MB.");
         _packets[packetNumber] = data;
     }
 

@@ -32,13 +32,14 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         var packet = new byte[count];
         Array.Copy(buffer, offset, packet, 0, count);
 
+        var packetNum = Interlocked.Increment(ref _packetNumber) - 1;
+
         var headers = new Dictionary<string, string>(_baseHeaders)
         {
-            [HeaderKeys.PacketNumber] = _packetNumber.ToString()
+            [HeaderKeys.PacketNumber] = packetNum.ToString()
         };
 
         await _producer.SendBytesAsync(_endpoint, packet, headers).ConfigureAwait(false);
-        _packetNumber++;
     }
 
     public async Task CloseAsync()
@@ -46,10 +47,12 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         if (_closed) return;
         _closed = true;
 
+        var packetNum = Interlocked.Read(ref _packetNumber);
+
         var headers = new Dictionary<string, string>(_baseHeaders)
         {
-            [HeaderKeys.PacketNumber] = _packetNumber.ToString(),
-            [HeaderKeys.LastPacketNumber] = _packetNumber.ToString()
+            [HeaderKeys.PacketNumber] = packetNum.ToString(),
+            [HeaderKeys.LastPacketNumber] = packetNum.ToString()
         };
 
         await _producer.SendBytesAsync(_endpoint, [], headers).ConfigureAwait(false);
