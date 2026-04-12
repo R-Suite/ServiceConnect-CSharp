@@ -267,11 +267,12 @@ public sealed class Client : IDisposable, IAsyncDisposable
     public void Dispose()
     {
         var deadline = Environment.TickCount64 + 5000;
-        var wait = new SpinWait();
         while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
         {
-            wait.SpinOnce();
+            Thread.Sleep(50);
         }
+
+        CloseChannel();
 
         if (_autoDelete && _model != null)
         {
@@ -280,21 +281,20 @@ public sealed class Client : IDisposable, IAsyncDisposable
             _ = Task.Run(async () =>
             {
                 try { await model.QueueDeleteAsync(queueName + ".Retries").ConfigureAwait(false); }
-                catch { }
+                catch (Exception ex) { _logger.LogWarning(ex, "Error deleting retry queue during dispose"); }
             });
         }
-
-        _model = null;
     }
 
     public async ValueTask DisposeAsync()
     {
         var deadline = Environment.TickCount64 + 5000;
-        var wait = new SpinWait();
         while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
         {
-            wait.SpinOnce();
+            await Task.Delay(50).ConfigureAwait(false);
         }
+
+        await CloseChannelAsync().ConfigureAwait(false);
 
         if (_autoDelete && _model != null)
         {
@@ -309,7 +309,39 @@ public sealed class Client : IDisposable, IAsyncDisposable
                 _logger.LogWarning(ex, "Error deleting retry queue");
             }
         }
+    }
 
+    private void CloseChannel()
+    {
+        if (_model == null) return;
+        try
+        {
+            if (_model.IsOpen)
+                _model.CloseAsync().GetAwaiter().GetResult();
+            _model.Dispose();
+        }
+        catch (ObjectDisposedException) { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error closing channel during dispose");
+        }
+        _model = null;
+    }
+
+    private async Task CloseChannelAsync()
+    {
+        if (_model == null) return;
+        try
+        {
+            if (_model.IsOpen)
+                await _model.CloseAsync().ConfigureAwait(false);
+            _model.Dispose();
+        }
+        catch (ObjectDisposedException) { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error closing channel during dispose");
+        }
         _model = null;
     }
 }
