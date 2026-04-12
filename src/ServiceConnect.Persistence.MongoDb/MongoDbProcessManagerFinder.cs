@@ -12,10 +12,12 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// Supports both standard and SSL connections via MongoDbPersistenceOptions.
 /// Uses locking mechanism for timeout batch retrieval to prevent duplicate dispatch.
 /// </summary>
-public class MongoDbProcessManagerFinder : IProcessManagerFinder
+public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeoutStore
 {
     private readonly IMongoDatabase _mongoDatabase;
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
+    private bool _timeoutIndexEnsured;
     private const string TimeoutsCollectionName = "Timeouts";
 
     public event TimeoutInsertedDelegate? TimeoutInserted;
@@ -35,10 +37,14 @@ public class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
-    public IPersistenceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+    public IPersistenceData<T>? FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
     {
-        var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
-                      mapper.Mappings.First(m => m.MessageType == typeof(Message));
+        var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
+                      ?? mapper.Mappings.FirstOrDefault(m => m.MessageType == typeof(Message));
+
+        if (mapping == null)
+            throw new InvalidOperationException(
+                $"No property mapping configured for message type '{message.GetType().FullName}' or the base Message type.");
 
         var collectionName = typeof(T).Name;
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
@@ -111,7 +117,7 @@ public class MongoDbProcessManagerFinder : IProcessManagerFinder
             var method = GetType().GetMethod(nameof(InsertDataTyped),
                 BindingFlags.NonPublic | BindingFlags.Instance)!;
             var genericMethod = method.MakeGenericMethod(dataType);
-            genericMethod.Invoke(this, new object[] { data, collectionName });
+            genericMethod.Invoke(this, [data, collectionName]);
         }
         catch (TargetInvocationException ex) when (ex.InnerException is MongoException mongoEx)
         {
@@ -158,21 +164,26 @@ public class MongoDbProcessManagerFinder : IProcessManagerFinder
                 Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, versionData.Data.CorrelationId),
                 Builders<MongoDbData<T>>.Filter.Eq(x => x.Version, currentVersion)
             );
-            versionData.Version += 1;
+            versionData.Version = currentVersion + 1;
             var result = collection.ReplaceOne(filter, versionData);
 
             if (result.IsAcknowledged && result.ModifiedCount == 0)
             {
-                throw new ArgumentException(
-                    $"Possible Concurrency Error. ProcessManagerData with CorrelationId {versionData.Data.CorrelationId} and Version {currentVersion} could not be updated.");
+                // Revert the version so the in-memory object stays consistent on failure
+                versionData.Version = currentVersion;
+                throw new PersistenceException(
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {versionData.Data.CorrelationId} and Version {currentVersion} could not be updated.");
             }
         }
-        catch (ArgumentException)
+        catch (PersistenceException)
         {
             throw;
         }
         catch (MongoException ex)
         {
+            // Revert the version so the in-memory object stays consistent on transport failure
+            if (persistenceData is MongoDbData<T> vd)
+                vd.Version = vd.Version > 0 ? vd.Version - 1 : 0;
             throw new PersistenceException(
                 $"Failed to update process manager data with CorrelationId '{persistenceData.Data.CorrelationId}'.", ex);
         }
@@ -217,7 +228,7 @@ public class MongoDbProcessManagerFinder : IProcessManagerFinder
     {
         try
         {
-            var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
+            var retval = new TimeoutsBatch { DueTimeouts = [] };
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             var utcNow = DateTime.UtcNow;
 
@@ -286,15 +297,21 @@ public class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
-    private static void EnsureCorrelationIdIndex<T>(IMongoCollection<MongoDbData<T>> collection) where T : class, IProcessManagerData
+    private void EnsureCorrelationIdIndex<T>(IMongoCollection<MongoDbData<T>> collection) where T : class, IProcessManagerData
     {
+        var collectionName = typeof(T).Name;
+        if (!_indexedCollections.TryAdd(collectionName, true)) return;
+
         var indexKeys = Builders<MongoDbData<T>>.IndexKeys.Ascending(x => x.Data.CorrelationId);
         var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys);
         collection.Indexes.CreateOne(indexModel);
     }
 
-    private static void EnsureTimeoutIndex(IMongoCollection<TimeoutData> collection)
+    private void EnsureTimeoutIndex(IMongoCollection<TimeoutData> collection)
     {
+        if (_timeoutIndexEnsured) return;
+        _timeoutIndexEnsured = true;
+
         var indexKeys = Builders<TimeoutData>.IndexKeys.Ascending(x => x.Id);
         var indexModel = new CreateIndexModel<TimeoutData>(indexKeys);
         collection.Indexes.CreateOne(indexModel);

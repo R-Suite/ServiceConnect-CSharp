@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -78,7 +80,7 @@ namespace ServiceConnect.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act / Assert
-            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = data }));
+            Assert.Throws<PersistenceException>(() => processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = data }));
         }
 
         [Fact]
@@ -89,8 +91,8 @@ namespace ServiceConnect.UnitTests
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             processManagerFinder.InsertData(data1);
 
-            var foundData1 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
-            var foundData2 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
+            var foundData1 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId))!;
+            var foundData2 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId))!;
 
             var foundData1Temp = new MemoryData<IProcessManagerData> { Data = foundData1.Data, Version = foundData1.Version };
             var foundData2Temp = new MemoryData<IProcessManagerData> { Data = foundData2.Data, Version = foundData2.Version };
@@ -98,7 +100,7 @@ namespace ServiceConnect.UnitTests
             processManagerFinder.UpdateData(foundData1Temp); // first update should be fine
 
             // Act / Assert
-            Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(foundData2Temp)); // second update should fail
+            Assert.Throws<PersistenceException>(() => processManagerFinder.UpdateData(foundData2Temp)); // second update should fail
         }
 
         [Fact]
@@ -127,6 +129,138 @@ namespace ServiceConnect.UnitTests
 
             // Assert
             Assert.Null(result);
+        }
+
+        // --- Timeout tests ---
+
+        private static TimeoutData MakeTimeoutData(Guid id, DateTime time) => new TimeoutData
+        {
+            Id = id,
+            Time = time,
+            Headers = new Dictionary<string, object>()
+        };
+
+        [Fact]
+        public void InsertTimeout_StoresTimeoutData()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var id = Guid.NewGuid();
+            finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddHours(-1)));
+
+            var batch = finder.GetTimeoutsBatch();
+            Assert.Single(batch.DueTimeouts);
+            Assert.Equal(id, batch.DueTimeouts[0].Id);
+        }
+
+        [Fact]
+        public void InsertTimeout_ThrowsWhenDuplicateId()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var id = Guid.NewGuid();
+            finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(5)));
+
+            Assert.Throws<ArgumentException>(() => finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(10))));
+        }
+
+        [Fact]
+        public void InsertTimeout_RaisesTimeoutInsertedEvent()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            DateTime? capturedTime = null;
+            finder.TimeoutInserted += time => capturedTime = time;
+
+            var expectedTime = DateTime.UtcNow.AddMinutes(5);
+            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), expectedTime));
+
+            Assert.Equal(expectedTime, capturedTime);
+        }
+
+        [Fact]
+        public void InsertTimeout_NoTimeoutInsertedSubscriber_DoesNotThrow()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+
+            var ex = Record.Exception(() => finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(5))));
+
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void GetTimeoutsBatch_WhenNoTimeouts_ReturnEmptyDueList()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+
+            var batch = finder.GetTimeoutsBatch();
+
+            Assert.Empty(batch.DueTimeouts);
+        }
+
+        [Fact]
+        public void GetTimeoutsBatch_FutureTimeout_NotInDueList()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddHours(1)));
+
+            var batch = finder.GetTimeoutsBatch();
+
+            Assert.Empty(batch.DueTimeouts);
+        }
+
+        [Fact]
+        public void GetTimeoutsBatch_FutureTimeout_SetsNextQueryTime()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var futureTime = DateTime.UtcNow.AddHours(1);
+            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), futureTime));
+
+            var batch = finder.GetTimeoutsBatch();
+
+            Assert.Equal(futureTime, batch.NextQueryTime);
+        }
+
+        [Fact]
+        public void GetTimeoutsBatch_NoFutureTimeouts_NextQueryTimeIsWithinOneMinute()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+
+            var batch = finder.GetTimeoutsBatch();
+            var expectedMax = DateTime.UtcNow.AddMinutes(1).AddSeconds(1);
+
+            Assert.True(batch.NextQueryTime <= expectedMax);
+        }
+
+        [Fact]
+        public void GetTimeoutsBatch_PastTimeout_IsInDueList()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddSeconds(-1)));
+
+            var batch = finder.GetTimeoutsBatch();
+
+            Assert.Single(batch.DueTimeouts);
+        }
+
+        [Fact]
+        public void RemoveDispatchedTimeout_RemovesTimeoutFromBatch()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var id = Guid.NewGuid();
+            finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddSeconds(-1)));
+
+            finder.RemoveDispatchedTimeout(id);
+
+            var batch = finder.GetTimeoutsBatch();
+            Assert.Empty(batch.DueTimeouts);
+        }
+
+        [Fact]
+        public void RemoveDispatchedTimeout_WhenIdDoesNotExist_DoesNotThrow()
+        {
+            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+
+            var ex = Record.Exception(() => finder.RemoveDispatchedTimeout(Guid.NewGuid()));
+
+            Assert.Null(ex);
         }
     }
 

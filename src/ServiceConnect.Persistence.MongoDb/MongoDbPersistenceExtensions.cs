@@ -18,7 +18,11 @@ public static class MongoDbPersistenceExtensions
             services.TryAddSingleton(options);
             services.TryAddSingleton(_ => MongoClientFactory.Create(options));
             services.TryAddSingleton<IAggregatorPersistor, MongoDbAggregatorPersistor>();
-            services.TryAddSingleton<IProcessManagerFinder, MongoDbProcessManagerFinder>();
+            services.TryAddSingleton<MongoDbProcessManagerFinder>();
+            services.TryAddSingleton<IProcessManagerFinder>(sp =>
+                sp.GetRequiredService<MongoDbProcessManagerFinder>());
+            services.TryAddSingleton<ITimeoutStore>(sp =>
+                sp.GetRequiredService<MongoDbProcessManagerFinder>());
         });
 
         return builder;

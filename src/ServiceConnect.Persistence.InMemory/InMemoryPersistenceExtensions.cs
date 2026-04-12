@@ -13,8 +13,12 @@ public static class InMemoryPersistenceExtensions
             services.TryAddSingleton<ICacheProvider, CacheProvider>();
             services.TryAddSingleton<IAggregatorPersistor>(_ =>
                 new InMemoryAggregatorPersistor("", "", ""));
-            services.TryAddSingleton<IProcessManagerFinder>(_ =>
+            services.TryAddSingleton<InMemoryProcessManagerFinder>(_ =>
                 new InMemoryProcessManagerFinder("", ""));
+            services.TryAddSingleton<IProcessManagerFinder>(sp =>
+                sp.GetRequiredService<InMemoryProcessManagerFinder>());
+            services.TryAddSingleton<ITimeoutStore>(sp =>
+                sp.GetRequiredService<InMemoryProcessManagerFinder>());
         });
         return builder;
     }

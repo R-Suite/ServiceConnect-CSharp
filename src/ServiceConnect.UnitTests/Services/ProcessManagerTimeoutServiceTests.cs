@@ -11,7 +11,7 @@ namespace ServiceConnect.UnitTests.Services;
 public class ProcessManagerTimeoutServiceTests
 {
     private readonly Mock<IBusConfiguration> _mockConfig = new();
-    private readonly Mock<IProcessManagerFinder> _mockFinder = new();
+    private readonly Mock<ITimeoutStore> _mockFinder = new();
     private readonly ILogger<ProcessManagerTimeoutService> _logger =
         new Mock<ILogger<ProcessManagerTimeoutService>>().Object;
 
