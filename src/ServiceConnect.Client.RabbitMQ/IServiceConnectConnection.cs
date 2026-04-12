@@ -2,10 +2,9 @@ using RabbitMQ.Client;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-public interface IServiceConnectConnection
+public interface IServiceConnectConnection : IAsyncDisposable
 {
     Task ConnectAsync();
     Task<IChannel> CreateChannelAsync();
-    void Dispose();
     bool IsConnected();
 }

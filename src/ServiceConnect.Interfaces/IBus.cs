@@ -5,7 +5,7 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// The core message bus interface for publishing, sending, and consuming messages.
 /// </summary>
-public interface IBus : IDisposable
+public interface IBus : IAsyncDisposable
 {
     /// <summary>
     /// Publishes a message to all subscribers of the message type.
@@ -53,7 +53,7 @@ public interface IBus : IDisposable
     /// <summary>
     /// Stops consuming messages and disposes the consumer.
     /// </summary>
-    void StopConsuming();
+    Task StopConsumingAsync();
 
     /// <summary>
     /// Gets whether the bus is currently consuming messages.

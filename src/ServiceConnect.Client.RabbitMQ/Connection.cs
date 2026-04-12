@@ -97,7 +97,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         try
         {
             if (conn.IsOpen)
-                await conn.CloseAsync();
+                await conn.CloseAsync().ConfigureAwait(false);
             conn.Dispose();
         }
         catch (Exception ex)
@@ -106,24 +106,4 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         }
     }
 
-    public void Dispose()
-    {
-        if (_connection == null) return;
-
-        var conn = _connection;
-        _connection = null;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                if (conn.IsOpen)
-                    await conn.CloseAsync();
-                conn.Dispose();
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "Error closing connection during dispose");
-            }
-        });
-    }
 }

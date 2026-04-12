@@ -25,8 +25,8 @@ public class RoutingSlipForwardingTests
         var step1Queue = _fixture.GetUniqueQueueName("rslip-step1");
         var step2Queue = _fixture.GetUniqueQueueName("rslip-step2");
 
-        var step1Called = new TaskCompletionSource<bool>();
-        var step2Called = new TaskCompletionSource<string>();
+        var step1Called = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var step2Called = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // --- Step 1 bus: handles the message, routing slip should forward to step2 ---
         var step1HandlerRefs = new List<HandlerReference>
@@ -125,8 +125,8 @@ public class RoutingSlipForwardingTests
         }
         finally
         {
-            step1Bus.Dispose();
-            step2Bus.Dispose();
+            await step1Bus.DisposeAsync();
+            await step2Bus.DisposeAsync();
             (step1Provider as IDisposable)?.Dispose();
             (step2Provider as IDisposable)?.Dispose();
         }

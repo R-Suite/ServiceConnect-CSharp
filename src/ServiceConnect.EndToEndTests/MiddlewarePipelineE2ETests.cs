@@ -50,7 +50,7 @@ public class MiddlewarePipelineE2ETests
     public async Task SendMiddleware_AddsHeader_ReceivedByConsumer()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<IDictionary<string, object>>();
+        var tcs = new TaskCompletionSource<IDictionary<string, object>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("mw-pipeline");
 
         var handlerReferences = new List<HandlerReference>
@@ -119,7 +119,7 @@ public class MiddlewarePipelineE2ETests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

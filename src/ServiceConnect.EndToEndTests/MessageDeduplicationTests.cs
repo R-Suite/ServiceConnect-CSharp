@@ -59,7 +59,7 @@ public class MessageDeduplicationTests
     {
         // Arrange
         var receivedMessages = new ConcurrentBag<string>();
-        var firstReceived = new TaskCompletionSource<bool>();
+        var firstReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("dedup");
         var sharedMessageId = Guid.NewGuid().ToString();
         var dedupFilter = new TestDeduplicationFilter();
@@ -147,7 +147,7 @@ public class MessageDeduplicationTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

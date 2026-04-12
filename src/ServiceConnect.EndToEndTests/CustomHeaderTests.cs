@@ -23,7 +23,7 @@ public class CustomHeaderTests
     public async Task PublishAsync_CustomHeaders_ReceivedByHandler()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<IDictionary<string, object>>();
+        var tcs = new TaskCompletionSource<IDictionary<string, object>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("customheader");
 
         var handlerReferences = new List<HandlerReference>
@@ -87,7 +87,7 @@ public class CustomHeaderTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }
@@ -182,9 +182,9 @@ public class CustomHeaderTests
         }
         finally
         {
-            responderBus.Dispose();
+            await responderBus.DisposeAsync();
             (responderProvider as IDisposable)?.Dispose();
-            requesterBus.Dispose();
+            await requesterBus.DisposeAsync();
             (requesterProvider as IDisposable)?.Dispose();
         }
     }

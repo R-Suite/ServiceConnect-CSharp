@@ -29,7 +29,7 @@ public class ConsumeContextReplyTests
         // Arrange
         var responderQueue = _fixture.GetUniqueQueueName("ctx-reply-responder");
         var requesterQueue = _fixture.GetUniqueQueueName("ctx-reply-requester");
-        var replyTcs = new TaskCompletionSource<TestResponse>();
+        var replyTcs = new TaskCompletionSource<TestResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // --- Responder: handles TestRequest and uses Context.ReplyAsync ---
         var responderHandlerRefs = new List<HandlerReference>
@@ -118,9 +118,9 @@ public class ConsumeContextReplyTests
         }
         finally
         {
-            responderBus.Dispose();
+            await responderBus.DisposeAsync();
             (responderProvider as IDisposable)?.Dispose();
-            requesterBus.Dispose();
+            await requesterBus.DisposeAsync();
             (requesterProvider as IDisposable)?.Dispose();
         }
     }

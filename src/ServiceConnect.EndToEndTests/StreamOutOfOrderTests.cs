@@ -24,7 +24,7 @@ public class StreamOutOfOrderTests
     public async Task Stream_MultipleChunks_ReassembledCorrectly()
     {
         // Arrange
-        var completed = new TaskCompletionSource<byte[]>();
+        var completed = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var consumerQueue = _fixture.GetUniqueQueueName("stream-ooo-consumer");
         var producerQueue = _fixture.GetUniqueQueueName("stream-ooo-producer");
 
@@ -120,8 +120,8 @@ public class StreamOutOfOrderTests
         }
         finally
         {
-            consumerBus.Dispose();
-            producerBus.Dispose();
+            await consumerBus.DisposeAsync();
+            await producerBus.DisposeAsync();
             (consumerProvider as IDisposable)?.Dispose();
             (producerProvider as IDisposable)?.Dispose();
         }

@@ -25,7 +25,7 @@ public class QueuePurgeTests
     {
         // Arrange: pre-populate queue with messages using raw RabbitMQ client
         var queueName = _fixture.GetUniqueQueueName("purge");
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var factory = new ConnectionFactory
         {
@@ -120,7 +120,7 @@ public class QueuePurgeTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

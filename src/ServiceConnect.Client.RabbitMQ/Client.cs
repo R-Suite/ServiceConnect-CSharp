@@ -8,7 +8,7 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-public sealed class Client : IDisposable, IAsyncDisposable
+public sealed class Client : IAsyncDisposable
 {
     private const ushort DefaultRetryCount = 60;
     private const ushort DefaultRetryTimeInSeconds = 10;
@@ -259,33 +259,6 @@ public sealed class Client : IDisposable, IAsyncDisposable
         }
     }
 
-    public void StopConsuming()
-    {
-        Dispose();
-    }
-
-    public void Dispose()
-    {
-        var deadline = Environment.TickCount64 + 5000;
-        while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
-        {
-            Thread.Sleep(50);
-        }
-
-        CloseChannel();
-
-        if (_autoDelete && _model != null)
-        {
-            var model = _model;
-            var queueName = _queueName;
-            _ = Task.Run(async () =>
-            {
-                try { await model.QueueDeleteAsync(queueName + ".Retries").ConfigureAwait(false); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Error deleting retry queue during dispose"); }
-            });
-        }
-    }
-
     public async ValueTask DisposeAsync()
     {
         var deadline = Environment.TickCount64 + 5000;
@@ -309,23 +282,6 @@ public sealed class Client : IDisposable, IAsyncDisposable
                 _logger.LogWarning(ex, "Error deleting retry queue");
             }
         }
-    }
-
-    private void CloseChannel()
-    {
-        if (_model == null) return;
-        try
-        {
-            if (_model.IsOpen)
-                _model.CloseAsync().GetAwaiter().GetResult();
-            _model.Dispose();
-        }
-        catch (ObjectDisposedException) { }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error closing channel during dispose");
-        }
-        _model = null;
     }
 
     private async Task CloseChannelAsync()

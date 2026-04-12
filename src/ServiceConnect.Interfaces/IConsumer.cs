@@ -3,7 +3,7 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// Consumes messages from the message broker.
 /// </summary>
-public interface IConsumer : IAsyncDisposable, IDisposable
+public interface IConsumer : IAsyncDisposable
 {
     /// <summary>
     /// Gets whether the consumer is currently connected to the broker.

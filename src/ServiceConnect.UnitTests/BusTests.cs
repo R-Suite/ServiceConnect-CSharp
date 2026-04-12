@@ -92,17 +92,17 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void StopConsuming_ShouldSetIsConnectedToFalse()
+        public async Task StopConsumingAsync_ShouldSetIsConnectedToFalse()
         {
             // StopConsuming can be called even without starting (no consumer needed)
-            _bus.StopConsuming();
+            await _bus.StopConsumingAsync();
             Assert.False(_bus.IsConnected);
         }
 
         [Fact]
-        public void Dispose_ShouldSetIsConnectedToFalse()
+        public async Task DisposeAsync_ShouldSetIsConnectedToFalse()
         {
-            _bus.Dispose();
+            await _bus.DisposeAsync();
             Assert.False(_bus.IsConnected);
         }
 

@@ -53,11 +53,12 @@ public class BusHostedServiceTests
     }
 
     [Fact]
-    public async Task StopAsync_CallsStopConsuming()
+    public async Task StopAsync_CallsStopConsumingAsync()
     {
+        _mockBus.Setup(b => b.StopConsumingAsync()).Returns(Task.CompletedTask);
         var sut = CreateSut();
         await sut.StopAsync(CancellationToken.None);
 
-        _mockBus.Verify(b => b.StopConsuming(), Times.Once);
+        _mockBus.Verify(b => b.StopConsumingAsync(), Times.Once);
     }
 }

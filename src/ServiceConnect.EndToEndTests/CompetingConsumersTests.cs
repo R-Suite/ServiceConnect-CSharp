@@ -26,7 +26,7 @@ public class CompetingConsumersTests
         // Arrange
         var queueName = _fixture.GetUniqueQueueName("competing");
         var allReceived = new ConcurrentBag<string>();
-        var allDone = new TaskCompletionSource<bool>();
+        var allDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         const int messageCount = 10;
         int totalReceived = 0;
 
@@ -117,9 +117,9 @@ public class CompetingConsumersTests
         }
         finally
         {
-            bus1.Dispose();
-            bus2.Dispose();
-            producerBus.Dispose();
+            await bus1.DisposeAsync();
+            await bus2.DisposeAsync();
+            await producerBus.DisposeAsync();
             (consumerProvider1 as IDisposable)?.Dispose();
             (consumerProvider2 as IDisposable)?.Dispose();
             (producerProvider as IDisposable)?.Dispose();

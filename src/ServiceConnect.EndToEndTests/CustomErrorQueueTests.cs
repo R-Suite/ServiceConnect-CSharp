@@ -108,7 +108,7 @@ public class CustomErrorQueueTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

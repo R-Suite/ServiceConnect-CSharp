@@ -100,7 +100,7 @@ public class ExceptionHandlerE2ETests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

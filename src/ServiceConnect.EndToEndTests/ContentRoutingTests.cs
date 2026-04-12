@@ -22,8 +22,8 @@ public class ContentRoutingTests
     public async Task Publish_DifferentMessageTypes_RoutedToCorrectHandlers()
     {
         // Arrange
-        var testMessageTcs = new TaskCompletionSource<TestMessage>();
-        var stepMessageTcs = new TaskCompletionSource<StepMessage>();
+        var testMessageTcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stepMessageTcs = new TaskCompletionSource<StepMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("content-routing");
 
         var handlerReferences = new List<HandlerReference>
@@ -96,7 +96,7 @@ public class ContentRoutingTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

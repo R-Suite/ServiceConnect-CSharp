@@ -22,7 +22,7 @@ public class EmptyMessageTests
     public async Task Publish_EmptyContent_HandlerReceivesMessageWithDefaults()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("emptymsg");
 
         var handlerReferences = new List<HandlerReference>
@@ -82,7 +82,7 @@ public class EmptyMessageTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

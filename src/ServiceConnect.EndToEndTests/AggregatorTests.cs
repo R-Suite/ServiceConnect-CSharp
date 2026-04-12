@@ -24,7 +24,7 @@ public class AggregatorTests
     public async Task Aggregator_BatchComplete_ExecutesWithAllMessages()
     {
         // Arrange
-        var executed = new TaskCompletionSource<IList<TestMessage>>();
+        var executed = new TaskCompletionSource<IList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("agg-batch");
 
         var handlerRefs = new List<HandlerReference>
@@ -84,7 +84,7 @@ public class AggregatorTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }
@@ -94,7 +94,7 @@ public class AggregatorTests
     public async Task Aggregator_Timeout_FlushesPartialBatch()
     {
         // Arrange
-        var executed = new TaskCompletionSource<IList<TestMessage>>();
+        var executed = new TaskCompletionSource<IList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("agg-timeout");
 
         var handlerRefs = new List<HandlerReference>
@@ -154,7 +154,7 @@ public class AggregatorTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

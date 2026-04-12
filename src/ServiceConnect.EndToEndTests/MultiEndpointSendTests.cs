@@ -27,8 +27,8 @@ public class MultiEndpointSendTests
         var queue2 = _fixture.GetUniqueQueueName("multi-endpoint-2");
         var senderQueue = _fixture.GetUniqueQueueName("multi-endpoint-sender");
 
-        var tcs1 = new TaskCompletionSource<TestMessage>();
-        var tcs2 = new TaskCompletionSource<TestMessage>();
+        var tcs1 = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs2 = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // --- Consumer 1 bus setup ---
         var consumer1HandlerReferences = new List<HandlerReference>
@@ -157,11 +157,11 @@ public class MultiEndpointSendTests
         }
         finally
         {
-            consumer1Bus.Dispose();
+            await consumer1Bus.DisposeAsync();
             (consumer1Provider as IDisposable)?.Dispose();
-            consumer2Bus.Dispose();
+            await consumer2Bus.DisposeAsync();
             (consumer2Provider as IDisposable)?.Dispose();
-            senderBus.Dispose();
+            await senderBus.DisposeAsync();
             (senderProvider as IDisposable)?.Dispose();
         }
     }

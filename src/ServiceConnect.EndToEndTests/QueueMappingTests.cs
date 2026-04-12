@@ -19,7 +19,7 @@ public class QueueMappingTests
     {
         var mappedQueue = _fixture.GetUniqueQueueName("qmap-target");
         var senderQueue = _fixture.GetUniqueQueueName("qmap-sender");
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Consumer on mapped queue
         var handlerRefs = new List<HandlerReference>
@@ -82,8 +82,8 @@ public class QueueMappingTests
         }
         finally
         {
-            consumerBus.Dispose(); (consumerProvider as IDisposable)?.Dispose();
-            senderBus.Dispose(); (senderProvider as IDisposable)?.Dispose();
+            await consumerBus.DisposeAsync(); (consumerProvider as IDisposable)?.Dispose();
+            await senderBus.DisposeAsync(); (senderProvider as IDisposable)?.Dispose();
         }
     }
 }

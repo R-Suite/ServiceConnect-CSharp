@@ -24,7 +24,7 @@ public class MultipleHandlerTests
     {
         // Arrange
         var bag = new ConcurrentBag<string>();
-        var tcs = new TaskCompletionSource<bool>();
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("multihandler");
 
         var handlerReferences = new List<HandlerReference>
@@ -91,7 +91,7 @@ public class MultipleHandlerTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

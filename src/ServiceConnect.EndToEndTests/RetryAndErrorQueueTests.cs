@@ -120,7 +120,7 @@ public class RetryAndErrorQueueTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }
@@ -132,7 +132,7 @@ public class RetryAndErrorQueueTests
         // Arrange
         var queueName = _fixture.GetUniqueQueueName("retry-transient");
         var errorQueueName = _fixture.GetUniqueQueueName("retry-transient-eq");
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         int attemptCount = 0;
         const int failuresBeforeSuccess = 1;
 
@@ -218,7 +218,7 @@ public class RetryAndErrorQueueTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

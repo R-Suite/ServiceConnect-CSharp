@@ -22,7 +22,7 @@ public class PolymorphicMessageTests
     public async Task Publish_DerivedMessage_BaseHandlerReceivesIt()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("polymorphic");
 
         var handlerReferences = new List<HandlerReference>
@@ -101,7 +101,7 @@ public class PolymorphicMessageTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

@@ -20,7 +20,7 @@ public class AutoStartConsumingE2ETests
     public async Task AutoStartConsuming_True_HandlerReceivesWithoutExplicitStart()
     {
         var queueName = _fixture.GetUniqueQueueName("autostart");
-        var receivedTcs = new TaskCompletionSource<TestMessage>();
+        var receivedTcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var handlerReferences = new List<HandlerReference>
         {

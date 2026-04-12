@@ -25,7 +25,7 @@ public class ProcessManagerMongoDbTests
     public async Task ProcessManager_TwoMessages_StateUpdatedCorrectly_MongoDb()
     {
         // Arrange
-        var secondHandled = new TaskCompletionSource<bool>();
+        var secondHandled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("pm");
         var correlationId = Guid.NewGuid();
 
@@ -101,7 +101,7 @@ public class ProcessManagerMongoDbTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

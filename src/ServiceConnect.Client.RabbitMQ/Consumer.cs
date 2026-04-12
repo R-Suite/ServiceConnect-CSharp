@@ -115,22 +115,17 @@ public sealed class Consumer : IConsumer
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         foreach (Client consumer in _clients)
         {
-            try { consumer.Dispose(); }
+            try { await consumer.DisposeAsync().ConfigureAwait(false); }
             catch (ObjectDisposedException) { }
         }
 
         _model = null;
-        _connection?.Dispose();
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        Dispose();
-        return ValueTask.CompletedTask;
+        if (_connection != null)
+            await _connection.DisposeAsync().ConfigureAwait(false);
     }
 
     private async Task ConfigureExchangeAsync(string exchangeName, string type)

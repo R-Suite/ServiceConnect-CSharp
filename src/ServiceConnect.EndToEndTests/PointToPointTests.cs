@@ -58,7 +58,7 @@ public class PointToPointTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
         }
     }
 
@@ -78,7 +78,7 @@ public class PointToPointTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
         }
     }
 }

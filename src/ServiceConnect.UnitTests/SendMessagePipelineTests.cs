@@ -104,7 +104,7 @@ namespace ServiceConnect.UnitTests
             pipeline.Dispose();
 
             // Producer lifetime is managed by the DI container, not by the pipeline
-            _mockProducer.Verify(p => p.Dispose(), Times.Never);
+            _mockProducer.Verify(p => p.DisposeAsync(), Times.Never);
         }
 
         [Fact]
@@ -116,7 +116,7 @@ namespace ServiceConnect.UnitTests
             pipeline.Dispose();
 
             // No exception thrown — dispose is idempotent
-            _mockProducer.Verify(p => p.Dispose(), Times.Never);
+            _mockProducer.Verify(p => p.DisposeAsync(), Times.Never);
         }
     }
 }

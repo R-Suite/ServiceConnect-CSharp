@@ -22,7 +22,7 @@ public class PublisherConfirmsTests
     public async Task PublisherConfirms_Enabled_MessageAcknowledgedByBroker()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("pub-confirms");
 
         var handlerReferences = new List<HandlerReference>
@@ -81,7 +81,7 @@ public class PublisherConfirmsTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

@@ -3,7 +3,7 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// Produces messages to the message broker.
 /// </summary>
-public interface IProducer : IAsyncDisposable, IDisposable
+public interface IProducer : IAsyncDisposable
 {
     /// <summary>
     /// Publishes a serialized message to all subscribers of the specified type.

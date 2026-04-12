@@ -23,7 +23,7 @@ public class AuditingTests
     public async Task AuditingEnabled_SuccessfulMessage_CopiedToAuditQueue()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("audit-enabled");
         var auditQueueName = _fixture.GetUniqueQueueName("audit-enabled-aq");
 
@@ -110,7 +110,7 @@ public class AuditingTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }
@@ -120,7 +120,7 @@ public class AuditingTests
     public async Task AuditingDisabled_SuccessfulMessage_NotCopiedToAuditQueue()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("audit-disabled");
         var auditQueueName = _fixture.GetUniqueQueueName("audit-disabled-aq");
 
@@ -206,7 +206,7 @@ public class AuditingTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

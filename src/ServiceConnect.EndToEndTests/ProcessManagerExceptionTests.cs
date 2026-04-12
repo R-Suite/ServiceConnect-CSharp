@@ -114,7 +114,7 @@ public class ProcessManagerExceptionTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

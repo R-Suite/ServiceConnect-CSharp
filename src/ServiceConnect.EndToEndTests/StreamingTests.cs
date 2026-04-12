@@ -24,7 +24,7 @@ public class StreamingTests
     public async Task CreateStream_WritesChunks_HandlerReceivesCompleteData()
     {
         // Arrange
-        var completed = new TaskCompletionSource<byte[]>();
+        var completed = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var consumerQueue = _fixture.GetUniqueQueueName("stream-consumer");
         var producerQueue = _fixture.GetUniqueQueueName("stream-producer");
 
@@ -116,8 +116,8 @@ public class StreamingTests
         }
         finally
         {
-            consumerBus.Dispose();
-            producerBus.Dispose();
+            await consumerBus.DisposeAsync();
+            await producerBus.DisposeAsync();
             (consumerProvider as IDisposable)?.Dispose();
             (producerProvider as IDisposable)?.Dispose();
         }

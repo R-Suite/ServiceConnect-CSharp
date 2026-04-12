@@ -70,7 +70,7 @@ public class FilterChainTests
     {
         // Arrange
         ExecutionOrder.Clear();
-        var handlerTcs = new TaskCompletionSource<TestMessage>();
+        var handlerTcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("filter-chain-order");
 
         var handlerReferences = new List<HandlerReference>
@@ -130,7 +130,7 @@ public class FilterChainTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }
@@ -141,7 +141,7 @@ public class FilterChainTests
     {
         // Arrange
         ExecutionOrder.Clear();
-        var handlerTcs = new TaskCompletionSource<TestMessage>();
+        var handlerTcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("filter-chain-block");
 
         var handlerReferences = new List<HandlerReference>
@@ -199,7 +199,7 @@ public class FilterChainTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

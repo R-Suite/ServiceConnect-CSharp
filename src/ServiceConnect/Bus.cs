@@ -188,7 +188,7 @@ public sealed class Bus(
         }
     }
 
-    public void StopConsuming()
+    public async Task StopConsumingAsync()
     {
         bool shouldDispose = false;
         lock (_stateLock)
@@ -201,11 +201,11 @@ public sealed class Bus(
             }
         }
         // Dispose outside the lock to avoid deadlock with consumer callback chain
-        if (shouldDispose)
-            _consumer?.Dispose();
+        if (shouldDispose && _consumer != null)
+            await _consumer.DisposeAsync().ConfigureAwait(false);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         lock (_stateLock)
         {
@@ -213,9 +213,10 @@ public sealed class Bus(
             _disposed = true;
         }
 
-        StopConsuming();
+        await StopConsumingAsync().ConfigureAwait(false);
         _sendPipeline.Dispose();
-        _producer?.Dispose();
+        if (_producer != null)
+            await _producer.DisposeAsync().ConfigureAwait(false);
     }
 
     private void ThrowIfDisposed()

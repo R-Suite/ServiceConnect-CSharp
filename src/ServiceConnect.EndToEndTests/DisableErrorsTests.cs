@@ -29,7 +29,7 @@ public class DisableErrorsTests
         // So _errorsDisabled=true prevents audit publishing.
 
         // Arrange
-        var tcs = new TaskCompletionSource<TestMessage>();
+        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("disable-errors");
         var auditQueueName = _fixture.GetUniqueQueueName("disable-errors-aq");
 
@@ -114,7 +114,7 @@ public class DisableErrorsTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

@@ -180,22 +180,10 @@ public sealed class Producer : IProducer
         finally { _publishLock.Release(); }
     }
 
-    public Task DisconnectAsync()
+    public async Task DisconnectAsync()
     {
         _logger.LogDebug("In Producer.DisconnectAsync()");
-        Dispose();
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _ = Task.Run(async () =>
-        {
-            try { await DisposeAsyncCore().ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogDebug(ex, "Error during fire-and-forget dispose"); }
-        });
+        await DisposeAsync().ConfigureAwait(false);
     }
 
     public async ValueTask DisposeAsync()

@@ -26,9 +26,8 @@ public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
-        bus.StopConsuming();
-        return Task.CompletedTask;
+        await bus.StopConsumingAsync().ConfigureAwait(false);
     }
 }

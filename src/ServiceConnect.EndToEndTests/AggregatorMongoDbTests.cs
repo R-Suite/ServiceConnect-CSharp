@@ -24,7 +24,7 @@ public class AggregatorMongoDbTests
     public async Task Aggregator_BatchComplete_ExecutesWithAllMessages_MongoDb()
     {
         // Arrange
-        var executed = new TaskCompletionSource<IList<TestMessage>>();
+        var executed = new TaskCompletionSource<IList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("agg-mongo");
 
         var handlerRefs = new List<HandlerReference>
@@ -88,7 +88,7 @@ public class AggregatorMongoDbTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

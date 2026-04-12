@@ -27,7 +27,7 @@ public class PriorityQueueTests
         var queueName = _fixture.GetUniqueQueueName("priority");
         var receivedPriorities = new ConcurrentQueue<int>();
         const int messageCount = 6;
-        var allReceived = new TaskCompletionSource<bool>();
+        var allReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         int totalReceived = 0;
 
         // Pre-declare the priority queue using raw RabbitMQ.Client before consumer starts,
@@ -147,8 +147,8 @@ public class PriorityQueueTests
         }
         finally
         {
-            consumerBus.Dispose();
-            producerBus.Dispose();
+            await consumerBus.DisposeAsync();
+            await producerBus.DisposeAsync();
             (consumerProvider as IDisposable)?.Dispose();
             (producerProvider as IDisposable)?.Dispose();
         }

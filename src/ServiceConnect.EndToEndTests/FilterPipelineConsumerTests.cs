@@ -47,7 +47,7 @@ public class FilterPipelineConsumerTests
     public async Task BeforeConsumingFilter_Blocks_HandlerNotInvoked()
     {
         // Arrange
-        var handlerInvokedTcs = new TaskCompletionSource<TestMessage>();
+        var handlerInvokedTcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("filter-blocking");
 
         var handlerReferences = new List<HandlerReference>
@@ -100,7 +100,7 @@ public class FilterPipelineConsumerTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }
@@ -110,7 +110,7 @@ public class FilterPipelineConsumerTests
     public async Task AfterConsumingFilter_RunsAfterHandler()
     {
         // Arrange
-        var filterSignalTcs = new TaskCompletionSource();
+        var filterSignalTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("filter-after");
 
         var handlerReferences = new List<HandlerReference>
@@ -166,7 +166,7 @@ public class FilterPipelineConsumerTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

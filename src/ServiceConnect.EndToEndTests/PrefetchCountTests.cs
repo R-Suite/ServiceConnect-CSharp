@@ -25,7 +25,7 @@ public class PrefetchCountTests
         // Arrange
         const int messageCount = 3;
         var concurrencyLog = new ConcurrentBag<int>();
-        var allDone = new TaskCompletionSource<bool>();
+        var allDone = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("prefetch");
 
         // Shared state passed into each handler instance
@@ -88,7 +88,7 @@ public class PrefetchCountTests
         }
         finally
         {
-            bus.Dispose();
+            await bus.DisposeAsync();
             (provider as IDisposable)?.Dispose();
         }
     }

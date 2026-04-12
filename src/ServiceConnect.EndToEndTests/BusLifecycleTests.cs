@@ -37,7 +37,7 @@ public class BusLifecycleTests
         await bus.StartConsumingAsync();
         Assert.True(bus.IsConnected);
 
-        bus.StopConsuming();
+        await bus.StopConsumingAsync();
         Assert.False(bus.IsConnected);
     }
 
@@ -58,7 +58,7 @@ public class BusLifecycleTests
         await bus.StartConsumingAsync();
         Assert.True(bus.IsConnected);
 
-        bus.Dispose();
+        await bus.DisposeAsync();
         Assert.False(bus.IsConnected);
     }
 
@@ -69,10 +69,10 @@ public class BusLifecycleTests
 
         await bus.StartConsumingAsync();
 
-        var exception = Record.Exception(() =>
+        var exception = await Record.ExceptionAsync(async () =>
         {
-            bus.Dispose();
-            bus.Dispose();
+            await bus.DisposeAsync();
+            await bus.DisposeAsync();
         });
 
         Assert.Null(exception);
