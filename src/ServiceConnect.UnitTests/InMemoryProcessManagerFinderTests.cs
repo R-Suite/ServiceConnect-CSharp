@@ -51,7 +51,7 @@ namespace ServiceConnect.UnitTests
             processManagerFinder.InsertData(data);
 
             // Act / Assert
-            Assert.Throws<ArgumentException>(() => processManagerFinder.InsertData(dataWithDuplicateId));
+            Assert.Throws<PersistenceException>(() => processManagerFinder.InsertData(dataWithDuplicateId));
         }
 
         [Fact]
@@ -159,7 +159,7 @@ namespace ServiceConnect.UnitTests
             var id = Guid.NewGuid();
             finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(5)));
 
-            Assert.Throws<ArgumentException>(() => finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(10))));
+            Assert.Throws<PersistenceException>(() => finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(10))));
         }
 
         [Fact]

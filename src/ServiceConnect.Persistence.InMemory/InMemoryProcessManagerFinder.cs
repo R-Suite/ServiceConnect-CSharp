@@ -130,7 +130,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
             }
             else
             {
-                throw new ArgumentException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
+                throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
             }
         }
     }
@@ -211,7 +211,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
             }
             else
             {
-                throw new ArgumentException($"TimeoutData with Id {key} already exists in the cache.");
+                throw new PersistenceException($"TimeoutData with Id {key} already exists in the cache.");
             }
         }
 
