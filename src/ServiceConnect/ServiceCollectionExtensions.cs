@@ -100,6 +100,13 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IList<HandlerReference>>(handlerReferences);
 
+        var registry = new MessageTypeRegistry();
+        foreach (var handlerRef in handlerReferences)
+        {
+            registry.Register(handlerRef.MessageType);
+        }
+        services.TryAddSingleton<IMessageTypeRegistry>(registry);
+
         // Apply additional registrations from builder extensions (e.g., persistence providers)
         foreach (var registration in builder.AdditionalRegistrations)
         {

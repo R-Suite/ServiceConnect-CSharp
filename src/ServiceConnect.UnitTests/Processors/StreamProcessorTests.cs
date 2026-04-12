@@ -15,7 +15,7 @@ public class StreamProcessorTests
     {
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object);
+        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object, new MessageTypeRegistry());
 
         var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "Send" };
         var envelope = new Envelope { Headers = headers, Body = Array.Empty<byte>() };
@@ -30,7 +30,7 @@ public class StreamProcessorTests
     {
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object);
+        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object, new MessageTypeRegistry());
 
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = Array.Empty<byte>() };
@@ -45,11 +45,11 @@ public class StreamProcessorTests
     {
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object);
+        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object, new MessageTypeRegistry());
 
         var headers = new Dictionary<string, object>
         {
-            [HeaderKeys.MessageType] = "ByteStream",
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
             [HeaderKeys.SequenceId] = "seq-1",
             [HeaderKeys.PacketNumber] = "0"
         };

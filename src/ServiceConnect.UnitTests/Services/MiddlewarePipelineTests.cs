@@ -7,8 +7,14 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
+using System.Text;
 
 namespace ServiceConnect.UnitTests.Services;
+
+file class TestMiddlewareMessage : Message
+{
+    public TestMiddlewareMessage() : base(Guid.NewGuid()) { }
+}
 
 #region Send middleware test types
 
@@ -21,23 +27,19 @@ file class RecordingSendMiddleware : ISendMessageMiddleware
         _log = log;
     }
 
-    public SendMessageDelegate Next { get; set; } = null!;
-
-    public async Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint = null)
+    public async Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next)
     {
         _log.Add("before");
-        await Next(typeObject, messageBytes, headers, endPoint);
+        await next(typeObject, messageBytes, headers, endPoint);
         _log.Add("after");
     }
 }
 
 file class ShortCircuitSendMiddleware : ISendMessageMiddleware
 {
-    public SendMessageDelegate Next { get; set; } = null!;
-
-    public Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint = null)
+    public Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next)
     {
-        // Intentionally does NOT call Next
+        // Intentionally does NOT call next
         return Task.CompletedTask;
     }
 }
@@ -55,13 +57,11 @@ file class RecordingProcessingMiddleware : IMessageProcessingMiddleware
         _log = log;
     }
 
-    public MessageProcessingDelegate Next { get; set; } = null!;
-
     public async Task<ConsumeEventResult> Process(byte[] messageBytes, Type messageType, object message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next)
     {
         _log.Add("before");
-        var result = await Next(messageBytes, messageType, message, headers, envelope);
+        var result = await next(messageBytes, messageType, message, headers, envelope);
         _log.Add("after");
         return result;
     }
@@ -69,10 +69,8 @@ file class RecordingProcessingMiddleware : IMessageProcessingMiddleware
 
 file class ShortCircuitProcessingMiddleware : IMessageProcessingMiddleware
 {
-    public MessageProcessingDelegate Next { get; set; } = null!;
-
     public Task<ConsumeEventResult> Process(byte[] messageBytes, Type messageType, object message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next)
     {
         return Task.FromResult(new ConsumeEventResult { Success = true });
     }
@@ -201,8 +199,11 @@ public class ProcessingMiddlewarePipelineTests
                 It.IsAny<IDictionary<string, object>>(), It.IsAny<Envelope>()))
             .Returns(() => { log.Add("processor"); return Task.FromResult(ProcessResult.Handled); });
 
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(string))).Returns("test");
+        var testMsg = new TestMiddlewareMessage();
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(TestMiddlewareMessage))).Returns(testMsg);
 
+        var registry = new MessageTypeRegistry();
+        registry.Register(typeof(TestMiddlewareMessage));
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
@@ -210,12 +211,13 @@ public class ProcessingMiddlewarePipelineTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             mockPipelineConfig.Object,
-            sp);
+            sp,
+            registry);
 
-        var headers = MakeHeaders(typeof(string));
+        var headers = MakeHeaders(typeof(TestMiddlewareMessage));
 
         // Act
-        var result = await dispatcher.Dispatch(new byte[] { 1 }, "String", headers);
+        var result = await dispatcher.Dispatch(new byte[] { 1 }, nameof(TestMiddlewareMessage), headers);
 
         // Assert
         Assert.True(result.Success);
@@ -237,8 +239,11 @@ public class ProcessingMiddlewarePipelineTests
         var mockProcessor = new Mock<IMessageProcessor>();
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
 
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(string))).Returns("test");
+        var testMsg = new TestMiddlewareMessage();
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(TestMiddlewareMessage))).Returns(testMsg);
 
+        var registry2 = new MessageTypeRegistry();
+        registry2.Register(typeof(TestMiddlewareMessage));
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
@@ -246,12 +251,13 @@ public class ProcessingMiddlewarePipelineTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             mockPipelineConfig.Object,
-            sp);
+            sp,
+            registry2);
 
-        var headers = MakeHeaders(typeof(string));
+        var headers = MakeHeaders(typeof(TestMiddlewareMessage));
 
         // Act
-        var result = await dispatcher.Dispatch(new byte[] { 1 }, "String", headers);
+        var result = await dispatcher.Dispatch(new byte[] { 1 }, nameof(TestMiddlewareMessage), headers);
 
         // Assert
         Assert.True(result.Success);

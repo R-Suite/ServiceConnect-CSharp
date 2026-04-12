@@ -4,6 +4,7 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
+using ServiceConnect.Services;
 
 namespace ServiceConnect.Persistence.MongoDb;
 
@@ -11,19 +12,21 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// MongoDB implementation of IAggregatorPersistor.
 /// Supports both standard and SSL connections via MongoDbPersistenceOptions.
 /// </summary>
-public class MongoDbAggregatorPersistor : IAggregatorPersistor
+public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 {
     private readonly IMongoCollection<AggregatorDocument> _collection;
     private readonly ILogger<MongoDbAggregatorPersistor> _logger;
+    private readonly IMessageTypeRegistry _typeRegistry;
 
-    public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger)
-        : this(options, "Aggregator", logger)
+    public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
+        : this(options, "Aggregator", logger, typeRegistry)
     {
     }
 
-    public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger)
+    public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
     {
         _logger = logger;
+        _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
 
         try
         {
@@ -68,15 +71,13 @@ public class MongoDbAggregatorPersistor : IAggregatorPersistor
 
             foreach (var doc in docs)
             {
-                var type = Type.GetType(doc.DataTypeName);
-                if (type != null)
-                {
-                    result.Add(BsonSerializer.Deserialize(doc.DataBson, type));
-                }
-                else
+                if (!_typeRegistry.TryResolve(doc.DataTypeName, out var type))
                 {
                     _logger.LogWarning("Cannot resolve type '{TypeName}' for aggregator data", doc.DataTypeName);
+                    continue;
                 }
+
+                result.Add(BsonSerializer.Deserialize(doc.DataBson, type));
             }
 
             return result;
@@ -108,7 +109,8 @@ public class MongoDbAggregatorPersistor : IAggregatorPersistor
         try
         {
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
-            return (int)_collection.CountDocuments(filter);
+            var count = _collection.CountDocuments(filter);
+            return count > int.MaxValue ? int.MaxValue : (int)count;
         }
         catch (MongoException ex)
         {

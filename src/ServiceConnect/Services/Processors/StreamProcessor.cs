@@ -6,19 +6,21 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public class StreamProcessor : IMessageProcessor, IDisposable
+public sealed class StreamProcessor : IMessageProcessor, IDisposable
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<StreamProcessor> _logger;
+    private readonly IMessageTypeRegistry _typeRegistry;
     private readonly ConcurrentDictionary<string, MessageBusReadStream> _activeStreams = new();
     private readonly ConcurrentDictionary<string, DateTime> _streamTimestamps = new();
     private readonly Timer _cleanupTimer;
     private static readonly TimeSpan StreamTimeout = TimeSpan.FromMinutes(5);
 
-    public StreamProcessor(IServiceProvider serviceProvider, ILogger<StreamProcessor> logger)
+    public StreamProcessor(IServiceProvider serviceProvider, ILogger<StreamProcessor> logger, IMessageTypeRegistry typeRegistry)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _cleanupTimer = new Timer(_ => EvictStaleStreams(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
     }
 
@@ -32,7 +34,7 @@ public class StreamProcessor : IMessageProcessor, IDisposable
             return ProcessResult.NotHandled;
 
         var msgType = msgTypeRaw is byte[] mtBytes ? Encoding.UTF8.GetString(mtBytes) : msgTypeRaw?.ToString();
-        if (msgType != "ByteStream")
+        if (msgType != HeaderKeys.ByteStream)
             return ProcessResult.NotHandled;
 
         if (!headers.TryGetValue(HeaderKeys.SequenceId, out var seqIdRaw))
@@ -41,7 +43,12 @@ public class StreamProcessor : IMessageProcessor, IDisposable
 
         if (!headers.TryGetValue(HeaderKeys.PacketNumber, out var pnRaw))
             return ProcessResult.NotHandled;
-        var packetNumber = long.Parse(pnRaw is byte[] pnBytes ? Encoding.UTF8.GetString(pnBytes) : pnRaw?.ToString()!);
+        var pnString = pnRaw is byte[] pnBytes ? Encoding.UTF8.GetString(pnBytes) : pnRaw?.ToString();
+        if (!long.TryParse(pnString, out var packetNumber))
+        {
+            _logger.LogWarning("Stream packet has invalid PacketNumber header '{Value}'; discarding", pnString);
+            return ProcessResult.Handled; // Handled to prevent infinite requeue
+        }
 
         var stream = _activeStreams.GetOrAdd(sequenceId, _ => new MessageBusReadStream { SequenceId = sequenceId });
 
@@ -50,7 +57,12 @@ public class StreamProcessor : IMessageProcessor, IDisposable
 
         if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
         {
-            var lastPacketNumber = long.Parse(lpnRaw is byte[] lpnBytes ? Encoding.UTF8.GetString(lpnBytes) : lpnRaw?.ToString()!);
+            var lpnString = lpnRaw is byte[] lpnBytes ? Encoding.UTF8.GetString(lpnBytes) : lpnRaw?.ToString();
+            if (!long.TryParse(lpnString, out var lastPacketNumber))
+            {
+                _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
+                return ProcessResult.Handled;
+            }
             stream.LastPacketNumber = lastPacketNumber;
         }
 
@@ -66,10 +78,9 @@ public class StreamProcessor : IMessageProcessor, IDisposable
             }
 
             var fullTypeName = ftnRaw is byte[] ftnBytes ? Encoding.UTF8.GetString(ftnBytes) : ftnRaw?.ToString();
-            var resolvedType = Type.GetType(fullTypeName!);
-            if (resolvedType == null)
+            if (!_typeRegistry.TryResolve(fullTypeName!, out var resolvedType))
             {
-                _logger.LogWarning("Cannot resolve type {TypeName} for completed stream", fullTypeName);
+                _logger.LogWarning("Unregistered type '{TypeName}' for completed stream. Rejecting", fullTypeName);
                 return ProcessResult.Handled;
             }
 
@@ -89,7 +100,9 @@ public class StreamProcessor : IMessageProcessor, IDisposable
             var originalMessage = serializer.Deserialize(assembledBytes, resolvedType);
 
             var executeMethod = handlerType.GetMethod("Execute");
-            executeMethod?.Invoke(handler, new[] { originalMessage });
+            var executeResult = executeMethod?.Invoke(handler, new[] { originalMessage });
+            if (executeResult is Task executeTask)
+                await executeTask.ConfigureAwait(false);
         }
 
         return ProcessResult.Handled;

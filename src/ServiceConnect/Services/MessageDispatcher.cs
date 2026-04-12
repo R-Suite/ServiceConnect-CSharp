@@ -13,7 +13,8 @@ public sealed class MessageDispatcher(
     ILogger<MessageDispatcher> logger,
     IBusConfiguration config,
     IPipelineConfiguration pipelineConfig,
-    IServiceProvider serviceProvider) : IMessageDispatcher
+    IServiceProvider serviceProvider,
+    IMessageTypeRegistry typeRegistry) : IMessageDispatcher
 {
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
     private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -22,6 +23,7 @@ public sealed class MessageDispatcher(
     private readonly IBusConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly IPipelineConfiguration _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
     private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
 
     public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers)
     {
@@ -35,12 +37,11 @@ public sealed class MessageDispatcher(
                 ? Encoding.UTF8.GetString(bytes)
                 : fullTypeNameRaw?.ToString() ?? throw new InvalidOperationException("FullTypeName header is null.");
 
-            var type = Type.GetType(fullTypeName)
-                ?? throw new InvalidOperationException($"Cannot resolve type '{fullTypeName}'.");
-
-            if (!typeof(Message).IsAssignableFrom(type))
-                throw new InvalidOperationException(
-                    $"Type '{fullTypeName}' does not derive from Message. Refusing to deserialize untrusted type.");
+            if (!_typeRegistry.TryResolve(fullTypeName, out var type))
+            {
+                _logger.LogWarning("Unregistered message type '{TypeName}'. Rejecting", fullTypeName);
+                return new ConsumeEventResult { Success = false };
+            }
 
             // 2. Build envelope
             var envelope = new Envelope { Headers = headers, Body = messageBytes };

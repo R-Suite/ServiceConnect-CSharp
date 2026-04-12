@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.Persistence.MongoDb;
+using ServiceConnect.Services;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
@@ -15,7 +16,7 @@ public class MongoDbAggregatorPersistorTests
         _fixture = fixture;
     }
 
-    private MongoDbAggregatorPersistor CreatePersistor(string collectionName = "TestAggregator")
+    private MongoDbAggregatorPersistor CreatePersistor(string collectionName = "TestAggregator", MessageTypeRegistry? registry = null)
     {
         var dbName = _fixture.GetUniqueDatabaseName();
         var options = new MongoDbPersistenceOptions
@@ -23,19 +24,25 @@ public class MongoDbAggregatorPersistorTests
             ConnectionString = _fixture.MongoDbConnectionString,
             DatabaseName = dbName
         };
-        return new MongoDbAggregatorPersistor(options, collectionName, NullLogger<MongoDbAggregatorPersistor>.Instance);
+        return new MongoDbAggregatorPersistor(options, collectionName, NullLogger<MongoDbAggregatorPersistor>.Instance, registry ?? new MessageTypeRegistry());
     }
 
     [Fact]
     [Trait("Category", "Docker")]
     public void InsertData_AndGetData_ReturnsInsertedItems()
     {
-        var persistor = CreatePersistor();
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
+        var item1 = new { Value = "item1", CorrelationId = correlationId1 };
+        var item2 = new { Value = "item2", CorrelationId = correlationId2 };
 
-        persistor.InsertData(new { Value = "item1", CorrelationId = correlationId1 }, "batch1");
-        persistor.InsertData(new { Value = "item2", CorrelationId = correlationId2 }, "batch1");
+        var registry = new MessageTypeRegistry();
+        registry.Register(item1.GetType());
+
+        var persistor = CreatePersistor(registry: registry);
+
+        persistor.InsertData(item1, "batch1");
+        persistor.InsertData(item2, "batch1");
 
         var result = persistor.GetData("batch1");
 

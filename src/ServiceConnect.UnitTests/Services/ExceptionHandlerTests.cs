@@ -43,6 +43,8 @@ public class ExceptionHandlerTests
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
         mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware).Returns(new List<Type>());
         var sp = new ServiceCollection().BuildServiceProvider();
+        var registry = new MessageTypeRegistry();
+        registry.Register(typeof(FakeMessage1));
         return new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
@@ -50,7 +52,8 @@ public class ExceptionHandlerTests
             NullLogger<MessageDispatcher>.Instance,
             _mockConfig.Object,
             mockPipelineConfig.Object,
-            sp);
+            sp,
+            registry);
     }
 
     [Fact]

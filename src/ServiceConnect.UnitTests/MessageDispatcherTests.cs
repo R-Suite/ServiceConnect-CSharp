@@ -79,13 +79,23 @@ public class MessageDispatcherTests
         return mock;
     }
 
+    private static MessageTypeRegistry CreateRegistryWithTypes(params Type[] types)
+    {
+        var registry = new MessageTypeRegistry();
+        foreach (var t in types)
+            registry.Register(t);
+        return registry;
+    }
+
     private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider)
     {
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_mockReplyManager.Object),
-            new HandlerProcessor(serviceProvider, NullLogger<HandlerProcessor>.Instance)
+            new HandlerProcessor(serviceProvider)
         };
+
+        var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
 
         return new MessageDispatcher(
             _mockSerializer.Object,
@@ -94,12 +104,14 @@ public class MessageDispatcherTests
             NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
-            serviceProvider);
+            serviceProvider,
+            registry);
     }
 
     private MessageDispatcher CreateDispatcherWithProcessors(IList<IMessageProcessor> processors)
     {
         var sp = new ServiceCollection().BuildServiceProvider();
+        var registry = CreateRegistryWithTypes(typeof(FakeMessage1));
         return new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
@@ -107,7 +119,8 @@ public class MessageDispatcherTests
             NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
-            sp);
+            sp,
+            registry);
     }
 
     [Fact]
@@ -295,6 +308,39 @@ public class MessageDispatcherTests
         // Assert
         Assert.True(result.Success);
         Assert.True(handler.Invoked);
+    }
+
+    [Fact]
+    public async Task Dispatch_UnregisteredType_ReturnsFailure()
+    {
+        // Arrange — empty registry, no types registered
+        var emptyRegistry = new MessageTypeRegistry();
+        var sp = new ServiceCollection().BuildServiceProvider();
+        var processors = new List<IMessageProcessor>
+        {
+            new ReplyProcessor(_mockReplyManager.Object),
+            new HandlerProcessor(sp)
+        };
+        var dispatcher = new MessageDispatcher(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            processors,
+            NullLogger<MessageDispatcher>.Instance,
+            new Mock<IBusConfiguration>().Object,
+            CreateEmptyPipelineConfig().Object,
+            sp,
+            emptyRegistry);
+
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes(typeof(FakeMessage1).AssemblyQualifiedName!)
+        };
+
+        // Act
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        // Assert
+        Assert.False(result.Success);
     }
 }
 
