@@ -1,5 +1,3 @@
-using System.Linq.Expressions;
-
 namespace ServiceConnect.Interfaces;
 
 public interface IProcessHandler<TData, TMessage>

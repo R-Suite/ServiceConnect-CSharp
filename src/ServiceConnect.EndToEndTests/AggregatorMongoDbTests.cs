@@ -3,6 +3,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
 
@@ -66,7 +67,7 @@ public class AggregatorMongoDbTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {

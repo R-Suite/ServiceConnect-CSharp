@@ -12,9 +12,9 @@ public static class SslConfigurationBuilder
             Version = transportSettings.SslProtocol,
             Enabled = true,
             AcceptablePolicyErrors = transportSettings.AcceptablePolicyErrors,
-            ServerName = transportSettings.ServerName,
+            ServerName = transportSettings.ServerName!,
             CertPassphrase = transportSettings.CertPassphrase,
-            CertPath = transportSettings.CertPath,
+            CertPath = transportSettings.CertPath!,
             Certs = transportSettings.Certs,
             CertificateSelectionCallback = transportSettings.CertificateSelectionCallback,
             CertificateValidationCallback = transportSettings.CertificateValidationCallback

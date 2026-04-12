@@ -28,13 +28,13 @@ public class BusLifecycleTests
     }
 
     [Fact]
-    public void Bus_StartsAndStopsConsuming_WithConsumer()
+    public async Task Bus_StartsAndStopsConsuming_WithConsumer()
     {
         var bus = CreateBus(withConsumer: true);
 
         Assert.False(bus.IsConnected);
 
-        bus.StartConsuming();
+        await bus.StartConsumingAsync();
         Assert.True(bus.IsConnected);
 
         bus.StopConsuming();
@@ -42,20 +42,20 @@ public class BusLifecycleTests
     }
 
     [Fact]
-    public void Bus_StartConsuming_ThrowsWithoutConsumer()
+    public async Task Bus_StartConsuming_ThrowsWithoutConsumer()
     {
         var bus = CreateBus(withConsumer: false);
 
         Assert.False(bus.IsConnected);
-        Assert.Throws<InvalidOperationException>(() => bus.StartConsuming());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bus.StartConsumingAsync());
     }
 
     [Fact]
-    public void Bus_DisposesCleanly()
+    public async Task Bus_DisposesCleanly()
     {
         var bus = CreateBus(withConsumer: true);
 
-        bus.StartConsuming();
+        await bus.StartConsumingAsync();
         Assert.True(bus.IsConnected);
 
         bus.Dispose();
@@ -63,11 +63,11 @@ public class BusLifecycleTests
     }
 
     [Fact]
-    public void Bus_DoubleDispose_DoesNotThrow()
+    public async Task Bus_DoubleDispose_DoesNotThrow()
     {
         var bus = CreateBus(withConsumer: true);
 
-        bus.StartConsuming();
+        await bus.StartConsumingAsync();
 
         var exception = Record.Exception(() =>
         {

@@ -97,24 +97,26 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Dispose_DisposesProducer()
+        public void Dispose_DoesNotDisposeProducer_ProducerLifetimeManagedByContainer()
         {
             var pipeline = CreatePipeline();
 
             pipeline.Dispose();
 
-            _mockProducer.Verify(p => p.Dispose(), Times.Once);
+            // Producer lifetime is managed by the DI container, not by the pipeline
+            _mockProducer.Verify(p => p.Dispose(), Times.Never);
         }
 
         [Fact]
-        public void Dispose_CalledTwice_DisposesProducerOnlyOnce()
+        public void Dispose_CalledTwice_IsIdempotent()
         {
             var pipeline = CreatePipeline();
 
             pipeline.Dispose();
             pipeline.Dispose();
 
-            _mockProducer.Verify(p => p.Dispose(), Times.Once);
+            // No exception thrown — dispose is idempotent
+            _mockProducer.Verify(p => p.Dispose(), Times.Never);
         }
     }
 }

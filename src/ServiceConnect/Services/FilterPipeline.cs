@@ -4,30 +4,21 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Services;
 
-public class FilterPipeline : IFilterPipeline
+public sealed class FilterPipeline(IPipelineConfiguration config, IServiceProvider serviceProvider) : IFilterPipeline
 {
-    private readonly IPipelineConfiguration _config;
-    private readonly IServiceProvider _serviceProvider;
-
-    public FilterPipeline(IPipelineConfiguration config, IServiceProvider serviceProvider)
-    {
-        _config = config;
-        _serviceProvider = serviceProvider;
-    }
-
     public bool ExecuteOutgoingFilters(Envelope envelope)
     {
-        return ExecuteFilters(_config.OutgoingFilters, envelope);
+        return ExecuteFilters(config.OutgoingFilters, envelope);
     }
 
     public bool ExecuteBeforeConsumingFilters(Envelope envelope)
     {
-        return ExecuteFilters(_config.BeforeConsumingFilters, envelope);
+        return ExecuteFilters(config.BeforeConsumingFilters, envelope);
     }
 
     public bool ExecuteAfterConsumingFilters(Envelope envelope)
     {
-        return ExecuteFilters(_config.AfterConsumingFilters, envelope);
+        return ExecuteFilters(config.AfterConsumingFilters, envelope);
     }
 
     private bool ExecuteFilters(IList<Type> filterTypes, Envelope envelope)
@@ -37,7 +28,7 @@ public class FilterPipeline : IFilterPipeline
 
         foreach (Type filterType in filterTypes)
         {
-            var filter = (IFilter)_serviceProvider.GetRequiredService(filterType);
+            var filter = (IFilter)serviceProvider.GetRequiredService(filterType);
 
             bool continueProcessing = filter.Process(envelope);
             if (!continueProcessing)

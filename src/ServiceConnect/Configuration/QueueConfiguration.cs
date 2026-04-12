@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Configuration;
 
-public class QueueConfiguration : IQueueConfiguration
+public sealed class QueueConfiguration : IQueueConfiguration
 {
     public string QueueName { get; set; } = "";
     public string ErrorQueueName { get; set; } = "errors";

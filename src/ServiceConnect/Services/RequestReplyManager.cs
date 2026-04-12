@@ -1,18 +1,14 @@
 using System.Collections.Concurrent;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
+using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
-public class RequestReplyManager : IRequestReplyManager
+public sealed class RequestReplyManager(IMessageSerializer serializer) : IRequestReplyManager
 {
     private readonly ConcurrentDictionary<string, RequestState> _pendingRequests = new();
-    private readonly IMessageSerializer _serializer;
-
-    public RequestReplyManager(IMessageSerializer serializer)
-    {
-        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-    }
+    private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
 
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
@@ -25,20 +21,20 @@ public class RequestReplyManager : IRequestReplyManager
         var messageId = Guid.NewGuid();
         var messageIdStr = messageId.ToString();
         var tcs = new TaskCompletionSource<object>();
-        _pendingRequests[messageIdStr] = new RequestState(tcs, 1);
+        _pendingRequests[messageIdStr] = new RequestState(tcs, 1, typeof(TReply));
 
         headers[HeaderKeys.RequestMessageId] = messageIdStr;
 
-        if (!string.IsNullOrEmpty(options.EndPoint))
-            await sendAction(typeof(TRequest), messageBytes, headers, options.EndPoint);
-        else
-            await sendAction(typeof(TRequest), messageBytes, headers, null);
-
-        using var cts = new CancellationTokenSource(options.Timeout);
-        cts.Token.Register(() => tcs.TrySetCanceled());
-
         try
         {
+            if (!string.IsNullOrEmpty(options.EndPoint))
+                await sendAction(typeof(TRequest), messageBytes, headers, options.EndPoint);
+            else
+                await sendAction(typeof(TRequest), messageBytes, headers, null);
+
+            using var cts = new CancellationTokenSource(options.Timeout);
+            await using var reg = cts.Token.Register(() => tcs.TrySetCanceled());
+
             var result = await tcs.Task;
             return (TReply)result;
         }
@@ -66,7 +62,7 @@ public class RequestReplyManager : IRequestReplyManager
         int expectedCount = options.ExpectedReplyCount ?? options.EndPoints?.Count ?? -1;
         var tcs = new TaskCompletionSource<object>();
 
-        _pendingRequests[messageIdStr] = new RequestState(tcs, expectedCount, reply =>
+        _pendingRequests[messageIdStr] = new RequestState(tcs, expectedCount, typeof(TReply), reply =>
         {
             responses.Add((TReply)reply);
             if (expectedCount > 0 && responses.Count >= expectedCount)
@@ -90,7 +86,7 @@ public class RequestReplyManager : IRequestReplyManager
             using var cts = new CancellationTokenSource(options.Timeout);
             cts.Token.Register(() => tcs.TrySetResult(null!)); // timeout returns what we have
             await tcs.Task;
-            return responses.ToList();
+            return [.. responses];
         }
         finally
         {
@@ -103,7 +99,9 @@ public class RequestReplyManager : IRequestReplyManager
         if (!_pendingRequests.TryGetValue(messageId, out var state))
             return;
 
-        object reply = _serializer.Deserialize(messageBytes, type);
+        // Use the expected reply type stored at request time, not the wire-provided type.
+        // This prevents deserialization into attacker-controlled types via crafted reply messages.
+        object reply = _serializer.Deserialize(messageBytes, state.ReplyType);
 
         if (state.OnReply != null)
         {
@@ -119,5 +117,6 @@ public class RequestReplyManager : IRequestReplyManager
     private record RequestState(
         TaskCompletionSource<object> Tcs,
         int ExpectedCount,
+        Type ReplyType,
         Action<object>? OnReply = null);
 }

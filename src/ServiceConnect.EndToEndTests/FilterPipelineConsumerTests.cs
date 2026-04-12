@@ -84,7 +84,7 @@ public class FilterPipelineConsumerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -92,8 +92,8 @@ public class FilterPipelineConsumerTests
             var message = new TestMessage(Guid.NewGuid()) { Content = "should-be-blocked" };
             await bus.PublishAsync(message);
 
-            // Wait 2 seconds — the handler should NOT fire
-            var handlerWasCalled = await Task.WhenAny(handlerInvokedTcs.Task, Task.Delay(TimeSpan.FromSeconds(2))) == handlerInvokedTcs.Task;
+            // Wait 5 seconds — the handler should NOT fire
+            var handlerWasCalled = await Task.WhenAny(handlerInvokedTcs.Task, Task.Delay(TimeSpan.FromSeconds(5))) == handlerInvokedTcs.Task;
 
             // Assert
             Assert.False(handlerWasCalled, "Handler should not have been invoked because the before-consuming filter blocked the message.");
@@ -150,7 +150,7 @@ public class FilterPipelineConsumerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {

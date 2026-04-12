@@ -76,7 +76,7 @@ public class AggregatorProcessorTests
         Assert.Equal(ProcessResult.Handled, result);
 
         var executedMessages = await Task.WhenAny(tcs.Task, Task.Delay(2000)) == tcs.Task
-            ? tcs.Task.Result
+            ? await tcs.Task
             : null;
 
         Assert.NotNull(executedMessages);

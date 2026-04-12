@@ -3,11 +3,12 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
-[Collection(nameof(MessagingCollection))]
+[Collection(nameof(RequestReplyCollection))]
 public class ScatterGatherPartialTests
 {
     private readonly MessagingFixture _fixture;
@@ -123,7 +124,7 @@ public class ScatterGatherPartialTests
         await requesterBus.StartConsumingAsync();
 
         // Give consumers time to set up
-        await Task.Delay(500);
+        
 
         try
         {

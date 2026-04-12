@@ -3,6 +3,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
@@ -125,7 +126,7 @@ public class MultiEndpointSendTests
         var senderBus = senderProvider.GetRequiredService<IBus>();
 
         // Give consumers time to set up
-        await Task.Delay(500);
+        
 
         try
         {

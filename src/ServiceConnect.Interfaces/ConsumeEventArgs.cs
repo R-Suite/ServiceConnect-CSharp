@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace ServiceConnect.Interfaces;
+﻿namespace ServiceConnect.Interfaces;
 
 public class ConsumeEventArgs
 {

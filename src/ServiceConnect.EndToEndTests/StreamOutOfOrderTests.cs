@@ -21,7 +21,7 @@ public class StreamOutOfOrderTests
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task Stream_ManyChunks_ReassembledCorrectly()
+    public async Task Stream_MultipleChunks_ReassembledCorrectly()
     {
         // Arrange
         var completed = new TaskCompletionSource<byte[]>();
@@ -75,7 +75,7 @@ public class StreamOutOfOrderTests
         var consumerProvider = consumerServices.BuildServiceProvider();
         var consumerBus = consumerProvider.GetRequiredService<IBus>();
         await consumerBus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         // Producer bus
         var producerServices = new ServiceCollection();
@@ -102,14 +102,14 @@ public class StreamOutOfOrderTests
         try
         {
             // Act: create stream, write 5 chunks, close
-            using var stream = producerBus.CreateStream(consumerQueue, originalMessage);
+            await using var stream = producerBus.CreateStream(consumerQueue, originalMessage);
 
-            stream.Write(chunk1, 0, chunk1.Length);
-            stream.Write(chunk2, 0, chunk2.Length);
-            stream.Write(chunk3, 0, chunk3.Length);
-            stream.Write(chunk4, 0, chunk4.Length);
-            stream.Write(chunk5, 0, chunk5.Length);
-            stream.Close();
+            await stream.WriteAsync(chunk1, 0, chunk1.Length);
+            await stream.WriteAsync(chunk2, 0, chunk2.Length);
+            await stream.WriteAsync(chunk3, 0, chunk3.Length);
+            await stream.WriteAsync(chunk4, 0, chunk4.Length);
+            await stream.WriteAsync(chunk5, 0, chunk5.Length);
+            await stream.CloseAsync();
 
             // Assert: wait for handler to receive reassembled data
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));

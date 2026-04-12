@@ -71,7 +71,7 @@ public class MaxRetriesZeroTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -88,13 +88,13 @@ public class MaxRetriesZeroTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             BasicGetResult? errorMsg = null;
             for (int i = 0; i < 30 && errorMsg == null; i++)
             {
-                errorMsg = channel.BasicGet(errorQueueName, autoAck: true);
+                errorMsg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
                 if (errorMsg == null) await Task.Delay(500);
             }
 

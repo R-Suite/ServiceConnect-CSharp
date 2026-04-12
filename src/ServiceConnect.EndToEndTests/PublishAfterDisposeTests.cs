@@ -27,7 +27,7 @@ public class PublishAfterDisposeTests
             await provider.DisposeAsync();
         }
 
-        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
             await bus.PublishAsync(new TestMessage()));
     }
 

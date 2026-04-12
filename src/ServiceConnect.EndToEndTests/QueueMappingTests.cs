@@ -67,7 +67,7 @@ public class QueueMappingTests
         var senderProvider = senderServices.BuildServiceProvider();
         var senderBus = senderProvider.GetRequiredService<IBus>();
 
-        await Task.Delay(500);
+        
 
         try
         {

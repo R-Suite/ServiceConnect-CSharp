@@ -81,8 +81,6 @@ public class PublishSubscribeTests
         // Start consuming
         await bus.StartConsumingAsync();
 
-        // Give the consumer time to set up
-        await Task.Delay(500);
 
         try
         {

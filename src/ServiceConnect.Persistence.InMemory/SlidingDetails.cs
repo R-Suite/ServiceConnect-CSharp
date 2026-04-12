@@ -1,40 +1,37 @@
-using System;
+namespace ServiceConnect.Persistence.InMemory;
 
-namespace ServiceConnect.Persistence.InMemory
+public class SlidingDetails
 {
-    public class SlidingDetails
+    /// <summary>
+    /// Initialise une nouvelle instance de <see cref="SlidingDetails"/> class.
+    /// </summary>
+    /// <param name="relativeExpiry">The relative expiry.</param>
+    public SlidingDetails(TimeSpan relativeExpiry)
     {
-        /// <summary>
-        /// Initialise une nouvelle instance de <see cref="SlidingDetails"/> class.
-        /// </summary>
-        /// <param name="relativeExpiry">The relative expiry.</param>
-        public SlidingDetails(TimeSpan relativeExpiry)
-        {
-            RelativeExpiry = relativeExpiry;
-            Slide();
-        }
+        RelativeExpiry = relativeExpiry;
+        Slide();
+    }
 
-        private TimeSpan RelativeExpiry { get; set; }
+    private TimeSpan RelativeExpiry { get; set; }
 
-        private DateTime ExpireAt { get; set; }
+    private DateTime ExpireAt { get; set; }
 
-        /// <summary>
-        /// Determines whether this instance can expire the specified try after.
-        /// </summary>
-        /// <param name="tryAfter">The try after.</param>
-        /// <returns></returns>
-        public bool CanExpire(out TimeSpan tryAfter)
-        {
-            tryAfter = (ExpireAt - DateTime.Now);
-            return (0 > tryAfter.Ticks);
-        }
+    /// <summary>
+    /// Determines whether this instance can expire the specified try after.
+    /// </summary>
+    /// <param name="tryAfter">The try after.</param>
+    /// <returns></returns>
+    public bool CanExpire(out TimeSpan tryAfter)
+    {
+        tryAfter = ExpireAt - DateTime.UtcNow;
+        return 0 > tryAfter.Ticks;
+    }
 
-        /// <summary>
-        /// Slides this instance.
-        /// </summary>
-        public void Slide()
-        {
-            ExpireAt = DateTime.Now.Add(RelativeExpiry);
-        }
+    /// <summary>
+    /// Slides this instance.
+    /// </summary>
+    public void Slide()
+    {
+        ExpireAt = DateTime.UtcNow.Add(RelativeExpiry);
     }
 }

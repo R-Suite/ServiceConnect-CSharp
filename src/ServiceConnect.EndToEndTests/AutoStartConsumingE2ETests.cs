@@ -70,7 +70,7 @@ public class AutoStartConsumingE2ETests
             // BusHostedService.StartAsync triggers bus.StartConsumingAsync() — no manual call
             await host.StartAsync();
 
-            // Give the consumer time to bind its queue
+            // Give the hosted service time to complete StartConsumingAsync
             await Task.Delay(500);
 
             // Publish via the bus from the host's service provider

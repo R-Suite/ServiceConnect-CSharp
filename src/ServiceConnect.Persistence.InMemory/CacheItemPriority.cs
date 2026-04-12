@@ -1,8 +1,7 @@
-namespace ServiceConnect.Persistence.InMemory
+namespace ServiceConnect.Persistence.InMemory;
+
+public enum CacheItemPriority
 {
-    public enum CacheItemPriority
-    {
-        Normal,
-        High,
-    }
+    Normal,
+    High,
 }

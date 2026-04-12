@@ -3,6 +3,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -62,7 +63,7 @@ public class AggregatorTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -132,7 +133,7 @@ public class AggregatorTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {

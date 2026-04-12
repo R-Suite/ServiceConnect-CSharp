@@ -1,3 +1,5 @@
+using ServiceConnect.Interfaces.Options;
+
 namespace ServiceConnect.Interfaces;
 
 public interface IRequestReplyManager

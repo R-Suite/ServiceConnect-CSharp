@@ -20,7 +20,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider, new Mock<ILogger<HandlerProcessor>>().Object);
+        var processor = new HandlerProcessor(provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -39,7 +39,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider, new Mock<ILogger<HandlerProcessor>>().Object);
+        var processor = new HandlerProcessor(provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -55,7 +55,7 @@ public class HandlerProcessorTests
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider, new Mock<ILogger<HandlerProcessor>>().Object);
+        var processor = new HandlerProcessor(provider);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -74,7 +74,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider, new Mock<ILogger<HandlerProcessor>>().Object);
+        var processor = new HandlerProcessor(provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -82,6 +82,73 @@ public class HandlerProcessorTests
         await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
 
         Assert.NotNull(handler.Context);
+        Assert.Same(mockBus.Object, handler.Context.Bus);
+        Assert.Same(headers, handler.Context.Headers);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithRoutingSlip_ForwardsToNextDestination()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()))
+            .Returns(Task.CompletedTask);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(provider);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "Step2,Step3" };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.True(handler.Invoked);
+        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 2 && d[0] == "Step2" && d[1] == "Step3")), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithRoutingSlipBytes_ForwardsToNextDestination()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()))
+            .Returns(Task.CompletedTask);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(provider);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = System.Text.Encoding.UTF8.GetBytes("NextQueue") };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 1 && d[0] == "NextQueue")), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NoRoutingSlip_DoesNotCallRoute()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(provider);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()), Times.Never);
     }
 }
 

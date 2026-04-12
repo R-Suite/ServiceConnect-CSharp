@@ -1,5 +1,6 @@
 using System.Net.Security;
 using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using Moq;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces.Configuration;
@@ -18,7 +19,7 @@ public class SslConfigurationBuilderTests
         mock.Setup(t => t.CertPath).Returns("/path/to/cert.pem");
         mock.Setup(t => t.CertPassphrase).Returns("secret");
         mock.Setup(t => t.AcceptablePolicyErrors).Returns(SslPolicyErrors.RemoteCertificateNameMismatch);
-        mock.Setup(t => t.Certs).Returns((System.Security.Cryptography.X509Certificates.X509CertificateCollection?)null);
+        mock.Setup(t => t.Certs).Returns((X509CertificateCollection?)null);
 
         var result = SslConfigurationBuilder.BuildSslOptions(mock.Object);
 
@@ -39,5 +40,33 @@ public class SslConfigurationBuilderTests
         var result = SslConfigurationBuilder.BuildSslOptions(mock.Object);
 
         Assert.True(result.Enabled);
+    }
+
+    [Fact]
+    public void BuildSslOptions_SetsCertificateCallbacks()
+    {
+        LocalCertificateSelectionCallback selectionCallback = (_, _, _, _, _) => null!;
+        RemoteCertificateValidationCallback validationCallback = (_, _, _, _) => true;
+
+        var mock = new Mock<ITransportConfiguration>();
+        mock.Setup(t => t.CertificateSelectionCallback).Returns(selectionCallback);
+        mock.Setup(t => t.CertificateValidationCallback).Returns(validationCallback);
+
+        var result = SslConfigurationBuilder.BuildSslOptions(mock.Object);
+
+        Assert.Same(selectionCallback, result.CertificateSelectionCallback);
+        Assert.Same(validationCallback, result.CertificateValidationCallback);
+    }
+
+    [Fact]
+    public void BuildSslOptions_SetsCertificateCollection()
+    {
+        var certs = new X509CertificateCollection();
+        var mock = new Mock<ITransportConfiguration>();
+        mock.Setup(t => t.Certs).Returns(certs);
+
+        var result = SslConfigurationBuilder.BuildSslOptions(mock.Object);
+
+        Assert.Same(certs, result.Certs);
     }
 }

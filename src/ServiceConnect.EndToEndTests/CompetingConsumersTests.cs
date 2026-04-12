@@ -3,6 +3,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using System.Collections.Concurrent;
 using Xunit;
 
@@ -71,7 +72,7 @@ public class CompetingConsumersTests
 
         await bus1.StartConsumingAsync();
         await bus2.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         // We need a separate producer bus (its own queue) to send messages
         var producerServices = new ServiceCollection();

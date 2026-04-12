@@ -4,10 +4,10 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect;
 
-public class ServiceConnectBuilder
+public sealed class ServiceConnectBuilder
 {
     internal BusConfiguration BusConfig { get; } = new();
-    public List<Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>> AdditionalRegistrations { get; } = new();
+    public List<Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>> AdditionalRegistrations { get; } = [];
 
     public ServiceConnectBuilder ConfigureTransport(Action<ITransportConfiguration> configure)
     {

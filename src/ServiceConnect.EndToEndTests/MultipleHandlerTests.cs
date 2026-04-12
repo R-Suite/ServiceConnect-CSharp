@@ -71,7 +71,7 @@ public class MultipleHandlerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {

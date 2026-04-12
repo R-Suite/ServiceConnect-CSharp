@@ -36,25 +36,28 @@ public class QueuePurgeTests
         };
 
         // Create queue and publish stale messages directly
-        using (var conn = factory.CreateConnection())
-        using (var channel = conn.CreateModel())
         {
-            channel.QueueDeclare(queueName, durable: true, exclusive: false, autoDelete: false);
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
+
+            await channel.QueueDeclareAsync(queueName, durable: true, exclusive: false, autoDelete: false);
 
             // Bind to the TestMessage exchange so ServiceConnect can find it
             var exchangeName = typeof(TestMessage).FullName!;
-            channel.ExchangeDeclare(exchangeName, "fanout", durable: true);
-            channel.QueueBind(queueName, exchangeName, string.Empty);
+            await channel.ExchangeDeclareAsync(exchangeName, "fanout", durable: true);
+            await channel.QueueBindAsync(queueName, exchangeName, string.Empty);
 
             // Publish 3 stale messages
-            var props = channel.CreateBasicProperties();
-            props.Headers = new Dictionary<string, object>
+            var props = new BasicProperties
             {
-                ["MessageType"] = Encoding.UTF8.GetBytes(typeof(TestMessage).FullName!)
+                Headers = new Dictionary<string, object?>
+                {
+                    ["MessageType"] = Encoding.UTF8.GetBytes(typeof(TestMessage).FullName!)
+                }
             };
             for (int i = 0; i < 3; i++)
             {
-                channel.BasicPublish("", queueName, props, Encoding.UTF8.GetBytes($"{{\"Content\":\"stale-{i}\"}}"));
+                await channel.BasicPublishAsync("", queueName, mandatory: false, props, Encoding.UTF8.GetBytes($"{{\"Content\":\"stale-{i}\"}}"));
             }
         }
 

@@ -1,20 +1,11 @@
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public class HandlerProcessor : IMessageProcessor
+public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessageProcessor
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<HandlerProcessor> _logger;
-
-    public HandlerProcessor(IServiceProvider serviceProvider, ILogger<HandlerProcessor> logger)
-    {
-        _serviceProvider = serviceProvider;
-        _logger = logger;
-    }
-
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope)
@@ -28,7 +19,7 @@ public class HandlerProcessor : IMessageProcessor
         while (checkedType != null && checkedType != typeof(Message) && checkedType != typeof(object))
         {
             var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(checkedType);
-            var handlers = _serviceProvider.GetServices(handlerInterfaceType);
+            var handlers = serviceProvider.GetServices(handlerInterfaceType);
             foreach (var h in handlers)
             {
                 if (h != null)
@@ -40,7 +31,7 @@ public class HandlerProcessor : IMessageProcessor
         if (allHandlers.Count == 0)
             return ProcessResult.NotHandled;
 
-        var bus = _serviceProvider.GetRequiredService<IBus>();
+        var bus = serviceProvider.GetRequiredService<IBus>();
         var context = new ConsumeContext(bus, headers);
 
         foreach (var (handler, resolvedInterface) in allHandlers)
@@ -50,11 +41,37 @@ public class HandlerProcessor : IMessageProcessor
 
             contextProperty?.SetValue(handler, context);
 
-            var task = (Task?)handleAsyncMethod?.Invoke(handler, new[] { message });
+            var task = (Task?)handleAsyncMethod?.Invoke(handler, [message]);
             if (task != null)
                 await task;
         }
 
+        await ForwardRoutingSlipAsync(message, messageType, headers, bus);
+
         return ProcessResult.Handled;
+    }
+
+    private async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus)
+    {
+        if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
+            return;
+
+        var routingSlip = routingSlipRaw is byte[] bytes
+            ? Encoding.UTF8.GetString(bytes)
+            : routingSlipRaw?.ToString();
+
+        if (string.IsNullOrWhiteSpace(routingSlip))
+            return;
+
+        var destinations = routingSlip.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(d => d.Trim())
+            .ToList();
+
+        if (destinations.Count == 0)
+            return;
+
+        var routeMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!.MakeGenericMethod(messageType);
+        var task = (Task)routeMethod.Invoke(bus, [message, destinations])!;
+        await task;
     }
 }

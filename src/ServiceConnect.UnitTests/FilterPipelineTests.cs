@@ -142,7 +142,7 @@ namespace ServiceConnect.UnitTests
         {
             _mockServiceProvider
                 .Setup(sp => sp.GetService(typeof(FakeFilter1)))
-                .Returns(null);
+                .Returns(null!);
 
             _config.OutgoingFilters.Add(typeof(FakeFilter1));
 

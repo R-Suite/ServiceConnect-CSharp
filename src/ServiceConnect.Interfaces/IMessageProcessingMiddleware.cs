@@ -6,9 +6,8 @@ public delegate Task<ConsumeEventResult> MessageProcessingDelegate(
 
 public interface IMessageProcessingMiddleware
 {
-    MessageProcessingDelegate Next { get; set; }
-
     Task<ConsumeEventResult> Process(
         byte[] messageBytes, Type messageType, object message,
-        IDictionary<string, object> headers, Envelope envelope);
+        IDictionary<string, object> headers, Envelope envelope,
+        MessageProcessingDelegate next);
 }

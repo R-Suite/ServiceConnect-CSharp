@@ -8,37 +8,38 @@ namespace ServiceConnect.Services;
 /// Default implementation of ISendMessagePipeline that delegates directly to IProducer,
 /// optionally wrapping calls in a middleware chain from IPipelineConfiguration.
 /// </summary>
-public class SendMessagePipeline : ISendMessagePipeline
+public sealed class SendMessagePipeline(
+    IProducer producer,
+    IPipelineConfiguration pipelineConfig,
+    IServiceProvider serviceProvider) : ISendMessagePipeline
 {
-    private readonly IProducer _producer;
-    private readonly IPipelineConfiguration _pipelineConfig;
-    private readonly IServiceProvider _serviceProvider;
-    private bool _disposed;
-
-    public SendMessagePipeline(IProducer producer, IPipelineConfiguration pipelineConfig, IServiceProvider serviceProvider)
-    {
-        _producer = producer ?? throw new ArgumentNullException(nameof(producer));
-        _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-    }
+    private readonly IProducer _producer = producer ?? throw new ArgumentNullException(nameof(producer));
+    private readonly IPipelineConfiguration _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
+    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    private volatile bool _disposed;
 
     public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null)
     {
-        SendMessageDelegate terminal = (t, b, h, ep) => _producer.PublishAsync(t, b, h);
-        var chain = BuildChain(terminal);
-        return chain(typeObject, messageBytes, headers ?? new Dictionary<string, string>(), endPoint);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, IProducer prod) =>
+            prod.PublishAsync(t, b, h);
+
+        var chain = BuildChain((t, b, h, ep) => Terminal(t, b, h, ep, _producer));
+        return chain(typeObject, messageBytes, headers ?? [], endPoint);
     }
 
     public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null)
     {
-        SendMessageDelegate terminal = (t, b, h, ep) =>
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, IProducer prod)
         {
             if (!string.IsNullOrEmpty(ep))
-                return _producer.SendAsync(ep, t, b, h);
-            return _producer.SendAsync(t, b, h);
-        };
-        var chain = BuildChain(terminal);
-        return chain(typeObject, messageBytes, headers ?? new Dictionary<string, string>(), endPoint);
+                return prod.SendAsync(ep, t, b, h);
+            return prod.SendAsync(t, b, h);
+        }
+
+        var chain = BuildChain((t, b, h, ep) => Terminal(t, b, h, ep, _producer));
+        return chain(typeObject, messageBytes, headers ?? [], endPoint);
     }
 
     private SendMessageDelegate BuildChain(SendMessageDelegate terminal)
@@ -51,9 +52,8 @@ public class SendMessagePipeline : ISendMessagePipeline
         for (int i = middlewareTypes.Count - 1; i >= 0; i--)
         {
             var mw = (ISendMessageMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
-            mw.Next = chain;
-            var current = mw;
-            chain = (t, b, h, ep) => current.Process(t, b, h, ep);
+            var next = chain;
+            chain = (t, b, h, ep) => mw.Process(t, b, h, ep, next);
         }
         return chain;
     }
@@ -62,6 +62,6 @@ public class SendMessagePipeline : ISendMessagePipeline
     {
         if (_disposed) return;
         _disposed = true;
-        _producer.Dispose();
+        // Producer lifetime is managed by the DI container — do not dispose it here
     }
 }

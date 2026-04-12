@@ -5,7 +5,7 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Configuration;
 
-public class TransportConfiguration : ITransportConfiguration
+public sealed class TransportConfiguration : ITransportConfiguration
 {
     public string Host { get; set; } = "localhost";
     public string? Username { get; set; }

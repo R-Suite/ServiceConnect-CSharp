@@ -3,6 +3,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
@@ -61,7 +62,7 @@ public class CustomHeaderTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -160,7 +161,7 @@ public class CustomHeaderTests
         var requesterBus = requesterProvider.GetRequiredService<IBus>();
         await requesterBus.StartConsumingAsync();
 
-        await Task.Delay(500);
+        
 
         try
         {

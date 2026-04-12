@@ -66,7 +66,7 @@ public class PrefetchCountTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -126,7 +126,7 @@ file class SlowHandler : IMessageHandler<TestMessage>
         var concurrency = Interlocked.Increment(ref _state.CurrentConcurrency);
         _state.ConcurrencyLog.Add(concurrency);
 
-        await Task.Delay(500);
+        await Task.Delay(500); // Simulate slow processing to test prefetch behavior
 
         Interlocked.Decrement(ref _state.CurrentConcurrency);
 

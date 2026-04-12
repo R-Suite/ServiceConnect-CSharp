@@ -3,7 +3,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
-public class MessageBusReadStream : IMessageBusReadStream
+public sealed class MessageBusReadStream : IMessageBusReadStream
 {
     private readonly ConcurrentDictionary<long, byte[]> _packets = new();
 

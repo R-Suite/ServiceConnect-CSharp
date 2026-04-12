@@ -1,3 +1,5 @@
+using ServiceConnect.Interfaces.Options;
+
 namespace ServiceConnect.Interfaces;
 
 public interface IBus : IDisposable
@@ -12,7 +14,6 @@ public interface IBus : IDisposable
         where TRequest : Message where TReply : Message;
     Task RouteAsync<T>(T message, IList<string> destinations) where T : Message;
     IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message;
-    void StartConsuming();
     Task StartConsumingAsync();
     void StopConsuming();
     bool IsConnected { get; }

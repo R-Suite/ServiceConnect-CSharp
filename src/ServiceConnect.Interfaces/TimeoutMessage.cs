@@ -1,15 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+namespace ServiceConnect.Interfaces;
 
-namespace ServiceConnect.Interfaces
-{
-    public class TimeoutMessage : Message
-    {
-        public TimeoutMessage(Guid correlationId) : base(correlationId)
-        {
-        }
-    }
-}
+public class TimeoutMessage(Guid correlationId) : Message(correlationId);

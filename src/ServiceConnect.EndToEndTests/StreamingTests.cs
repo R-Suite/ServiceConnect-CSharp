@@ -73,7 +73,7 @@ public class StreamingTests
         var consumerProvider = consumerServices.BuildServiceProvider();
         var consumerBus = consumerProvider.GetRequiredService<IBus>();
         await consumerBus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         // Producer bus
         var producerServices = new ServiceCollection();
@@ -100,12 +100,12 @@ public class StreamingTests
         try
         {
             // Act: create stream, write chunks, close
-            using var stream = producerBus.CreateStream(consumerQueue, originalMessage);
+            await using var stream = producerBus.CreateStream(consumerQueue, originalMessage);
 
-            stream.Write(chunk1, 0, chunk1.Length);
-            stream.Write(chunk2, 0, chunk2.Length);
-            stream.Write(chunk3, 0, chunk3.Length);
-            stream.Close();
+            await stream.WriteAsync(chunk1, 0, chunk1.Length);
+            await stream.WriteAsync(chunk2, 0, chunk2.Length);
+            await stream.WriteAsync(chunk3, 0, chunk3.Length);
+            await stream.CloseAsync();
 
             // Assert: wait for handler to receive the complete reassembled data
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));

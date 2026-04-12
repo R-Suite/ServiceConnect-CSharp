@@ -2,7 +2,7 @@
 
 public class ConsumeEventArgs
 {
-    public byte[] Message { get; init; } = Array.Empty<byte>();
+    public byte[] Message { get; init; } = [];
 
     public string Type { get; init; } = string.Empty;
 

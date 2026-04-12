@@ -4,6 +4,7 @@ using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -64,7 +65,7 @@ public class ProcessManagerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {

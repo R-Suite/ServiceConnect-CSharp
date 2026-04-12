@@ -3,11 +3,12 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
-[Collection(nameof(MessagingCollection))]
+[Collection(nameof(RequestReplyCollection))]
 public class ConsumeContextReplyTests
 {
     private readonly MessagingFixture _fixture;
@@ -101,7 +102,7 @@ public class ConsumeContextReplyTests
         var requesterBus = requesterProvider.GetRequiredService<IBus>();
         await requesterBus.StartConsumingAsync();
 
-        await Task.Delay(500);
+        
 
         try
         {

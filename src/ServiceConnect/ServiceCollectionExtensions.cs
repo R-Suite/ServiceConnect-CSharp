@@ -31,9 +31,9 @@ public static class ServiceCollectionExtensions
 
         // Message processors (order matters: ReplyProcessor first, then HandlerProcessor last)
         services.TryAddSingleton<ReplyProcessor>();
-        services.AddSingleton<StreamProcessor>();
+        services.TryAddSingleton<StreamProcessor>();
         services.TryAddSingleton<ProcessManagerProcessor>();
-        services.AddSingleton<AggregatorProcessor>();
+        services.TryAddSingleton<AggregatorProcessor>();
         services.TryAddSingleton<HandlerProcessor>();
         services.TryAddSingleton<IList<IMessageProcessor>>(sp =>
         [
@@ -100,12 +100,13 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IList<HandlerReference>>(handlerReferences);
 
-        var registry = new MessageTypeRegistry();
-        foreach (var handlerRef in handlerReferences)
+        services.TryAddSingleton<IMessageTypeRegistry>(sp =>
         {
-            registry.Register(handlerRef.MessageType);
-        }
-        services.TryAddSingleton<IMessageTypeRegistry>(registry);
+            var registry = new MessageTypeRegistry();
+            foreach (var handlerRef in sp.GetRequiredService<IList<HandlerReference>>())
+                registry.Register(handlerRef.MessageType);
+            return registry;
+        });
 
         // Apply additional registrations from builder extensions (e.g., persistence providers)
         foreach (var registration in builder.AdditionalRegistrations)

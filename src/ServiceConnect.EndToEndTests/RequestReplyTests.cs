@@ -3,6 +3,7 @@ using Moq;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
+using ServiceConnect.Interfaces.Options;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;

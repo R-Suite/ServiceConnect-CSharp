@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Configuration;
 
-public class BusConfiguration : IBusConfiguration
+public sealed class BusConfiguration : IBusConfiguration
 {
     public bool ScanForMessageHandlers { get; set; } = true;
     public bool AutoStartConsuming { get; set; } = true;

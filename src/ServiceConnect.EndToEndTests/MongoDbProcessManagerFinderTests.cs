@@ -6,6 +6,7 @@ using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
 
@@ -158,7 +159,7 @@ public class MongoDbProcessManagerFinderTests
         finder.UpdateData(first);
 
         // Update via the second copy — should throw due to version mismatch
-        Assert.Throws<ArgumentException>(() => finder.UpdateData(second));
+        Assert.Throws<PersistenceException>(() => finder.UpdateData(second));
     }
 
     [Fact]

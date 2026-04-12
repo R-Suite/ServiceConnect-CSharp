@@ -1,11 +1,7 @@
 namespace ServiceConnect.Interfaces.Exceptions;
 
-public class SerializationException : ServiceConnectException
+public sealed class SerializationException(string message, Type? messageType = null, Exception? innerException = null)
+    : ServiceConnectException(message, innerException)
 {
-    public Type? MessageType { get; }
-    public SerializationException(string message, Type? messageType = null, Exception? innerException = null)
-        : base(message, innerException)
-    {
-        MessageType = messageType;
-    }
+    public Type? MessageType { get; } = messageType;
 }

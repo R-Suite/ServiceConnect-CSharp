@@ -4,6 +4,7 @@ using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
 
@@ -68,7 +69,7 @@ public class ProcessManagerMongoDbTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {

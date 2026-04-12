@@ -109,7 +109,7 @@ public class FilterChainTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -180,7 +180,7 @@ public class FilterChainTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -189,7 +189,7 @@ public class FilterChainTests
             await bus.PublishAsync(message);
 
             // Assert: handler NOT invoked (first filter blocked)
-            var handlerWasCalled = await Task.WhenAny(handlerTcs.Task, Task.Delay(TimeSpan.FromSeconds(3))) == handlerTcs.Task;
+            var handlerWasCalled = await Task.WhenAny(handlerTcs.Task, Task.Delay(TimeSpan.FromSeconds(5))) == handlerTcs.Task;
             Assert.False(handlerWasCalled, "Handler should not have been invoked because the first filter blocked the message.");
 
             // First filter ran, second filter and handler were not called

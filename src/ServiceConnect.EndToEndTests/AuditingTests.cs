@@ -67,7 +67,7 @@ public class AuditingTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -92,20 +92,20 @@ public class AuditingTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             BasicGetResult? auditMsg = null;
             for (int i = 0; i < 10 && auditMsg == null; i++)
             {
-                auditMsg = channel.BasicGet(auditQueueName, autoAck: true);
+                auditMsg = await channel.BasicGetAsync(auditQueueName, autoAck: true);
                 if (auditMsg == null) await Task.Delay(500);
             }
 
             Assert.NotNull(auditMsg);
 
             // Verify the audited message has the original headers
-            var headers = auditMsg.BasicProperties.Headers;
+            var headers = auditMsg.BasicProperties.Headers!;
             Assert.True(headers.ContainsKey("MessageId"));
         }
         finally
@@ -164,7 +164,7 @@ public class AuditingTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -189,14 +189,14 @@ public class AuditingTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             // Queue may not exist at all if auditing is disabled — BasicGet on
             // a non-existent queue throws, so declare it passively first
             try
             {
-                var auditMsg = channel.BasicGet(auditQueueName, autoAck: true);
+                var auditMsg = await channel.BasicGetAsync(auditQueueName, autoAck: true);
                 Assert.Null(auditMsg);
             }
             catch (RabbitMQ.Client.Exceptions.OperationInterruptedException)

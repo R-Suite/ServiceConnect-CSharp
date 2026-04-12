@@ -75,7 +75,7 @@ public class RetryAndErrorQueueTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -93,26 +93,26 @@ public class RetryAndErrorQueueTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             BasicGetResult? errorMsg = null;
             for (int i = 0; i < 30 && errorMsg == null; i++)
             {
-                errorMsg = channel.BasicGet(errorQueueName, autoAck: true);
+                errorMsg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
                 if (errorMsg == null) await Task.Delay(1000);
             }
 
             Assert.NotNull(errorMsg);
 
             // Verify RetryCount header equals maxRetries
-            var headers = errorMsg.BasicProperties.Headers;
+            var headers = errorMsg.BasicProperties.Headers!;
             Assert.True(headers.ContainsKey("RetryCount"));
-            Assert.Equal(maxRetries, (int)headers["RetryCount"]);
+            Assert.Equal(maxRetries, (int)headers["RetryCount"]!);
 
             // Verify Exception header is present with serialized exception details
             Assert.True(headers.ContainsKey("Exception"));
-            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]);
+            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]!);
             Assert.Contains("Simulated handler failure", exceptionJson);
 
             // Handler should have been called 1 (initial) + maxRetries times
@@ -183,7 +183,7 @@ public class RetryAndErrorQueueTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -209,11 +209,11 @@ public class RetryAndErrorQueueTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             // Declare the error queue passively to check if it has messages
-            var errorMsg = channel.BasicGet(errorQueueName, autoAck: true);
+            var errorMsg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
             Assert.Null(errorMsg);
         }
         finally

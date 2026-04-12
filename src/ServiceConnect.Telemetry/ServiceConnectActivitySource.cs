@@ -5,10 +5,10 @@ namespace ServiceConnect.Telemetry;
 
 public static class ServiceConnectActivitySource
 {
-    public static ServiceConnectInstrumentationOptions Options { get; set; } = new();
+    public static ServiceConnectInstrumentationOptions Options { get; internal set; } = new();
 
     internal static readonly Version? Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
-    internal static readonly string ActivitySourceName = typeof(ServiceConnectActivitySource).Assembly.GetName().Name + ".Bus" ?? "ServiceConnect.Bus";
+    internal static readonly string ActivitySourceName = (typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect") + ".Bus";
 
     public static readonly string PublishActivitySourceName = ActivitySourceName + ".Publish";
     public static readonly string ConsumeActivitySourceName = ActivitySourceName + ".Consume";
@@ -93,16 +93,16 @@ public static class ServiceConnectActivitySource
             .SetTag(MessagingAttributes.ProtocolName, "amqp")
             .SetTag(MessagingAttributes.MessagingOperation, "receive");
 
-        Dictionary<string, string?> readableHeaders = new();
+        Dictionary<string, string?> readableHeaders = [];
         foreach (var kvp in eventArgs.Headers.ToList())
         {
-            if (kvp.Value.GetType() == typeof(byte[]))
+            if (kvp.Value is byte[])
             {
                 readableHeaders[kvp.Key] = Encoding.UTF8.GetString((byte[])kvp.Value);
                 continue;
             }
 
-            readableHeaders[kvp.Key] = kvp.Value.ToString();
+            readableHeaders[kvp.Key] = kvp.Value?.ToString();
         }
 
         readableHeaders.TryGetValue("DestinationAddress", out string? destinationAddress);
@@ -208,7 +208,7 @@ public static class ServiceConnectActivitySource
         if (hasHeaders)
         {
             DistributedContextPropagator.Current.ExtractTraceIdAndState(headers, ExtractTraceIdAndState,
-                out string traceParent, out string traceState);
+                out string? traceParent, out string? traceState);
             return ActivityContext.TryParse(traceParent, traceState, out context);
         }
 
@@ -216,7 +216,7 @@ public static class ServiceConnectActivitySource
         return false;
     }
 
-    private static void ExtractTraceIdAndState(object eventArgs, string name, out string? value, out IEnumerable<string>? values)
+    private static void ExtractTraceIdAndState(object? eventArgs, string name, out string? value, out IEnumerable<string>? values)
     {
         if (eventArgs is Dictionary<string, object> headers && headers.TryGetValue(name, out object? propsVal))
         {

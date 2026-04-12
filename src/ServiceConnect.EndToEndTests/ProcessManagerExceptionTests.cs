@@ -6,6 +6,7 @@ using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -77,7 +78,7 @@ public class ProcessManagerExceptionTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -93,22 +94,22 @@ public class ProcessManagerExceptionTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             BasicGetResult? errorMsg = null;
             for (int i = 0; i < 30 && errorMsg == null; i++)
             {
-                errorMsg = channel.BasicGet(errorQueueName, autoAck: true);
+                errorMsg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
                 if (errorMsg == null) await Task.Delay(1000);
             }
 
             // Assert
             Assert.NotNull(errorMsg);
 
-            var headers = errorMsg.BasicProperties.Headers;
+            var headers = errorMsg.BasicProperties.Headers!;
             Assert.True(headers.ContainsKey("Exception"));
-            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]);
+            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]!);
             Assert.Contains("PM handler exploded", exceptionJson);
         }
         finally

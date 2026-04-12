@@ -3,12 +3,13 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using System.Collections.Concurrent;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
-[Collection(nameof(MessagingCollection))]
+[Collection(nameof(IsolatedCollection))]
 public class PriorityQueueTests
 {
     private readonly MessagingFixture _fixture;
@@ -38,14 +39,14 @@ public class PriorityQueueTests
             UserName = _fixture.RabbitMqUsername,
             Password = _fixture.RabbitMqPassword
         };
-        using var rawConn = connFactory.CreateConnection();
-        using var rawModel = rawConn.CreateModel();
-        rawModel.QueueDeclare(
+        await using var rawConn = await connFactory.CreateConnectionAsync();
+        await using var rawModel = await rawConn.CreateChannelAsync();
+        await rawModel.QueueDeclareAsync(
             queue: queueName,
             durable: true,
             exclusive: false,
             autoDelete: false,
-            arguments: new Dictionary<string, object> { { "x-max-priority", 10 } });
+            arguments: new Dictionary<string, object?> { { "x-max-priority", 10 } });
 
         // Set up producer bus (its own queue, only sends)
         var producerServices = new ServiceCollection();
@@ -84,8 +85,7 @@ public class PriorityQueueTests
             });
         }
 
-        // Give RabbitMQ a moment to enqueue all messages before consumer starts
-        await Task.Delay(500);
+        
 
         // Set up consumer bus AFTER all messages are queued
         var handlerRefs = new List<HandlerReference>
@@ -137,11 +137,13 @@ public class PriorityQueueTests
             cts.Token.Register(() => allReceived.TrySetCanceled());
             await allReceived.Task;
 
-            // First 3 received should be priority 10 (high priority), last 3 should be priority 1 (low priority)
+            // All priority-10 messages should come before all priority-1 messages
             var ordered = receivedPriorities.ToArray();
             Assert.Equal(messageCount, ordered.Length);
-            Assert.All(ordered.Take(3), p => Assert.Equal(10, p));
-            Assert.All(ordered.Skip(3), p => Assert.Equal(1, p));
+
+            // Verify descending priority order: all high-priority first, then all low-priority
+            var expectedOrder = ordered.OrderByDescending(p => p).ToArray();
+            Assert.Equal(expectedOrder, ordered);
         }
         finally
         {

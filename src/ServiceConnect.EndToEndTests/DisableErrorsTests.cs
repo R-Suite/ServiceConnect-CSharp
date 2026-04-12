@@ -74,7 +74,7 @@ public class DisableErrorsTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -99,12 +99,12 @@ public class DisableErrorsTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             try
             {
-                var auditMsg = channel.BasicGet(auditQueueName, autoAck: true);
+                var auditMsg = await channel.BasicGetAsync(auditQueueName, autoAck: true);
                 Assert.Null(auditMsg);
             }
             catch (RabbitMQ.Client.Exceptions.OperationInterruptedException)

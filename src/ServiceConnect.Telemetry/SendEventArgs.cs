@@ -6,10 +6,7 @@ public class SendEventArgs : OutgoingEventArgs
 
     public IList<string> EndPoints
     {
-        get => EndPoint
-                .Remove(0)
-                .Remove(EndPoint.Length - 1)
-                .Split(',');
+        get => EndPoint.Trim('[', ']').Split(',', StringSplitOptions.RemoveEmptyEntries);
         init => EndPoint = "[" + string.Join(',', value) + "]";
     }
 }

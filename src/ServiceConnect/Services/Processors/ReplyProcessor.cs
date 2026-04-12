@@ -3,15 +3,8 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public class ReplyProcessor : IMessageProcessor
+public sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessageProcessor
 {
-    private readonly IRequestReplyManager _replyManager;
-
-    public ReplyProcessor(IRequestReplyManager replyManager)
-    {
-        _replyManager = replyManager;
-    }
-
     public bool RunBeforeDeserialization => true;
 
     public Task<ProcessResult> ProcessAsync(
@@ -28,7 +21,7 @@ public class ReplyProcessor : IMessageProcessor
         if (string.IsNullOrEmpty(responseMessageId))
             return Task.FromResult(ProcessResult.NotHandled);
 
-        _replyManager.ProcessReply(responseMessageId, messageBytes, messageType);
+        replyManager.ProcessReply(responseMessageId, messageBytes, messageType);
         return Task.FromResult(ProcessResult.Handled);
     }
 }

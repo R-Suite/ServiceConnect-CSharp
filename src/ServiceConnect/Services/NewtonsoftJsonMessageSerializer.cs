@@ -1,17 +1,18 @@
 using System.Text;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
-using ServiceConnect.Interfaces.Exceptions;
 
 namespace ServiceConnect.Services;
 
-public class NewtonsoftJsonMessageSerializer : IMessageSerializer
+public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
 {
     private readonly JsonSerializerSettings _settings;
 
     public NewtonsoftJsonMessageSerializer(JsonSerializerSettings? settings = null)
     {
         _settings = settings ?? new JsonSerializerSettings();
+        // Prevent deserialization gadget attacks via $type metadata
+        _settings.TypeNameHandling = TypeNameHandling.None;
     }
 
     public byte[] Serialize<T>(T message) where T : Message

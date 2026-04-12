@@ -28,15 +28,21 @@ public static class MongoClientFactory
 
         if (!string.IsNullOrEmpty(sslOptions.CertPath))
         {
+#if NET9_0_OR_GREATER
+            var cert = string.IsNullOrEmpty(sslOptions.CertPassphrase)
+                ? X509CertificateLoader.LoadCertificateFromFile(sslOptions.CertPath)
+                : X509CertificateLoader.LoadPkcs12FromFile(sslOptions.CertPath, sslOptions.CertPassphrase);
+#else
             var cert = string.IsNullOrEmpty(sslOptions.CertPassphrase)
                 ? new X509Certificate2(sslOptions.CertPath)
                 : new X509Certificate2(sslOptions.CertPath, sslOptions.CertPassphrase);
+#endif
 
             settings.SslSettings = new SslSettings
             {
                 ClientCertificates = new[] { cert },
                 ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
-                CheckCertificateRevocation = false,
+                CheckCertificateRevocation = sslOptions.CheckCertificateRevocation,
                 EnabledSslProtocols = sslOptions.SslProtocol
             };
         }

@@ -39,7 +39,7 @@ public class ServiceConnectBuilderTests
 
         builder.ConfigurePipeline(p => p.OutgoingFilters.Add(typeof(TestFilter)));
 
-        Assert.Equal(1, builder.BusConfig.Pipeline.OutgoingFilters.Count);
+        Assert.Single(builder.BusConfig.Pipeline.OutgoingFilters);
     }
 
     [Fact]

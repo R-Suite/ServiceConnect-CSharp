@@ -9,8 +9,8 @@ public class OutgoingEventArgs
     public Dictionary<string, string> Headers
     {
         get => _headers;
-        set => _headers = value is not null ? value : new();
+        set => _headers = value is not null ? value : [];
     }
 
-    private Dictionary<string, string> _headers = new();
+    private Dictionary<string, string> _headers = [];
 }

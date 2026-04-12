@@ -33,7 +33,7 @@ public static class HandlerScanner
                     {
                         HandlerType = type,
                         MessageType = messageType,
-                        RoutingKeys = new List<string>()
+                        RoutingKeys = []
                     });
                 }
 
@@ -47,7 +47,7 @@ public static class HandlerScanner
                     {
                         HandlerType = type,
                         MessageType = messageType,
-                        RoutingKeys = new List<string>()
+                        RoutingKeys = []
                     });
                 }
 
@@ -61,7 +61,7 @@ public static class HandlerScanner
                     {
                         HandlerType = type,
                         MessageType = messageType,
-                        RoutingKeys = new List<string>()
+                        RoutingKeys = []
                     });
                 }
 
@@ -76,7 +76,7 @@ public static class HandlerScanner
                         {
                             HandlerType = type,
                             MessageType = messageType,
-                            RoutingKeys = new List<string>()
+                            RoutingKeys = []
                         });
                     }
                 }

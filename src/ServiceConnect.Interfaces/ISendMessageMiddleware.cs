@@ -6,8 +6,7 @@ public delegate Task SendMessageDelegate(
 
 public interface ISendMessageMiddleware
 {
-    SendMessageDelegate Next { get; set; }
-
     Task Process(Type typeObject, byte[] messageBytes,
-        Dictionary<string, string> headers, string? endPoint = null);
+        Dictionary<string, string> headers, string? endPoint,
+        SendMessageDelegate next);
 }

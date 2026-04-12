@@ -1,6 +1,6 @@
-namespace ServiceConnect.Interfaces;
+namespace ServiceConnect.Interfaces.Options;
 
-public class SendOptions
+public sealed class SendOptions
 {
     public Dictionary<string, string>? Headers { get; set; }
     public string? EndPoint { get; set; }

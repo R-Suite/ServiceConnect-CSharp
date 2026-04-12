@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Configuration;
 
-public class PipelineConfiguration : IPipelineConfiguration
+public sealed class PipelineConfiguration : IPipelineConfiguration
 {
     public IList<Type> BeforeConsumingFilters { get; } = new List<Type>();
     public IList<Type> AfterConsumingFilters { get; } = new List<Type>();

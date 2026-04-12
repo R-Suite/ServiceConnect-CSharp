@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;

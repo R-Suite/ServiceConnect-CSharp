@@ -8,28 +8,29 @@ public class RetryTests
     private static readonly TimeSpan FastInterval = TimeSpan.FromMilliseconds(1);
 
     [Fact]
-    public void Do_ExecutesActionSuccessfully()
+    public async Task DoAsync_ExecutesActionSuccessfully()
     {
         var executed = false;
 
-        Retry.Do(() => { executed = true; }, _ => { }, FastInterval, 3);
+        await Retry.DoAsync(() => { executed = true; return Task.CompletedTask; }, _ => Task.CompletedTask, FastInterval, 3);
 
         Assert.True(executed);
     }
 
     [Fact]
-    public void Do_RetriesOnFailure()
+    public async Task DoAsync_RetriesOnFailure()
     {
         int attempts = 0;
 
-        Retry.Do(
+        await Retry.DoAsync(
             () =>
             {
                 attempts++;
                 if (attempts < 3)
                     throw new InvalidOperationException("transient");
+                return Task.CompletedTask;
             },
-            _ => { },
+            _ => Task.CompletedTask,
             FastInterval,
             3);
 
@@ -37,12 +38,12 @@ public class RetryTests
     }
 
     [Fact]
-    public void Do_ThrowsAggregateException_WhenAllRetriesFail()
+    public async Task DoAsync_ThrowsAggregateException_WhenAllRetriesFail()
     {
-        var ex = Assert.Throws<AggregateException>(() =>
-            Retry.Do(
+        var ex = await Assert.ThrowsAsync<AggregateException>(() =>
+            Retry.DoAsync(
                 () => throw new InvalidOperationException("fail"),
-                _ => { },
+                _ => Task.CompletedTask,
                 FastInterval,
                 3));
 
@@ -50,14 +51,14 @@ public class RetryTests
     }
 
     [Fact]
-    public void Do_CallsExceptionActionOnEachFailure()
+    public async Task DoAsync_CallsExceptionActionOnEachFailure()
     {
         var exceptionsCaught = new List<Exception>();
 
-        Assert.Throws<AggregateException>(() =>
-            Retry.Do(
+        await Assert.ThrowsAsync<AggregateException>(() =>
+            Retry.DoAsync(
                 () => throw new InvalidOperationException("fail"),
-                ex => exceptionsCaught.Add(ex),
+                ex => { exceptionsCaught.Add(ex); return Task.CompletedTask; },
                 FastInterval,
                 3));
 
@@ -65,27 +66,27 @@ public class RetryTests
     }
 
     [Fact]
-    public void DoGeneric_ReturnsValueOnSuccess()
+    public async Task DoAsyncGeneric_ReturnsValueOnSuccess()
     {
-        var result = Retry.Do(() => 42, _ => { }, FastInterval, 3);
+        var result = await Retry.DoAsync(() => Task.FromResult(42), _ => Task.CompletedTask, FastInterval, 3);
 
         Assert.Equal(42, result);
     }
 
     [Fact]
-    public void DoGeneric_RetriesAndReturnsValue()
+    public async Task DoAsyncGeneric_RetriesAndReturnsValue()
     {
         int attempts = 0;
 
-        var result = Retry.Do(
+        var result = await Retry.DoAsync(
             () =>
             {
                 attempts++;
                 if (attempts < 2)
                     throw new InvalidOperationException("transient");
-                return attempts;
+                return Task.FromResult(attempts);
             },
-            _ => { },
+            _ => Task.CompletedTask,
             FastInterval,
             3);
 

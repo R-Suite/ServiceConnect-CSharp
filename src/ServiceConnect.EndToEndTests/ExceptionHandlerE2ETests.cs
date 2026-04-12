@@ -72,7 +72,7 @@ public class ExceptionHandlerE2ETests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -81,11 +81,11 @@ public class ExceptionHandlerE2ETests
             var message = new TestMessage(correlationId) { Content = "trigger-exception" };
             await bus.PublishAsync(message);
 
-            // Assert: poll until ExceptionHandler fires (timeout 10s)
-            var deadline = DateTime.UtcNow.AddSeconds(10);
-            while (capturedExceptions.IsEmpty && DateTime.UtcNow < deadline)
+            // Assert: wait for ExceptionHandler to fire
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (capturedExceptions.IsEmpty && !cts.Token.IsCancellationRequested)
             {
-                await Task.Delay(100);
+                await Task.Delay(100, cts.Token);
             }
 
             Assert.False(capturedExceptions.IsEmpty, "ExceptionHandler was not invoked within timeout");

@@ -9,13 +9,11 @@ namespace ServiceConnect.EndToEndTests;
 
 file sealed class HeaderAddingSendMiddleware : ISendMessageMiddleware
 {
-    public SendMessageDelegate Next { get; set; } = null!;
-
     public Task Process(Type typeObject, byte[] messageBytes,
-        Dictionary<string, string> headers, string? endPoint = null)
+        Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next)
     {
         headers["X-Send-Middleware"] = "applied";
-        return Next(typeObject, messageBytes, headers, endPoint);
+        return next(typeObject, messageBytes, headers, endPoint);
     }
 }
 
@@ -28,14 +26,12 @@ file sealed class HeaderCapturingMiddleware : IMessageProcessingMiddleware
         _tcs = tcs;
     }
 
-    public MessageProcessingDelegate Next { get; set; } = null!;
-
     public async Task<ConsumeEventResult> Process(
         byte[] messageBytes, Type messageType, object message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next)
     {
         _tcs.TrySetResult(headers);
-        return await Next(messageBytes, messageType, message, headers, envelope);
+        return await next(messageBytes, messageType, message, headers, envelope);
     }
 }
 
@@ -97,7 +93,7 @@ public class MiddlewarePipelineE2ETests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {

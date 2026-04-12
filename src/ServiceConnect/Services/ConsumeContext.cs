@@ -1,12 +1,13 @@
 using System.Text;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
-public class ConsumeContext : IConsumeContext
+public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers) : IConsumeContext
 {
-    public IBus Bus { get; set; }
-    public IDictionary<string, object> Headers { get; set; }
+    public IBus Bus { get; } = bus;
+    public IDictionary<string, object> Headers { get; } = headers;
 
     public string? MessageId =>
         Headers.TryGetValue(HeaderKeys.MessageId, out var value) ? DecodeHeaderValue(value) : null;
@@ -14,12 +15,6 @@ public class ConsumeContext : IConsumeContext
     public Guid CorrelationId =>
         Headers.TryGetValue(HeaderKeys.CorrelationId, out var value) && Guid.TryParse(DecodeHeaderValue(value), out var id)
             ? id : Guid.Empty;
-
-    public ConsumeContext(IBus bus, IDictionary<string, object> headers)
-    {
-        Bus = bus;
-        Headers = headers;
-    }
 
     public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null) where TReply : Message
     {
@@ -29,7 +24,7 @@ public class ConsumeContext : IConsumeContext
 
         var requestMessageId = Headers.TryGetValue(HeaderKeys.RequestMessageId, out var rmi) ? DecodeHeaderValue(rmi) : null;
 
-        var replyHeaders = headers ?? new Dictionary<string, string>();
+        var replyHeaders = headers ?? [];
         if (!string.IsNullOrEmpty(requestMessageId))
             replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;
 

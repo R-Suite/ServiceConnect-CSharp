@@ -1,11 +1,7 @@
 namespace ServiceConnect.Interfaces.Exceptions;
 
-public class TransportException : ServiceConnectException
+public sealed class TransportException(string message, string? endpoint = null, Exception? innerException = null)
+    : ServiceConnectException(message, innerException)
 {
-    public string? Endpoint { get; }
-    public TransportException(string message, string? endpoint = null, Exception? innerException = null)
-        : base(message, innerException)
-    {
-        Endpoint = endpoint;
-    }
+    public string? Endpoint { get; } = endpoint;
 }

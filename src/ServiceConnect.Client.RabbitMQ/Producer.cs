@@ -190,6 +190,7 @@ public sealed class Producer : IProducer
     public void Dispose()
     {
         if (_disposed) return;
+        _disposed = true; // Set immediately so concurrent operations see disposed state
         _ = Task.Run(async () =>
         {
             try { await DisposeAsync().ConfigureAwait(false); }

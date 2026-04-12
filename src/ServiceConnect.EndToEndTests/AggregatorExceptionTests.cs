@@ -71,7 +71,7 @@ public class AggregatorExceptionTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -87,13 +87,13 @@ public class AggregatorExceptionTests
                 UserName = _fixture.RabbitMqUsername,
                 Password = _fixture.RabbitMqPassword
             };
-            using var conn = factory.CreateConnection();
-            using var channel = conn.CreateModel();
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
 
             BasicGetResult? errorMsg = null;
             for (int i = 0; i < 30 && errorMsg == null; i++)
             {
-                errorMsg = channel.BasicGet(errorQueueName, autoAck: true);
+                errorMsg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
                 if (errorMsg == null) await Task.Delay(1000);
             }
 
@@ -101,9 +101,9 @@ public class AggregatorExceptionTests
             Assert.NotNull(errorMsg);
 
             // Verify Exception header contains the thrown message
-            var headers = errorMsg.BasicProperties.Headers;
+            var headers = errorMsg.BasicProperties.Headers!;
             Assert.True(headers.ContainsKey("Exception"));
-            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]);
+            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]!);
             Assert.Contains("Aggregator Execute failed", exceptionJson);
         }
         finally

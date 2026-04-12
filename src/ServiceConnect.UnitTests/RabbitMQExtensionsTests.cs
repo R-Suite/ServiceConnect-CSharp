@@ -15,7 +15,13 @@ public class RabbitMQExtensionsTests
 
         builder.UseRabbitMQ();
 
-        Assert.NotEmpty(builder.AdditionalRegistrations);
+        // Verify registration action was added and resolves IProducer/IConsumer
+        Assert.Single(builder.AdditionalRegistrations);
+        var services = new ServiceCollection();
+        builder.AdditionalRegistrations[0](services);
+
+        Assert.Contains(services, sd => sd.ServiceType == typeof(IProducer));
+        Assert.Contains(services, sd => sd.ServiceType == typeof(IConsumer));
     }
 
     [Fact]

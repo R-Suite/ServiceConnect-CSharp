@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
-public class MessageBusWriteStream : IMessageBusWriteStream
+public sealed class MessageBusWriteStream : IMessageBusWriteStream
 {
     private readonly IProducer _producer;
     private readonly string _endpoint;
@@ -21,13 +21,13 @@ public class MessageBusWriteStream : IMessageBusWriteStream
             [HeaderKeys.SequenceId] = _sequenceId,
             [HeaderKeys.FullTypeName] = messageType.AssemblyQualifiedName!,
             [HeaderKeys.TypeName] = messageType.FullName!,
-            [HeaderKeys.MessageType] = "ByteStream"
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream
         };
     }
 
-    public void Write(byte[] buffer, int offset, int count)
+    public async Task WriteAsync(byte[] buffer, int offset, int count)
     {
-        if (_closed) throw new ObjectDisposedException(nameof(MessageBusWriteStream));
+        ObjectDisposedException.ThrowIf(_closed, this);
 
         var packet = new byte[count];
         Array.Copy(buffer, offset, packet, 0, count);
@@ -37,11 +37,11 @@ public class MessageBusWriteStream : IMessageBusWriteStream
             [HeaderKeys.PacketNumber] = _packetNumber.ToString()
         };
 
-        Task.Run(() => _producer.SendBytesAsync(_endpoint, packet, headers)).GetAwaiter().GetResult();
+        await _producer.SendBytesAsync(_endpoint, packet, headers).ConfigureAwait(false);
         _packetNumber++;
     }
 
-    public void Close()
+    public async Task CloseAsync()
     {
         if (_closed) return;
         _closed = true;
@@ -52,11 +52,11 @@ public class MessageBusWriteStream : IMessageBusWriteStream
             [HeaderKeys.LastPacketNumber] = _packetNumber.ToString()
         };
 
-        Task.Run(() => _producer.SendBytesAsync(_endpoint, Array.Empty<byte>(), headers)).GetAwaiter().GetResult();
+        await _producer.SendBytesAsync(_endpoint, [], headers).ConfigureAwait(false);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        Close();
+        await CloseAsync();
     }
 }

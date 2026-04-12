@@ -67,7 +67,7 @@ public class MalformedMessageTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(500);
+        
 
         try
         {
@@ -80,17 +80,20 @@ public class MalformedMessageTests
                 Password = _fixture.RabbitMqPassword
             };
 
-            using (var conn = factory.CreateConnection())
-            using (var channel = conn.CreateModel())
             {
-                var props = channel.CreateBasicProperties();
-                props.Headers = new Dictionary<string, object>
+                await using var conn = await factory.CreateConnectionAsync();
+                await using var channel = await conn.CreateChannelAsync();
+
+                var props = new BasicProperties
                 {
-                    ["FullTypeName"] = Encoding.UTF8.GetBytes(typeof(TestMessage).AssemblyQualifiedName!),
-                    ["MessageType"] = Encoding.UTF8.GetBytes(typeof(TestMessage).FullName!),
-                    ["MessageId"] = Encoding.UTF8.GetBytes(Guid.NewGuid().ToString())
+                    Headers = new Dictionary<string, object?>
+                    {
+                        ["FullTypeName"] = Encoding.UTF8.GetBytes(typeof(TestMessage).AssemblyQualifiedName!),
+                        ["MessageType"] = Encoding.UTF8.GetBytes(typeof(TestMessage).FullName!),
+                        ["MessageId"] = Encoding.UTF8.GetBytes(Guid.NewGuid().ToString())
+                    }
                 };
-                channel.BasicPublish("", queueName, props, Encoding.UTF8.GetBytes("{{{INVALID JSON}}}"));
+                await channel.BasicPublishAsync("", queueName, mandatory: false, props, Encoding.UTF8.GetBytes("{{{INVALID JSON}}}"));
             }
 
             // Assert: poll the error queue for the dead-lettered message
@@ -102,13 +105,13 @@ public class MalformedMessageTests
                 Password = _fixture.RabbitMqPassword
             };
 
-            using var pollConn = pollFactory.CreateConnection();
-            using var pollChannel = pollConn.CreateModel();
+            await using var pollConn = await pollFactory.CreateConnectionAsync();
+            await using var pollChannel = await pollConn.CreateChannelAsync();
 
             BasicGetResult? errorMsg = null;
             for (int i = 0; i < 30 && errorMsg == null; i++)
             {
-                errorMsg = pollChannel.BasicGet(errorQueueName, autoAck: true);
+                errorMsg = await pollChannel.BasicGetAsync(errorQueueName, autoAck: true);
                 if (errorMsg == null) await Task.Delay(1000);
             }
 
