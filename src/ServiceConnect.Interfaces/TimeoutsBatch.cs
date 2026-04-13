@@ -1,6 +1,6 @@
 ﻿namespace ServiceConnect.Interfaces;
 
-public class TimeoutsBatch
+public sealed class TimeoutsBatch
 {
     /// <summary>
     /// Timeouts due to be triggered

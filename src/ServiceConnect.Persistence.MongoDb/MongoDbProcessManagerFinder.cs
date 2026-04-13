@@ -19,6 +19,12 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
     private volatile bool _timeoutIndexEnsured;
     private const string TimeoutsCollectionName = "Timeouts";
+    /// <summary>
+    /// Interval after which the polling service is asked to re-query when no future timeouts
+    /// are scheduled. Balances polling chatter against responsiveness to freshly-inserted
+    /// timeouts discovered after a query.
+    /// </summary>
+    private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
 
     public MongoDbProcessManagerFinder(MongoDbPersistenceOptions options, ILogger<MongoDbProcessManagerFinder> logger)
     {
@@ -279,7 +285,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
 
             if (nextQueryTime == DateTime.MaxValue)
             {
-                nextQueryTime = utcNow.AddMinutes(1);
+                nextQueryTime = utcNow.Add(DefaultNextQueryInterval);
             }
 
             retval.NextQueryTime = nextQueryTime;

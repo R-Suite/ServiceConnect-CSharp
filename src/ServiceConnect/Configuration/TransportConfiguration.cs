@@ -7,13 +7,27 @@ namespace ServiceConnect.Configuration;
 
 public sealed class TransportConfiguration : ITransportConfiguration
 {
+    /// <summary>Default dead-letter retry delay, in milliseconds.</summary>
+    public const int DefaultRetryDelayMilliseconds = 3000;
+    /// <summary>Default maximum retries before a message is sent to the error queue.</summary>
+    public const int DefaultMaxRetries = 3;
+    /// <summary>Default RabbitMQ prefetch count per consumer.</summary>
+    public const ushort DefaultPrefetchCount = 1;
+    /// <summary>Default RabbitMQ graceful-shutdown drain timeout, in milliseconds.</summary>
+    public const int DefaultGracefulShutdownTimeoutMilliseconds = 5000;
+
     public string Host { get; set; } = "localhost";
     public string? Username { get; set; }
     public string? Password { get; set; }
     public string? VirtualHost { get; set; }
-    public int RetryDelay { get; set; } = 3000;
-    public int MaxRetries { get; set; } = 3;
-    public ushort PrefetchCount { get; set; } = 1;
+    /// <summary>Dead-letter retry delay, in milliseconds. Must be non-negative.</summary>
+    public int RetryDelay { get; set; } = DefaultRetryDelayMilliseconds;
+    public int MaxRetries { get; set; } = DefaultMaxRetries;
+    public ushort PrefetchCount { get; set; } = DefaultPrefetchCount;
+    /// <summary>
+    /// Time to wait for in-flight messages to drain during graceful shutdown, in milliseconds. (C-09)
+    /// </summary>
+    public int GracefulShutdownTimeoutMilliseconds { get; set; } = DefaultGracefulShutdownTimeoutMilliseconds;
     public bool SslEnabled { get; set; }
     /// <summary>
     /// Gets or sets the SSL policy errors that are acceptable.

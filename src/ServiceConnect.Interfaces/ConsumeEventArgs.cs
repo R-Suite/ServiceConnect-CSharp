@@ -1,6 +1,6 @@
 ﻿namespace ServiceConnect.Interfaces;
 
-public class ConsumeEventArgs
+public sealed class ConsumeEventArgs
 {
     public byte[] Message { get; init; } = Array.Empty<byte>();
 

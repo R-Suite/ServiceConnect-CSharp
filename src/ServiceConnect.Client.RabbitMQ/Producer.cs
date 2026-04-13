@@ -8,8 +8,11 @@ namespace ServiceConnect.Client.RabbitMQ;
 
 public sealed class Producer : IProducer
 {
-    private const long DefaultMaxMessageSize = 65536;
+    /// <summary>Default maximum message body size, in bytes (64 KiB).</summary>
+    private const long DefaultMaxMessageSize = 64 * 1024;
+    /// <summary>Default publish-retry attempt count.</summary>
     private const ushort DefaultRetryCount = 60;
+    /// <summary>Default delay between publish retries, in seconds.</summary>
     private const ushort DefaultRetryTimeInSeconds = 10;
 
     private readonly ITransportConfiguration _transportConfiguration;
@@ -127,7 +130,7 @@ public sealed class Producer : IProducer
             var messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
             var basicProperties = CreateBasicProperties(messageHeaders);
 
-            string exchangeName = await ConfigureExchangeAsync(type.FullName!.Replace(".", string.Empty), "fanout").ConfigureAwait(false);
+            string exchangeName = await ConfigureExchangeAsync(type.FullName!.Replace(".", string.Empty), ExchangeType.Fanout).ConfigureAwait(false);
             await PublishWithRetryAsync(exchangeName, "", basicProperties, message, cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
@@ -140,8 +143,8 @@ public sealed class Producer : IProducer
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!_queueConfiguration.QueueMappings.TryGetValue(type.FullName!, out IList<string>? endPoints))
-                throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via QueueMappings.");
+            if (!_queueConfiguration.TryGetQueueMapping(type, out IReadOnlyList<string>? endPoints))
+                throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
 
             foreach (string endPoint in endPoints)
             {

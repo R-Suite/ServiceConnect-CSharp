@@ -1,6 +1,6 @@
 namespace ServiceConnect.Interfaces;
 
-public class ProcessManagerToMessageMap
+public sealed class ProcessManagerToMessageMap
 {
     public required Func<object, object> MessageProp { get; set; }
     public required Type MessageType { get; set; }

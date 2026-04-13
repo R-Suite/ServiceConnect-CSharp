@@ -196,6 +196,10 @@ public sealed class Bus : IBus
     public async Task StartConsumingAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(_queueConfig.QueueName))
+            throw new InvalidOperationException(
+                "QueueName is not set. Configure via ServiceConnectBuilder.ConfigureQueues(q => q.QueueName = \"...\") before starting consumption (E-07).");
+
         await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {

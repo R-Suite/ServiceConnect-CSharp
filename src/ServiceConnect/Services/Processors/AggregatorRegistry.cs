@@ -84,6 +84,12 @@ internal sealed class AggregatorRegistry
         var batchSize = (int)aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.BatchSize))!.Invoke(aggregator, null)!;
         var timeout = (TimeSpan)aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.Timeout))!.Invoke(aggregator, null)!;
 
+        // Dual-zero means messages would aggregate forever with no flush trigger (E-08).
+        if (batchSize <= 0 && timeout <= TimeSpan.Zero)
+            throw new InvalidOperationException(
+                $"Aggregator '{aggregatorBaseType.FullName}' has BatchSize={batchSize} and Timeout={timeout}. " +
+                "At least one of BatchSize (>0) or Timeout (>TimeSpan.Zero) must be configured, otherwise messages would buffer indefinitely without being flushed.");
+
         return new AggregatorDescriptor(
             MessageType: messageType,
             AggregatorBaseType: aggregatorBaseType,

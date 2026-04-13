@@ -65,7 +65,7 @@ public sealed class Consumer : IConsumer
         // Configure exchanges
         foreach (string messageType in messageTypes)
         {
-            await ConfigureExchangeAsync(messageType, "fanout", cancellationToken);
+            await ConfigureExchangeAsync(messageType, ExchangeType.Fanout, cancellationToken);
         }
 
         // Configure queue
@@ -154,12 +154,12 @@ public sealed class Consumer : IConsumer
     {
         // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
         // dead-letter exchange is of type "direct" and bound to the original queue.
-        string retryQueueName = queueName + ".Retries";
-        string retryDeadLetterExchangeName = queueName + ".Retries.DeadLetter";
+        string retryQueueName = queueName + RabbitMqQueueNaming.RetryQueueSuffix;
+        string retryDeadLetterExchangeName = queueName + RabbitMqQueueNaming.RetryDeadLetterExchangeSuffix;
 
         try
         {
-            await _model!.ExchangeDeclareAsync(retryDeadLetterExchangeName, "direct", _durable, _autoDelete, null, cancellationToken: cancellationToken);
+            await _model!.ExchangeDeclareAsync(retryDeadLetterExchangeName, ExchangeType.Direct, _durable, _autoDelete, null, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -177,8 +177,8 @@ public sealed class Consumer : IConsumer
 
         Dictionary<string, object?> arguments = new(_retryQueueArguments)
         {
-            {"x-dead-letter-exchange", retryDeadLetterExchangeName},
-            {"x-message-ttl", _retryDelay}
+            {RabbitMqQueueNaming.XDeadLetterExchangeArgument, retryDeadLetterExchangeName},
+            {RabbitMqQueueNaming.XMessageTtlArgument, _retryDelay}
         };
 
         try
@@ -196,7 +196,7 @@ public sealed class Consumer : IConsumer
     {
         try
         {
-            await _model!.ExchangeDeclareAsync(_queueConfiguration.ErrorQueueName, "direct", cancellationToken: cancellationToken);
+            await _model!.ExchangeDeclareAsync(_queueConfiguration.ErrorQueueName, ExchangeType.Direct, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -224,7 +224,7 @@ public sealed class Consumer : IConsumer
     {
         try
         {
-            await _model!.ExchangeDeclareAsync(_queueConfiguration.AuditQueueName, "direct", cancellationToken: cancellationToken);
+            await _model!.ExchangeDeclareAsync(_queueConfiguration.AuditQueueName, ExchangeType.Direct, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

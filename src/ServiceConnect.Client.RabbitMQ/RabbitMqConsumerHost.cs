@@ -23,6 +23,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly ushort _prefetchCount;
     private readonly bool _disablePrefetch;
     private readonly IDictionary<string, object?> _queueArguments;
+    private readonly int _gracefulShutdownTimeoutMs;
 
     private IChannel? _model;
     private ConsumerEventHandler? _consumerEventHandler;
@@ -58,6 +59,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _queueArguments = settings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal)
             ? (IDictionary<string, object?>)argsVal
             : new Dictionary<string, object?>();
+        _gracefulShutdownTimeoutMs = transportConfiguration.GracefulShutdownTimeoutMilliseconds > 0
+            ? transportConfiguration.GracefulShutdownTimeoutMilliseconds
+            : 5000;
     }
 
     public async Task StartConsumingAsync(
@@ -67,7 +71,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _consumerEventHandler = messageReceived;
         _consumingCt = cancellationToken;
         _queueName = queueName;
-        _retryQueueName = queueName + ".Retries";
+        _retryQueueName = queueName + RabbitMqQueueNaming.RetryQueueSuffix;
 
         if (autoDelete.HasValue) _autoDelete = autoDelete.Value;
 
@@ -181,7 +185,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        var deadline = Environment.TickCount64 + 5000;
+        var deadline = Environment.TickCount64 + _gracefulShutdownTimeoutMs;
         while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
         {
             await Task.Delay(50).ConfigureAwait(false);

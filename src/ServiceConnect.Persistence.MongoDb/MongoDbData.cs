@@ -4,7 +4,7 @@ using ServiceConnect.Interfaces;
 namespace ServiceConnect.Persistence.MongoDb;
 
 [BsonIgnoreExtraElements]
-public class MongoDbData<T> : IPersistenceData<T> where T : class, IProcessManagerData
+public sealed class MongoDbData<T> : IPersistenceData<T> where T : class, IProcessManagerData
 {
     public Guid Id { get; set; }
     public int Version { get; set; }

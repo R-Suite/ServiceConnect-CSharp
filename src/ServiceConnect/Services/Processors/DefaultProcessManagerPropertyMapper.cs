@@ -3,9 +3,10 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal class DefaultProcessManagerPropertyMapper : IProcessManagerPropertyMapper
+internal sealed class DefaultProcessManagerPropertyMapper : IProcessManagerPropertyMapper
 {
-    public List<ProcessManagerToMessageMap> Mappings { get; set; } = [];
+    private readonly List<ProcessManagerToMessageMap> _mappings = [];
+    public IReadOnlyList<ProcessManagerToMessageMap> Mappings => _mappings;
 
     public void ConfigureMapping<TProcessManagerData, TMessage>(
         System.Linq.Expressions.Expression<Func<TProcessManagerData, object>> processManagerProperty,
@@ -27,7 +28,7 @@ internal class DefaultProcessManagerPropertyMapper : IProcessManagerPropertyMapp
             map.PropertiesHierarchy[propInfo.Name] = propInfo.PropertyType;
         }
 
-        Mappings.Add(map);
+        _mappings.Add(map);
     }
 
     private static Func<object, object> BuildMessageFunc<TMessage>(

@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistence.InMemory;
 
-public class MemoryData<T> : IPersistenceData<T> where T : class, IProcessManagerData
+public sealed class MemoryData<T> : IPersistenceData<T> where T : class, IProcessManagerData
 {
     public Guid Id { get; set; }
     public int Version { get; set; }

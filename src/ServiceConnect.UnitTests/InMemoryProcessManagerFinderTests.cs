@@ -328,7 +328,8 @@ namespace ServiceConnect.UnitTests
     /// </summary>
     public class TestProcessManagerPropertyMapper : IProcessManagerPropertyMapper
     {
-        public List<ProcessManagerToMessageMap> Mappings { get; set; } = new();
+        private readonly List<ProcessManagerToMessageMap> _mappings = new();
+        public IReadOnlyList<ProcessManagerToMessageMap> Mappings => _mappings;
 
         public void ConfigureMapping<TProcessManagerData, TMessage>(
             System.Linq.Expressions.Expression<Func<TProcessManagerData, object>> processManagerProperty,
@@ -353,7 +354,7 @@ namespace ServiceConnect.UnitTests
                 map.PropertiesHierarchy[propInfo.Name] = propInfo.PropertyType;
             }
 
-            Mappings.Add(map);
+            _mappings.Add(map);
         }
 
         private static Func<object, object> BuildMessageFunc<TMessage>(

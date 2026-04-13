@@ -1,6 +1,6 @@
 ﻿namespace ServiceConnect.Interfaces;
 
-public class PublishEventArgs : OutgoingEventArgs
+public sealed class PublishEventArgs : OutgoingEventArgs
 {
     public string RoutingKey { get; init; } = string.Empty;
 }

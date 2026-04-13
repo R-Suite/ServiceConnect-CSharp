@@ -14,7 +14,13 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
     private readonly ConcurrentDictionary<string, MessageBusReadStream> _activeStreams = new();
     private readonly ConcurrentDictionary<string, DateTime> _streamTimestamps = new();
     private readonly Timer _cleanupTimer;
+    /// <summary>
+    /// Maximum time a partial stream may sit without new packets before it is evicted.
+    /// Tuned to balance memory held by stale streams against transient network stalls.
+    /// </summary>
     private static readonly TimeSpan StreamTimeout = TimeSpan.FromMinutes(5);
+    /// <summary>Interval at which the sweeper runs to evict stale partial streams.</summary>
+    private static readonly TimeSpan StreamCleanupInterval = TimeSpan.FromMinutes(1);
 
     public StreamProcessor(
         IServiceProvider serviceProvider,
@@ -26,7 +32,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
-        _cleanupTimer = new Timer(_ => EvictStaleStreams(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        _cleanupTimer = new Timer(_ => EvictStaleStreams(), null, StreamCleanupInterval, StreamCleanupInterval);
     }
 
     public bool RunBeforeDeserialization => true;

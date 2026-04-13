@@ -2,7 +2,7 @@
 
 public sealed class HandlerReference
 {
-    public required Type MessageType { get; set; }
-    public required Type HandlerType { get; set; }
-    public IList<string> RoutingKeys { get; set; } = [];
+    public required Type MessageType { get; init; }
+    public required Type HandlerType { get; init; }
+    public IReadOnlyList<string> RoutingKeys { get; init; } = [];
 }

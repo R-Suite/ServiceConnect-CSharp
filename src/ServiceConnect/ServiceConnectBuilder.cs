@@ -12,7 +12,23 @@ public sealed class ServiceConnectBuilder
     public ServiceConnectBuilder ConfigureTransport(Action<ITransportConfiguration> configure)
     {
         configure(BusConfig.Transport);
+        ValidateTransport(BusConfig.Transport);
         return this;
+    }
+
+    // Guard against silently-broken configuration at startup (G-07). Values that would
+    // cause confusing runtime errors are rejected with a message pointing at the
+    // misconfigured property.
+    private static void ValidateTransport(ITransportConfiguration transport)
+    {
+        if (string.IsNullOrWhiteSpace(transport.Host))
+            throw new InvalidOperationException("TransportConfiguration.Host must be a non-empty host or comma-separated host list.");
+        if (transport.RetryDelay < 0)
+            throw new InvalidOperationException($"TransportConfiguration.RetryDelay must be non-negative (got {transport.RetryDelay}).");
+        if (transport.MaxRetries < 0)
+            throw new InvalidOperationException($"TransportConfiguration.MaxRetries must be non-negative (got {transport.MaxRetries}).");
+        if (transport.GracefulShutdownTimeoutMilliseconds < 0)
+            throw new InvalidOperationException($"TransportConfiguration.GracefulShutdownTimeoutMilliseconds must be non-negative (got {transport.GracefulShutdownTimeoutMilliseconds}).");
     }
 
     public ServiceConnectBuilder ConfigureQueues(Action<IQueueConfiguration> configure)

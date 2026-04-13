@@ -4,9 +4,6 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Telemetry;
 using Xunit;
 using static ServiceConnect.Telemetry.MessagingAttributes;
-using ConsumeEventArgs = ServiceConnect.Telemetry.ConsumeEventArgs;
-using PublishEventArgs = ServiceConnect.Telemetry.PublishEventArgs;
-using SendEventArgs = ServiceConnect.Telemetry.SendEventArgs;
 
 namespace ServiceConnect.UnitTests.Telemetry;
 

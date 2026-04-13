@@ -3,6 +3,8 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Telemetry;
 
+// Telemetry uses the ServiceConnect.Interfaces event-args types (A-04).
+
 public static class ServiceConnectActivitySource
 {
     public static ServiceConnectInstrumentationOptions Options { get; internal set; } = new();
@@ -51,7 +53,7 @@ public static class ServiceConnectActivitySource
             activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
         }
 
-        if (eventArgs.Headers.TryGetValue("MessageId", out string? messageId))
+        if (eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out string? messageId))
         {
             activity.SetTag(MessagingAttributes.MessageId, messageId);
         }
@@ -99,10 +101,10 @@ public static class ServiceConnectActivitySource
             readableHeaders[kvp.Key] = HeaderDecoder.Decode(kvp.Value);
         }
 
-        readableHeaders.TryGetValue("DestinationAddress", out string? destinationAddress);
+        readableHeaders.TryGetValue(HeaderKeys.DestinationAddress, out string? destinationAddress);
         activity.DisplayName = (string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive";
 
-        if (readableHeaders.TryGetValue("MessageId", out string? messageId))
+        if (readableHeaders.TryGetValue(HeaderKeys.MessageId, out string? messageId))
         {
             activity.SetTag(MessagingAttributes.MessageId, messageId);
         }

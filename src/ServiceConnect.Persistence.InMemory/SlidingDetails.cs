@@ -1,11 +1,10 @@
 namespace ServiceConnect.Persistence.InMemory;
 
-public class SlidingDetails
+public sealed class SlidingDetails
 {
     /// <summary>
-    /// Initialise une nouvelle instance de <see cref="SlidingDetails"/> class.
+    /// Initializes a new <see cref="SlidingDetails"/> with a sliding expiry window.
     /// </summary>
-    /// <param name="relativeExpiry">The relative expiry.</param>
     public SlidingDetails(TimeSpan relativeExpiry)
     {
         RelativeExpiry = relativeExpiry;
@@ -17,10 +16,9 @@ public class SlidingDetails
     private DateTime ExpireAt { get; set; }
 
     /// <summary>
-    /// Determines whether this instance can expire the specified try after.
+    /// Returns true if the sliding window has elapsed. When false, <paramref name="tryAfter"/>
+    /// gives the caller the remaining time before the next expiry check should run.
     /// </summary>
-    /// <param name="tryAfter">The try after.</param>
-    /// <returns></returns>
     public bool CanExpire(out TimeSpan tryAfter)
     {
         tryAfter = ExpireAt - DateTime.UtcNow;
@@ -28,7 +26,7 @@ public class SlidingDetails
     }
 
     /// <summary>
-    /// Slides this instance.
+    /// Resets the sliding window so the expiry is <see cref="RelativeExpiry"/> from now.
     /// </summary>
     public void Slide()
     {

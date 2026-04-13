@@ -1,18 +1,13 @@
 namespace ServiceConnect.Persistence.InMemory;
 
-public class CacheItem
+public sealed class CacheItem
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CacheItem"/> class.
-    /// </summary>
     public CacheItem() { }
 
     /// <summary>
-    /// Initialise une nouvelle instance de <see cref="CacheItem"/> class.
+    /// Initializes a new <see cref="CacheItem"/> with a value, priority, and optional
+    /// relative expiry duration. A null <paramref name="relativeExpiry"/> disables sliding expiry.
     /// </summary>
-    /// <param name="value">The value.</param>
-    /// <param name="priority">The priority.</param>
-    /// <param name="relativeExpiry">The relative expiry.</param>
     public CacheItem(object value, CacheItemPriority priority, TimeSpan? relativeExpiry = null)
     {
         Value = value;
@@ -20,27 +15,12 @@ public class CacheItem
         RelativeExpiry = relativeExpiry;
     }
 
-    /// <summary>
-    /// Gets or sets the value.
-    /// </summary>
-    /// <value>
-    /// The value.
-    /// </value>
+    /// <summary>Cached value.</summary>
     public object? Value { get; set; }
 
-    /// <summary>
-    /// Gets or sets the priority.
-    /// </summary>
-    /// <value>
-    /// The priority.
-    /// </value>
+    /// <summary>Priority controlling whether this item is subject to purge sweeps.</summary>
     public CacheItemPriority Priority { get; set; }
 
-    /// <summary>
-    /// Gets or sets the relative expiry.
-    /// </summary>
-    /// <value>
-    /// The relative expiry.
-    /// </value>
+    /// <summary>Sliding expiry window; null for absolute expiry.</summary>
     public TimeSpan? RelativeExpiry { get; set; }
 }

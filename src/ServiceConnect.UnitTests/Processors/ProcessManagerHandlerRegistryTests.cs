@@ -272,13 +272,14 @@ file class FakeConsumeContext : IConsumeContext
 
 file class DefaultProcessManagerPropertyMapperStub : IProcessManagerPropertyMapper
 {
-    public List<ProcessManagerToMessageMap> Mappings { get; set; } = [];
+    private readonly List<ProcessManagerToMessageMap> _mappings = [];
+    public IReadOnlyList<ProcessManagerToMessageMap> Mappings => _mappings;
 
     public void ConfigureMapping<TProcessManagerData, TMessage>(
         System.Linq.Expressions.Expression<Func<TProcessManagerData, object>> processManagerProperty,
         System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
         where TProcessManagerData : IProcessManagerData
     {
-        Mappings.Add(new ProcessManagerToMessageMap { MessageType = typeof(TMessage), MessageProp = _ => null! });
+        _mappings.Add(new ProcessManagerToMessageMap { MessageType = typeof(TMessage), MessageProp = _ => null! });
     }
 }
