@@ -68,15 +68,21 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
 
         var messageId = Guid.NewGuid();
         var messageIdStr = messageId.ToString();
-        var responses = new ConcurrentBag<TReply>();
+        // List<T> with explicit lock outperforms ConcurrentBag for the request/reply
+        // fan-in case because we need Count to be O(1) and we're appending on the
+        // reply thread with no parallel readers until completion (P-18).
+        var responses = new List<TReply>(Math.Max(0, options.ExpectedReplyCount ?? options.EndPoints?.Count ?? 0));
         int expectedCount = options.ExpectedReplyCount ?? options.EndPoints?.Count ?? -1;
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         _pendingRequests[messageIdStr] = new RequestState(tcs, expectedCount, typeof(TReply), reply =>
         {
-            responses.Add((TReply)reply);
-            if (expectedCount > 0 && responses.Count >= expectedCount)
-                tcs.TrySetResult(null!);
+            lock (responses)
+            {
+                responses.Add((TReply)reply);
+                if (expectedCount > 0 && responses.Count >= expectedCount)
+                    tcs.TrySetResult(null!);
+            }
         });
 
         headers[HeaderKeys.RequestMessageId] = messageIdStr;
@@ -105,7 +111,10 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
             }
 
             await tcs.Task.ConfigureAwait(false);
-            return [.. responses];
+            lock (responses)
+            {
+                return [.. responses];
+            }
         }
         finally
         {

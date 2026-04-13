@@ -40,8 +40,12 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         {
             if (_provider.Contains(name))
             {
-                var cacheItem = _provider.Get<string, object>(name);
-                return Task.FromResult<IList<object>>(((List<object>)cacheItem).ToList());
+                // Pre-size the copy to the source list count to avoid resize, and
+                // allocate only a single new list (not two) per retrieval (P-36).
+                var source = (List<object>)_provider.Get<string, object>(name);
+                var copy = new List<object>(source.Count);
+                copy.AddRange(source);
+                return Task.FromResult<IList<object>>(copy);
             }
             return Task.FromResult<IList<object>>([]);
         }

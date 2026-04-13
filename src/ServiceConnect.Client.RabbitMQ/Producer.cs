@@ -221,31 +221,39 @@ public sealed class Producer : IProducer
 
     private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string>? headers, string queueName, string messageType)
     {
-        headers ??= new Dictionary<string, string>();
+        // Build the final object-valued dictionary directly rather than populating a
+        // string-valued copy and then rewriting it (P-28). Pre-sized to the maximum
+        // number of stamped keys + any caller-provided entries.
+        var callerCount = headers?.Count ?? 0;
+        var result = new Dictionary<string, object>(callerCount + 11);
 
-        if (!headers.ContainsKey(HeaderKeys.DestinationAddress))
-            headers[HeaderKeys.DestinationAddress] = queueName;
+        if (headers is not null)
+        {
+            foreach (var kvp in headers)
+                result[kvp.Key] = kvp.Value;
+        }
 
-        if (!headers.ContainsKey(HeaderKeys.MessageId))
-            headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+        if (!result.ContainsKey(HeaderKeys.DestinationAddress))
+            result[HeaderKeys.DestinationAddress] = queueName;
+        if (!result.ContainsKey(HeaderKeys.MessageId))
+            result[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+        if (!result.ContainsKey(HeaderKeys.MessageType))
+            result[HeaderKeys.MessageType] = messageType;
 
-        if (!headers.ContainsKey(HeaderKeys.MessageType))
-            headers[HeaderKeys.MessageType] = messageType;
-
-        headers[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
-        headers[HeaderKeys.TimeSent] = DateTime.UtcNow.ToString("O");
+        result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
+        result[HeaderKeys.TimeSent] = DateTime.UtcNow.ToString("O");
         if (_busConfiguration.IncludeMachineNameInHeaders)
-            headers[HeaderKeys.SourceMachine] = Environment.MachineName;
+            result[HeaderKeys.SourceMachine] = Environment.MachineName;
 
-        if (!headers.ContainsKey(HeaderKeys.TypeName))
-            headers[HeaderKeys.TypeName] = type.FullName!;
-        if (!headers.ContainsKey(HeaderKeys.FullTypeName))
-            headers[HeaderKeys.FullTypeName] = type.AssemblyQualifiedName!;
+        if (!result.ContainsKey(HeaderKeys.TypeName))
+            result[HeaderKeys.TypeName] = type.FullName!;
+        if (!result.ContainsKey(HeaderKeys.FullTypeName))
+            result[HeaderKeys.FullTypeName] = type.AssemblyQualifiedName!;
 
-        headers[HeaderKeys.ConsumerType] = "RabbitMQ";
-        headers[HeaderKeys.Language] = "C#";
+        result[HeaderKeys.ConsumerType] = "RabbitMQ";
+        result[HeaderKeys.Language] = "C#";
 
-        return headers.ToDictionary(x => x.Key, x => (object)x.Value);
+        return result;
     }
 
     private async Task<string> ConfigureExchangeAsync(string exchangeName, string type)

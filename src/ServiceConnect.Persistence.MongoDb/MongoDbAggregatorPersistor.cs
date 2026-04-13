@@ -69,7 +69,8 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         {
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             var docs = await _collection.Find(filter).ToListAsync(cancellationToken).ConfigureAwait(false);
-            var result = new List<object>();
+            // Pre-size the result list to doc count so it doesn't resize as we append (P-59).
+            var result = new List<object>(docs.Count);
 
             foreach (var doc in docs)
             {

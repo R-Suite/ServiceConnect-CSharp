@@ -4,6 +4,10 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessageProcessor
 {
+    // Cache the two result tasks so enum-boxing allocation doesn't happen per message (P-44).
+    private static readonly Task<ProcessResult> NotHandledTask = Task.FromResult(ProcessResult.NotHandled);
+    private static readonly Task<ProcessResult> HandledTask = Task.FromResult(ProcessResult.Handled);
+
     public bool RunBeforeDeserialization => true;
 
     public Task<ProcessResult> ProcessAsync(
@@ -13,14 +17,14 @@ internal sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessa
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!headers.TryGetValue(HeaderKeys.ResponseMessageId, out var responseMessageIdRaw))
-            return Task.FromResult(ProcessResult.NotHandled);
+            return NotHandledTask;
 
         var responseMessageId = HeaderDecoder.Decode(responseMessageIdRaw);
 
         if (string.IsNullOrEmpty(responseMessageId))
-            return Task.FromResult(ProcessResult.NotHandled);
+            return NotHandledTask;
 
         replyManager.ProcessReply(responseMessageId, messageBytes, messageType);
-        return Task.FromResult(ProcessResult.Handled);
+        return HandledTask;
     }
 }

@@ -95,8 +95,10 @@ public static class ServiceConnectActivitySource
             .SetTag(MessagingAttributes.ProtocolName, "amqp")
             .SetTag(MessagingAttributes.MessagingOperation, "receive");
 
-        Dictionary<string, string?> readableHeaders = [];
-        foreach (var kvp in eventArgs.Headers.ToList())
+        // Pre-size the dict and iterate the source directly — ToList() was a defensive
+        // copy that allocated a full KeyValuePair list per consumed message (P-64).
+        var readableHeaders = new Dictionary<string, string?>(eventArgs.Headers.Count);
+        foreach (var kvp in eventArgs.Headers)
         {
             readableHeaders[kvp.Key] = HeaderDecoder.Decode(kvp.Value);
         }

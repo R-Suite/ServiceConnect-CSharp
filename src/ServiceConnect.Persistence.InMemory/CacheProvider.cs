@@ -72,20 +72,23 @@ public sealed class CacheProvider : ICacheProvider
     }
 
     /// <summary>
-    /// Gets an enumerator for keys of a specific type.
+    /// Gets an enumerator for keys of a specific type. Streams the ConcurrentDictionary
+    /// snapshot so callers that bail early avoid the full filtered-materialization cost (P-76).
     /// </summary>
     public IEnumerable<TKey> Keys<TKey>()
     {
-        return [.. _cache.Keys.Where(k => k.GetType() == typeof(TKey)).Cast<TKey>()];
+        var typeOfKey = typeof(TKey);
+        foreach (var k in _cache.Keys)
+        {
+            if (k.GetType() == typeOfKey) yield return (TKey)k;
+        }
     }
 
     /// <summary>
-    /// Gets an enumerator for all the keys.
+    /// Gets an enumerator for all the keys. <see cref="ConcurrentDictionary{TKey,TValue}.Keys"/>
+    /// is already a snapshot — no extra materialization required.
     /// </summary>
-    public IEnumerable<object> Keys()
-    {
-        return [.. _cache.Keys];
-    }
+    public IEnumerable<object> Keys() => _cache.Keys;
 
     /// <summary>
     /// Gets the total count of items in cache.
