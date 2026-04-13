@@ -1,6 +1,4 @@
-using System.Text;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Interfaces;
@@ -30,6 +28,8 @@ public sealed class Client : IAsyncDisposable
     private string _errorExchange = "";
     private string _auditExchange = "";
 
+    private readonly MessageRetryHandler _retryHandler;
+
     private int _messagesBeingProcessed;
     private AsyncEventingBasicConsumer? _consumer;
     private CancellationToken _consumingCt;
@@ -47,6 +47,7 @@ public sealed class Client : IAsyncDisposable
         _prefetchCount = settings.TryGetValue(RabbitMQSettingKeys.PrefetchCount, out var prefetchVal) ? Convert.ToUInt16((int)prefetchVal) : transportConfiguration.PrefetchCount;
         _disablePrefetch = settings.TryGetValue(RabbitMQSettingKeys.DisablePrefetch, out var disablePrefetchVal) && (bool)disablePrefetchVal;
         _queueArguments = settings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal) ? (IDictionary<string, object?>)argsVal : new Dictionary<string, object?>();
+        _retryHandler = new MessageRetryHandler(_maxRetries, queueConfiguration.ErrorQueueName, logger);
     }
 
     /// <summary>
@@ -109,13 +110,13 @@ public sealed class Client : IAsyncDisposable
         }
 
         if (args.Redelivered)
-            SetHeader(headers, HeaderKeys.Redelivered, true);
+            HeaderHelpers.SetHeader(headers, HeaderKeys.Redelivered, true);
 
         try
         {
-            SetHeader(headers, HeaderKeys.TimeReceived, DateTime.UtcNow.ToString("O"));
-            SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
-            SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
+            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeReceived, DateTime.UtcNow.ToString("O"));
+            HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
+            HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
 
             var typeNameRaw = headers.ContainsKey(HeaderKeys.FullTypeName) ? headers[HeaderKeys.FullTypeName] : headers[HeaderKeys.TypeName];
             string typeName = HeaderDecoder.Decode(typeNameRaw) ?? "";
@@ -130,7 +131,7 @@ public sealed class Client : IAsyncDisposable
                 result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers, _consumingCt).ConfigureAwait(false);
             }
 
-            SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));
+            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));
         }
         catch (Exception ex)
         {
@@ -143,45 +144,7 @@ public sealed class Client : IAsyncDisposable
 
         if (!result.Success)
         {
-            int retryCount = 0;
-
-            if (headers.TryGetValue(HeaderKeys.RetryCount, out var retryCountVal)
-                && int.TryParse(retryCountVal?.ToString(), out int parsedRetry)
-                && parsedRetry >= 0 && parsedRetry <= _maxRetries + 1)
-            {
-                retryCount = parsedRetry;
-            }
-
-            if (retryCount < _maxRetries)
-            {
-                retryCount++;
-                SetHeader(headers, HeaderKeys.RetryCount, retryCount);
-
-                var retryProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
-                await _model!.BasicPublishAsync(string.Empty, _retryQueueName, mandatory: false, retryProps, args.Body).ConfigureAwait(false);
-            }
-            else
-            {
-                if (result.Exception != null)
-                {
-                    // Only include type + message in headers — no stack traces or internal details
-                    // that could leak sensitive information to error queue consumers.
-                    // Full diagnostics are logged server-side below.
-                    SetHeader(headers, HeaderKeys.Exception, JsonConvert.SerializeObject(new
-                    {
-                        TimeStamp = DateTime.UtcNow,
-                        ExceptionType = result.Exception.GetType().FullName,
-                        Message = GetErrorMessage(result.Exception)
-                    }));
-
-                    _logger.LogError(result.Exception, "Max retries exceeded for MessageId {MessageId}",
-                        args.BasicProperties.MessageId);
-                }
-
-                _logger.LogError("Max number of retries exceeded. MessageId: {MessageId}", args.BasicProperties.MessageId);
-                var errorProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
-                await _model!.BasicPublishAsync(_errorExchange, string.Empty, mandatory: false, errorProps, args.Body).ConfigureAwait(false);
-            }
+            await _retryHandler.HandleFailureAsync(_model!, _retryQueueName, args, headers, result.Exception).ConfigureAwait(false);
         }
         else if (!_errorsDisabled)
         {
@@ -193,7 +156,7 @@ public sealed class Client : IAsyncDisposable
 
             if (_queueConfiguration.AuditingEnabled && messageType != HeaderKeys.ByteStream)
             {
-                var auditProps = new BasicProperties(args.BasicProperties) { Headers = ToNullableHeaders(headers) };
+                var auditProps = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
                 await _model!.BasicPublishAsync(_auditExchange, string.Empty, mandatory: false, auditProps, args.Body).ConfigureAwait(false);
             }
         }
@@ -237,36 +200,6 @@ public sealed class Client : IAsyncDisposable
     {
         // messageTypeName is the name of the exchange
         await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments).ConfigureAwait(false);
-    }
-
-    private static string GetErrorMessage(Exception exception)
-    {
-        var sbMessage = new StringBuilder();
-        sbMessage.AppendLine(exception.Message);
-        var ie = exception.InnerException;
-        while (ie != null)
-        {
-            sbMessage.AppendLine(ie.Message);
-            ie = ie.InnerException;
-        }
-        return sbMessage.ToString();
-    }
-
-    private static Dictionary<string, object?> ToNullableHeaders(IDictionary<string, object> headers)
-    {
-        return headers.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value);
-    }
-
-    private static void SetHeader<T>(IDictionary<string, object> headers, string key, T value)
-    {
-        if (value is null)
-        {
-            _ = headers.Remove(key);
-        }
-        else
-        {
-            headers[key] = value;
-        }
     }
 
     public async ValueTask DisposeAsync()

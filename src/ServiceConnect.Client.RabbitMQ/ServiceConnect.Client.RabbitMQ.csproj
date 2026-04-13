@@ -9,6 +9,11 @@
         <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>ServiceConnect.UnitTests</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+    <ItemGroup>
         <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
