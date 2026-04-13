@@ -20,7 +20,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
     {
         var messageId = Guid.NewGuid();
         var messageIdStr = messageId.ToString();
-        var tcs = new TaskCompletionSource<object>();
+        var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pendingRequests[messageIdStr] = new RequestState(tcs, 1, typeof(TReply));
 
         headers[HeaderKeys.RequestMessageId] = messageIdStr;
@@ -60,7 +60,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         var messageIdStr = messageId.ToString();
         var responses = new ConcurrentBag<TReply>();
         int expectedCount = options.ExpectedReplyCount ?? options.EndPoints?.Count ?? -1;
-        var tcs = new TaskCompletionSource<object>();
+        var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         _pendingRequests[messageIdStr] = new RequestState(tcs, expectedCount, typeof(TReply), reply =>
         {
