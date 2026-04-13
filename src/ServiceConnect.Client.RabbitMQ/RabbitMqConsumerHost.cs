@@ -46,6 +46,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _retryHandler = retryHandler ?? throw new ArgumentNullException(nameof(retryHandler));
         _auditPublisher = auditPublisher ?? throw new ArgumentNullException(nameof(auditPublisher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        ArgumentNullException.ThrowIfNull(transportConfiguration);
 
         var settings = transportConfiguration.ClientSettings;
         _errorsDisabled = queueConfiguration.DisableErrors;
@@ -86,7 +87,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments).ConfigureAwait(false);
     }
 
-    public async Task EventAsync(object consumer, BasicDeliverEventArgs args)
+    private async Task EventAsync(object consumer, BasicDeliverEventArgs args)
     {
         bool processed = false;
         try
@@ -191,7 +192,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             try
             {
                 _logger.LogDebug("Deleting retry queue");
-                await _model.QueueDeleteAsync(_queueName + ".Retries", false, false, false).ConfigureAwait(false);
+                await _model.QueueDeleteAsync(_retryQueueName, false, false, false).ConfigureAwait(false);
             }
             catch (ObjectDisposedException) { }
             catch (Exception ex)
