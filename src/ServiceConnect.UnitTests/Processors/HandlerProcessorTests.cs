@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
@@ -20,7 +21,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -39,7 +40,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider);
+        var processor = new HandlerProcessor(BuildRegistry(), provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -55,7 +56,7 @@ public class HandlerProcessorTests
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider);
+        var processor = new HandlerProcessor(BuildRegistry(), provider);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -74,7 +75,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -98,7 +99,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "Step2,Step3" };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -121,7 +122,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = System.Text.Encoding.UTF8.GetBytes("NextQueue") };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -141,7 +142,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -149,6 +150,16 @@ public class HandlerProcessorTests
         await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
 
         mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()), Times.Never);
+    }
+
+    private static MessageHandlerRegistry BuildRegistry(params Type[] messageTypes)
+    {
+        var refs = messageTypes
+            .Select(mt => new HandlerReference { MessageType = mt, HandlerType = typeof(TestHpHandler) })
+            .ToList();
+        return new MessageHandlerRegistry(
+            refs,
+            NullLogger<MessageHandlerRegistry>.Instance);
     }
 }
 

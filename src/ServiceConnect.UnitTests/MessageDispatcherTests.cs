@@ -87,12 +87,23 @@ public class MessageDispatcherTests
         return registry;
     }
 
+    private static MessageHandlerRegistry BuildHandlerRegistry(params (Type MessageType, Type HandlerType)[] entries)
+    {
+        var refs = entries
+            .Select(e => new HandlerReference { MessageType = e.MessageType, HandlerType = e.HandlerType })
+            .ToList();
+        return new MessageHandlerRegistry(refs, NullLogger<MessageHandlerRegistry>.Instance);
+    }
+
     private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider)
     {
+        var handlerRegistry = BuildHandlerRegistry(
+            (typeof(FakeMessage1), typeof(TestDispatchHandler)),
+            (typeof(PolyBaseMessage), typeof(PolyBaseHandler)));
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_mockReplyManager.Object),
-            new HandlerProcessor(serviceProvider)
+            new HandlerProcessor(handlerRegistry, serviceProvider)
         };
 
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
@@ -321,7 +332,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_mockReplyManager.Object),
-            new HandlerProcessor(sp)
+            new HandlerProcessor(BuildHandlerRegistry(), sp)
         };
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,

@@ -3,7 +3,9 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessageProcessor
+internal sealed class HandlerProcessor(
+    MessageHandlerRegistry registry,
+    IServiceProvider serviceProvider) : IMessageProcessor
 {
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
@@ -13,46 +15,41 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
         cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
-        // Resolve handlers — walk up base types, stop before Message and object.
-        // All matching handlers in the hierarchy are invoked (not just the most specific).
-        var allHandlers = new List<(object Handler, Type InterfaceType)>();
+        // Walk up the message hierarchy — stop at Message and object.
+        // All matching handlers in the hierarchy are invoked.
+        var invocations = new List<(object Handler, MessageHandlerDescriptor Descriptor)>();
         var checkedType = messageType;
         while (checkedType != null && checkedType != typeof(Message) && checkedType != typeof(object))
         {
-            var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(checkedType);
-            var handlers = serviceProvider.GetServices(handlerInterfaceType);
-            foreach (var h in handlers)
+            if (registry.TryGetOrBuild(checkedType, out var descriptor))
             {
-                if (h != null)
-                    allHandlers.Add((h, handlerInterfaceType));
+                foreach (var h in serviceProvider.GetServices(descriptor.HandlerInterfaceType))
+                {
+                    if (h != null)
+                        invocations.Add((h, descriptor));
+                }
             }
             checkedType = checkedType.BaseType;
         }
 
-        if (allHandlers.Count == 0)
+        if (invocations.Count == 0)
             return ProcessResult.NotHandled;
 
         var bus = serviceProvider.GetRequiredService<IBus>();
         var context = new ConsumeContext(bus, headers) { CancellationToken = cancellationToken };
 
-        foreach (var (handler, resolvedInterface) in allHandlers)
+        foreach (var (handler, descriptor) in invocations)
         {
-            var contextProperty = resolvedInterface.GetProperty("Context");
-            var handleAsyncMethod = resolvedInterface.GetMethod("HandleAsync");
-
-            contextProperty?.SetValue(handler, context);
-
-            var task = (Task?)handleAsyncMethod?.Invoke(handler, [message]);
-            if (task != null)
-                await task;
+            descriptor.SetContext(handler, context);
+            await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
         }
 
-        await ForwardRoutingSlipAsync(message, messageType, headers, bus, cancellationToken);
+        await ForwardRoutingSlipAsync(message, messageType, headers, bus, cancellationToken).ConfigureAwait(false);
 
         return ProcessResult.Handled;
     }
 
-    private async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus, CancellationToken cancellationToken)
+    private static async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus, CancellationToken cancellationToken)
     {
         if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
             return;
@@ -69,6 +66,8 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
         if (destinations.Count == 0)
             return;
 
+        // MakeGenericMethod here is intentionally retained — IBus.RouteAsync is a generic method
+        // with no descriptor to compile against. Separate concern from R-009.
         var routeMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!.MakeGenericMethod(messageType);
         var task = (Task)routeMethod.Invoke(bus, [message, destinations, cancellationToken])!;
         await task;
