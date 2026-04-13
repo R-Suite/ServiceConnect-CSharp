@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Moq;
 using ServiceConnect.Interfaces;
@@ -44,7 +45,7 @@ namespace ServiceConnect.UnitTests
             var headers = new Dictionary<string, string>();
             var messageBytes = new byte[] { 1, 2, 3 };
 
-            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint)
+            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint, CancellationToken ct)
             {
                 capturedMessageId = hdrs["RequestMessageId"];
                 // Simulate a reply inline on a background task
@@ -76,7 +77,7 @@ namespace ServiceConnect.UnitTests
             var headers = new Dictionary<string, string>();
             var messageBytes = new byte[] { 1, 2, 3 };
 
-            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint)
+            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint, CancellationToken ct)
                 => Task.CompletedTask;
 
             // Act & Assert
@@ -103,7 +104,7 @@ namespace ServiceConnect.UnitTests
             var headers = new Dictionary<string, string>();
             var messageBytes = new byte[] { 1, 2, 3 };
 
-            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint)
+            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint, CancellationToken ct)
             {
                 capturedEndpoint = endpoint;
                 capturedMessageId = hdrs["RequestMessageId"];
@@ -158,7 +159,7 @@ namespace ServiceConnect.UnitTests
             var headers = new Dictionary<string, string>();
             var messageBytes = new byte[] { 1, 2, 3 };
 
-            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint)
+            Task sendAction(Type type, byte[] bytes, Dictionary<string, string> hdrs, string? endpoint, CancellationToken ct)
             {
                 capturedMessageId = hdrs["RequestMessageId"];
                 Task.Run(async () =>
@@ -179,6 +180,56 @@ namespace ServiceConnect.UnitTests
 
             // Assert
             Assert.Equal(2, results.Count);
+        }
+
+        // --- CancellationToken tests (Task 8) ---
+
+        [Fact]
+        public async Task SendRequestAsync_ExternalCancel_ThrowsOCE_NotRequestTimeoutException()
+        {
+            var rrm = new RequestReplyManager(Mock.Of<IMessageSerializer>());
+            using var externalCts = new CancellationTokenSource();
+            var options = new RequestOptions { Timeout = 300000 }; // 5 minutes ms
+
+            var task = rrm.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                new byte[] { 0 }, new Dictionary<string, string>(),
+                (type, bytes, headers, endpoint, ct) => Task.CompletedTask,
+                options,
+                externalCts.Token);
+
+            externalCts.CancelAfter(50);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+        }
+
+        [Fact]
+        public async Task SendRequestAsync_Timeout_ThrowsRequestTimeoutException()
+        {
+            var rrm = new RequestReplyManager(Mock.Of<IMessageSerializer>());
+            var options = new RequestOptions { Timeout = 50 }; // 50 ms
+
+            var task = rrm.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                new byte[] { 0 }, new Dictionary<string, string>(),
+                (type, bytes, headers, endpoint, ct) => Task.CompletedTask,
+                options,
+                CancellationToken.None);
+
+            await Assert.ThrowsAsync<RequestTimeoutException>(() => task);
+        }
+
+        [Fact]
+        public async Task SendRequestAsync_PreCancelledToken_ThrowsImmediately()
+        {
+            var rrm = new RequestReplyManager(Mock.Of<IMessageSerializer>());
+            using var externalCts = new CancellationTokenSource();
+            externalCts.Cancel();
+            var options = new RequestOptions { Timeout = 300000 };
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                rrm.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                    new byte[] { 0 }, new Dictionary<string, string>(),
+                    (type, bytes, headers, endpoint, ct) => Task.CompletedTask,
+                    options, externalCts.Token));
         }
     }
 }

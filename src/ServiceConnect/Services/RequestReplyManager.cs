@@ -13,11 +13,14 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
-        Func<Type, byte[], Dictionary<string, string>, string?, Task> sendAction,
-        RequestOptions options)
+        Func<Type, byte[], Dictionary<string, string>, string?, CancellationToken, Task> sendAction,
+        RequestOptions options,
+        CancellationToken cancellationToken = default)
         where TRequest : Message
         where TReply : Message
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var messageId = Guid.NewGuid();
         var messageIdStr = messageId.ToString();
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -25,22 +28,26 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
 
         headers[HeaderKeys.RequestMessageId] = messageIdStr;
 
+        using var timeoutCts = new CancellationTokenSource(options.Timeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        await using var reg = linkedCts.Token.Register(() =>
+        {
+            if (cancellationToken.IsCancellationRequested)
+                tcs.TrySetCanceled(cancellationToken);
+            else
+                tcs.TrySetException(new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout)));
+        });
+
         try
         {
             if (!string.IsNullOrEmpty(options.EndPoint))
-                await sendAction(typeof(TRequest), messageBytes, headers, options.EndPoint);
+                await sendAction(typeof(TRequest), messageBytes, headers, options.EndPoint, cancellationToken).ConfigureAwait(false);
             else
-                await sendAction(typeof(TRequest), messageBytes, headers, null);
+                await sendAction(typeof(TRequest), messageBytes, headers, null, cancellationToken).ConfigureAwait(false);
 
-            using var cts = new CancellationTokenSource(options.Timeout);
-            await using var reg = cts.Token.Register(() => tcs.TrySetCanceled());
-
-            var result = await tcs.Task;
+            var result = await tcs.Task.ConfigureAwait(false);
             return (TReply)result;
-        }
-        catch (OperationCanceledException)
-        {
-            throw new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout));
         }
         finally
         {
@@ -51,11 +58,14 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
-        Func<Type, byte[], Dictionary<string, string>, string?, Task> sendAction,
-        RequestOptions options)
+        Func<Type, byte[], Dictionary<string, string>, string?, CancellationToken, Task> sendAction,
+        RequestOptions options,
+        CancellationToken cancellationToken = default)
         where TRequest : Message
         where TReply : Message
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var messageId = Guid.NewGuid();
         var messageIdStr = messageId.ToString();
         var responses = new ConcurrentBag<TReply>();
@@ -71,21 +81,30 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
 
         headers[HeaderKeys.RequestMessageId] = messageIdStr;
 
-        if (options.EndPoints != null)
+        using var timeoutCts = new CancellationTokenSource(options.Timeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        await using var reg = linkedCts.Token.Register(() =>
         {
-            foreach (string endPoint in options.EndPoints)
-                await sendAction(typeof(TRequest), messageBytes, headers, endPoint);
-        }
-        else
-        {
-            await sendAction(typeof(TRequest), messageBytes, headers, null);
-        }
+            if (cancellationToken.IsCancellationRequested)
+                tcs.TrySetCanceled(cancellationToken);
+            else
+                tcs.TrySetResult(null!); // timeout returns what we have
+        });
 
         try
         {
-            using var cts = new CancellationTokenSource(options.Timeout);
-            cts.Token.Register(() => tcs.TrySetResult(null!)); // timeout returns what we have
-            await tcs.Task;
+            if (options.EndPoints != null)
+            {
+                foreach (string endPoint in options.EndPoints)
+                    await sendAction(typeof(TRequest), messageBytes, headers, endPoint, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                await sendAction(typeof(TRequest), messageBytes, headers, null, cancellationToken).ConfigureAwait(false);
+            }
+
+            await tcs.Task.ConfigureAwait(false);
             return [.. responses];
         }
         finally

@@ -95,8 +95,9 @@ public sealed class Bus(
         return await _requestReplyManager.SendRequestAsync<T, TReply>(
             messageBytes,
             headers,
-            (type, bytes, hdrs, endpoint) => _sendPipeline.ExecuteSendMessagePipelineAsync(type, bytes, hdrs, endpoint, cancellationToken),
-            requestOptions).ConfigureAwait(false);
+            _sendPipeline.ExecuteSendMessagePipelineAsync,
+            requestOptions,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
@@ -116,8 +117,9 @@ public sealed class Bus(
         return await _requestReplyManager.SendRequestMultiAsync<T, TReply>(
             messageBytes,
             headers,
-            (type, bytes, hdrs, endpoint) => _sendPipeline.ExecuteSendMessagePipelineAsync(type, bytes, hdrs, endpoint, cancellationToken),
-            requestOptions).ConfigureAwait(false);
+            _sendPipeline.ExecuteSendMessagePipelineAsync,
+            requestOptions,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
