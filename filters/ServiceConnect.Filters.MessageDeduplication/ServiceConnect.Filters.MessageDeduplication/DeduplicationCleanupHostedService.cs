@@ -23,25 +23,12 @@ namespace ServiceConnect.Filters.MessageDeduplication
             IMessageDeduplicationPersistor persistor,
             IOptions<DeduplicationFilterSettings> options,
             ILogger<DeduplicationCleanupHostedService> logger)
-            : this(
-                persistor,
-                ResolveDisableMsgExpiry(options),
-                ResolveInterval(options),
-                logger)
-        {
-        }
-
-        private static bool ResolveDisableMsgExpiry(IOptions<DeduplicationFilterSettings> options)
         {
             if (options is null) throw new ArgumentNullException(nameof(options));
-            return options.Value.DisableMsgExpiry;
-        }
-
-        private static TimeSpan ResolveInterval(IOptions<DeduplicationFilterSettings> options)
-        {
-            // options was already null-checked in ResolveDisableMsgExpiry (called first by C#
-            // ctor-chaining evaluation order — which is left-to-right on the `this(...)` args).
-            return TimeSpan.FromMinutes(options.Value.MsgCleanupIntervalMinutes);
+            _persistor = persistor ?? throw new ArgumentNullException(nameof(persistor));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _disableMsgExpiry = options.Value.DisableMsgExpiry;
+            _interval = TimeSpan.FromMinutes(options.Value.MsgCleanupIntervalMinutes);
         }
 
         private DeduplicationCleanupHostedService(
@@ -78,9 +65,9 @@ namespace ServiceConnect.Filters.MessageDeduplication
                     await Task.Delay(_interval, stoppingToken).ConfigureAwait(false);
                     await _persistor.RemoveExpiredMessagesAsync(DateTime.UtcNow, stoppingToken).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                catch (OperationCanceledException ex) when (ex.CancellationToken == stoppingToken)
                 {
-                    return; // graceful shutdown
+                    return; // graceful shutdown — cancellation came from our stoppingToken
                 }
                 catch (Exception ex)
                 {
