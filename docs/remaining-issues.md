@@ -1,6 +1,6 @@
 # Remaining Issues — Verified but Deferred
 
-Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. R-017/R-018 (async filter pipeline + fail-closed dedup) and R-032 (settings DI) completed in Group C-2 on 2026-04-13. R-020/R-021 (Client + ProcessManagerProcessor SRP refactor) completed in Group C-3 on 2026-04-13. R-009 (service locator + reflection in remaining three processors) completed in Group C-4 on 2026-04-13. R-028 (unit test gap-fill) completed in Group C-5 on 2026-04-13. All verified issues now resolved. R-037 discovered during C-5 and recorded below for follow-up.
+Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. R-017/R-018 (async filter pipeline + fail-closed dedup) and R-032 (settings DI) completed in Group C-2 on 2026-04-13. R-020/R-021 (Client + ProcessManagerProcessor SRP refactor) completed in Group C-3 on 2026-04-13. R-009 (service locator + reflection in remaining three processors) completed in Group C-4 on 2026-04-13. R-028 (unit test gap-fill) completed in Group C-5 on 2026-04-13. R-037 (TryGetExistingContext carrier-type bug) fixed on 2026-04-13. All known issues now resolved.
 
 ## From Code Review Plan (Medium Priority)
 
@@ -29,7 +29,7 @@ Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken
 
 | ID | Category | Description | Scope |
 |----|----------|-------------|-------|
-| R-037 | Bug | `ServiceConnectActivitySource.TryGetExistingContext` cannot extract trace context. The method accepts `Dictionary<string, string>` but the internal `ExtractTraceIdAndState` callback pattern-matches against `Dictionary<string, object>`. Because generic `Dictionary<K,V>` is invariant, the cast always fails and the method silently returns `false`. Discovered via unit test in Group C-5. No in-repo callers — impact limited to external instrumentation code that calls this public helper. Fix would be either (a) adding a `Dictionary<string, string>` branch to the callback, or (b) rewriting `TryGetExistingContext` to iterate headers directly. |
+| R-037 | Bug | **Done** (2026-04-13) — `ExtractTraceIdAndState` now pattern-matches both `Dictionary<string, object>` (Consume / AMQP header path) and `Dictionary<string, string>` (TryGetExistingContext path). Public API unchanged. Unit test flipped from bug-characterization to correctness. |
 
 ## Not Real (Removed)
 
