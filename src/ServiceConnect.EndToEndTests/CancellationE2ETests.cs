@@ -34,7 +34,11 @@ public class CancellationE2ETests
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
             });
-            builder.ConfigureQueues(q => q.QueueName = queueName);
+            builder.ConfigureQueues(q =>
+            {
+                q.QueueName = queueName;
+                q.AddQueueMapping(typeof(CancellationTestRequest), "cancellation-test-never-replied");
+            });
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
         });
 
