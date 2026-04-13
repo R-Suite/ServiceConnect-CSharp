@@ -10,6 +10,8 @@
         <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
         <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj" />
         <ProjectReference Include="..\ServiceConnect.Persistence.InMemory\ServiceConnect.Persistence.InMemory.csproj" />
+        <ProjectReference Include="..\ServiceConnect.Persistence.MongoDb\ServiceConnect.Persistence.MongoDb.csproj" />
+        <ProjectReference Include="..\ServiceConnect.Telemetry\ServiceConnect.Telemetry.csproj" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="coverlet.collector" Version="6.0.4">
