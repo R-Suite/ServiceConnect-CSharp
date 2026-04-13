@@ -1,5 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services.Processors;
@@ -16,7 +16,12 @@ public class AggregatorProcessorTests
         services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
         var provider = services.BuildServiceProvider();
 
-        var processor = new AggregatorProcessor(provider, new Mock<ILogger<AggregatorProcessor>>().Object);
+        var registry = new AggregatorRegistry(
+            new List<HandlerReference>(),
+            provider,
+            NullLogger<AggregatorRegistry>.Instance);
+        var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
+
         var msg = new AggTestMessage(Guid.NewGuid()) { Value = "test" };
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -65,7 +70,8 @@ public class AggregatorProcessorTests
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
 
-        using var processor = new AggregatorProcessor(provider, new Mock<ILogger<AggregatorProcessor>>().Object);
+        var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
+        using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 

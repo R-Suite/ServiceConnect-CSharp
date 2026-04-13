@@ -45,6 +45,12 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.StreamHandlerRegistry>>()));
 
+        // Aggregator descriptor registry (eagerly built, materializes each aggregator once to capture BatchSize/Timeout)
+        services.TryAddSingleton<Services.Processors.AggregatorRegistry>(sp => new Services.Processors.AggregatorRegistry(
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp,
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.AggregatorRegistry>>()));
+
         // Message processors (order matters: ReplyProcessor first, then HandlerProcessor last)
         services.TryAddSingleton<ReplyProcessor>();
         services.TryAddSingleton<StreamProcessor>();
