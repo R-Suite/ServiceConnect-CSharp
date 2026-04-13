@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Moq;
+using Microsoft.Extensions.Logging.Abstractions;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
@@ -15,7 +14,11 @@ public class StreamProcessorTests
     {
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object, new MessageTypeRegistry());
+        var processor = new StreamProcessor(
+            provider,
+            NullLogger<StreamProcessor>.Instance,
+            new MessageTypeRegistry(),
+            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance));
 
         var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "Send" };
         var envelope = new Envelope { Headers = headers, Body = Array.Empty<byte>() };
@@ -30,7 +33,11 @@ public class StreamProcessorTests
     {
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object, new MessageTypeRegistry());
+        var processor = new StreamProcessor(
+            provider,
+            NullLogger<StreamProcessor>.Instance,
+            new MessageTypeRegistry(),
+            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance));
 
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = Array.Empty<byte>() };
@@ -45,7 +52,11 @@ public class StreamProcessorTests
     {
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(provider, new Mock<ILogger<StreamProcessor>>().Object, new MessageTypeRegistry());
+        var processor = new StreamProcessor(
+            provider,
+            NullLogger<StreamProcessor>.Instance,
+            new MessageTypeRegistry(),
+            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance));
 
         var headers = new Dictionary<string, object>
         {

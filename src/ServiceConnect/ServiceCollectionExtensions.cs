@@ -40,6 +40,11 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.MessageHandlerRegistry>>()));
 
+        // Stream-handler descriptor registry (eagerly built, singleton)
+        services.TryAddSingleton<Services.Processors.StreamHandlerRegistry>(sp => new Services.Processors.StreamHandlerRegistry(
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.StreamHandlerRegistry>>()));
+
         // Message processors (order matters: ReplyProcessor first, then HandlerProcessor last)
         services.TryAddSingleton<ReplyProcessor>();
         services.TryAddSingleton<StreamProcessor>();
