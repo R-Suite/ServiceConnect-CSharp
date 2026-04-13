@@ -1,12 +1,92 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using ServiceConnect.Filters.MessageDeduplication.Persistors;
 
 namespace ServiceConnect.Filters.MessageDeduplication
 {
-    // Placeholder — Task 5 implements the cleanup loop.
+    /// <summary>
+    /// Periodically removes expired message ids from the deduplication persistor.
+    /// Honors <see cref="DeduplicationFilterSettings.DisableMsgExpiry"/>.
+    /// </summary>
     public sealed class DeduplicationCleanupHostedService : BackgroundService
     {
-        protected override Task ExecuteAsync(CancellationToken stoppingToken) => Task.CompletedTask;
+        private readonly IMessageDeduplicationPersistor _persistor;
+        private readonly bool _disableMsgExpiry;
+        private readonly TimeSpan _interval;
+        private readonly ILogger<DeduplicationCleanupHostedService> _logger;
+
+        public DeduplicationCleanupHostedService(
+            IMessageDeduplicationPersistor persistor,
+            IOptions<DeduplicationFilterSettings> options,
+            ILogger<DeduplicationCleanupHostedService> logger)
+            : this(
+                persistor,
+                ResolveDisableMsgExpiry(options),
+                ResolveInterval(options),
+                logger)
+        {
+        }
+
+        private static bool ResolveDisableMsgExpiry(IOptions<DeduplicationFilterSettings> options)
+        {
+            if (options is null) throw new ArgumentNullException(nameof(options));
+            return options.Value.DisableMsgExpiry;
+        }
+
+        private static TimeSpan ResolveInterval(IOptions<DeduplicationFilterSettings> options)
+        {
+            // options was already null-checked in ResolveDisableMsgExpiry (called first by C#
+            // ctor-chaining evaluation order — which is left-to-right on the `this(...)` args).
+            return TimeSpan.FromMinutes(options.Value.MsgCleanupIntervalMinutes);
+        }
+
+        private DeduplicationCleanupHostedService(
+            IMessageDeduplicationPersistor persistor,
+            bool disableMsgExpiry,
+            TimeSpan interval,
+            ILogger<DeduplicationCleanupHostedService> logger)
+        {
+            _persistor = persistor ?? throw new ArgumentNullException(nameof(persistor));
+            _disableMsgExpiry = disableMsgExpiry;
+            _interval = interval;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        // Internal test seam — allows sub-minute intervals for testing the loop.
+        internal static DeduplicationCleanupHostedService CreateForTesting(
+            IMessageDeduplicationPersistor persistor,
+            bool disableMsgExpiry,
+            TimeSpan interval,
+            ILogger<DeduplicationCleanupHostedService> logger)
+        {
+            return new DeduplicationCleanupHostedService(persistor, disableMsgExpiry, interval, logger);
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            if (_disableMsgExpiry)
+                return;
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(_interval, stoppingToken).ConfigureAwait(false);
+                    await _persistor.RemoveExpiredMessagesAsync(DateTime.UtcNow, stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    return; // graceful shutdown
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during dedup cleanup; will retry on next interval");
+                }
+            }
+        }
     }
 }
