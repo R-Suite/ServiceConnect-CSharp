@@ -8,22 +8,22 @@ public interface IProducer : IAsyncDisposable
     /// <summary>
     /// Publishes a serialized message to all subscribers of the specified type.
     /// </summary>
-    Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null);
+    Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends a serialized message to the configured queue for the specified type.
     /// </summary>
-    Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null);
+    Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends a serialized message to a specific endpoint.
     /// </summary>
-    Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null);
+    Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends raw bytes to a specific endpoint without type-based routing.
     /// </summary>
-    Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null);
+    Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the maximum message size in bytes supported by the broker.
@@ -33,5 +33,5 @@ public interface IProducer : IAsyncDisposable
     /// <summary>
     /// Disconnects the producer from the broker.
     /// </summary>
-    Task DisconnectAsync();
+    Task DisconnectAsync(CancellationToken cancellationToken = default);
 }

@@ -117,25 +117,27 @@ public sealed class Producer : IProducer
         }
     }
 
-    public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
+    public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureConnectedAsync().ConfigureAwait(false);
-        await _publishLock.WaitAsync().ConfigureAwait(false);
+        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
             var basicProperties = CreateBasicProperties(messageHeaders);
 
             string exchangeName = await ConfigureExchangeAsync(type.FullName!.Replace(".", string.Empty), "fanout").ConfigureAwait(false);
-            await PublishWithRetryAsync(exchangeName, "", basicProperties, message).ConfigureAwait(false);
+            await PublishWithRetryAsync(exchangeName, "", basicProperties, message, cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
     }
 
-    public async Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null)
+    public async Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureConnectedAsync().ConfigureAwait(false);
-        await _publishLock.WaitAsync().ConfigureAwait(false);
+        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (!_queueConfiguration.QueueMappings.TryGetValue(type.FullName!, out IList<string>? endPoints))
@@ -145,43 +147,46 @@ public sealed class Producer : IProducer
             {
                 var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
                 var basicProperties = CreateBasicProperties(messageHeaders);
-                await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message).ConfigureAwait(false);
+                await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message, cancellationToken).ConfigureAwait(false);
             }
         }
         finally { _publishLock.Release(); }
     }
 
-    public async Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null)
+    public async Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
             throw new ArgumentException($"Cannot send message of type {type} to empty endpoint");
 
         await EnsureConnectedAsync().ConfigureAwait(false);
-        await _publishLock.WaitAsync().ConfigureAwait(false);
+        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
             var basicProperties = CreateBasicProperties(messageHeaders);
-            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message).ConfigureAwait(false);
+            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message, cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
     }
 
-    public async Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null)
+    public async Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureConnectedAsync().ConfigureAwait(false);
-        await _publishLock.WaitAsync().ConfigureAwait(false);
+        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, HeaderKeys.ByteStream);
             var basicProperties = CreateBasicProperties(messageHeaders);
-            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, packet).ConfigureAwait(false);
+            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, packet, cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
     }
 
-    public async Task DisconnectAsync()
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         _logger.LogDebug("In Producer.DisconnectAsync()");
         await DisposeAsync().ConfigureAwait(false);
     }
@@ -227,9 +232,9 @@ public sealed class Producer : IProducer
         return basicProperties;
     }
 
-    private async Task PublishWithRetryAsync(string exchange, string routingKey, BasicProperties basicProperties, byte[] message)
+    private async Task PublishWithRetryAsync(string exchange, string routingKey, BasicProperties basicProperties, byte[] message, CancellationToken cancellationToken = default)
     {
-        await _model!.BasicPublishAsync(exchange, routingKey, mandatory: false, basicProperties, (ReadOnlyMemory<byte>)message).ConfigureAwait(false);
+        await _model!.BasicPublishAsync(exchange, routingKey, mandatory: false, basicProperties, (ReadOnlyMemory<byte>)message, cancellationToken).ConfigureAwait(false);
     }
 
     private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string>? headers, string queueName, string messageType)
