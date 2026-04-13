@@ -13,6 +13,8 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 
         public MessageDeduplicationPersistorMongoDb(DeduplicationFilterSettings settings)
         {
+            if (settings is null) throw new ArgumentNullException(nameof(settings));
+
             var url = new MongoUrl(settings.ConnectionStringMongoDb);
             var clientSettings = MongoClientSettings.FromUrl(url);
 
@@ -47,6 +49,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             var mongoDatabase = mongoClient.GetDatabase(settings.DatabaseNameMongoDb);
             _collection = mongoDatabase.GetCollection<ProcessedMessage>(settings.CollectionNameMongoDb);
 
+            // Ensure indexes (fire-and-forget during construction is existing behavior).
             _collection.Indexes.CreateOneAsync(
                 new CreateIndexModel<ProcessedMessage>(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id)));
             _collection.Indexes.CreateOneAsync(

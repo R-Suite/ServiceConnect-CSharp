@@ -20,8 +20,10 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             IMessageDeduplicationPersistor persistor,
             IOptions<DeduplicationFilterSettings> options)
         {
-            _persistor = persistor ?? throw new ArgumentNullException(nameof(persistor));
-            _settings = options?.Value ?? throw new ArgumentNullException(nameof(options));
+            if (persistor is null) throw new ArgumentNullException(nameof(persistor));
+            if (options is null) throw new ArgumentNullException(nameof(options));
+            _persistor = persistor;
+            _settings = options.Value;
         }
 
         public async Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
