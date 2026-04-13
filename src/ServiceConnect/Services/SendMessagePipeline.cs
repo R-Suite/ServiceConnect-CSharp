@@ -22,7 +22,7 @@ public sealed class SendMessagePipeline(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct, IProducer prod) =>
-            prod.PublishAsync(t, b, h);
+            prod.PublishAsync(t, b, h, ct);
 
         var chain = BuildChain((t, b, h, ep, ct) => Terminal(t, b, h, ep, ct, _producer));
         return chain(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
@@ -34,8 +34,8 @@ public sealed class SendMessagePipeline(
         static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct, IProducer prod)
         {
             if (!string.IsNullOrEmpty(ep))
-                return prod.SendAsync(ep, t, b, h);
-            return prod.SendAsync(t, b, h);
+                return prod.SendAsync(ep, t, b, h, ct);
+            return prod.SendAsync(t, b, h, ct);
         }
 
         var chain = BuildChain((t, b, h, ep, ct) => Terminal(t, b, h, ep, ct, _producer));
