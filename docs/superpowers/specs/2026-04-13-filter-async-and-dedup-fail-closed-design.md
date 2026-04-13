@@ -9,9 +9,9 @@
 
 Three related defects in the deduplication filter subsystem, made tractable together:
 
-1. **R-018 — `IFilter.Process` is synchronous.** The interface returns `bool` and has no `CancellationToken`. Filters that need async I/O (MongoDB deduplication, any persistor) are forced to sync-over-async, e.g. [`MessageDeduplicationPersistorMongoDb.cs:57`](../../../filters/ServiceConnect.Filter.MessageDeduplication/Persistors/MessageDeduplicationPersistorMongoDb.cs) uses `_collection.FindAsync(...).Result`. This blocks pipeline threads and risks deadlock under contention. Group C-1 made the surrounding bus/consumer/producer pipeline async with cancellation; the filter layer is the last sync island.
+1. **R-018 — `IFilter.Process` is synchronous.** The interface returns `bool` and has no `CancellationToken`. Filters that need async I/O (MongoDB deduplication, any persistor) are forced to sync-over-async, e.g. [`MessageDeduplicationPersistorMongoDb.cs:57`](../../../filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Persistors/MessageDeduplicationPersistorMongoDb.cs) uses `_collection.FindAsync(...).Result`. This blocks pipeline threads and risks deadlock under contention. Group C-1 made the surrounding bus/consumer/producer pipeline async with cancellation; the filter layer is the last sync island.
 
-2. **R-017 — Silent exception swallowing in dedup persistor and outgoing filter.** [`OutgoingFilter.Process`](../../../filters/ServiceConnect.Filter.MessageDeduplication/Filters/OutgoingFilter.cs#L66-L78) catches `Exception`, logs a warning, and returns `true` (continue). The message is sent *without* a dedup record, silently breaking the guarantee the filter exists to provide. The MongoDb persistor's `Insert` and `RemoveExpiredMessages` methods also catch-log-return on any error. Operators discover dedup is broken only from log review — not from behavior.
+2. **R-017 — Silent exception swallowing in dedup persistor and outgoing filter.** [`OutgoingFilter.Process`](../../../filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/OutgoingFilter.cs#L66-L78) catches `Exception`, logs a warning, and returns `true` (continue). The message is sent *without* a dedup record, silently breaking the guarantee the filter exists to provide. The MongoDb persistor's `Insert` and `RemoveExpiredMessages` methods also catch-log-return on any error. Operators discover dedup is broken only from log review — not from behavior.
 
 3. **R-032 — `DeduplicationFilterSettings` is a hand-rolled `Lazy<T>` singleton.** Configuration happens via `DeduplicationFilterSettings.Instance.X = ...` mutation before app startup. This pattern defeats DI, makes testing settings variations awkward, and pre-dates the framework's migration to `Microsoft.Extensions.DependencyInjection`.
 
@@ -46,7 +46,9 @@ public interface IFilter
 }
 ```
 
-Return value semantics unchanged: `true` blocks the pipeline, `false` continues.
+Return value semantics unchanged: `true` **continues** the pipeline, `false` **blocks** (stops) it.
+
+**Documentation bug fix:** [`IFilter.cs`](../../../src/ServiceConnect.Interfaces/IFilter.cs) currently has XML doc comments that state the **inverse** of actual behavior. [`FilterPipeline.ExecuteFilters` line 33-35](../../../src/ServiceConnect/Services/FilterPipeline.cs) treats the return value as `continueProcessing`, and [`IncomingFilter.cs:29`](../../../filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/IncomingFilter.cs) returns `false` to block duplicates. Update the XML docs to match reality when renaming to `ProcessAsync`.
 
 **Migration for the six current implementations:**
 - `OutgoingDeduplicationFilter` — rewritten (Section 3).
@@ -127,7 +129,7 @@ Connection construction: align with Group B's MongoUrl pattern where compatible.
 
 ### 5. Fail-closed outgoing filter
 
-New [`OutgoingDeduplicationFilter`](../../../filters/ServiceConnect.Filter.MessageDeduplication/Filters/OutgoingDeduplicationFilter.cs):
+New [`OutgoingDeduplicationFilter`](../../../filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/OutgoingDeduplicationFilter.cs):
 
 ```csharp
 public sealed class OutgoingDeduplicationFilter : IFilter
@@ -150,27 +152,31 @@ public sealed class OutgoingDeduplicationFilter : IFilter
         var messageId = HeaderDecoder.GetMessageId(envelope.Headers);
         var expiry = DateTime.UtcNow.AddHours(_settings.MsgExpiryHours);
         await _persistor.InsertAsync(messageId, expiry, cancellationToken).ConfigureAwait(false);
-        return false; // continue pipeline (true = block, false = continue)
+        return true; // continue pipeline (true = continue, false = block)
     }
 }
 ```
 
-**Block semantics reminder:** `IFilter.ProcessAsync` returns `true` to **block** (stop pipeline) and `false` to **continue**. Outgoing dedup records the send and continues (`false`). Incoming dedup returns `true` to block duplicates, else `false`.
+**Return semantics reminder:** `IFilter.ProcessAsync` returns `true` to **continue** and `false` to **block** (stop the pipeline). Outgoing dedup records the send and continues (`true`). Incoming dedup returns `false` to block duplicates, `true` to continue.
 
 No try/catch. On persistor failure, exception bubbles through `FilterPipeline.ExecuteOutgoingFiltersAsync` → `Bus.PublishAsync` → caller. Caller retries at their own discretion. The dedup guarantee is maintained: no record, no send.
 
-New [`IncomingDeduplicationFilter`](../../../filters/ServiceConnect.Filter.MessageDeduplication/Filters/IncomingDeduplicationFilter.cs):
+New [`IncomingDeduplicationFilter`](../../../filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/IncomingDeduplicationFilter.cs):
 
 ```csharp
 public async Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
 {
+    // Only dedup-check on redelivered messages (see original IncomingFilter comment):
+    // RabbitMQ guarantees a first-delivery has never been seen before.
+    if (!IsRedelivered(envelope.Headers))
+        return true; // continue
+
     var messageId = HeaderDecoder.GetMessageId(envelope.Headers);
     var exists = await _persistor.GetMessageExistsAsync(messageId, cancellationToken).ConfigureAwait(false);
-    if (exists) return true; // block duplicate
+    if (exists)
+        return false; // block duplicate
 
-    var expiry = DateTime.UtcNow.AddHours(_settings.MsgExpiryHours);
-    await _persistor.InsertAsync(messageId, expiry, cancellationToken).ConfigureAwait(false);
-    return false; // continue
+    return true; // continue
 }
 ```
 
@@ -360,31 +366,31 @@ pipeline.Outgoing<OutgoingDeduplicationFilter>();
 - `src/ServiceConnect/Services/FilterPipeline.cs`
 - `src/ServiceConnect/Bus.cs` (5 call sites)
 - `src/ServiceConnect/Services/MessageDispatcher.cs` (3 call sites)
-- `filters/ServiceConnect.Filter.MessageDeduplication/Filters/OutgoingDeduplicationFilter.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication/Filters/IncomingDeduplicationFilter.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication/Persistors/IMessageDeduplicationPersistor.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication/Persistors/MessageDeduplicationPersistorInMemory.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication/Persistors/MessageDeduplicationPersistorMongoDb.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication/DeduplicationFilterSettings.cs`
-- `filters/ServiceConnect.Filter.GzipCompression/OutgoingGzipCompressionFilter.cs`
-- `filters/ServiceConnect.Filter.GzipCompression/IncomingGzipCompressionFilter.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/OutgoingDeduplicationFilter.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/IncomingDeduplicationFilter.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Persistors/IMessageDeduplicationPersistor.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Persistors/MessageDeduplicationPersistorInMemory.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Persistors/MessageDeduplicationPersistorMongoDb.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/DeduplicationFilterSettings.cs`
+- `filters/ServiceConnect.Filters.GzipCompression/ServiceConnect.Filters.GzipCompression/OutgoingGzipCompressionFilter.cs`
+- `filters/ServiceConnect.Filters.GzipCompression/ServiceConnect.Filters.GzipCompression/IncomingGzipCompressionFilter.cs`
 - `src/ServiceConnect.UnitTests/FilterPipelineTests.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication.UnitTests/OutgoingFilterTests.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication.UnitTests/IncomingFilterTests.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.Tests/OutgoingFilterTests.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.Tests/IncomingFilterTests.cs`
 - `src/ServiceConnect.EndToEndTests/MessageDeduplicationTests.cs`
 - `docs/remaining-issues.md` (wrap-up task)
 
 **Created (~5):**
-- `filters/ServiceConnect.Filter.MessageDeduplication/AddMessageDeduplicationFilterExtensions.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication/DeduplicationCleanupHostedService.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication.UnitTests/MessageDeduplicationPersistorInMemoryTests.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication.UnitTests/AddMessageDeduplicationFilterTests.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication.UnitTests/DeduplicationCleanupHostedServiceTests.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/AddMessageDeduplicationFilterExtensions.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/DeduplicationCleanupHostedService.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.Tests/MessageDeduplicationPersistorInMemoryTests.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.Tests/AddMessageDeduplicationFilterTests.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.Tests/DeduplicationCleanupHostedServiceTests.cs`
 
 **Deleted (~4):**
-- `filters/ServiceConnect.Filter.MessageDeduplication/PersistorFactory.cs`
-- `filters/ServiceConnect.Filter.MessageDeduplication/Filters/OutgoingFilter.cs` (logic moved into `OutgoingDeduplicationFilter`)
-- `filters/ServiceConnect.Filter.MessageDeduplication/Filters/IncomingFilter.cs` (logic moved into `IncomingDeduplicationFilter`)
-- `filters/ServiceConnect.Filter.MessageDeduplication.UnitTests/PersistorFactoryTests.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/PersistorFactory.cs`
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/OutgoingFilter.cs` (logic moved into `OutgoingDeduplicationFilter`)
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/Filters/IncomingFilter.cs` (logic moved into `IncomingDeduplicationFilter`)
+- `filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.Tests/PersistorFactoryTests.cs`
 
 Implementer: verify the exact filter project paths under `filters/` match; directory structure may differ slightly from the paths shown above.
