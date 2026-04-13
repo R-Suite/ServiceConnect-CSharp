@@ -167,8 +167,8 @@ public class ProcessingMiddlewarePipelineTests
     {
         _mockSerializer = new Mock<IMessageSerializer>();
         _mockFilterPipeline = new Mock<IFilterPipeline>();
-        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFilters(It.IsAny<Envelope>())).Returns(false);
-        _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFilters(It.IsAny<Envelope>())).Returns(false);
+        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
     }
 
     private static IDictionary<string, object> MakeHeaders(Type messageType)

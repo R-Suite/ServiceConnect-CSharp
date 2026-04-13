@@ -11,9 +11,9 @@ file sealed class ConsumerBlockingFilter : IFilter
 {
     public IBus Bus { get; set; } = null!;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        return false; // block the message — handler must not be invoked
+        return Task.FromResult(false); // block the message — handler must not be invoked
     }
 }
 
@@ -25,10 +25,10 @@ file sealed class AfterConsumingSignalFilter : IFilter
 
     public IBus Bus { get; set; } = null!;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult();
-        return true;
+        return Task.FromResult(true);
     }
 }
 

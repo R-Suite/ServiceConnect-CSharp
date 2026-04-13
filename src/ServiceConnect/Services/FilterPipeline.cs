@@ -6,31 +6,32 @@ namespace ServiceConnect.Services;
 
 public sealed class FilterPipeline(IPipelineConfiguration config, IServiceProvider serviceProvider) : IFilterPipeline
 {
-    public bool ExecuteOutgoingFilters(Envelope envelope)
+    public Task<bool> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        return ExecuteFilters(config.OutgoingFilters, envelope);
+        return ExecuteFiltersAsync(config.OutgoingFilters, envelope, cancellationToken);
     }
 
-    public bool ExecuteBeforeConsumingFilters(Envelope envelope)
+    public Task<bool> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        return ExecuteFilters(config.BeforeConsumingFilters, envelope);
+        return ExecuteFiltersAsync(config.BeforeConsumingFilters, envelope, cancellationToken);
     }
 
-    public bool ExecuteAfterConsumingFilters(Envelope envelope)
+    public Task<bool> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        return ExecuteFilters(config.AfterConsumingFilters, envelope);
+        return ExecuteFiltersAsync(config.AfterConsumingFilters, envelope, cancellationToken);
     }
 
-    private bool ExecuteFilters(IList<Type> filterTypes, Envelope envelope)
+    private async Task<bool> ExecuteFiltersAsync(IList<Type> filterTypes, Envelope envelope, CancellationToken cancellationToken)
     {
         if (filterTypes == null || filterTypes.Count == 0)
             return false;
 
         foreach (Type filterType in filterTypes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var filter = (IFilter)serviceProvider.GetRequiredService(filterType);
 
-            bool continueProcessing = filter.Process(envelope);
+            bool continueProcessing = await filter.ProcessAsync(envelope, cancellationToken).ConfigureAwait(false);
             if (!continueProcessing)
                 return true; // stopped
         }

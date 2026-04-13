@@ -61,7 +61,7 @@ public sealed class MessageDispatcher(
             var message = _serializer.Deserialize(messageBytes, type);
 
             // 6. Run BeforeConsumingFilters
-            bool blocked = _filterPipeline.ExecuteBeforeConsumingFilters(envelope);
+            bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
@@ -74,13 +74,13 @@ public sealed class MessageDispatcher(
                     var result = await proc.ProcessAsync(mb, mt, m, h, e, ct);
                     if (result == ProcessResult.Handled)
                     {
-                        _filterPipeline.ExecuteAfterConsumingFilters(e);
+                        await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
                         return new ConsumeEventResult { Success = true };
                     }
                 }
 
                 _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
-                _filterPipeline.ExecuteAfterConsumingFilters(e);
+                await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
                 return new ConsumeEventResult { Success = true };
             }
 

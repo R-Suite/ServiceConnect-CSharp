@@ -42,7 +42,7 @@ public sealed class Bus(
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
-        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
             return;
 
         var headers = ExtractHeaders(envelope);
@@ -60,7 +60,7 @@ public sealed class Bus(
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
-        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
             return;
 
         var headers = ExtractHeaders(envelope);
@@ -87,7 +87,7 @@ public sealed class Bus(
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
 
-        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("Outgoing filters blocked the request message.");
 
         var headers = ExtractHeaders(envelope);
@@ -109,7 +109,7 @@ public sealed class Bus(
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
 
-        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("Outgoing filters blocked the request message.");
 
         var headers = ExtractHeaders(envelope);
@@ -146,7 +146,7 @@ public sealed class Bus(
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes);
 
-        if (_filterPipeline.ExecuteOutgoingFilters(envelope))
+        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
             return;
 
         var headers = ExtractHeaders(envelope);

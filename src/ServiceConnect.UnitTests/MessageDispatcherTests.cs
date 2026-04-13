@@ -68,8 +68,8 @@ public class MessageDispatcherTests
         _mockBus = new Mock<IBus>();
 
         // Default: filters don't block
-        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFilters(It.IsAny<Envelope>())).Returns(false);
-        _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFilters(It.IsAny<Envelope>())).Returns(false);
+        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
     }
 
     private static Mock<IPipelineConfiguration> CreateEmptyPipelineConfig()
@@ -186,7 +186,7 @@ public class MessageDispatcherTests
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "BlockedUser" };
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
-        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFilters(It.IsAny<Envelope>())).Returns(true);
+        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         bool handlerCalled = false;
         var handler = new TestDispatchHandler(onHandle: _ => handlerCalled = true);

@@ -37,7 +37,7 @@ namespace ServiceConnect.UnitTests
             _mockQueueConfig.Setup(x => x.QueueName).Returns("test-queue");
 
             // Default: filters pass through (false = not stopped)
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(false);
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
             _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns(new byte[] { 1, 2, 3 });
 
             _mockDispatcher = new Mock<IMessageDispatcher>();
@@ -123,7 +123,7 @@ namespace ServiceConnect.UnitTests
 
             // Assert
             _mockSerializer.Verify(x => x.Serialize(message), Times.Once);
-            _mockFilterPipeline.Verify(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>()), Times.Once);
+            _mockFilterPipeline.Verify(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
             _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
                 typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null), Times.Once);
         }
@@ -132,7 +132,7 @@ namespace ServiceConnect.UnitTests
         public async Task PublishAsync_ShouldNotPublish_WhenFilterBlocksMessage()
         {
             // Arrange
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(true);
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
             // Act
@@ -230,7 +230,7 @@ namespace ServiceConnect.UnitTests
         public async Task SendAsync_ShouldNotSend_WhenFilterBlocksMessage()
         {
             // Arrange
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFilters(It.IsAny<Envelope>())).Returns(true);
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
             // Act

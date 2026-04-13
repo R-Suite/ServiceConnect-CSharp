@@ -8,15 +8,15 @@ public interface IFilterPipeline
     /// <summary>
     /// Executes all outgoing filters. Returns <c>true</c> if any filter blocked the message.
     /// </summary>
-    bool ExecuteOutgoingFilters(Envelope envelope);
+    Task<bool> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes all before-consuming filters. Returns <c>true</c> if any filter blocked the message.
     /// </summary>
-    bool ExecuteBeforeConsumingFilters(Envelope envelope);
+    Task<bool> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes all after-consuming filters. Returns <c>true</c> if any filter blocked the message.
     /// </summary>
-    bool ExecuteAfterConsumingFilters(Envelope envelope);
+    Task<bool> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
 }

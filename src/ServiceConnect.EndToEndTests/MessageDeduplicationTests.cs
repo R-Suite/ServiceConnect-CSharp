@@ -16,30 +16,30 @@ file sealed class TestDeduplicationFilter : IFilter
 
     public IBus Bus { get; set; } = null!;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         if (!envelope.Headers.TryGetValue(HeaderKeys.MessageId, out var rawId))
-            return true; // no MessageId header — let it through
+            return Task.FromResult(true); // no MessageId header — let it through
 
         var messageId = rawId is byte[] bytes
             ? Encoding.UTF8.GetString(bytes)
             : rawId?.ToString() ?? string.Empty;
 
         if (string.IsNullOrEmpty(messageId))
-            return true;
+            return Task.FromResult(true);
 
         if (_seen.TryAdd(messageId, 0))
-            return true; // first time seeing this ID — allow processing
+            return Task.FromResult(true); // first time seeing this ID — allow processing
 
         // Already seen — block if this is a redelivery
         if (!envelope.Headers.TryGetValue(HeaderKeys.Redelivered, out var rawRedelivered))
-            return true;
+            return Task.FromResult(true);
 
         var redeliveredStr = rawRedelivered is byte[] redeliveredBytes
             ? Encoding.UTF8.GetString(redeliveredBytes)
             : rawRedelivered?.ToString() ?? string.Empty;
 
-        return !string.Equals(redeliveredStr, "True", StringComparison.OrdinalIgnoreCase);
+        return Task.FromResult(!string.Equals(redeliveredStr, "True", StringComparison.OrdinalIgnoreCase));
     }
 }
 

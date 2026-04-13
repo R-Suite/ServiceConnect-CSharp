@@ -113,6 +113,6 @@ public class RequestReplyTests
     private class BlockAllFilter : IFilter
     {
         public IBus Bus { get; set; } = null!;
-        public bool Process(Envelope envelope) => false;
+        public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 }

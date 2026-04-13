@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Filters.MessageDeduplication.Filters
@@ -10,9 +12,9 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
 
         public IBus Bus { get; set; }
 
-        public bool Process(Envelope envelope)
+        public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
         {
-            return _outgoingFilter.Value.Process(envelope);
+            return Task.FromResult(_outgoingFilter.Value.Process(envelope));
         }
     }
 }

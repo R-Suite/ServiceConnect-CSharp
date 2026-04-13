@@ -1,12 +1,14 @@
-﻿using System.IO;
+using System.IO;
 using System.IO.Compression;
+using System.Threading;
+using System.Threading.Tasks;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Filters.GzipCompression
 {
     public class OutgoingGzipCompressionFilter : IFilter
     {
-        public bool Process(Envelope envelope)
+        public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
         {
             using (var messageMemoryStream = new MemoryStream(envelope.Body))
             using (var compressedMessageMemoryStream = new MemoryStream())
@@ -18,7 +20,7 @@ namespace ServiceConnect.Filters.GzipCompression
 
                 envelope.Body = compressedMessageMemoryStream.ToArray();
             }
-            return true;
+            return Task.FromResult(true);
         }
 
         public IBus Bus { get; set; }

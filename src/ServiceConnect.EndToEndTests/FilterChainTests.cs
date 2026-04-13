@@ -12,10 +12,10 @@ file sealed class OrderTrackingFilterA : IFilter
 {
     public IBus Bus { get; set; } = null!;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("FilterA");
-        return true; // continue processing (true = keep going)
+        return Task.FromResult(true); // continue processing (true = keep going)
     }
 }
 
@@ -23,10 +23,10 @@ file sealed class OrderTrackingFilterB : IFilter
 {
     public IBus Bus { get; set; } = null!;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("FilterB");
-        return true; // continue processing (true = keep going)
+        return Task.FromResult(true); // continue processing (true = keep going)
     }
 }
 
@@ -34,10 +34,10 @@ file sealed class ChainBlockingFilter : IFilter
 {
     public IBus Bus { get; set; } = null!;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("BlockingFilter");
-        return false; // block — stop pipeline (false = don't continue)
+        return Task.FromResult(false); // block — stop pipeline (false = don't continue)
     }
 }
 
@@ -45,10 +45,10 @@ file sealed class ChainSecondFilter : IFilter
 {
     public IBus Bus { get; set; } = null!;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("SecondFilter");
-        return true; // continue processing
+        return Task.FromResult(true); // continue processing
     }
 }
 

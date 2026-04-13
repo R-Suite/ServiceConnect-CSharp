@@ -12,10 +12,10 @@ file sealed class BlockingFilter : IFilter
     public IBus Bus { get; set; } = null!;
     public bool WasCalled { get; private set; }
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         WasCalled = true;
-        return false; // block the message
+        return Task.FromResult(false); // block the message
     }
 }
 
@@ -24,11 +24,11 @@ file sealed class HeaderAddingFilter : IFilter
     public IBus Bus { get; set; } = null!;
     public bool WasCalled { get; private set; }
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         WasCalled = true;
         envelope.Headers["X-Test-Header"] = "added-by-filter";
-        return true; // allow the message through
+        return Task.FromResult(true); // allow the message through
     }
 }
 
