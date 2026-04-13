@@ -11,29 +11,27 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
     {
         private readonly IMongoCollection<ProcessedMessage> _collection;
 
-        public MessageDeduplicationPersistorMongoDb()
+        public MessageDeduplicationPersistorMongoDb(DeduplicationFilterSettings settings)
         {
-            var filterSettings = DeduplicationFilterSettings.Instance;
-
-            var url = new MongoUrl(filterSettings.ConnectionStringMongoDb);
+            var url = new MongoUrl(settings.ConnectionStringMongoDb);
             var clientSettings = MongoClientSettings.FromUrl(url);
 
-            if (!string.IsNullOrEmpty(filterSettings.MongoDbCertPath) ||
-                !string.IsNullOrEmpty(filterSettings.MongoDbCertBase64))
+            if (!string.IsNullOrEmpty(settings.MongoDbCertPath) ||
+                !string.IsNullOrEmpty(settings.MongoDbCertBase64))
             {
                 X509Certificate2 cert;
-                if (!string.IsNullOrEmpty(filterSettings.MongoDbCertPath))
+                if (!string.IsNullOrEmpty(settings.MongoDbCertPath))
                 {
-                    cert = string.IsNullOrEmpty(filterSettings.MongoDbCertPassphrase)
-                        ? new X509Certificate2(filterSettings.MongoDbCertPath)
-                        : new X509Certificate2(filterSettings.MongoDbCertPath, filterSettings.MongoDbCertPassphrase);
+                    cert = string.IsNullOrEmpty(settings.MongoDbCertPassphrase)
+                        ? new X509Certificate2(settings.MongoDbCertPath)
+                        : new X509Certificate2(settings.MongoDbCertPath, settings.MongoDbCertPassphrase);
                 }
                 else
                 {
-                    var certBytes = Convert.FromBase64String(filterSettings.MongoDbCertBase64);
-                    cert = string.IsNullOrEmpty(filterSettings.MongoDbCertPassphrase)
+                    var certBytes = Convert.FromBase64String(settings.MongoDbCertBase64!);
+                    cert = string.IsNullOrEmpty(settings.MongoDbCertPassphrase)
                         ? new X509Certificate2(certBytes)
-                        : new X509Certificate2(certBytes, filterSettings.MongoDbCertPassphrase);
+                        : new X509Certificate2(certBytes, settings.MongoDbCertPassphrase);
                 }
 
                 clientSettings.UseTls = true;
@@ -46,10 +44,9 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             }
 
             var mongoClient = new MongoClient(clientSettings);
-            var mongoDatabase = mongoClient.GetDatabase(filterSettings.DatabaseNameMongoDb);
-            _collection = mongoDatabase.GetCollection<ProcessedMessage>(filterSettings.CollectionNameMongoDb);
+            var mongoDatabase = mongoClient.GetDatabase(settings.DatabaseNameMongoDb);
+            _collection = mongoDatabase.GetCollection<ProcessedMessage>(settings.CollectionNameMongoDb);
 
-            // Ensure indexes (fire-and-forget during construction is existing behavior).
             _collection.Indexes.CreateOneAsync(
                 new CreateIndexModel<ProcessedMessage>(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id)));
             _collection.Indexes.CreateOneAsync(
@@ -67,11 +64,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
         public Task InsertAsync(Guid messageId, DateTime messageExpiry, CancellationToken cancellationToken = default)
         {
             return _collection.InsertOneAsync(
-                new ProcessedMessage
-                {
-                    Id = messageId,
-                    ExpiryDateTime = messageExpiry
-                },
+                new ProcessedMessage { Id = messageId, ExpiryDateTime = messageExpiry },
                 options: null,
                 cancellationToken: cancellationToken);
         }

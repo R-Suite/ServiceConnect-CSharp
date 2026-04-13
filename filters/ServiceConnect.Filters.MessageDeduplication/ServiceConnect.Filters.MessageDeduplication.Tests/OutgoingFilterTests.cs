@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
 using Moq;
 using ServiceConnect.Filters.MessageDeduplication.Filters;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
@@ -14,23 +15,13 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
     public class OutgoingDeduplicationFilterTests
     {
         private readonly Mock<IMessageDeduplicationPersistor> _persistor = new();
+        private readonly DeduplicationFilterSettings _settings = new() { MsgExpiryHours = 24 };
 
-        private OutgoingDeduplicationFilter CreateFilter()
-        {
-            OutgoingDeduplicationFilter.OverridePersistorForTesting(_persistor.Object);
-            return new OutgoingDeduplicationFilter();
-        }
+        private OutgoingDeduplicationFilter CreateFilter() =>
+            new(_persistor.Object, Options.Create(_settings));
 
-        private static Envelope EnvelopeWithMessageId(Guid id)
-        {
-            return new Envelope
-            {
-                Headers = new Dictionary<string, object>
-                {
-                    { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) }
-                }
-            };
-        }
+        private static Envelope EnvelopeWithMessageId(Guid id) =>
+            new() { Headers = new Dictionary<string, object> { { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) } } };
 
         [Fact]
         public async Task ProcessAsync_HappyPath_CallsInsertAndReturnsTrue()

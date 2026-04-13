@@ -15,11 +15,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
     {
         private readonly Mock<IMessageDeduplicationPersistor> _persistor = new();
 
-        private IncomingDeduplicationFilter CreateFilter()
-        {
-            IncomingDeduplicationFilter.OverridePersistorForTesting(_persistor.Object);
-            return new IncomingDeduplicationFilter();
-        }
+        private IncomingDeduplicationFilter CreateFilter() => new(_persistor.Object);
 
         [Fact]
         public async Task ProcessAsync_NotRedelivered_ReturnsTrue()
@@ -37,8 +33,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
         public async Task ProcessAsync_RedeliveredButNotInPersistor_ReturnsTrue()
         {
             var id = Guid.NewGuid();
-            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(false);
+            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
             var filter = CreateFilter();
             var envelope = new Envelope
@@ -50,17 +45,14 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
                 }
             };
 
-            var result = await filter.ProcessAsync(envelope);
-
-            Assert.True(result);
+            Assert.True(await filter.ProcessAsync(envelope));
         }
 
         [Fact]
         public async Task ProcessAsync_RedeliveredAndInPersistor_ReturnsFalse()
         {
             var id = Guid.NewGuid();
-            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(true);
+            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
             var filter = CreateFilter();
             var envelope = new Envelope
@@ -72,9 +64,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
                 }
             };
 
-            var result = await filter.ProcessAsync(envelope);
-
-            Assert.False(result);
+            Assert.False(await filter.ProcessAsync(envelope));
         }
 
         [Fact]
@@ -101,8 +91,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
         public async Task ProcessAsync_PreCancelledToken_ThrowsOCE()
         {
             var id = Guid.NewGuid();
-            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(false);
+            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
             var filter = CreateFilter();
             var envelope = new Envelope
