@@ -89,7 +89,7 @@ public class ProcessManagerTests
             var finder = provider.GetRequiredService<IProcessManagerFinder>();
             var mapper = new TestProcessManagerPropertyMapper();
             mapper.ConfigureMapping<TestProcessData, TestMessage>(d => d.CorrelationId, m => m.CorrelationId);
-            var result = finder.FindData<TestProcessData>(mapper, new TestMessage(correlationId));
+            var result = await finder.FindDataAsync<TestProcessData>(mapper, new TestMessage(correlationId));
 
             Assert.NotNull(result);
             Assert.Equal(2, result.Data.Counter);

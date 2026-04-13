@@ -59,9 +59,12 @@ public sealed class ProcessManagerProcessor(IServiceProvider serviceProvider, IL
         var configureMapperMethod = processHandlerInterfaceType.GetMethod("ConfigureMapper");
         configureMapperMethod?.Invoke(handler, [mapper]);
 
-        // 6. FindData<TData>(mapper, message)
-        var findDataMethod = typeof(IProcessManagerFinder).GetMethod("FindData")!.MakeGenericMethod(dataType);
-        var persistenceData = findDataMethod.Invoke(finder, [mapper, message]);
+        // 6. FindDataAsync<TData>(mapper, message, cancellationToken)
+        var findDataMethod = typeof(IProcessManagerFinder).GetMethod("FindDataAsync")!.MakeGenericMethod(dataType);
+        var findTaskObj = findDataMethod.Invoke(finder, [mapper, message, cancellationToken])!;
+        await ((Task)findTaskObj).ConfigureAwait(false);
+        // Read .Result from the Task<IPersistenceData<TData>?> via the actual runtime type
+        var persistenceData = findTaskObj.GetType().GetProperty("Result")!.GetValue(findTaskObj);
 
         // 7. If null, create new TData and set CorrelationId
         bool isNew = persistenceData == null;
@@ -97,12 +100,13 @@ public sealed class ProcessManagerProcessor(IServiceProvider serviceProvider, IL
         // 9. Insert or Update
         if (isNew)
         {
-            finder.InsertData((IProcessManagerData)data);
+            await finder.InsertDataAsync((IProcessManagerData)data, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            var updateMethod = typeof(IProcessManagerFinder).GetMethod("UpdateData")!.MakeGenericMethod(dataType);
-            updateMethod.Invoke(finder, [persistenceData]);
+            var updateMethod = typeof(IProcessManagerFinder).GetMethod("UpdateDataAsync")!.MakeGenericMethod(dataType);
+            var updateTask = (Task)updateMethod.Invoke(finder, [persistenceData, cancellationToken])!;
+            await updateTask.ConfigureAwait(false);
         }
 
         return ProcessResult.Handled;

@@ -68,12 +68,12 @@ public class MongoDbProcessManagerFinderTests
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void ShouldInsertData()
+    public async Task ShouldInsertData()
     {
         var (finder, connectionString, dbName) = CreateFinder();
         var data = new TestData { CorrelationId = Guid.NewGuid(), Name = "Insert Test" };
 
-        finder.InsertData(data);
+        await finder.InsertDataAsync(data);
 
         var collection = GetCollection(connectionString, dbName);
         var result = collection.Find(Builders<MongoDbData<TestData>>.Filter.Eq(x => x.Data.CorrelationId, data.CorrelationId)).FirstOrDefault();
@@ -84,16 +84,16 @@ public class MongoDbProcessManagerFinderTests
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void ShouldFindData()
+    public async Task ShouldFindData()
     {
         var (finder, _, _) = CreateFinder();
         var correlationId = Guid.NewGuid();
         var data = new TestData { CorrelationId = correlationId, Name = "Find Test" };
-        finder.InsertData(data);
+        await finder.InsertDataAsync(data);
 
         var mapper = CreateMapper();
         var message = new Message(correlationId);
-        var result = finder.FindData<TestData>(mapper, message);
+        var result = await finder.FindDataAsync<TestData>(mapper, message);
 
         Assert.NotNull(result);
         Assert.Equal(correlationId, result.Data.CorrelationId);
@@ -102,33 +102,33 @@ public class MongoDbProcessManagerFinderTests
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void ShouldReturnNullWhenDataNotFound()
+    public async Task ShouldReturnNullWhenDataNotFound()
     {
         var (finder, _, _) = CreateFinder();
 
         var mapper = CreateMapper();
         var message = new Message(Guid.NewGuid());
-        var result = finder.FindData<TestData>(mapper, message);
+        var result = await finder.FindDataAsync<TestData>(mapper, message);
 
         Assert.Null(result);
     }
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void ShouldUpdateData()
+    public async Task ShouldUpdateData()
     {
         var (finder, connectionString, dbName) = CreateFinder();
         var correlationId = Guid.NewGuid();
         var data = new TestData { CorrelationId = correlationId, Name = "Update Test" };
-        finder.InsertData(data);
+        await finder.InsertDataAsync(data);
 
         var mapper = CreateMapper();
         var message = new Message(correlationId);
-        var found = finder.FindData<TestData>(mapper, message);
+        var found = await finder.FindDataAsync<TestData>(mapper, message);
         Assert.NotNull(found);
 
         found.Data.Name = "Updated";
-        finder.UpdateData(found);
+        await finder.UpdateDataAsync(found);
 
         var collection = GetCollection(connectionString, dbName);
         var updated = collection.Find(Builders<MongoDbData<TestData>>.Filter.Eq(x => x.Data.CorrelationId, correlationId)).FirstOrDefault();
@@ -139,44 +139,44 @@ public class MongoDbProcessManagerFinderTests
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void ShouldThrowWhenUpdatingConcurrently()
+    public async Task ShouldThrowWhenUpdatingConcurrently()
     {
         var (finder, _, _) = CreateFinder();
         var correlationId = Guid.NewGuid();
         var data = new TestData { CorrelationId = correlationId, Name = "Concurrent Test" };
-        finder.InsertData(data);
+        await finder.InsertDataAsync(data);
 
         var mapper = CreateMapper();
         var message = new Message(correlationId);
 
         // Find twice to get two copies at the same version
-        var first = finder.FindData<TestData>(mapper, message);
-        var second = finder.FindData<TestData>(mapper, message);
+        var first = await finder.FindDataAsync<TestData>(mapper, message);
+        var second = await finder.FindDataAsync<TestData>(mapper, message);
         Assert.NotNull(first);
         Assert.NotNull(second);
 
         // Update via the first copy — succeeds
-        finder.UpdateData(first);
+        await finder.UpdateDataAsync(first);
 
         // Update via the second copy — should throw due to version mismatch
-        Assert.Throws<PersistenceException>(() => finder.UpdateData(second));
+        await Assert.ThrowsAsync<PersistenceException>(() => finder.UpdateDataAsync(second));
     }
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void ShouldDeleteData()
+    public async Task ShouldDeleteData()
     {
         var (finder, connectionString, dbName) = CreateFinder();
         var correlationId = Guid.NewGuid();
         var data = new TestData { CorrelationId = correlationId, Name = "Delete Test" };
-        finder.InsertData(data);
+        await finder.InsertDataAsync(data);
 
         var mapper = CreateMapper();
         var message = new Message(correlationId);
-        var found = finder.FindData<TestData>(mapper, message);
+        var found = await finder.FindDataAsync<TestData>(mapper, message);
         Assert.NotNull(found);
 
-        finder.DeleteData(found);
+        await finder.DeleteDataAsync(found);
 
         var collection = GetCollection(connectionString, dbName);
         var result = collection.Find(Builders<MongoDbData<TestData>>.Filter.Eq(x => x.Data.CorrelationId, correlationId)).FirstOrDefault();

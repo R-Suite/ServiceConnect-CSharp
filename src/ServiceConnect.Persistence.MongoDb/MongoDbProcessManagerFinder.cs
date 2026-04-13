@@ -37,8 +37,10 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    public IPersistenceData<T>? FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+    public async Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
                       ?? mapper.Mappings.FirstOrDefault(m => m.MessageType == typeof(Message));
 
@@ -91,7 +93,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
             }
 
             var lambda = Expression.Lambda<Func<MongoDbData<T>, bool>>(expression, pe);
-            return collection.Find(lambda).FirstOrDefault()!;
+            return await collection.Find(lambda).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (PersistenceException)
         {
@@ -104,20 +106,22 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    public void InsertData(IProcessManagerData data)
+    public async Task InsertDataAsync(IProcessManagerData data, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var collectionName = GetCollectionName(data);
         var dataType = data.GetType();
 
         try
         {
-            // Use reflection to call the generic InsertDataTyped<T> method with the actual
+            // Use reflection to call the generic InsertDataTypedAsync<T> method with the actual
             // data type rather than the interface, so MongoDB serializes/deserializes with
             // a consistent generic type parameter across Insert and Find operations.
-            var method = GetType().GetMethod(nameof(InsertDataTyped),
+            var method = GetType().GetMethod(nameof(InsertDataTypedAsync),
                 BindingFlags.NonPublic | BindingFlags.Instance)!;
             var genericMethod = method.MakeGenericMethod(dataType);
-            genericMethod.Invoke(this, [data, collectionName]);
+            await ((Task)genericMethod.Invoke(this, [data, collectionName, cancellationToken])!).ConfigureAwait(false);
         }
         catch (TargetInvocationException ex) when (ex.InnerException is MongoException mongoEx)
         {
@@ -131,7 +135,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    private void InsertDataTyped<T>(T data, string collectionName) where T : class, IProcessManagerData
+    private async Task InsertDataTypedAsync<T>(T data, string collectionName, CancellationToken cancellationToken) where T : class, IProcessManagerData
     {
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
         EnsureCorrelationIdIndex(collection);
@@ -145,11 +149,13 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
 
         var filter = Builders<MongoDbData<T>>.Filter
             .Eq(x => x.Data.CorrelationId, mongoDbData.Data.CorrelationId);
-        collection.ReplaceOne(filter, mongoDbData, new ReplaceOptions { IsUpsert = true });
+        await collection.ReplaceOneAsync(filter, mongoDbData, new ReplaceOptions { IsUpsert = true }, cancellationToken).ConfigureAwait(false);
     }
 
-    public void UpdateData<T>(IPersistenceData<T> persistenceData) where T : class, IProcessManagerData
+    public async Task UpdateDataAsync<T>(IPersistenceData<T> persistenceData, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var collectionName = GetCollectionName(persistenceData.Data);
 
         try
@@ -165,7 +171,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
                 Builders<MongoDbData<T>>.Filter.Eq(x => x.Version, currentVersion)
             );
             versionData.Version = currentVersion + 1;
-            var result = collection.ReplaceOne(filter, versionData);
+            var result = await collection.ReplaceOneAsync(filter, versionData, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             if (result.IsAcknowledged && result.ModifiedCount == 0)
             {
@@ -189,8 +195,10 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    public void DeleteData<T>(IPersistenceData<T> persistenceData) where T : class, IProcessManagerData
+    public async Task DeleteDataAsync<T>(IPersistenceData<T> persistenceData, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var collectionName = GetCollectionName(persistenceData.Data);
 
         try
@@ -199,7 +207,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
             EnsureCorrelationIdIndex(collection);
 
             var filter = Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, persistenceData.Data.CorrelationId);
-            collection.DeleteMany(filter);
+            await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
@@ -208,14 +216,16 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    public void InsertTimeout(TimeoutData timeoutData)
+    public async Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             EnsureTimeoutIndex(collection);
 
-            collection.InsertOne(timeoutData);
+            await collection.InsertOneAsync(timeoutData, cancellationToken: cancellationToken).ConfigureAwait(false);
             TimeoutInserted?.Invoke(timeoutData.Time);
         }
         catch (MongoException ex)
@@ -224,8 +234,10 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    public TimeoutsBatch GetTimeoutsBatch()
+    public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             var retval = new TimeoutsBatch { DueTimeouts = [] };
@@ -240,10 +252,11 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
                              Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
 
                 var update = Builders<TimeoutData>.Update.Set(x => x.Locked, true);
-                var result = collection.FindOneAndUpdate(
+                var result = await collection.FindOneAndUpdateAsync(
                     filter,
                     update,
-                    new FindOneAndUpdateOptions<TimeoutData> { ReturnDocument = ReturnDocument.After });
+                    new FindOneAndUpdateOptions<TimeoutData> { ReturnDocument = ReturnDocument.After },
+                    cancellationToken).ConfigureAwait(false);
 
                 if (result is null)
                 {
@@ -260,7 +273,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
             var futureFilter = Builders<TimeoutData>.Filter.Gt(x => x.Time, utcNow) &
                                Builders<TimeoutData>.Filter.Eq(x => x.Locked, false);
             var futureSort = Builders<TimeoutData>.Sort.Ascending(x => x.Time);
-            var nextTimeout = collection.Find(futureFilter).Sort(futureSort).FirstOrDefault();
+            var nextTimeout = await collection.Find(futureFilter).Sort(futureSort).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
             if (nextTimeout is not null)
             {
@@ -281,15 +294,17 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    public void RemoveDispatchedTimeout(Guid id)
+    public async Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
                          Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
-            collection.DeleteOne(filter);
+            await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {

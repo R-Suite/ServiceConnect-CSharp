@@ -3,7 +3,7 @@ namespace ServiceConnect.Interfaces;
 public interface ITimeoutStore
 {
     event TimeoutInsertedDelegate? TimeoutInserted;
-    void InsertTimeout(TimeoutData timeoutData);
-    TimeoutsBatch GetTimeoutsBatch();
-    void RemoveDispatchedTimeout(Guid id);
+    Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default);
+    Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default);
+    Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
 }

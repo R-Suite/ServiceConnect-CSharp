@@ -25,8 +25,10 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
 
     public event TimeoutInsertedDelegate? TimeoutInserted;
 
-    public IPersistenceData<T>? FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
+    public Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_memoryCacheLock)
         {
             var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
@@ -45,7 +47,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
             catch (Exception)
             {
                 // Property mapping invocation failed — no matching data for this message
-                return null;
+                return Task.FromResult<IPersistenceData<T>?>(null);
             }
 
             if (msgPropValue is null)
@@ -107,12 +109,14 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
 
             MemoryData<T>? retval = newCacheItems.FirstOrDefault(lambda.Compile());
 
-            return retval;
+            return Task.FromResult<IPersistenceData<T>?>(retval);
         }
     }
 
-    public void InsertData(IProcessManagerData data)
+    public Task InsertDataAsync(IProcessManagerData data, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         Type typeParameterType = data.GetType();
 
         MethodInfo md = GetType().GetTypeInfo().GetMethods().First(m => m.Name == "GetMemoryData" && m.GetParameters()[0].Name == "data");
@@ -133,6 +137,8 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
                 throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
             }
         }
+
+        return Task.CompletedTask;
     }
 
     public MemoryData<DT> GetMemoryData<DT>(DT data) where DT : class, IProcessManagerData
@@ -147,8 +153,10 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         return memoryData;
     }
 
-    public void UpdateData<T>(IPersistenceData<T> data) where T : class, IProcessManagerData
+    public Task UpdateDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_memoryCacheLock)
         {
             string? error = null;
@@ -188,19 +196,27 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
                 throw new PersistenceException(error);
             }
         }
+
+        return Task.CompletedTask;
     }
 
-    public void DeleteData<T>(IPersistenceData<T> data) where T : class, IProcessManagerData
+    public Task DeleteDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_memoryCacheLock)
         {
             string key = data.Data.CorrelationId.ToString();
             _provider.Remove(key);
         }
+
+        return Task.CompletedTask;
     }
 
-    public void InsertTimeout(TimeoutData timeoutData)
+    public Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_memoryCacheLock)
         {
             string key = timeoutData.Id.ToString();
@@ -216,10 +232,14 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         }
 
         TimeoutInserted?.Invoke(timeoutData.Time);
+
+        return Task.CompletedTask;
     }
 
-    public TimeoutsBatch GetTimeoutsBatch()
+    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var retval = new TimeoutsBatch { DueTimeouts = [] };
 
         DateTime utcNow = DateTime.UtcNow;
@@ -261,14 +281,18 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
 
         retval.NextQueryTime = nextQueryTime;
 
-        return retval;
+        return Task.FromResult(retval);
     }
 
-    public void RemoveDispatchedTimeout(Guid id)
+    public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         lock (_memoryCacheLock)
         {
             _provider.Remove(id.ToString());
         }
+
+        return Task.CompletedTask;
     }
 }

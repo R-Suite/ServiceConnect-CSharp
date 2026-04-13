@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.InMemory;
@@ -25,107 +27,107 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldInsertData()
+        public async Task ShouldInsertData()
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act
-            processManagerFinder.InsertData(data);
+            await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
             // Assert
-            // InsertData wraps as MemoryData<IProcessManagerData>, so FindData must use IProcessManagerData
-            var found = processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
+            // InsertDataAsync wraps as MemoryData<IProcessManagerData>, so FindDataAsync must use IProcessManagerData
+            var found = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
             Assert.NotNull(found);
             Assert.Equal("TestData", ((TestData)found.Data).Name);
         }
 
         [Fact]
-        public void ShouldThrowWhenInsertingDataWithExistingId()
+        public async Task ShouldThrowWhenInsertingDataWithExistingId()
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerData dataWithDuplicateId = new TestData { CorrelationId = _correlationId, Name = "TestDataWithDuplicateId" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            processManagerFinder.InsertData(data);
+            await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
             // Act / Assert
-            Assert.Throws<PersistenceException>(() => processManagerFinder.InsertData(dataWithDuplicateId));
+            await Assert.ThrowsAsync<PersistenceException>(() => processManagerFinder.InsertDataAsync(dataWithDuplicateId, CancellationToken.None));
         }
 
         [Fact]
-        public void ShouldUpdateData()
+        public async Task ShouldUpdateData()
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerData dataUpdated = new TestData { CorrelationId = _correlationId, Name = "TestDataUpdated" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            processManagerFinder.InsertData(data);
+            await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
             // Act
-            processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = dataUpdated, Version = 1 });
+            await processManagerFinder.UpdateDataAsync(new MemoryData<IProcessManagerData> { Data = dataUpdated, Version = 1 }, CancellationToken.None);
 
             // Assert
-            var found = processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
+            var found = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
             Assert.NotNull(found);
             Assert.Equal("TestDataUpdated", ((TestData)found.Data).Name);
         }
 
         [Fact]
-        public void ShouldThrowWhenUpdatingDataThatDoesNotExist()
+        public async Task ShouldThrowWhenUpdatingDataThatDoesNotExist()
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act / Assert
-            Assert.Throws<PersistenceException>(() => processManagerFinder.UpdateData(new MemoryData<IProcessManagerData> { Data = data }));
+            await Assert.ThrowsAsync<PersistenceException>(() => processManagerFinder.UpdateDataAsync(new MemoryData<IProcessManagerData> { Data = data }, CancellationToken.None));
         }
 
         [Fact]
-        public void ShouldThrowWhenUpdatingTwoInstancesOfSameDataAtTheSameTime()
+        public async Task ShouldThrowWhenUpdatingTwoInstancesOfSameDataAtTheSameTime()
         {
             // Arrange
             IProcessManagerData data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            processManagerFinder.InsertData(data1);
+            await processManagerFinder.InsertDataAsync(data1, CancellationToken.None);
 
-            var foundData1 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId))!;
-            var foundData2 = (MemoryData<IProcessManagerData>)processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId))!;
+            var foundData1 = (MemoryData<IProcessManagerData>)(await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
+            var foundData2 = (MemoryData<IProcessManagerData>)(await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
 
             var foundData1Temp = new MemoryData<IProcessManagerData> { Data = foundData1.Data, Version = foundData1.Version };
             var foundData2Temp = new MemoryData<IProcessManagerData> { Data = foundData2.Data, Version = foundData2.Version };
 
-            processManagerFinder.UpdateData(foundData1Temp); // first update should be fine
+            await processManagerFinder.UpdateDataAsync(foundData1Temp, CancellationToken.None); // first update should be fine
 
             // Act / Assert
-            Assert.Throws<PersistenceException>(() => processManagerFinder.UpdateData(foundData2Temp)); // second update should fail
+            await Assert.ThrowsAsync<PersistenceException>(() => processManagerFinder.UpdateDataAsync(foundData2Temp, CancellationToken.None)); // second update should fail
         }
 
         [Fact]
-        public void ShouldDeleteData()
+        public async Task ShouldDeleteData()
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            processManagerFinder.InsertData(data);
+            await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
             // Act
-            processManagerFinder.DeleteData(new MemoryData<IProcessManagerData> { Data = data });
+            await processManagerFinder.DeleteDataAsync(new MemoryData<IProcessManagerData> { Data = data }, CancellationToken.None);
 
             // Assert
-            Assert.Null(processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId)));
+            Assert.Null(await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None));
         }
 
         [Fact]
-        public void ShouldReturnNullWhenDataNotFound()
+        public async Task ShouldReturnNullWhenDataNotFound()
         {
             // Arrange
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
             // Act
-            var result = processManagerFinder.FindData<IProcessManagerData>(_mapper, new Message(_correlationId));
+            var result = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
 
             // Assert
             Assert.Null(result);
@@ -141,126 +143,205 @@ namespace ServiceConnect.UnitTests
         };
 
         [Fact]
-        public void InsertTimeout_StoresTimeoutData()
+        public async Task InsertTimeout_StoresTimeoutData()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             var id = Guid.NewGuid();
-            finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddHours(-1)));
+            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddHours(-1)), CancellationToken.None);
 
-            var batch = finder.GetTimeoutsBatch();
+            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
             Assert.Single(batch.DueTimeouts);
             Assert.Equal(id, batch.DueTimeouts[0].Id);
         }
 
         [Fact]
-        public void InsertTimeout_ThrowsWhenDuplicateId()
+        public async Task InsertTimeout_ThrowsWhenDuplicateId()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             var id = Guid.NewGuid();
-            finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(5)));
+            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(5)), CancellationToken.None);
 
-            Assert.Throws<PersistenceException>(() => finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(10))));
+            await Assert.ThrowsAsync<PersistenceException>(() => finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(10)), CancellationToken.None));
         }
 
         [Fact]
-        public void InsertTimeout_RaisesTimeoutInsertedEvent()
+        public async Task InsertTimeout_RaisesTimeoutInsertedEvent()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             DateTime? capturedTime = null;
             finder.TimeoutInserted += time => capturedTime = time;
 
             var expectedTime = DateTime.UtcNow.AddMinutes(5);
-            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), expectedTime));
+            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), expectedTime), CancellationToken.None);
 
             Assert.Equal(expectedTime, capturedTime);
         }
 
         [Fact]
-        public void InsertTimeout_NoTimeoutInsertedSubscriber_DoesNotThrow()
+        public async Task InsertTimeout_NoTimeoutInsertedSubscriber_DoesNotThrow()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
-            var ex = Record.Exception(() => finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(5))));
+            var ex = await Record.ExceptionAsync(() => finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(5)), CancellationToken.None));
 
             Assert.Null(ex);
         }
 
         [Fact]
-        public void GetTimeoutsBatch_WhenNoTimeouts_ReturnEmptyDueList()
+        public async Task GetTimeoutsBatch_WhenNoTimeouts_ReturnEmptyDueList()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
-            var batch = finder.GetTimeoutsBatch();
+            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
 
             Assert.Empty(batch.DueTimeouts);
         }
 
         [Fact]
-        public void GetTimeoutsBatch_FutureTimeout_NotInDueList()
+        public async Task GetTimeoutsBatch_FutureTimeout_NotInDueList()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddHours(1)));
+            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddHours(1)), CancellationToken.None);
 
-            var batch = finder.GetTimeoutsBatch();
+            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
 
             Assert.Empty(batch.DueTimeouts);
         }
 
         [Fact]
-        public void GetTimeoutsBatch_FutureTimeout_SetsNextQueryTime()
+        public async Task GetTimeoutsBatch_FutureTimeout_SetsNextQueryTime()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             var futureTime = DateTime.UtcNow.AddHours(1);
-            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), futureTime));
+            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), futureTime), CancellationToken.None);
 
-            var batch = finder.GetTimeoutsBatch();
+            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
 
             Assert.Equal(futureTime, batch.NextQueryTime);
         }
 
         [Fact]
-        public void GetTimeoutsBatch_NoFutureTimeouts_NextQueryTimeIsWithinOneMinute()
+        public async Task GetTimeoutsBatch_NoFutureTimeouts_NextQueryTimeIsWithinOneMinute()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
-            var batch = finder.GetTimeoutsBatch();
+            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
             var expectedMax = DateTime.UtcNow.AddMinutes(1).AddSeconds(1);
 
             Assert.True(batch.NextQueryTime <= expectedMax);
         }
 
         [Fact]
-        public void GetTimeoutsBatch_PastTimeout_IsInDueList()
+        public async Task GetTimeoutsBatch_PastTimeout_IsInDueList()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            finder.InsertTimeout(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddSeconds(-1)));
+            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
-            var batch = finder.GetTimeoutsBatch();
+            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
 
             Assert.Single(batch.DueTimeouts);
         }
 
         [Fact]
-        public void RemoveDispatchedTimeout_RemovesTimeoutFromBatch()
+        public async Task RemoveDispatchedTimeout_RemovesTimeoutFromBatch()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             var id = Guid.NewGuid();
-            finder.InsertTimeout(MakeTimeoutData(id, DateTime.UtcNow.AddSeconds(-1)));
+            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
-            finder.RemoveDispatchedTimeout(id);
+            await finder.RemoveDispatchedTimeoutAsync(id, CancellationToken.None);
 
-            var batch = finder.GetTimeoutsBatch();
+            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
             Assert.Empty(batch.DueTimeouts);
         }
 
         [Fact]
-        public void RemoveDispatchedTimeout_WhenIdDoesNotExist_DoesNotThrow()
+        public async Task RemoveDispatchedTimeout_WhenIdDoesNotExist_DoesNotThrow()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
-            var ex = Record.Exception(() => finder.RemoveDispatchedTimeout(Guid.NewGuid()));
+            var ex = await Record.ExceptionAsync(() => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), CancellationToken.None));
 
             Assert.Null(ex);
+        }
+
+        // --- Pre-cancelled token tests ---
+
+        [Fact]
+        public async Task FindDataAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), cts.Token));
+        }
+
+        [Fact]
+        public async Task InsertDataAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => finder.InsertDataAsync(new TestData { CorrelationId = _correlationId }, cts.Token));
+        }
+
+        [Fact]
+        public async Task UpdateDataAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => finder.UpdateDataAsync(new MemoryData<IProcessManagerData> { Data = new TestData { CorrelationId = _correlationId }, Version = 1 }, cts.Token));
+        }
+
+        [Fact]
+        public async Task DeleteDataAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => finder.DeleteDataAsync(new MemoryData<IProcessManagerData> { Data = new TestData { CorrelationId = _correlationId } }, cts.Token));
+        }
+
+        [Fact]
+        public async Task InsertTimeoutAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(5)), cts.Token));
+        }
+
+        [Fact]
+        public async Task GetTimeoutsBatchAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => finder.GetTimeoutsBatchAsync(cts.Token));
+        }
+
+        [Fact]
+        public async Task RemoveDispatchedTimeoutAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), cts.Token));
         }
     }
 

@@ -33,7 +33,7 @@ public class ProcessManagerTimeoutServiceTests
         await sut.StartAsync(CancellationToken.None);
         await sut.StopAsync(CancellationToken.None);
 
-        _mockFinder.Verify(f => f.GetTimeoutsBatch(), Times.Never);
+        _mockFinder.Verify(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -75,12 +75,12 @@ public class ProcessManagerTimeoutServiceTests
             NextQueryTime = DateTime.UtcNow.AddSeconds(30)
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatch()).Returns(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
 
         var sut = CreateSut(registerFinder: true);
 
         await sut.PollOnceAsync();
 
-        _mockFinder.Verify(f => f.RemoveDispatchedTimeout(timeoutId), Times.Once);
+        _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

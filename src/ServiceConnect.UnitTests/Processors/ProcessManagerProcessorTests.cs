@@ -57,11 +57,12 @@ public class ProcessManagerProcessorTests
         services.AddSingleton<IList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
 
-        // FindData returns null => new state
-        mockFinder.Setup(f => f.FindData<PmTestData>(
+        // FindDataAsync returns null => new state
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
                 It.IsAny<IProcessManagerPropertyMapper>(),
-                It.IsAny<Message>()))
-            .Returns((IPersistenceData<PmTestData>)null!);
+                It.IsAny<Message>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
         var processor = new ProcessManagerProcessor(provider, new Mock<ILogger<ProcessManagerProcessor>>().Object);
@@ -75,8 +76,8 @@ public class ProcessManagerProcessorTests
 
         Assert.Equal(ProcessResult.Handled, result);
         Assert.True(handler.Invoked);
-        mockFinder.Verify(f => f.InsertData(It.Is<IProcessManagerData>(d => d.CorrelationId == correlationId)), Times.Once);
-        mockFinder.Verify(f => f.UpdateData(It.IsAny<IPersistenceData<PmTestData>>()), Times.Never);
+        mockFinder.Verify(f => f.InsertDataAsync(It.Is<IProcessManagerData>(d => d.CorrelationId == correlationId), It.IsAny<CancellationToken>()), Times.Once);
+        mockFinder.Verify(f => f.UpdateDataAsync(It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -101,10 +102,11 @@ public class ProcessManagerProcessorTests
         var existingData = new PmTestData { CorrelationId = Guid.NewGuid(), Counter = 5 };
         var persistenceData = new PmTestPersistenceData { Data = existingData };
 
-        mockFinder.Setup(f => f.FindData<PmTestData>(
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
                 It.IsAny<IProcessManagerPropertyMapper>(),
-                It.IsAny<Message>()))
-            .Returns(persistenceData);
+                It.IsAny<Message>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(persistenceData);
 
         var provider = services.BuildServiceProvider();
         var processor = new ProcessManagerProcessor(provider, new Mock<ILogger<ProcessManagerProcessor>>().Object);
@@ -118,8 +120,8 @@ public class ProcessManagerProcessorTests
         Assert.Equal(ProcessResult.Handled, result);
         Assert.True(handler.Invoked);
         Assert.Equal(6, existingData.Counter);
-        mockFinder.Verify(f => f.UpdateData(persistenceData), Times.Once);
-        mockFinder.Verify(f => f.InsertData(It.IsAny<IProcessManagerData>()), Times.Never);
+        mockFinder.Verify(f => f.UpdateDataAsync(persistenceData, It.IsAny<CancellationToken>()), Times.Once);
+        mockFinder.Verify(f => f.InsertDataAsync(It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
 
@@ -144,6 +146,8 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
 {
     public bool Invoked { get; private set; }
     public IConsumeContext? Context { get; set; }
+
+    public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
     public Task HandleAsync(PmTestMessage message, PmTestData data)
     {

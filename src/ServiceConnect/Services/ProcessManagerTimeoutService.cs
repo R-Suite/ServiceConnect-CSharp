@@ -52,14 +52,14 @@ public sealed class ProcessManagerTimeoutService(
         }
     }
 
-    internal async Task PollOnceAsync()
+    internal async Task PollOnceAsync(CancellationToken cancellationToken = default)
     {
         _finder ??= serviceProvider.GetService<ITimeoutStore>();
         if (_finder == null) return;
 
         try
         {
-            var batch = _finder.GetTimeoutsBatch();
+            var batch = await _finder.GetTimeoutsBatchAsync(cancellationToken).ConfigureAwait(false);
             if (batch.DueTimeouts == null || batch.DueTimeouts.Count == 0) return;
 
             var bus = serviceProvider.GetService<IBus>();
@@ -80,7 +80,7 @@ public sealed class ProcessManagerTimeoutService(
                         }).ConfigureAwait(false);
                     }
 
-                    _finder.RemoveDispatchedTimeout(timeout.Id);
+                    await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -102,7 +102,7 @@ public sealed class ProcessManagerTimeoutService(
             try
             {
                 await timer.WaitForNextTickAsync(cancellationToken);
-                await PollOnceAsync();
+                await PollOnceAsync(cancellationToken);
             }
             catch (OperationCanceledException) { break; }
         }
