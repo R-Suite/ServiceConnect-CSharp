@@ -66,7 +66,7 @@ public class MessageBusWriteStreamTests
     [Fact]
     public async Task WriteAsync_AfterClose_ThrowsObjectDisposedException()
     {
-        var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
+        await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
         await stream.CloseAsync();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => stream.WriteAsync([1], 0, 1));
@@ -95,8 +95,10 @@ public class MessageBusWriteStreamTests
         await stream.CloseAsync();
         await stream.CloseAsync();
 
-        // One close-marker send; no additional calls on second CloseAsync.
+        // First CloseAsync sent exactly one close-marker; second call was a no-op.
         Assert.Single(_sends);
+        Assert.Empty(_sends[0].Payload);
+        Assert.Contains(HeaderKeys.LastPacketNumber, _sends[0].Headers!.Keys);
     }
 
     [Fact]
