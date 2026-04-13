@@ -91,12 +91,9 @@ public sealed class AggregatorProcessor(IServiceProvider serviceProvider, ILogge
         object? aggregator;
         System.Reflection.MethodInfo? executeMethod;
 
-        // Snapshot under lock, then execute outside lock
+        // Dispose the timer under lock, then execute outside lock
         lock (_flushLock)
         {
-            var persistorSnapshot = serviceProvider.GetService<IAggregatorPersistor>();
-            if (persistorSnapshot == null) return;
-
             if (_timers.TryRemove(aggregatorName, out var activeTimer))
                 activeTimer.Dispose();
         }
