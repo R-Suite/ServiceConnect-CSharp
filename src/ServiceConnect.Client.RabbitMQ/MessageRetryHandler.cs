@@ -60,8 +60,10 @@ internal sealed class MessageRetryHandler
 
             _logger.LogError(ex, "Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
         }
-
-        _logger.LogError("Max number of retries exceeded. MessageId: {MessageId}", args.BasicProperties.MessageId);
+        else
+        {
+            _logger.LogError("Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
+        }
         var errorProps = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
         await channel.BasicPublishAsync(_errorExchange, string.Empty, mandatory: false, errorProps, args.Body).ConfigureAwait(false);
     }

@@ -25,7 +25,6 @@ public sealed class Client : IAsyncDisposable
     private readonly bool _disablePrefetch;
     private readonly IDictionary<string, object?> _queueArguments;
     private string _retryQueueName = "";
-    private string _errorExchange = "";
     private string _auditExchange = "";
 
     private readonly MessageRetryHandler _retryHandler;
@@ -168,7 +167,6 @@ public sealed class Client : IAsyncDisposable
         _consumingCt = cancellationToken;
         _queueName = queueName;
         _retryQueueName = queueName + ".Retries";
-        _errorExchange = _queueConfiguration.ErrorQueueName;
         _auditExchange = _queueConfiguration.AuditQueueName;
 
         if (autoDelete.HasValue)
