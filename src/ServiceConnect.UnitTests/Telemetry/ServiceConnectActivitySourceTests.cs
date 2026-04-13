@@ -199,12 +199,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     // ---------------- TryGetExistingContext ----------------
 
     [Fact]
-    public void TryGetExistingContext_WithTraceparent_ReturnsFalse_DueToCarrierTypeMismatch()
+    public void TryGetExistingContext_WithTraceparent_ReturnsTrue_AndParsesContext()
     {
-        // TryGetExistingContext accepts Dictionary<string, string> but the internal
-        // ExtractTraceIdAndState callback pattern-matches against Dictionary<string, object>.
-        // Because Dictionary<string,string> is not Dictionary<string,object> (no variance),
-        // the extraction always fails. This test documents that current behavior.
         var traceId = "0af7651916cd43dd8448eb211c80319c";
         var spanId = "b7ad6b7169203331";
         var headers = new Dictionary<string, string>
@@ -214,8 +210,9 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         var ok = ServiceConnectActivitySource.TryGetExistingContext(headers, out var ctx);
 
-        Assert.False(ok);
-        Assert.Equal(default, ctx);
+        Assert.True(ok);
+        Assert.Equal(traceId, ctx.TraceId.ToString());
+        Assert.Equal(spanId, ctx.SpanId.ToString());
     }
 
     [Fact]

@@ -212,14 +212,18 @@ public static class ServiceConnectActivitySource
 
     private static void ExtractTraceIdAndState(object? eventArgs, string name, out string? value, out IEnumerable<string>? values)
     {
-        if (eventArgs is Dictionary<string, object> headers && headers.TryGetValue(name, out object? propsVal))
-        {
-            value = HeaderDecoder.Decode(propsVal);
-            values = default;
-            return;
-        }
-
-        value = default;
         values = default;
+        switch (eventArgs)
+        {
+            case Dictionary<string, object> objHeaders when objHeaders.TryGetValue(name, out object? objVal):
+                value = HeaderDecoder.Decode(objVal);
+                return;
+            case Dictionary<string, string> strHeaders when strHeaders.TryGetValue(name, out string? strVal):
+                value = strVal;
+                return;
+            default:
+                value = default;
+                return;
+        }
     }
 }
