@@ -278,8 +278,8 @@ Remove the old "Dispose outside the lock to avoid deadlock with consumer callbac
 
 - [ ] **Step 5: Run the new tests**
 
-Run: `dotnet test src/ServiceConnect.UnitTests --filter "StartConsumingAsync_ConcurrentWithStop_SerializesState|StartConsumingAsync_PreCancelledToken_ThrowsOCE" -v quiet`
-Expected: both PASS.
+Run: `dotnet test src/ServiceConnect.UnitTests --filter "StartConsumingAsync_ConcurrentWithStop_SerializesState|StartConsumingAsync_PreCancelledToken_ThrowsOCE|StopConsumingAsync_WhileStartInFlight_WaitsForStartToComplete" -v quiet`
+Expected: all three PASS.
 
 - [ ] **Step 6: Run the full unit test suite**
 
