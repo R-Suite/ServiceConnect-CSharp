@@ -13,13 +13,11 @@ namespace ServiceConnect.UnitTests
     // Marker abstract classes for ordering tests
     public abstract class FakeFilter1 : IFilter
     {
-        public IBus Bus { get; set; } = null!;
         public abstract Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
     }
 
     public abstract class FakeFilter2 : IFilter
     {
-        public IBus Bus { get; set; } = null!;
         public abstract Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
     }
 

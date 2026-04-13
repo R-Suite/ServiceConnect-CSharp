@@ -12,7 +12,6 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
     {
         private readonly IMessageDeduplicationPersistor _persistor;
 
-        public IBus Bus { get; set; } = null!;
 
         public IncomingDeduplicationFilter(IMessageDeduplicationPersistor persistor)
         {

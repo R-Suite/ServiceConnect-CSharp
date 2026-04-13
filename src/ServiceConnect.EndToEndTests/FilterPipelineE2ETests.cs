@@ -9,7 +9,6 @@ namespace ServiceConnect.EndToEndTests;
 
 file sealed class BlockingFilter : IFilter
 {
-    public IBus Bus { get; set; } = null!;
     public bool WasCalled { get; private set; }
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
@@ -21,7 +20,6 @@ file sealed class BlockingFilter : IFilter
 
 file sealed class HeaderAddingFilter : IFilter
 {
-    public IBus Bus { get; set; } = null!;
     public bool WasCalled { get; private set; }
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)

@@ -10,7 +10,6 @@ namespace ServiceConnect.EndToEndTests;
 
 file sealed class OrderTrackingFilterA : IFilter
 {
-    public IBus Bus { get; set; } = null!;
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
@@ -21,7 +20,6 @@ file sealed class OrderTrackingFilterA : IFilter
 
 file sealed class OrderTrackingFilterB : IFilter
 {
-    public IBus Bus { get; set; } = null!;
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
@@ -32,7 +30,6 @@ file sealed class OrderTrackingFilterB : IFilter
 
 file sealed class ChainBlockingFilter : IFilter
 {
-    public IBus Bus { get; set; } = null!;
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
@@ -43,7 +40,6 @@ file sealed class ChainBlockingFilter : IFilter
 
 file sealed class ChainSecondFilter : IFilter
 {
-    public IBus Bus { get; set; } = null!;
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {

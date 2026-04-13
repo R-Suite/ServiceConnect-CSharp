@@ -6,7 +6,6 @@ namespace ServiceConnect.UnitTests;
 
 public class TestFilter : IFilter
 {
-    public IBus Bus { get; set; } = null!;
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default) => Task.FromResult(true);
 }
 

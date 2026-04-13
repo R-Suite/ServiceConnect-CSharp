@@ -10,7 +10,6 @@ public class IncomingGzipCompressionFilter : IFilter
 {
     private const int MaxDecompressedSize = 10 * 1024 * 1024; // 10 MB
 
-    public IBus Bus { get; set; } = null!;
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {

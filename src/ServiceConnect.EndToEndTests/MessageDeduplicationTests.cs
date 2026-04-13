@@ -14,7 +14,6 @@ file sealed class TestDeduplicationFilter : IFilter
 {
     private readonly ConcurrentDictionary<string, byte> _seen = new(StringComparer.Ordinal);
 
-    public IBus Bus { get; set; } = null!;
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
