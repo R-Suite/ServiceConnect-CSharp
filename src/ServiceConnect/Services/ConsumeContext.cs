@@ -7,6 +7,7 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
 {
     public IBus Bus { get; } = bus;
     public IDictionary<string, object> Headers { get; } = headers;
+    public CancellationToken CancellationToken { get; set; }
 
     public string? MessageId =>
         Headers.TryGetValue(HeaderKeys.MessageId, out var value) ? HeaderDecoder.Decode(value) : null;
@@ -15,7 +16,7 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
         Headers.TryGetValue(HeaderKeys.CorrelationId, out var value) && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
             ? id : Guid.Empty;
 
-    public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null) where TReply : Message
+    public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default) where TReply : Message
     {
         var sourceAddress = Headers.TryGetValue(HeaderKeys.SourceAddress, out var sa) ? HeaderDecoder.Decode(sa) : null;
         if (string.IsNullOrEmpty(sourceAddress))
@@ -28,6 +29,6 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
             replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;
 
         var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
-        await Bus.SendAsync(message, options).ConfigureAwait(false);
+        await Bus.SendAsync(message, options, cancellationToken).ConfigureAwait(false);
     }
 }
