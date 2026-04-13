@@ -13,5 +13,5 @@ public interface IConsumer : IAsyncDisposable
     /// <summary>
     /// Starts consuming messages from the specified queue for the given message types.
     /// </summary>
-    Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler);
+    Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default);
 }

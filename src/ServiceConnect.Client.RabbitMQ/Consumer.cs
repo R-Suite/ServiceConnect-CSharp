@@ -22,6 +22,7 @@ public sealed class Consumer : IConsumer
     private Dictionary<string, object?> _utilityQueueArguments = [];
     private readonly ConcurrentBag<Client> _clients = new();
     private readonly IBusConfiguration _busConfiguration;
+    private CancellationToken _consumingCt;
 
     public Consumer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Consumer> logger)
     {
@@ -42,8 +43,11 @@ public sealed class Consumer : IConsumer
 
     public bool IsConnected => _connection?.IsConnected() ?? false;
 
-    public async Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler)
+    public async Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        _consumingCt = cancellationToken;
+
         var clientSettings = _transportConfiguration.ClientSettings;
 
         _durable = !clientSettings.TryGetValue(RabbitMQSettingKeys.Durable, out var durableVal) || (bool)durableVal;
@@ -61,43 +65,43 @@ public sealed class Consumer : IConsumer
         // Configure exchanges
         foreach (string messageType in messageTypes)
         {
-            await ConfigureExchangeAsync(messageType, "fanout");
+            await ConfigureExchangeAsync(messageType, "fanout", cancellationToken);
         }
 
         // Configure queue
-        await ConfigureQueueAsync(queueName);
+        await ConfigureQueueAsync(queueName, cancellationToken);
 
         // Purge all messages on queue
         if (_queueConfiguration.PurgeQueueOnStartup)
         {
             _logger.LogDebug("Purging queue");
-            await _model.QueuePurgeAsync(queueName);
+            await _model.QueuePurgeAsync(queueName, cancellationToken);
         }
 
         // Configure retry queue (but only if retries are expected)
         if (_transportConfiguration.MaxRetries > 0)
         {
-            await ConfigureRetryQueueAsync(queueName);
+            await ConfigureRetryQueueAsync(queueName, cancellationToken);
         }
 
         // Configure Error Queue/Exchange
-        string errorExchange = await ConfigureErrorExchangeAsync();
-        string errorQueue = await ConfigureErrorQueueAsync();
+        string errorExchange = await ConfigureErrorExchangeAsync(cancellationToken);
+        string errorQueue = await ConfigureErrorQueueAsync(cancellationToken);
 
         if (!string.IsNullOrEmpty(errorExchange))
         {
-            await _model.QueueBindAsync(errorQueue, errorExchange, string.Empty, _utilityQueueArguments);
+            await _model.QueueBindAsync(errorQueue, errorExchange, string.Empty, _utilityQueueArguments, cancellationToken: cancellationToken);
         }
 
         // Configure Audit Queue/Exchange
         if (_queueConfiguration.AuditingEnabled)
         {
-            string auditExchange = await ConfigureAuditExchangeAsync();
-            string auditQueue = await ConfigureAuditQueueAsync();
+            string auditExchange = await ConfigureAuditExchangeAsync(cancellationToken);
+            string auditQueue = await ConfigureAuditQueueAsync(cancellationToken);
 
             if (!string.IsNullOrEmpty(auditExchange))
             {
-                await _model.QueueBindAsync(auditQueue, auditExchange, string.Empty, _utilityQueueArguments);
+                await _model.QueueBindAsync(auditQueue, auditExchange, string.Empty, _utilityQueueArguments, cancellationToken: cancellationToken);
             }
         }
 
@@ -128,12 +132,12 @@ public sealed class Consumer : IConsumer
             await _connection.DisposeAsync().ConfigureAwait(false);
     }
 
-    private async Task ConfigureExchangeAsync(string exchangeName, string type)
+    private async Task ConfigureExchangeAsync(string exchangeName, string type, CancellationToken cancellationToken = default)
     {
         try
         {
             // Hard code auto delete and durable to sensible defaults so that producers and consumers dont try to declare exchanges with different settings.
-            await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null);
+            await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -141,12 +145,12 @@ public sealed class Consumer : IConsumer
         }
     }
 
-    private async Task ConfigureQueueAsync(string queueName)
+    private async Task ConfigureQueueAsync(string queueName, CancellationToken cancellationToken = default)
     {
-        await _model!.QueueDeclareAsync(queueName, _durable, _exclusive, _autoDelete, _queueArguments);
+        await _model!.QueueDeclareAsync(queueName, _durable, _exclusive, _autoDelete, _queueArguments, cancellationToken: cancellationToken);
     }
 
-    private async Task ConfigureRetryQueueAsync(string queueName)
+    private async Task ConfigureRetryQueueAsync(string queueName, CancellationToken cancellationToken = default)
     {
         // When message goes to retry queue, it falls-through to dead-letter exchange (after _retryDelay)
         // dead-letter exchange is of type "direct" and bound to the original queue.
@@ -155,7 +159,7 @@ public sealed class Consumer : IConsumer
 
         try
         {
-            await _model!.ExchangeDeclareAsync(retryDeadLetterExchangeName, "direct", _durable, _autoDelete, null);
+            await _model!.ExchangeDeclareAsync(retryDeadLetterExchangeName, "direct", _durable, _autoDelete, null, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -164,7 +168,7 @@ public sealed class Consumer : IConsumer
 
         try
         {
-            await _model!.QueueBindAsync(queueName, retryDeadLetterExchangeName, retryQueueName, _retryQueueArguments); // only redeliver to the original queue (use _queueName as routing key)
+            await _model!.QueueBindAsync(queueName, retryDeadLetterExchangeName, retryQueueName, _retryQueueArguments, cancellationToken: cancellationToken); // only redeliver to the original queue (use _queueName as routing key)
         }
         catch (Exception ex)
         {
@@ -180,7 +184,7 @@ public sealed class Consumer : IConsumer
         try
         {
             // We never have consumers on the retry queue.  Therefore set autodelete to false.
-            await _model!.QueueDeclareAsync(retryQueueName, _durable, false, false, arguments);
+            await _model!.QueueDeclareAsync(retryQueueName, _durable, false, false, arguments, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -188,11 +192,11 @@ public sealed class Consumer : IConsumer
         }
     }
 
-    private async Task<string> ConfigureErrorExchangeAsync()
+    private async Task<string> ConfigureErrorExchangeAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            await _model!.ExchangeDeclareAsync(_queueConfiguration.ErrorQueueName, "direct");
+            await _model!.ExchangeDeclareAsync(_queueConfiguration.ErrorQueueName, "direct", cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -202,11 +206,11 @@ public sealed class Consumer : IConsumer
         return _queueConfiguration.ErrorQueueName;
     }
 
-    private async Task<string> ConfigureErrorQueueAsync()
+    private async Task<string> ConfigureErrorQueueAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            await _model!.QueueDeclareAsync(_queueConfiguration.ErrorQueueName, true, false, false, _utilityQueueArguments);
+            await _model!.QueueDeclareAsync(_queueConfiguration.ErrorQueueName, true, false, false, _utilityQueueArguments, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -216,11 +220,11 @@ public sealed class Consumer : IConsumer
         return _queueConfiguration.ErrorQueueName;
     }
 
-    private async Task<string> ConfigureAuditExchangeAsync()
+    private async Task<string> ConfigureAuditExchangeAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            await _model!.ExchangeDeclareAsync(_queueConfiguration.AuditQueueName, "direct");
+            await _model!.ExchangeDeclareAsync(_queueConfiguration.AuditQueueName, "direct", cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -230,11 +234,11 @@ public sealed class Consumer : IConsumer
         return _queueConfiguration.AuditQueueName;
     }
 
-    private async Task<string> ConfigureAuditQueueAsync()
+    private async Task<string> ConfigureAuditQueueAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            await _model!.QueueDeclareAsync(_queueConfiguration.AuditQueueName, true, false, false, _utilityQueueArguments);
+            await _model!.QueueDeclareAsync(_queueConfiguration.AuditQueueName, true, false, false, _utilityQueueArguments, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

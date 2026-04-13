@@ -192,7 +192,7 @@ public sealed class Bus(
             _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
                 _queueConfig.QueueName, messageTypeNames.Count);
 
-            await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch).ConfigureAwait(false);
+            await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch, cancellationToken).ConfigureAwait(false);
 
             lock (_stateLock) { _consuming = true; }
         }
