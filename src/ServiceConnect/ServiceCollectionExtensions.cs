@@ -147,6 +147,9 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IMessageDispatcher>(),
             sp.GetRequiredService<IList<HandlerReference>>(),
             sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>(),
+            sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>(),
+            sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>(),
+            sp.GetRequiredService<Services.Processors.AggregatorRegistry>(),
             sp.GetService<IConsumer>(),
             sp.GetService<IProducer>()));
 

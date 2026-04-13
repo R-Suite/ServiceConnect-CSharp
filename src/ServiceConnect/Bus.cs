@@ -17,6 +17,9 @@ public sealed class Bus : IBus
     private readonly IMessageDispatcher _dispatcher;
     private readonly IList<HandlerReference> _handlerReferences;
     private readonly Services.Processors.ProcessManagerHandlerRegistry _processManagerRegistry;
+    private readonly Services.Processors.MessageHandlerRegistry _messageHandlerRegistry;
+    private readonly Services.Processors.StreamHandlerRegistry _streamHandlerRegistry;
+    private readonly Services.Processors.AggregatorRegistry _aggregatorRegistry;
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
     private readonly object _stateLock = new();
@@ -34,6 +37,9 @@ public sealed class Bus : IBus
         IMessageDispatcher dispatcher,
         IList<HandlerReference> handlerReferences,
         Services.Processors.ProcessManagerHandlerRegistry processManagerRegistry,
+        Services.Processors.MessageHandlerRegistry messageHandlerRegistry,
+        Services.Processors.StreamHandlerRegistry streamHandlerRegistry,
+        Services.Processors.AggregatorRegistry aggregatorRegistry,
         IConsumer? consumer = null,
         IProducer? producer = null)
     {
@@ -46,6 +52,9 @@ public sealed class Bus : IBus
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
         _processManagerRegistry = processManagerRegistry ?? throw new ArgumentNullException(nameof(processManagerRegistry));
+        _messageHandlerRegistry = messageHandlerRegistry ?? throw new ArgumentNullException(nameof(messageHandlerRegistry));
+        _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
+        _aggregatorRegistry = aggregatorRegistry ?? throw new ArgumentNullException(nameof(aggregatorRegistry));
         _consumer = consumer;
         _producer = producer;
     }
@@ -208,7 +217,11 @@ public sealed class Bus : IBus
                 localConsumer = _consumer;
             }
 
-            _ = _processManagerRegistry; // touch singleton; duplicate-handler registration would have thrown at DI resolution time
+            // touch singletons; any duplicate-handler registration in the registries would have thrown at DI resolution time
+            _ = _processManagerRegistry;
+            _ = _messageHandlerRegistry;
+            _ = _streamHandlerRegistry;
+            _ = _aggregatorRegistry;
             _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
                 _queueConfig.QueueName, messageTypeNames.Count);
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -26,6 +27,9 @@ namespace ServiceConnect.UnitTests
         private readonly Mock<IMessageDispatcher> _mockDispatcher;
         private readonly IList<HandlerReference> _handlerReferences;
         private readonly ProcessManagerHandlerRegistry _processManagerRegistry;
+        private readonly MessageHandlerRegistry _messageHandlerRegistry;
+        private readonly StreamHandlerRegistry _streamHandlerRegistry;
+        private readonly AggregatorRegistry _aggregatorRegistry;
         private readonly Bus _bus;
 
         public BusTests()
@@ -48,6 +52,16 @@ namespace ServiceConnect.UnitTests
             _processManagerRegistry = new ProcessManagerHandlerRegistry(
                 new List<HandlerReference>(),
                 NullLogger<ProcessManagerHandlerRegistry>.Instance);
+            _messageHandlerRegistry = new MessageHandlerRegistry(
+                new List<HandlerReference>(),
+                NullLogger<MessageHandlerRegistry>.Instance);
+            _streamHandlerRegistry = new StreamHandlerRegistry(
+                new List<HandlerReference>(),
+                NullLogger<StreamHandlerRegistry>.Instance);
+            _aggregatorRegistry = new AggregatorRegistry(
+                new List<HandlerReference>(),
+                new ServiceCollection().BuildServiceProvider(),
+                NullLogger<AggregatorRegistry>.Instance);
 
             _bus = new Bus(
                 _mockSerializer.Object,
@@ -58,7 +72,10 @@ namespace ServiceConnect.UnitTests
                 _mockQueueConfig.Object,
                 _mockDispatcher.Object,
                 _handlerReferences,
-                _processManagerRegistry);
+                _processManagerRegistry,
+                _messageHandlerRegistry,
+                _streamHandlerRegistry,
+                _aggregatorRegistry);
         }
 
         [Fact]
@@ -91,6 +108,9 @@ namespace ServiceConnect.UnitTests
                 _mockDispatcher.Object,
                 _handlerReferences,
                 _processManagerRegistry,
+                _messageHandlerRegistry,
+                _streamHandlerRegistry,
+                _aggregatorRegistry,
                 mockConsumer.Object);
 
             // Act
@@ -285,15 +305,18 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Constructor_ShouldThrow_WhenDependencyIsNull()
         {
-            Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, null!, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, (IMessageDispatcher)null!, _handlerReferences, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, null!, _processManagerRegistry));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, null!));
+            Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, null!, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, (IMessageDispatcher)null!, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, null!, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, null!, _messageHandlerRegistry, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, null!, _streamHandlerRegistry, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, null!, _aggregatorRegistry));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, _processManagerRegistry, _messageHandlerRegistry, _streamHandlerRegistry, null!));
         }
 
         // --- Helper ---
@@ -309,6 +332,9 @@ namespace ServiceConnect.UnitTests
                 _mockDispatcher.Object,
                 _handlerReferences,
                 _processManagerRegistry,
+                _messageHandlerRegistry,
+                _streamHandlerRegistry,
+                _aggregatorRegistry,
                 consumer);
 
         // --- Lifecycle serialization tests (R-034) ---
