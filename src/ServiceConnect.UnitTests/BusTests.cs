@@ -346,5 +346,43 @@ namespace ServiceConnect.UnitTests
                 It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()),
                 Times.Never);
         }
+
+        [Fact]
+        public async Task StopConsumingAsync_WhileStartInFlight_WaitsForStartToComplete()
+        {
+            var consumerStarted = new TaskCompletionSource();
+            var releaseStart = new TaskCompletionSource();
+            var startCompleted = new TaskCompletionSource();
+
+            var mockConsumer = new Mock<IConsumer>();
+            mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+                .Returns(async () =>
+                {
+                    consumerStarted.SetResult();
+                    await releaseStart.Task;
+                });
+
+            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+
+            var startTask = Task.Run(async () =>
+            {
+                await bus.StartConsumingAsync();
+                startCompleted.SetResult();
+            });
+
+            await consumerStarted.Task;
+
+            // Fire Stop while Start is blocked inside the consumer call
+            var stopTask = bus.StopConsumingAsync();
+
+            // Stop is behind Start on the semaphore -- it cannot complete first
+            var firstCompleted = await Task.WhenAny(stopTask, startCompleted.Task, Task.Delay(100));
+            Assert.NotSame(stopTask, firstCompleted);
+
+            // Release Start; both tasks complete cleanly
+            releaseStart.SetResult();
+            await startTask;
+            await stopTask;
+        }
     }
 }

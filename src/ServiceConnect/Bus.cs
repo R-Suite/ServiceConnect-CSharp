@@ -208,6 +208,12 @@ public sealed class Bus(
         await StopConsumingCoreAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Stops consuming without the disposed guard. Called from DisposeAsync,
+    /// which sets _disposed = true before invoking this -- a ThrowIfDisposed()
+    /// here would throw ObjectDisposedException and prevent clean shutdown.
+    /// Public callers must use StopConsumingAsync instead, which adds the guard.
+    /// </summary>
     private async Task StopConsumingCoreAsync(CancellationToken cancellationToken = default)
     {
         await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);

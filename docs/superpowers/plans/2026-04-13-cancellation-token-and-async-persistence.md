@@ -254,6 +254,8 @@ public async Task StopConsumingAsync(CancellationToken cancellationToken = defau
 
 Update `DisposeAsync` to dispose the semaphore after the stop:
 
+`DisposeAsync` sets `_disposed = true` before calling stop, so the public `StopConsumingAsync` (which calls `ThrowIfDisposed()`) cannot be used here -- it would throw `ObjectDisposedException` and prevent clean shutdown. Three options: (a) suppress the disposed check in `StopConsumingAsync`; (b) extract a private core helper that omits the guard; (c) inline the stop logic in `DisposeAsync`. **Chosen approach: option (b)** -- extract a private helper `StopConsumingCoreAsync` that contains the semaphore work but omits `ThrowIfDisposed()`. `StopConsumingAsync` calls `ThrowIfDisposed()` then delegates. `DisposeAsync` calls the core helper directly.
+
 ```csharp
 public async ValueTask DisposeAsync()
 {
@@ -263,7 +265,8 @@ public async ValueTask DisposeAsync()
         _disposed = true;
     }
 
-    await StopConsumingAsync().ConfigureAwait(false);
+    // Call the core helper, not the public method, to skip ThrowIfDisposed.
+    await StopConsumingCoreAsync().ConfigureAwait(false);
     _sendPipeline.Dispose();
     if (_producer != null)
         await _producer.DisposeAsync().ConfigureAwait(false);
