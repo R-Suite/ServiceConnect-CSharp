@@ -56,6 +56,19 @@ public class DefaultProcessManagerPropertyMapperTests
 
         Assert.Equal("Acme", value);
     }
+
+    [Fact]
+    public void ConfigureMapping_CompiledMessageFunc_BoxesValueTypePropertyCorrectly()
+    {
+        var mapper = new DefaultProcessManagerPropertyMapper();
+        mapper.ConfigureMapping<FakePmData, FakePmMsg>(d => d.OrderId, m => m.OrderId);
+
+        var expected = Guid.NewGuid();
+        var msg = new FakePmMsg(Guid.NewGuid()) { OrderId = expected };
+        var value = mapper.Mappings.Single().MessageProp(msg);
+
+        Assert.Equal(expected, value);
+    }
 }
 
 file class FakePmData : IProcessManagerData
