@@ -53,18 +53,18 @@ internal sealed class AggregatorProcessor(
 
     private void ResetTimer(AggregatorDescriptor descriptor)
     {
-        // Replace any in-flight timer with a fresh one and dispose the old one.
-        var timer = new Timer(_ => OnTimerFired(descriptor),
-            null, descriptor.Timeout, Timeout.InfiniteTimeSpan);
-        if (_timers.TryGetValue(descriptor.AggregatorName, out var existing))
-        {
-            _timers[descriptor.AggregatorName] = timer;
-            existing.Dispose();
-        }
-        else
-        {
-            _timers[descriptor.AggregatorName] = timer;
-        }
+        // Replace any in-flight timer atomically so concurrent message arrivals for the
+        // same aggregator don't leak an undisposed timer or lose the final reset (M-1).
+        Timer? previous = null;
+        _timers.AddOrUpdate(
+            descriptor.AggregatorName,
+            _ => new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan),
+            (_, existing) =>
+            {
+                previous = existing;
+                return new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan);
+            });
+        previous?.Dispose();
     }
 
     private void OnTimerFired(AggregatorDescriptor descriptor)

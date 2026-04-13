@@ -34,4 +34,12 @@ public sealed class TimeoutData
     /// Mark processed timeouts as dispatched to prevent multiple dispatch of the same timeout
     /// </summary>
     public bool Locked { get; set; }
+
+    /// <summary>
+    /// When <see cref="Locked"/> is set by a polling consumer, this holds the
+    /// unique poll-session id of the consumer that did the locking. Readers
+    /// filter on this so a batch read sees only its own locked rows, not rows
+    /// locked by a concurrent consumer (H-1).
+    /// </summary>
+    public Guid LockedBy { get; set; }
 }

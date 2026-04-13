@@ -9,6 +9,12 @@ namespace ServiceConnect.Services;
 /// optionally wrapping calls in a middleware chain from IPipelineConfiguration.
 /// Chains are built once (lazily) and cached rather than rebuilt per message (P-04).
 /// </summary>
+/// <remarks>
+/// Because the chain caches middleware instances captured at first use,
+/// <see cref="ISendMessageMiddleware"/> implementations MUST be registered as
+/// singletons. Scoped or transient registrations will be silently promoted to
+/// singleton lifetime, which can cause cross-request state leaks (M-3).
+/// </remarks>
 public sealed class SendMessagePipeline : ISendMessagePipeline
 {
     private readonly IProducer _producer;

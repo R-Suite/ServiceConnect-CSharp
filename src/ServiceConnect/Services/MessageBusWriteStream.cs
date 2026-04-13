@@ -49,6 +49,12 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         if (_closed) return;
         _closed = true;
 
+        // _packetNumber was post-incremented on each WriteAsync, so after N data
+        // packets (indices 0..N-1) its value is N. The close packet reuses that value
+        // as its own index, and LastPacketNumber equals the count. The reader's
+        // IsComplete loop checks 0..LastPacketNumber inclusive so the empty close
+        // packet fills that final slot (L-5). Changing the close-packet payload in the
+        // future would break this invariant — see MessageBusReadStream.Read().
         var packetNum = Interlocked.Read(ref _packetNumber);
 
         var headers = new Dictionary<string, string>(_baseHeaders.Count + 2);

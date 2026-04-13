@@ -312,11 +312,13 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
             var hash = new HashCode();
             hash.Add(T);
             hash.Add(PropertyType);
+            // XOR-combine per-entry hashes so the result is independent of the
+            // dictionary's (undefined) iteration order (M-2). Otherwise Equals
+            // could be true while GetHashCode disagreed, violating the contract.
+            int entryHash = 0;
             foreach (var kvp in PropertiesHierarchy)
-            {
-                hash.Add(kvp.Key);
-                hash.Add(kvp.Value);
-            }
+                entryHash ^= HashCode.Combine(kvp.Key, kvp.Value);
+            hash.Add(entryHash);
             return hash.ToHashCode();
         }
     }

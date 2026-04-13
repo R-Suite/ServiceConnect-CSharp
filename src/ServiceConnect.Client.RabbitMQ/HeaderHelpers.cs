@@ -17,7 +17,8 @@ internal static class HeaderHelpers
     // inner-exception chains (including ones that might reveal connection strings or
     // file paths) cannot bloat the message or leak beyond a controlled surface (S-07).
     private const int MaxErrorMessageInnerDepth = 3;
-    private const int MaxErrorMessageLength = 2048;
+    private const int MaxErrorMessageLength = 4096;
+    private const string TruncationMarker = "...[truncated]";
 
     public static string GetErrorMessage(Exception exception)
     {
@@ -31,7 +32,13 @@ internal static class HeaderHelpers
             ie = ie.InnerException;
             depth++;
         }
+        // Append a marker when the chain was deeper than we recorded so operators
+        // know to check logs for the full inner-exception stack (M-4).
+        if (ie != null)
+            sb.Append(TruncationMarker);
+
         var s = sb.ToString();
-        return s.Length <= MaxErrorMessageLength ? s : s[..MaxErrorMessageLength];
+        if (s.Length <= MaxErrorMessageLength) return s;
+        return string.Concat(s.AsSpan(0, MaxErrorMessageLength - TruncationMarker.Length), TruncationMarker);
     }
 }
