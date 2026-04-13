@@ -41,12 +41,14 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertData(It.IsAny<object>(), It.IsAny<string>()));
-        persistorMock.Setup(p => p.Count(It.IsAny<string>()))
-            .Returns(() => ++insertCount);
-        persistorMock.Setup(p => p.GetData(It.IsAny<string>()))
-            .Returns(new List<object>(messages));
-        persistorMock.Setup(p => p.RemoveData(It.IsAny<string>(), It.IsAny<Guid>()));
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ++insertCount);
+        persistorMock.Setup(p => p.GetDataAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<object>(messages));
+        persistorMock.Setup(p => p.RemoveDataAsync(It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var handlerRefs = new List<HandlerReference>
         {

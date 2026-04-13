@@ -41,9 +41,9 @@ public sealed class AggregatorProcessor(IServiceProvider serviceProvider, ILogge
         var batchSize = (int)aggregatorBaseType.GetMethod("BatchSize")!.Invoke(aggregator, null)!;
         var timeout = (TimeSpan)aggregatorBaseType.GetMethod("Timeout")!.Invoke(aggregator, null)!;
 
-        persistor.InsertData(message, aggregatorName);
+        await persistor.InsertDataAsync(message, aggregatorName, cancellationToken).ConfigureAwait(false);
 
-        var count = persistor.Count(aggregatorName);
+        var count = await persistor.CountAsync(aggregatorName, cancellationToken).ConfigureAwait(false);
         if (batchSize > 0 && count >= batchSize)
         {
             // Cancel any active timer before flushing
@@ -51,7 +51,7 @@ public sealed class AggregatorProcessor(IServiceProvider serviceProvider, ILogge
             {
                 timerToCancel.Dispose();
             }
-            FlushAggregator(aggregatorName, messageType, aggregatorBaseType);
+            await FlushAggregatorAsync(aggregatorName, messageType, aggregatorBaseType, cancellationToken).ConfigureAwait(false);
         }
         else if (timeout > TimeSpan.Zero)
         {
@@ -75,45 +75,47 @@ public sealed class AggregatorProcessor(IServiceProvider serviceProvider, ILogge
         if (!_timers.ContainsKey(aggregatorName))
             return;
 
-        try
-        {
-            FlushAggregator(aggregatorName, messageType, aggregatorBaseType);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error flushing aggregator {AggregatorName} on timeout", aggregatorName);
-        }
+        // Fire and forget from timer callback — log any errors
+        _ = FlushAggregatorAsync(aggregatorName, messageType, aggregatorBaseType, CancellationToken.None)
+            .ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                    logger.LogError(t.Exception, "Error flushing aggregator {AggregatorName} on timeout", aggregatorName);
+            }, TaskContinuationOptions.OnlyOnFaulted);
     }
 
-    private void FlushAggregator(string aggregatorName, Type messageType, Type aggregatorBaseType)
+    private async Task FlushAggregatorAsync(string aggregatorName, Type messageType, Type aggregatorBaseType, CancellationToken cancellationToken)
     {
         IList<object> rawMessages;
         System.Collections.IList typedList;
         object? aggregator;
         System.Reflection.MethodInfo? executeMethod;
 
+        // Snapshot under lock, then execute outside lock
         lock (_flushLock)
         {
-            var persistor = serviceProvider.GetService<IAggregatorPersistor>();
-            if (persistor == null) return;
-
-            rawMessages = persistor.GetData(aggregatorName);
-            if (rawMessages.Count == 0) return;
-
-            var listType = typeof(List<>).MakeGenericType(messageType);
-            typedList = (System.Collections.IList)Activator.CreateInstance(listType)!;
-            foreach (var msg in rawMessages)
-                typedList.Add(msg);
-
-            aggregator = serviceProvider.GetService(aggregatorBaseType);
-            if (aggregator == null) return;
-
-            executeMethod = aggregatorBaseType.GetMethod("Execute");
+            var persistorSnapshot = serviceProvider.GetService<IAggregatorPersistor>();
+            if (persistorSnapshot == null) return;
 
             if (_timers.TryRemove(aggregatorName, out var activeTimer))
                 activeTimer.Dispose();
         }
 
+        var persistor = serviceProvider.GetService<IAggregatorPersistor>();
+        if (persistor == null) return;
+
+        rawMessages = await persistor.GetDataAsync(aggregatorName, cancellationToken).ConfigureAwait(false);
+        if (rawMessages.Count == 0) return;
+
+        var listType = typeof(List<>).MakeGenericType(messageType);
+        typedList = (System.Collections.IList)Activator.CreateInstance(listType)!;
+        foreach (var msg in rawMessages)
+            typedList.Add(msg);
+
+        aggregator = serviceProvider.GetService(aggregatorBaseType);
+        if (aggregator == null) return;
+
+        executeMethod = aggregatorBaseType.GetMethod("Execute");
         executeMethod?.Invoke(aggregator, [typedList]);
 
         var postFlushPersistor = serviceProvider.GetService<IAggregatorPersistor>();
@@ -122,7 +124,7 @@ public sealed class AggregatorProcessor(IServiceProvider serviceProvider, ILogge
             foreach (var msg in rawMessages)
             {
                 if (msg is Message m)
-                    postFlushPersistor.RemoveData(aggregatorName, m.CorrelationId);
+                    await postFlushPersistor.RemoveDataAsync(aggregatorName, m.CorrelationId, cancellationToken).ConfigureAwait(false);
             }
         }
     }

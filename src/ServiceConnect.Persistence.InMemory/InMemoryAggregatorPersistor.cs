@@ -15,8 +15,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
     private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
     private readonly CacheProvider _provider = new();
 
-    public void InsertData(object data, string name)
+    public Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
@@ -29,23 +30,26 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
                 _provider.Add(name, new List<object> { data }, DateTime.UtcNow.Add(ExpiryDuration));
             }
         }
+        return Task.CompletedTask;
     }
 
-    public IList<object> GetData(string name)
+    public Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
             {
                 var cacheItem = _provider.Get<string, object>(name);
-                return ((List<object>)cacheItem).ToList();
+                return Task.FromResult<IList<object>>(((List<object>)cacheItem).ToList());
             }
-            return [];
+            return Task.FromResult<IList<object>>([]);
         }
     }
 
-    public void RemoveData(string name, Guid correlationId)
+    public Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
@@ -56,6 +60,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
                     cacheItem.Remove(message);
             }
         }
+        return Task.CompletedTask;
     }
 
     public void RemoveAll(string name)
@@ -69,16 +74,17 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         }
     }
 
-    public int Count(string name)
+    public Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
             {
                 var cacheItem = (List<object>)_provider.Get<string, object>(name);
-                return cacheItem.Count;
+                return Task.FromResult(cacheItem.Count);
             }
-            return 0;
+            return Task.FromResult(0);
         }
     }
 }

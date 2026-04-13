@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
@@ -26,135 +28,135 @@ namespace ServiceConnect.UnitTests
     public class InMemoryAggregatorPersistorTests
     {
         [Fact]
-        public void ShouldInsertData()
+        public async Task ShouldInsertData()
         {
             // Arrange
             IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             var data = new AggregatorTestData(Guid.NewGuid()) { Value = "TestData" };
 
             // Act
-            aggregatorPersistor.InsertData(data, "key1");
+            await aggregatorPersistor.InsertDataAsync(data, "key1", CancellationToken.None);
 
             // Assert
-            var result = aggregatorPersistor.GetData("key1");
+            var result = await aggregatorPersistor.GetDataAsync("key1", CancellationToken.None);
             Assert.Single(result);
             Assert.Equal("TestData", ((AggregatorTestData)result[0]).Value);
         }
 
         [Fact]
-        public void ShouldDeleteData()
+        public async Task ShouldDeleteData()
         {
             // Arrange
             var corrId = Guid.NewGuid();
             IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             var data = new AggregatorTestData(corrId);
-            aggregatorPersistor.InsertData(data, "key1");
+            await aggregatorPersistor.InsertDataAsync(data, "key1", CancellationToken.None);
 
             // Act
-            aggregatorPersistor.RemoveData("key1", corrId);
+            await aggregatorPersistor.RemoveDataAsync("key1", corrId, CancellationToken.None);
 
             // Assert
-            Assert.Empty(aggregatorPersistor.GetData("key1"));
+            Assert.Empty(await aggregatorPersistor.GetDataAsync("key1", CancellationToken.None));
         }
 
         [Fact]
-        public void GetData_WhenKeyDoesNotExist_ReturnsEmptyList()
+        public async Task GetData_WhenKeyDoesNotExist_ReturnsEmptyList()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
 
-            var result = persistor.GetData("nonexistent-key");
+            var result = await persistor.GetDataAsync("nonexistent-key", CancellationToken.None);
 
             Assert.Empty(result);
         }
 
         [Fact]
-        public void InsertData_MultipleItems_AllRetrievable()
+        public async Task InsertData_MultipleItems_AllRetrievable()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             var data1 = new AggregatorTestData(Guid.NewGuid()) { Value = "first" };
             var data2 = new AggregatorTestData(Guid.NewGuid()) { Value = "second" };
 
-            persistor.InsertData(data1, "mykey");
-            persistor.InsertData(data2, "mykey");
+            await persistor.InsertDataAsync(data1, "mykey", CancellationToken.None);
+            await persistor.InsertDataAsync(data2, "mykey", CancellationToken.None);
 
-            var result = persistor.GetData("mykey");
+            var result = await persistor.GetDataAsync("mykey", CancellationToken.None);
             Assert.Equal(2, result.Count);
         }
 
         [Fact]
-        public void InsertData_DifferentKeys_StoredSeparately()
+        public async Task InsertData_DifferentKeys_StoredSeparately()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             var data1 = new AggregatorTestData(Guid.NewGuid()) { Value = "alpha" };
             var data2 = new AggregatorTestData(Guid.NewGuid()) { Value = "beta" };
 
-            persistor.InsertData(data1, "key-a");
-            persistor.InsertData(data2, "key-b");
+            await persistor.InsertDataAsync(data1, "key-a", CancellationToken.None);
+            await persistor.InsertDataAsync(data2, "key-b", CancellationToken.None);
 
-            Assert.Single(persistor.GetData("key-a"));
-            Assert.Single(persistor.GetData("key-b"));
-            Assert.Equal("alpha", ((AggregatorTestData)persistor.GetData("key-a")[0]).Value);
-            Assert.Equal("beta", ((AggregatorTestData)persistor.GetData("key-b")[0]).Value);
+            Assert.Single(await persistor.GetDataAsync("key-a", CancellationToken.None));
+            Assert.Single(await persistor.GetDataAsync("key-b", CancellationToken.None));
+            Assert.Equal("alpha", ((AggregatorTestData)(await persistor.GetDataAsync("key-a", CancellationToken.None))[0]).Value);
+            Assert.Equal("beta", ((AggregatorTestData)(await persistor.GetDataAsync("key-b", CancellationToken.None))[0]).Value);
         }
 
         [Fact]
-        public void Count_WhenKeyDoesNotExist_ReturnsZero()
+        public async Task Count_WhenKeyDoesNotExist_ReturnsZero()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
 
-            int count = persistor.Count("nonexistent-key");
+            int count = await persistor.CountAsync("nonexistent-key", CancellationToken.None);
 
             Assert.Equal(0, count);
         }
 
         [Fact]
-        public void Count_AfterInsertingOneItem_ReturnsOne()
+        public async Task Count_AfterInsertingOneItem_ReturnsOne()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
-            persistor.InsertData(new AggregatorTestData(Guid.NewGuid()), "mykey");
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
 
-            int count = persistor.Count("mykey");
+            int count = await persistor.CountAsync("mykey", CancellationToken.None);
 
             Assert.Equal(1, count);
         }
 
         [Fact]
-        public void Count_AfterInsertingMultipleItems_ReturnsCorrectCount()
+        public async Task Count_AfterInsertingMultipleItems_ReturnsCorrectCount()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
-            persistor.InsertData(new AggregatorTestData(Guid.NewGuid()), "mykey");
-            persistor.InsertData(new AggregatorTestData(Guid.NewGuid()), "mykey");
-            persistor.InsertData(new AggregatorTestData(Guid.NewGuid()), "mykey");
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
 
-            int count = persistor.Count("mykey");
+            int count = await persistor.CountAsync("mykey", CancellationToken.None);
 
             Assert.Equal(3, count);
         }
 
         [Fact]
-        public void Count_AfterRemovingItem_DecrementsByOne()
+        public async Task Count_AfterRemovingItem_DecrementsByOne()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             var corrId = Guid.NewGuid();
-            persistor.InsertData(new AggregatorTestData(corrId), "mykey");
-            persistor.InsertData(new AggregatorTestData(Guid.NewGuid()), "mykey");
+            await persistor.InsertDataAsync(new AggregatorTestData(corrId), "mykey", CancellationToken.None);
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
 
-            persistor.RemoveData("mykey", corrId);
+            await persistor.RemoveDataAsync("mykey", corrId, CancellationToken.None);
 
-            Assert.Equal(1, persistor.Count("mykey"));
+            Assert.Equal(1, await persistor.CountAsync("mykey", CancellationToken.None));
         }
 
         [Fact]
-        public void RemoveAll_ClearsAllItemsForKey()
+        public async Task RemoveAll_ClearsAllItemsForKey()
         {
             var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
-            persistor.InsertData(new AggregatorTestData(Guid.NewGuid()), "mykey");
-            persistor.InsertData(new AggregatorTestData(Guid.NewGuid()), "mykey");
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
 
             persistor.RemoveAll("mykey");
 
-            Assert.Empty(persistor.GetData("mykey"));
-            Assert.Equal(0, persistor.Count("mykey"));
+            Assert.Empty(await persistor.GetDataAsync("mykey", CancellationToken.None));
+            Assert.Equal(0, await persistor.CountAsync("mykey", CancellationToken.None));
         }
 
         [Fact]
@@ -168,13 +170,53 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void RemoveData_WhenKeyDoesNotExist_DoesNotThrow()
+        public async Task RemoveData_WhenKeyDoesNotExist_DoesNotThrow()
         {
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
 
-            var ex = Record.Exception(() => persistor.RemoveData("nonexistent-key", Guid.NewGuid()));
+            var ex = await Record.ExceptionAsync(() => persistor.RemoveDataAsync("nonexistent-key", Guid.NewGuid(), CancellationToken.None));
 
             Assert.Null(ex);
+        }
+
+        [Fact]
+        public async Task InsertDataAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => persistor.InsertDataAsync(new object(), "test", cts.Token));
+        }
+
+        [Fact]
+        public async Task GetDataAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => persistor.GetDataAsync("test", cts.Token));
+        }
+
+        [Fact]
+        public async Task RemoveDataAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => persistor.RemoveDataAsync("test", Guid.NewGuid(), cts.Token));
+        }
+
+        [Fact]
+        public async Task CountAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => persistor.CountAsync("test", cts.Token));
         }
     }
 }

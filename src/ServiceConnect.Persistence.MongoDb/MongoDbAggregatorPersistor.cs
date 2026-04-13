@@ -40,20 +40,20 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
-    public void InsertData(object data, string name)
+    public async Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
     {
         try
         {
             var dataType = data.GetType();
             var dataBson = data.ToBsonDocument(dataType);
 
-            _collection.InsertOne(new AggregatorDocument
+            await _collection.InsertOneAsync(new AggregatorDocument
             {
                 Name = name,
                 DataBson = dataBson,
                 DataTypeName = dataType.AssemblyQualifiedName!,
                 Version = 1
-            });
+            }, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
@@ -61,12 +61,12 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
-    public IList<object> GetData(string name)
+    public async Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
     {
         try
         {
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
-            var docs = _collection.Find(filter).ToList();
+            var docs = await _collection.Find(filter).ToListAsync(cancellationToken).ConfigureAwait(false);
             var result = new List<object>();
 
             foreach (var doc in docs)
@@ -88,7 +88,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
-    public void RemoveData(string name, Guid correlationId)
+    public async Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -96,7 +96,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
                 Builders<AggregatorDocument>.Filter.Eq("DataBson.CorrelationId", new BsonBinaryData(correlationId, GuidRepresentation.Standard))
             );
-            _collection.DeleteMany(filter);
+            await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
@@ -104,12 +104,12 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
-    public int Count(string name)
+    public async Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
     {
         try
         {
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
-            var count = _collection.CountDocuments(filter);
+            var count = await _collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken).ConfigureAwait(false);
             return count > int.MaxValue ? int.MaxValue : (int)count;
         }
         catch (MongoException ex)

@@ -29,7 +29,7 @@ public class MongoDbAggregatorPersistorTests
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void InsertData_AndGetData_ReturnsInsertedItems()
+    public async Task InsertData_AndGetData_ReturnsInsertedItems()
     {
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
@@ -41,54 +41,54 @@ public class MongoDbAggregatorPersistorTests
 
         var persistor = CreatePersistor(registry: registry);
 
-        persistor.InsertData(item1, "batch1");
-        persistor.InsertData(item2, "batch1");
+        await persistor.InsertDataAsync(item1, "batch1");
+        await persistor.InsertDataAsync(item2, "batch1");
 
-        var result = persistor.GetData("batch1");
+        var result = await persistor.GetDataAsync("batch1");
 
         Assert.Equal(2, result.Count);
     }
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void Count_ReturnsCorrectCount()
+    public async Task Count_ReturnsCorrectCount()
     {
         var persistor = CreatePersistor();
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
 
-        persistor.InsertData(new { Value = "item1", CorrelationId = correlationId1 }, "batch2");
-        persistor.InsertData(new { Value = "item2", CorrelationId = correlationId2 }, "batch2");
+        await persistor.InsertDataAsync(new { Value = "item1", CorrelationId = correlationId1 }, "batch2");
+        await persistor.InsertDataAsync(new { Value = "item2", CorrelationId = correlationId2 }, "batch2");
 
-        var count = persistor.Count("batch2");
+        var count = await persistor.CountAsync("batch2");
 
         Assert.Equal(2, count);
     }
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void RemoveData_RemovesByCorrelationId()
+    public async Task RemoveData_RemovesByCorrelationId()
     {
         var persistor = CreatePersistor();
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
 
-        persistor.InsertData(new { Value = "item1", CorrelationId = correlationId1 }, "batch3");
-        persistor.InsertData(new { Value = "item2", CorrelationId = correlationId2 }, "batch3");
+        await persistor.InsertDataAsync(new { Value = "item1", CorrelationId = correlationId1 }, "batch3");
+        await persistor.InsertDataAsync(new { Value = "item2", CorrelationId = correlationId2 }, "batch3");
 
-        persistor.RemoveData("batch3", correlationId1);
+        await persistor.RemoveDataAsync("batch3", correlationId1);
 
-        var count = persistor.Count("batch3");
+        var count = await persistor.CountAsync("batch3");
         Assert.Equal(1, count);
     }
 
     [Fact]
     [Trait("Category", "Docker")]
-    public void GetData_ReturnsEmptyList_WhenNoData()
+    public async Task GetData_ReturnsEmptyList_WhenNoData()
     {
         var persistor = CreatePersistor();
 
-        var result = persistor.GetData("nonexistent");
+        var result = await persistor.GetDataAsync("nonexistent");
 
         Assert.Empty(result);
     }
