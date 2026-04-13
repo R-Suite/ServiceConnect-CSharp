@@ -84,6 +84,21 @@ public class AggregatorRegistryTests
     }
 
     [Fact]
+    public void Construction_Deduplicates_SameHandlerRegisteredTwice()
+    {
+        var refs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) },
+            new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) }
+        };
+        var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
+
+        // Same (MessageType, HandlerType) pair twice must not throw.
+        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        Assert.True(registry.TryGet(typeof(ArgFoo), out _));
+    }
+
+    [Fact]
     public void Construction_IgnoresNonAggregators()
     {
         var refs = new List<HandlerReference>

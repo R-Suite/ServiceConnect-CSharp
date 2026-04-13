@@ -9,7 +9,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class AggregatorRegistry
 {
-    private readonly Dictionary<Type, AggregatorDescriptor> _descriptors = new();
+    private readonly Dictionary<Type, (AggregatorDescriptor Descriptor, Type HandlerType)> _descriptors = new();
 
     internal AggregatorRegistry(
         IList<HandlerReference> handlerReferences,
@@ -26,14 +26,17 @@ internal sealed class AggregatorRegistry
             if (aggregatorBaseType == null)
                 continue;
 
-            if (_descriptors.ContainsKey(href.MessageType))
+            if (_descriptors.TryGetValue(href.MessageType, out var existing))
             {
+                if (existing.HandlerType == href.HandlerType)
+                    continue; // identical (MessageType, HandlerType) pair registered twice — dedupe silently
                 throw new InvalidOperationException(
-                    $"Duplicate aggregator registration for message type '{href.MessageType.FullName}'. Only one Aggregator<T> may be registered per message type.");
+                    $"Duplicate aggregator registration for message type '{href.MessageType.FullName}'. " +
+                    $"Only one Aggregator<T> may be registered per message type; found '{existing.HandlerType.FullName}' and '{href.HandlerType.FullName}'.");
             }
 
             var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, serviceProvider);
-            _descriptors[href.MessageType] = descriptor;
+            _descriptors[href.MessageType] = (descriptor, href.HandlerType);
 
             logger.LogDebug(
                 "Registered aggregator descriptor: message={MessageType}, aggregator={AggregatorType}, batchSize={BatchSize}, timeout={Timeout}",
@@ -42,7 +45,15 @@ internal sealed class AggregatorRegistry
     }
 
     internal bool TryGet(Type messageType, [NotNullWhen(true)] out AggregatorDescriptor? descriptor)
-        => _descriptors.TryGetValue(messageType, out descriptor);
+    {
+        if (_descriptors.TryGetValue(messageType, out var entry))
+        {
+            descriptor = entry.Descriptor;
+            return true;
+        }
+        descriptor = null;
+        return false;
+    }
 
     private static Type? FindAggregatorBaseType(Type handlerType, Type messageType)
     {
