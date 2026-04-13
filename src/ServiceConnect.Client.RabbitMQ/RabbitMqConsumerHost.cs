@@ -24,6 +24,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly bool _disablePrefetch;
     private readonly IDictionary<string, object?> _queueArguments;
     private readonly int _gracefulShutdownTimeoutMs;
+    private readonly bool _includeMachineNameInHeaders;
 
     private IChannel? _model;
     private ConsumerEventHandler? _consumerEventHandler;
@@ -38,6 +39,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         IServiceConnectConnection connection,
         ITransportConfiguration transportConfiguration,
         IQueueConfiguration queueConfiguration,
+        IBusConfiguration busConfiguration,
         MessageRetryHandler retryHandler,
         MessageAuditPublisher auditPublisher,
         ILogger logger)
@@ -48,6 +50,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _auditPublisher = auditPublisher ?? throw new ArgumentNullException(nameof(auditPublisher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         ArgumentNullException.ThrowIfNull(transportConfiguration);
+        ArgumentNullException.ThrowIfNull(busConfiguration);
+        _includeMachineNameInHeaders = busConfiguration.IncludeMachineNameInHeaders;
 
         var settings = transportConfiguration.ClientSettings;
         _errorsDisabled = queueConfiguration.DisableErrors;
@@ -150,7 +154,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         try
         {
             HeaderHelpers.SetHeader(headers, HeaderKeys.TimeReceived, DateTime.UtcNow.ToString("O"));
-            HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
+            if (_includeMachineNameInHeaders)
+                HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
             HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
 
             var typeNameRaw = headers.ContainsKey(HeaderKeys.FullTypeName) ? headers[HeaderKeys.FullTypeName] : headers[HeaderKeys.TypeName];

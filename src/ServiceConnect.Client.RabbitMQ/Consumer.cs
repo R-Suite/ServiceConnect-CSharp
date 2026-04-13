@@ -109,7 +109,7 @@ public sealed class Consumer : IConsumer
 
         for (int i = 0; i < clientCount; i++)
         {
-            Client client = new(_connection, _transportConfiguration, _queueConfiguration, _logger);
+            Client client = new(_connection, _transportConfiguration, _queueConfiguration, _busConfiguration, _logger);
             await client.StartConsumingAsync(eventHandler, queueName, cancellationToken: cancellationToken);
             foreach (string messageType in messageTypes)
             {

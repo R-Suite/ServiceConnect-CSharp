@@ -2,7 +2,11 @@ namespace ServiceConnect.Persistence.MongoDb;
 
 public sealed class MongoDbPersistenceOptions
 {
-    public string ConnectionString { get; set; } = "mongodb://localhost/";
+    /// <summary>
+    /// MongoDB connection string. Must be explicitly configured; there is no default,
+    /// to prevent accidental localhost use in production (S-06).
+    /// </summary>
+    public string ConnectionString { get; set; } = string.Empty;
     public string DatabaseName { get; set; } = "RMessageBusPersistentStore";
     public MongoDbSslOptions? Ssl { get; set; }
 }

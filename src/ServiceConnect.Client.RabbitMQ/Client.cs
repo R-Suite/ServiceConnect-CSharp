@@ -16,13 +16,14 @@ public sealed class Client : IAsyncDisposable
         IServiceConnectConnection connection,
         ITransportConfiguration transportConfiguration,
         IQueueConfiguration queueConfiguration,
+        IBusConfiguration busConfiguration,
         ILogger logger)
     {
         var retryHandler = new MessageRetryHandler(
             transportConfiguration.MaxRetries, queueConfiguration.ErrorQueueName, logger);
         var auditPublisher = new MessageAuditPublisher(queueConfiguration);
         _host = new RabbitMqConsumerHost(
-            connection, transportConfiguration, queueConfiguration,
+            connection, transportConfiguration, queueConfiguration, busConfiguration,
             retryHandler, auditPublisher, logger);
     }
 

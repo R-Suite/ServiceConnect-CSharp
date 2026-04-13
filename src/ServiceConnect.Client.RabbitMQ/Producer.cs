@@ -17,6 +17,7 @@ public sealed class Producer : IProducer
 
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
+    private readonly IBusConfiguration _busConfiguration;
     private readonly ILogger<Producer> _logger;
     private volatile IChannel? _model;
     private IConnection? _connection;
@@ -30,10 +31,11 @@ public sealed class Producer : IProducer
     private volatile bool _connected;
     private volatile bool _disposed;
 
-    public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, ILogger<Producer> logger)
+    public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Producer> logger)
     {
         _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
+        _busConfiguration = busConfiguration ?? throw new ArgumentNullException(nameof(busConfiguration));
         _logger = logger;
 
         var settings = transportConfiguration.ClientSettings;
@@ -257,7 +259,8 @@ public sealed class Producer : IProducer
 
         headers[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
         headers[HeaderKeys.TimeSent] = DateTime.UtcNow.ToString("O");
-        headers[HeaderKeys.SourceMachine] = Environment.MachineName;
+        if (_busConfiguration.IncludeMachineNameInHeaders)
+            headers[HeaderKeys.SourceMachine] = Environment.MachineName;
 
         if (!headers.ContainsKey(HeaderKeys.TypeName))
             headers[HeaderKeys.TypeName] = type.FullName!;

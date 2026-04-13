@@ -9,6 +9,8 @@ public sealed class BusConfiguration : IBusConfiguration
     public bool EnableProcessManagerTimeouts { get; set; }
     public int ConsumerCount { get; set; } = 1;
     public Action<Exception>? ExceptionHandler { get; set; }
+    /// <inheritdoc />
+    public bool IncludeMachineNameInHeaders { get; set; }
     public ITransportConfiguration Transport { get; } = new TransportConfiguration();
     public IQueueConfiguration Queues { get; } = new QueueConfiguration();
     public IPersistenceConfiguration Persistence { get; } = new PersistenceConfiguration();

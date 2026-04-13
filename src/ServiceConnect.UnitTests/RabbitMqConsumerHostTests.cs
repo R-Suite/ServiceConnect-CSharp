@@ -58,6 +58,13 @@ public class RabbitMqConsumerHostTests
         return cfg;
     }
 
+    private static Mock<IBusConfiguration> MakeBusCfg()
+    {
+        var cfg = new Mock<IBusConfiguration>();
+        cfg.SetupGet(c => c.IncludeMachineNameInHeaders).Returns(false);
+        return cfg;
+    }
+
     [Fact]
     public async Task StartConsumingAsync_SetsBasicQos_WhenPrefetchEnabled()
     {
@@ -67,7 +74,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
@@ -83,7 +90,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
@@ -101,7 +108,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
         await host.ConsumeMessageTypeAsync("SomeMsg");
@@ -120,7 +127,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         await host.DisposeAsync();
@@ -137,7 +144,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         await host.DisposeAsync();
@@ -156,7 +163,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         var thrown = await Record.ExceptionAsync(() => host.DisposeAsync().AsTask());

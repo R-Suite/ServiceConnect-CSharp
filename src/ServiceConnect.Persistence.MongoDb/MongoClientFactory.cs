@@ -10,6 +10,11 @@ public static class MongoClientFactory
 {
     public static MongoClient Create(MongoDbPersistenceOptions options)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        if (string.IsNullOrWhiteSpace(options.ConnectionString))
+            throw new InvalidOperationException(
+                "MongoDbPersistenceOptions.ConnectionString is required. Configure via IOptions<MongoDbPersistenceOptions> or builder (S-06).");
+
         if (options.Ssl is null)
         {
             return new MongoClient(options.ConnectionString);

@@ -23,13 +23,19 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!envelope.Headers.ContainsKey("Redelivered"))
+            if (!envelope.Headers.TryGetValue("Redelivered", out var redeliveredRaw))
                 return true;
 
-            if (!bool.TryParse(HeaderDecoder.Decode(envelope.Headers["Redelivered"]), out var redelivered) || !redelivered)
+            if (!bool.TryParse(HeaderDecoder.Decode(redeliveredRaw), out var redelivered) || !redelivered)
                 return true;
 
-            var messageId = new Guid(HeaderDecoder.Decode(envelope.Headers["MessageId"]) ?? string.Empty);
+            // Use TryParse to tolerate malformed MessageId headers rather than throwing
+            // FormatException on arbitrary input (S-08). Missing or malformed id: let
+            // the message through; deduplication cannot apply without a valid key.
+            if (!envelope.Headers.TryGetValue("MessageId", out var messageIdRaw) ||
+                !Guid.TryParse(HeaderDecoder.Decode(messageIdRaw), out var messageId))
+                return true;
+
             var exists = await _persistor.GetMessageExistsAsync(messageId, cancellationToken).ConfigureAwait(false);
 
             return !exists;
