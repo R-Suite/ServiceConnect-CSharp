@@ -1,6 +1,6 @@
 # Remaining Issues — Verified but Deferred
 
-Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. R-017/R-018 (async filter pipeline + fail-closed dedup) and R-032 (settings DI) completed in Group C-2 on 2026-04-13. R-020/R-021 (Client + ProcessManagerProcessor SRP refactor) completed in Group C-3 on 2026-04-13. R-009 (service locator + reflection in remaining three processors) completed in Group C-4 on 2026-04-13. Tackle remaining items after further discussion.
+Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. R-017/R-018 (async filter pipeline + fail-closed dedup) and R-032 (settings DI) completed in Group C-2 on 2026-04-13. R-020/R-021 (Client + ProcessManagerProcessor SRP refactor) completed in Group C-3 on 2026-04-13. R-009 (service locator + reflection in remaining three processors) completed in Group C-4 on 2026-04-13. R-028 (unit test gap-fill) completed in Group C-5 on 2026-04-13. All verified issues now resolved. R-037 discovered during C-5 and recorded below for follow-up.
 
 ## From Code Review Plan (Medium Priority)
 
@@ -21,9 +21,15 @@ Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken
 | R-020/R-021 | SRP | ProcessManagerProcessor and Client have too many responsibilities | **Done** (Group C-3) — Client split into `RabbitMqConsumerHost` + `MessageRetryHandler` + `MessageAuditPublisher`; `ProcessManagerProcessor` thinned via `ProcessManagerHandlerRegistry` with compiled-expression delegates |
 | R-022 | Architecture | Dedup filter combinatorial explosion | **Done** (Group B) — collapsed 8 filter variants to 2 + PersistorFactory, removed Redis support |
 | R-027 | Tech Debt | MongoDbSsl manual connection string parsing | **Done** (Group B) — merged MongoDbSsl into MongoDb persistor with driver-native MongoUrl parsing |
-| R-028 | Testing | Zero unit test coverage | Large — ongoing effort |
+| R-028 | Testing | Zero unit test coverage | **Done** (Group C-5) — every logic-bearing non-integration-heavy class now has unit tests. Remaining untested files are either (a) broker/DB integration classes (Consumer/Producer/Connection/Client, MongoDbAggregatorPersistor/MongoDbProcessManagerFinder) covered comprehensively by E2E, or (b) logic-less POCOs (config classes, event-args, options). |
 | R-032 | Architecture | DeduplicationFilterSettings singleton pattern | **Done** (Group C-2) — POCO + IOptions<T> + AddMessageDeduplicationFilter extension method; PersistorFactory removed; DeduplicationCleanupHostedService replaces static Timer |
 | R-034 | Async/Threading | Race condition in Bus.StartConsumingAsync — lock released before long-running await | **Done** (Group C-1) — SemaphoreSlim lifecycle serialization in Bus, with new unit tests |
+
+## Discovered During This Series
+
+| ID | Category | Description | Scope |
+|----|----------|-------------|-------|
+| R-037 | Bug | `ServiceConnectActivitySource.TryGetExistingContext` cannot extract trace context. The method accepts `Dictionary<string, string>` but the internal `ExtractTraceIdAndState` callback pattern-matches against `Dictionary<string, object>`. Because generic `Dictionary<K,V>` is invariant, the cast always fails and the method silently returns `false`. Discovered via unit test in Group C-5. No in-repo callers — impact limited to external instrumentation code that calls this public helper. Fix would be either (a) adding a `Dictionary<string, string>` branch to the callback, or (b) rewriting `TryGetExistingContext` to iterate headers directly. |
 
 ## Not Real (Removed)
 
