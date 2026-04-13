@@ -17,8 +17,10 @@ public sealed class AggregatorProcessor(IServiceProvider serviceProvider, ILogge
 
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
         var aggregatorBaseType = FindAggregatorType(messageType);

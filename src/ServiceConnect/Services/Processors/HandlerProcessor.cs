@@ -7,8 +7,10 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
 {
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
         // Resolve handlers — walk up base types, stop before Message and object.
@@ -31,7 +33,7 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
             return ProcessResult.NotHandled;
 
         var bus = serviceProvider.GetRequiredService<IBus>();
-        var context = new ConsumeContext(bus, headers);
+        var context = new ConsumeContext(bus, headers) { CancellationToken = cancellationToken };
 
         foreach (var (handler, resolvedInterface) in allHandlers)
         {
@@ -45,12 +47,12 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
                 await task;
         }
 
-        await ForwardRoutingSlipAsync(message, messageType, headers, bus);
+        await ForwardRoutingSlipAsync(message, messageType, headers, bus, cancellationToken);
 
         return ProcessResult.Handled;
     }
 
-    private async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus)
+    private async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus, CancellationToken cancellationToken)
     {
         if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
             return;
@@ -68,7 +70,7 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
             return;
 
         var routeMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!.MakeGenericMethod(messageType);
-        var task = (Task)routeMethod.Invoke(bus, [message, destinations, CancellationToken.None])!;
+        var task = (Task)routeMethod.Invoke(bus, [message, destinations, cancellationToken])!;
         await task;
     }
 }

@@ -9,8 +9,10 @@ public sealed class ProcessManagerProcessor(IServiceProvider serviceProvider, IL
 {
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
         // 1. Find a HandlerReference whose HandlerType implements IProcessHandler<,> for this message type
@@ -82,7 +84,7 @@ public sealed class ProcessManagerProcessor(IServiceProvider serviceProvider, IL
 
         // 8. Set Context, invoke HandleAsync
         var bus = serviceProvider.GetRequiredService<IBus>();
-        var context = new ConsumeContext(bus, headers);
+        var context = new ConsumeContext(bus, headers) { CancellationToken = cancellationToken };
 
         var contextProp = processHandlerInterfaceType.GetProperty("Context");
         contextProp?.SetValue(handler, context);

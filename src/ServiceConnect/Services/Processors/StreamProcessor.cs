@@ -27,8 +27,10 @@ public sealed class StreamProcessor : IMessageProcessor, IDisposable
 
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!headers.TryGetValue(HeaderKeys.MessageType, out var msgTypeRaw))
             return ProcessResult.NotHandled;
 

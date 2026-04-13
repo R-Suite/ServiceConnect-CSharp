@@ -196,7 +196,7 @@ public class ProcessingMiddlewarePipelineTests
         var mockProcessor = new Mock<IMessageProcessor>();
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
         mockProcessor.Setup(p => p.ProcessAsync(It.IsAny<byte[]>(), It.IsAny<Type>(), It.IsAny<object?>(),
-                It.IsAny<IDictionary<string, object>>(), It.IsAny<Envelope>()))
+                It.IsAny<IDictionary<string, object>>(), It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
             .Returns(() => { log.Add("processor"); return Task.FromResult(ProcessResult.Handled); });
 
         var testMsg = new TestMiddlewareMessage();
@@ -262,6 +262,6 @@ public class ProcessingMiddlewarePipelineTests
         // Assert
         Assert.True(result.Success);
         mockProcessor.Verify(p => p.ProcessAsync(It.IsAny<byte[]>(), It.IsAny<Type>(), It.IsAny<object?>(),
-            It.IsAny<IDictionary<string, object>>(), It.IsAny<Envelope>()), Times.Never);
+            It.IsAny<IDictionary<string, object>>(), It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

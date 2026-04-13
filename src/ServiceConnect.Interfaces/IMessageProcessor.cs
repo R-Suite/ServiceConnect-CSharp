@@ -16,5 +16,6 @@ public interface IMessageProcessor
         Type messageType,
         object? message,
         IDictionary<string, object> headers,
-        Envelope envelope);
+        Envelope envelope,
+        CancellationToken cancellationToken = default);
 }

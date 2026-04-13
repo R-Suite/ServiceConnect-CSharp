@@ -72,7 +72,8 @@ public class ExceptionHandlerTests
                 It.IsAny<Type>(),
                 It.IsAny<object?>(),
                 It.IsAny<IDictionary<string, object>>(),
-                It.IsAny<Envelope>()))
+                It.IsAny<Envelope>(),
+                It.IsAny<CancellationToken>()))
             .ThrowsAsync(thrownException);
 
         var message = new FakeMessage1(Guid.NewGuid());

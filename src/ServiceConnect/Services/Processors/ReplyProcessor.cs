@@ -8,8 +8,10 @@ public sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessage
 
     public Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
-        IDictionary<string, object> headers, Envelope envelope)
+        IDictionary<string, object> headers, Envelope envelope,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!headers.TryGetValue(HeaderKeys.ResponseMessageId, out var responseMessageIdRaw))
             return Task.FromResult(ProcessResult.NotHandled);
 
