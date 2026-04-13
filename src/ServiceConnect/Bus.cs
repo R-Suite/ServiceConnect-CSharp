@@ -34,9 +34,10 @@ public sealed class Bus(
 
     public bool IsConnected => _consuming;
 
-    public async Task PublishAsync<T>(T message, PublishOptions? options = null) where T : Message
+    public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
@@ -51,9 +52,10 @@ public sealed class Bus(
         await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(T), messageBytes, headers).ConfigureAwait(false);
     }
 
-    public async Task SendAsync<T>(T message, SendOptions? options = null) where T : Message
+    public async Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
 
@@ -75,10 +77,11 @@ public sealed class Bus(
         }
     }
 
-    public async Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null)
+    public async Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where T : Message where TReply : Message
     {
         ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? new RequestOptions();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
@@ -95,10 +98,11 @@ public sealed class Bus(
             requestOptions).ConfigureAwait(false);
     }
 
-    public async Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null)
+    public async Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where T : Message where TReply : Message
     {
         ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? new RequestOptions();
         var messageBytes = _serializer.Serialize(message);
         var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
@@ -115,10 +119,11 @@ public sealed class Bus(
             requestOptions).ConfigureAwait(false);
     }
 
-    public async Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null)
+    public async Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where TRequest : Message where TReply : Message
     {
-        var replies = await SendRequestMultiAsync<TRequest, TReply>(message, options).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var replies = await SendRequestMultiAsync<TRequest, TReply>(message, options, cancellationToken).ConfigureAwait(false);
 
         foreach (var reply in replies)
         {
@@ -126,9 +131,10 @@ public sealed class Bus(
         }
     }
 
-    public async Task RouteAsync<T>(T message, IList<string> destinations) where T : Message
+    public async Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
         if (destinations == null || destinations.Count == 0)
             throw new ArgumentException("At least one destination is required.", nameof(destinations));
 
@@ -157,8 +163,9 @@ public sealed class Bus(
         return new MessageBusWriteStream(_producer, endpoint, typeof(T));
     }
 
-    public async Task StartConsumingAsync()
+    public async Task StartConsumingAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         IConsumer localConsumer;
         List<string> messageTypeNames;
 
@@ -188,8 +195,9 @@ public sealed class Bus(
         }
     }
 
-    public async Task StopConsumingAsync()
+    public async Task StopConsumingAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         bool shouldDispose = false;
         lock (_stateLock)
         {

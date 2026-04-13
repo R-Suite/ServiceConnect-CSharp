@@ -68,7 +68,7 @@ public sealed class HandlerProcessor(IServiceProvider serviceProvider) : IMessag
             return;
 
         var routeMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!.MakeGenericMethod(messageType);
-        var task = (Task)routeMethod.Invoke(bus, [message, destinations])!;
+        var task = (Task)routeMethod.Invoke(bus, [message, destinations, CancellationToken.None])!;
         await task;
     }
 }
