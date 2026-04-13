@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Moq;
 using ServiceConnect.Filters.MessageDeduplication.Filters;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
@@ -10,82 +11,114 @@ using Xunit;
 
 namespace ServiceConnect.Filters.MessageDeduplication.Tests
 {
-    public class IncomingFilterTests
+    public class IncomingDeduplicationFilterTests
     {
-        readonly Mock<IMessageDeduplicationPersistor> _persistor;
+        private readonly Mock<IMessageDeduplicationPersistor> _persistor = new();
 
-        public IncomingFilterTests()
+        private IncomingDeduplicationFilter CreateFilter()
         {
-            _persistor = new Mock<IMessageDeduplicationPersistor>();
+            IncomingDeduplicationFilter.OverridePersistorForTesting(_persistor.Object);
+            return new IncomingDeduplicationFilter();
         }
 
         [Fact]
-        public void ShouldProcessNewMessageWhenRedeliveredFlagIsNotSet()
+        public async Task ProcessAsync_NotRedelivered_ReturnsTrue()
         {
-            // Arrange
-            var incomingFilter = new IncomingFilter(_persistor.Object);
-            var envelope = new Envelope();
-            envelope.Headers = new Dictionary<string, object>();
+            var filter = CreateFilter();
+            var envelope = new Envelope { Headers = new Dictionary<string, object>() };
 
+            var result = await filter.ProcessAsync(envelope);
 
-            // Act
-            var result = incomingFilter.Process(envelope);
+            Assert.True(result);
+            _persistor.Verify(p => p.GetMessageExistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
 
+        [Fact]
+        public async Task ProcessAsync_RedeliveredButNotInPersistor_ReturnsTrue()
+        {
+            var id = Guid.NewGuid();
+            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
 
-            // Assert
+            var filter = CreateFilter();
+            var envelope = new Envelope
+            {
+                Headers = new Dictionary<string, object>
+                {
+                    { "Redelivered", true },
+                    { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) }
+                }
+            };
+
+            var result = await filter.ProcessAsync(envelope);
+
             Assert.True(result);
         }
 
         [Fact]
-        public void ShouldProcessNewMessageWhenRedeliveredFlagIsSet()
+        public async Task ProcessAsync_RedeliveredAndInPersistor_ReturnsFalse()
         {
-            // Arrange
-            var incomingFilter = new IncomingFilter(_persistor.Object);
-            Guid messageId = Guid.NewGuid();
-            var envelope = new Envelope();
-            envelope.Headers = new Dictionary<string, object> { { "Redelivered", true }, { "MessageId",  Encoding.ASCII.GetBytes(messageId.ToString()) } };
+            var id = Guid.NewGuid();
+            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
 
+            var filter = CreateFilter();
+            var envelope = new Envelope
+            {
+                Headers = new Dictionary<string, object>
+                {
+                    { "Redelivered", true },
+                    { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) }
+                }
+            };
 
-            // Act
-            var result = incomingFilter.Process(envelope);
+            var result = await filter.ProcessAsync(envelope);
 
-
-            // Assert
-            Assert.True(result);
-        }
-
-        [Fact]
-        public void ShouldNotProcessDuplicateMessageWhenRedeliveredFlagIsSet()
-        {
-            // Arrange
-            Guid messageId = Guid.NewGuid();
-            _persistor.Setup(i => i.GetMessageExistsAsync(messageId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
-            var incomingFilter = new IncomingFilter(_persistor.Object);
-            var envelope = new Envelope();
-            envelope.Headers = new Dictionary<string, object> { { "Redelivered", true }, { "MessageId", Encoding.ASCII.GetBytes(messageId.ToString()) } };
-
-
-            // Act
-            var result = incomingFilter.Process(envelope);
-
-
-            // Assert
             Assert.False(result);
         }
 
         [Fact]
-        public void ShouldRethrowAnyInternalException()
+        public async Task ProcessAsync_PersistorThrows_ExceptionPropagates()
         {
-            // Arrange
-            Guid messageId = Guid.NewGuid();
-            _persistor.Setup(i => i.GetMessageExistsAsync(messageId, It.IsAny<CancellationToken>())).ThrowsAsync(new Exception());
-            var incomingFilter = new IncomingFilter(_persistor.Object);
-            var envelope = new Envelope();
-            envelope.Headers = new Dictionary<string, object> { { "Redelivered", true }, { "MessageId", Encoding.ASCII.GetBytes(messageId.ToString()) } };
+            var id = Guid.NewGuid();
+            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
 
+            var filter = CreateFilter();
+            var envelope = new Envelope
+            {
+                Headers = new Dictionary<string, object>
+                {
+                    { "Redelivered", true },
+                    { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) }
+                }
+            };
 
-            // Act / Assert
-            Assert.Throws<Exception>(() => incomingFilter.Process(envelope));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => filter.ProcessAsync(envelope));
+        }
+
+        [Fact]
+        public async Task ProcessAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var id = Guid.NewGuid();
+            _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(false);
+
+            var filter = CreateFilter();
+            var envelope = new Envelope
+            {
+                Headers = new Dictionary<string, object>
+                {
+                    { "Redelivered", true },
+                    { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) }
+                }
+            };
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                filter.ProcessAsync(envelope, cts.Token));
         }
     }
 }
