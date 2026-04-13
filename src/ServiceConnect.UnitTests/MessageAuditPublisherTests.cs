@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -17,10 +16,11 @@ public class MessageAuditPublisherTests
         return new BasicDeliverEventArgs("tag", 1, false, "", "q", props, new byte[] { 1, 2, 3 });
     }
 
-    private static Mock<IQueueConfiguration> MakeQueueCfg(bool auditingEnabled)
+    private static Mock<IQueueConfiguration> MakeQueueCfg(bool auditingEnabled, string auditExchange = "audit")
     {
         var cfg = new Mock<IQueueConfiguration>();
         cfg.SetupGet(c => c.AuditingEnabled).Returns(auditingEnabled);
+        cfg.SetupGet(c => c.AuditQueueName).Returns(auditExchange);
         return cfg;
     }
 
@@ -34,7 +34,7 @@ public class MessageAuditPublisherTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var publisher = new MessageAuditPublisher("audit", MakeQueueCfg(true).Object, NullLogger.Instance);
+        var publisher = new MessageAuditPublisher(MakeQueueCfg(true).Object);
         var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "SomeMessage" };
 
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
@@ -49,7 +49,7 @@ public class MessageAuditPublisherTests
     public async Task PublishAuditIfEnabledAsync_Skips_WhenAuditingDisabled()
     {
         var channel = new Mock<IChannel>();
-        var publisher = new MessageAuditPublisher("audit", MakeQueueCfg(false).Object, NullLogger.Instance);
+        var publisher = new MessageAuditPublisher(MakeQueueCfg(false).Object);
 
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), new Dictionary<string, object>());
 
@@ -63,7 +63,7 @@ public class MessageAuditPublisherTests
     public async Task PublishAuditIfEnabledAsync_Skips_ForByteStreamMessageType()
     {
         var channel = new Mock<IChannel>();
-        var publisher = new MessageAuditPublisher("audit", MakeQueueCfg(true).Object, NullLogger.Instance);
+        var publisher = new MessageAuditPublisher(MakeQueueCfg(true).Object);
         var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = HeaderKeys.ByteStream };
 
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
@@ -72,5 +72,25 @@ public class MessageAuditPublisherTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishAuditIfEnabledAsync_Publishes_WhenMessageTypeHeaderAbsent()
+    {
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var publisher = new MessageAuditPublisher(MakeQueueCfg(true).Object);
+
+        await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), new Dictionary<string, object>());
+
+        channel.Verify(c => c.BasicPublishAsync(
+            "audit", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -47,7 +47,7 @@ public sealed class Client : IAsyncDisposable
         _disablePrefetch = settings.TryGetValue(RabbitMQSettingKeys.DisablePrefetch, out var disablePrefetchVal) && (bool)disablePrefetchVal;
         _queueArguments = settings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal) ? (IDictionary<string, object?>)argsVal : new Dictionary<string, object?>();
         _retryHandler = new MessageRetryHandler(_maxRetries, queueConfiguration.ErrorQueueName, logger);
-        _auditPublisher = new MessageAuditPublisher(queueConfiguration.AuditQueueName, queueConfiguration, logger);
+        _auditPublisher = new MessageAuditPublisher(queueConfiguration);
     }
 
     /// <summary>

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Interfaces;
@@ -13,15 +12,11 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// </summary>
 internal sealed class MessageAuditPublisher
 {
-    private readonly string _auditExchange;
     private readonly IQueueConfiguration _queueConfiguration;
-    private readonly ILogger _logger;
 
-    public MessageAuditPublisher(string auditExchange, IQueueConfiguration queueConfiguration, ILogger logger)
+    public MessageAuditPublisher(IQueueConfiguration queueConfiguration)
     {
-        _auditExchange = auditExchange ?? throw new ArgumentNullException(nameof(auditExchange));
         _queueConfiguration = queueConfiguration ?? throw new ArgumentNullException(nameof(queueConfiguration));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task PublishAuditIfEnabledAsync(IChannel channel, BasicDeliverEventArgs args, Dictionary<string, object> headers)
@@ -37,6 +32,6 @@ internal sealed class MessageAuditPublisher
             return;
 
         var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
-        await channel.BasicPublishAsync(_auditExchange, string.Empty, mandatory: false, props, args.Body).ConfigureAwait(false);
+        await channel.BasicPublishAsync(_queueConfiguration.AuditQueueName, string.Empty, mandatory: false, props, args.Body).ConfigureAwait(false);
     }
 }
