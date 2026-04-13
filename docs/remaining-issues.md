@@ -1,6 +1,6 @@
 # Remaining Issues — Verified but Deferred
 
-Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. Tackle remaining items after further discussion.
+Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. R-017/R-018 (async filter pipeline + fail-closed dedup) and R-032 (settings DI) completed in Group C-2 on 2026-04-13. Tackle remaining items after further discussion.
 
 ## From Code Review Plan (Medium Priority)
 
@@ -17,12 +17,12 @@ Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken
 |----|----------|-------------|-------|
 | R-009 | Architecture | Service locator anti-pattern in all Processors (HandlerProcessor, ProcessManagerProcessor, StreamProcessor, AggregatorProcessor) | Large — inherent to message dispatch design |
 | R-016 | .NET Best Practices | Missing CancellationToken on public async APIs | **Done** (Group C-1) — completed with B-01 |
-| R-017/R-018 | Error Handling | Silent exception swallowing in dedup filter persistors (OutgoingFilter, MongoDb persistors) | Large — needs IFilter interface change for async; moved to Group C |
+| R-017/R-018 | Error Handling | Silent exception swallowing in dedup filter persistors (OutgoingFilter, MongoDb persistors) | **Done** (Group C-2) — IFilter/pipeline async; outgoing dedup now fail-closed; MongoDb persistor inner swallows removed |
 | R-020/R-021 | SRP | ProcessManagerProcessor and Client have too many responsibilities | Large — internal structure refactor |
 | R-022 | Architecture | Dedup filter combinatorial explosion | **Done** (Group B) — collapsed 8 filter variants to 2 + PersistorFactory, removed Redis support |
 | R-027 | Tech Debt | MongoDbSsl manual connection string parsing | **Done** (Group B) — merged MongoDbSsl into MongoDb persistor with driver-native MongoUrl parsing |
 | R-028 | Testing | Zero unit test coverage | Large — ongoing effort |
-| R-032 | Architecture | DeduplicationFilterSettings singleton pattern | Medium — deferred to Group C; requires DI migration of filter project (depends on R-009 core DI) |
+| R-032 | Architecture | DeduplicationFilterSettings singleton pattern | **Done** (Group C-2) — POCO + IOptions<T> + AddMessageDeduplicationFilter extension method; PersistorFactory removed; DeduplicationCleanupHostedService replaces static Timer |
 | R-034 | Async/Threading | Race condition in Bus.StartConsumingAsync — lock released before long-running await | **Done** (Group C-1) — SemaphoreSlim lifecycle serialization in Bus, with new unit tests |
 
 ## Not Real (Removed)
