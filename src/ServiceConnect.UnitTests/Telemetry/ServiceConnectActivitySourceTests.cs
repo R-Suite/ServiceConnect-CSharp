@@ -1,0 +1,278 @@
+using System.Diagnostics;
+using System.Text;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Telemetry;
+using Xunit;
+using static ServiceConnect.Telemetry.MessagingAttributes;
+using ConsumeEventArgs = ServiceConnect.Telemetry.ConsumeEventArgs;
+using PublishEventArgs = ServiceConnect.Telemetry.PublishEventArgs;
+using SendEventArgs = ServiceConnect.Telemetry.SendEventArgs;
+
+namespace ServiceConnect.UnitTests.Telemetry;
+
+[CollectionDefinition("ActivityListener", DisableParallelization = true)]
+public class ActivityListenerCollection { }
+
+[Collection("ActivityListener")]
+public sealed class ServiceConnectActivitySourceTests : IDisposable
+{
+    private readonly ActivityListener _listener;
+
+    public ServiceConnectActivitySourceTests()
+    {
+        _listener = new ActivityListener
+        {
+            ShouldListenTo = src =>
+                src.Name == ServiceConnectActivitySource.PublishActivitySourceName
+                || src.Name == ServiceConnectActivitySource.ConsumeActivitySourceName
+                || src.Name == ServiceConnectActivitySource.SendActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            SampleUsingParentId = (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllData
+        };
+        ActivitySource.AddActivityListener(_listener);
+    }
+
+    public void Dispose()
+    {
+        // Reset user-configurable enrichers in case a test set them.
+        ServiceConnectActivitySource.Options.EnrichWithMessage = null;
+        ServiceConnectActivitySource.Options.EnrichWithMessageBytes = null;
+        _listener.Dispose();
+    }
+
+    // ---------------- Publish ----------------
+
+    [Fact]
+    public void Publish_WithRoutingKey_SetsNamedDestinationAndDisplayName()
+    {
+        var args = new PublishEventArgs
+        {
+            RoutingKey = "orders",
+            Message = new Message(Guid.NewGuid()),
+            Headers = { ["MessageId"] = "msg-1" }
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("orders publish", activity!.DisplayName);
+        Assert.Equal("orders", activity.GetTagItem(MessagingDestination));
+        Assert.Equal("orders", activity.GetTagItem(MessagingDestinationRoutingKey));
+        Assert.Equal("rabbitmq", activity.GetTagItem(MessagingSystem));
+        Assert.Equal("publish", activity.GetTagItem(MessagingOperation));
+        Assert.Equal("msg-1", activity.GetTagItem(MessageId));
+    }
+
+    [Fact]
+    public void Publish_WithoutRoutingKey_MarksDestinationAnonymous()
+    {
+        var args = new PublishEventArgs
+        {
+            RoutingKey = "",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("anonymous publish", activity!.DisplayName);
+        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+    }
+
+    [Fact]
+    public void Publish_EnricherThrows_RecordsEnrichmentException()
+    {
+        ServiceConnectActivitySource.Options.EnrichWithMessage =
+            (_, _) => throw new InvalidOperationException("boom");
+
+        var args = new PublishEventArgs
+        {
+            RoutingKey = "orders",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("boom", activity!.GetTagItem("enrichment.exception"));
+    }
+
+    // ---------------- Consume ----------------
+
+    [Fact]
+    public void Consume_SetsMessagingTags_AndDestinationFromHeader()
+    {
+        var args = new ConsumeEventArgs
+        {
+            Message = new byte[] { 1, 2, 3 },
+            Headers = new Dictionary<string, object>
+            {
+                ["DestinationAddress"] = Encoding.UTF8.GetBytes("svc.inbox"),
+                ["MessageId"] = Encoding.UTF8.GetBytes("msg-42")
+            }
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("svc.inbox receive", activity!.DisplayName);
+        Assert.Equal("svc.inbox", activity.GetTagItem(MessagingDestination));
+        Assert.Equal("msg-42", activity.GetTagItem(MessageId));
+        Assert.Equal("rabbitmq", activity.GetTagItem(MessagingSystem));
+        Assert.Equal("receive", activity.GetTagItem(MessagingOperation));
+        Assert.Equal(3, activity.GetTagItem(MessagingBodySize));
+    }
+
+    [Fact]
+    public void Consume_WithoutDestinationHeader_MarksAnonymous()
+    {
+        var args = new ConsumeEventArgs
+        {
+            Message = Array.Empty<byte>(),
+            Headers = new Dictionary<string, object>()
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("anonymous receive", activity!.DisplayName);
+        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+    }
+
+    [Fact]
+    public void Consume_ExtractsParentContext_FromTraceparentHeader()
+    {
+        // Build a valid W3C traceparent: 00-<32 hex traceId>-<16 hex spanId>-01
+        var traceId = "0af7651916cd43dd8448eb211c80319c";
+        var spanId = "b7ad6b7169203331";
+        var traceparent = $"00-{traceId}-{spanId}-01";
+
+        var args = new ConsumeEventArgs
+        {
+            Headers = new Dictionary<string, object>
+            {
+                ["traceparent"] = Encoding.UTF8.GetBytes(traceparent)
+            }
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal(traceId, activity!.TraceId.ToString());
+        Assert.Equal(spanId, activity.ParentSpanId.ToString());
+    }
+
+    // ---------------- Send ----------------
+
+    [Fact]
+    public void Send_WithEndpoint_SetsNamedDestination()
+    {
+        var args = new SendEventArgs
+        {
+            EndPoint = "svc.queue",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("svc.queue publish", activity!.DisplayName);
+        Assert.Equal("svc.queue", activity.GetTagItem(MessagingDestination));
+    }
+
+    [Fact]
+    public void Send_WithoutEndpoint_MarksAnonymous()
+    {
+        var args = new SendEventArgs
+        {
+            EndPoint = "",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("anonymous publish", activity!.DisplayName);
+        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+    }
+
+    // ---------------- TryGetExistingContext ----------------
+
+    [Fact]
+    public void TryGetExistingContext_WithTraceparent_ReturnsFalse_DueToCarrierTypeMismatch()
+    {
+        // TryGetExistingContext accepts Dictionary<string, string> but the internal
+        // ExtractTraceIdAndState callback pattern-matches against Dictionary<string, object>.
+        // Because Dictionary<string,string> is not Dictionary<string,object> (no variance),
+        // the extraction always fails. This test documents that current behavior.
+        var traceId = "0af7651916cd43dd8448eb211c80319c";
+        var spanId = "b7ad6b7169203331";
+        var headers = new Dictionary<string, string>
+        {
+            ["traceparent"] = $"00-{traceId}-{spanId}-01"
+        };
+
+        var ok = ServiceConnectActivitySource.TryGetExistingContext(headers, out var ctx);
+
+        Assert.False(ok);
+        Assert.Equal(default, ctx);
+    }
+
+    [Fact]
+    public void TryGetExistingContext_WithNullHeaders_ReturnsFalse()
+    {
+        var ok = ServiceConnectActivitySource.TryGetExistingContext(null!, out var ctx);
+
+        Assert.False(ok);
+        Assert.Equal(default, ctx);
+    }
+
+    [Fact]
+    public void TryGetExistingContext_WithoutTraceHeaders_ReturnsFalse()
+    {
+        var headers = new Dictionary<string, string> { ["Unrelated"] = "v" };
+
+        var ok = ServiceConnectActivitySource.TryGetExistingContext(headers, out var ctx);
+
+        Assert.False(ok);
+        Assert.Equal(default, ctx);
+    }
+}
+
+[Collection("ActivityListener")]
+public sealed class ServiceConnectActivitySource_NoListenerTests
+{
+    [Fact]
+    public void Publish_ReturnsNull_WhenNoListeners()
+    {
+        var args = new PublishEventArgs
+        {
+            RoutingKey = "orders",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.Null(activity);
+    }
+
+    [Fact]
+    public void Consume_ReturnsNull_WhenNoListeners()
+    {
+        var args = new ConsumeEventArgs();
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.Null(activity);
+    }
+
+    [Fact]
+    public void Send_ReturnsNull_WhenNoListeners()
+    {
+        var args = new SendEventArgs { EndPoint = "ep" };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.Null(activity);
+    }
+}
