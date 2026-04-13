@@ -71,9 +71,19 @@ public static class ServiceCollectionExtensions
 
         IList<HandlerReference> handlerReferences;
         if (builder.BusConfig.ScanForMessageHandlers)
-            handlerReferences = HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies());
+        {
+            // Prefer explicit assemblies from the builder; fall back to the loaded AppDomain
+            // only when no assemblies were supplied. Explicit registration avoids
+            // the static global dependency that breaks test isolation (A-11).
+            var assemblies = builder.ScanAssembliesList.Count > 0
+                ? builder.ScanAssembliesList.ToArray()
+                : AppDomain.CurrentDomain.GetAssemblies();
+            handlerReferences = HandlerScanner.ScanForHandlers(assemblies);
+        }
         else
+        {
             handlerReferences = [];
+        }
 
         foreach (var handlerRef in handlerReferences)
         {

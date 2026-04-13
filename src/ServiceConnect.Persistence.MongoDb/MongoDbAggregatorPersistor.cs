@@ -51,7 +51,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             {
                 Name = name,
                 DataBson = dataBson,
-                DataTypeName = dataType.AssemblyQualifiedName!,
+                // Store FullName rather than AssemblyQualifiedName so an assembly-version
+                // bump between store and read doesn't invalidate the lookup (A-20).
+                DataTypeName = dataType.FullName!,
                 Version = 1
             }, cancellationToken: cancellationToken).ConfigureAwait(false);
         }

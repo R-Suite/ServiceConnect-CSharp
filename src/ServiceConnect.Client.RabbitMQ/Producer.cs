@@ -77,32 +77,7 @@ public sealed class Producer : IProducer
 
     private async Task CreateConnectionAsync()
     {
-        var port = _transportConfiguration.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal)
-            ? Convert.ToInt32(portVal)
-            : AmqpTcpEndpoint.UseDefaultPort;
-
-        _connectionFactory = new ConnectionFactory
-        {
-            VirtualHost = "/",
-            Port = port,
-            AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true
-        };
-
-        if (!string.IsNullOrEmpty(_transportConfiguration.Username))
-            _connectionFactory.UserName = _transportConfiguration.Username;
-
-        if (!string.IsNullOrEmpty(_transportConfiguration.Password))
-            _connectionFactory.Password = _transportConfiguration.Password;
-
-        if (_transportConfiguration.SslEnabled)
-        {
-            _connectionFactory.Ssl = SslConfigurationBuilder.BuildSslOptions(_transportConfiguration);
-            _connectionFactory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
-        }
-
-        if (!string.IsNullOrEmpty(_transportConfiguration.VirtualHost))
-            _connectionFactory.VirtualHost = _transportConfiguration.VirtualHost;
+        _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration, heartbeatInterval: null);
 
         string producerName = Assembly.GetEntryAssembly()?.GetName().Name
             ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;

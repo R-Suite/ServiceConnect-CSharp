@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -8,7 +9,9 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class ProcessManagerHandlerRegistry
 {
-    private readonly Dictionary<Type, ProcessManagerDescriptor> _descriptors = new();
+    // Built once at construction, never written to afterwards. FrozenDictionary gives
+    // ~20–40% faster lookups than Dictionary for the per-message hot path (A-12).
+    private readonly FrozenDictionary<Type, ProcessManagerDescriptor> _descriptors;
 
     internal ProcessManagerHandlerRegistry(
         IList<HandlerReference> handlerReferences,
@@ -17,6 +20,7 @@ internal sealed class ProcessManagerHandlerRegistry
         ArgumentNullException.ThrowIfNull(handlerReferences);
         ArgumentNullException.ThrowIfNull(logger);
 
+        var builder = new Dictionary<Type, ProcessManagerDescriptor>();
         foreach (var href in handlerReferences)
         {
             var processHandlerInterface = href.HandlerType.GetInterfaces()
@@ -29,7 +33,7 @@ internal sealed class ProcessManagerHandlerRegistry
 
             var dataType = processHandlerInterface.GetGenericArguments()[0];
             var descriptor = BuildDescriptor(href.MessageType, dataType, processHandlerInterface);
-            if (!_descriptors.TryAdd(href.MessageType, descriptor))
+            if (!builder.TryAdd(href.MessageType, descriptor))
             {
                 throw new InvalidOperationException(
                     $"Duplicate process-manager handler registration for message type '{href.MessageType.FullName}'. Only one IProcessHandler<TData,TMessage> may be registered per message type.");
@@ -39,6 +43,8 @@ internal sealed class ProcessManagerHandlerRegistry
                 "Registered process-manager descriptor: message={MessageType}, data={DataType}, handler={HandlerType}",
                 href.MessageType.Name, dataType.Name, href.HandlerType.Name);
         }
+
+        _descriptors = builder.ToFrozenDictionary();
     }
 
     internal bool TryGet(Type messageType, [NotNullWhen(true)] out ProcessManagerDescriptor? descriptor)

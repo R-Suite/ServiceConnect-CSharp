@@ -1,3 +1,4 @@
+using System.Reflection;
 using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
@@ -8,6 +9,21 @@ public sealed class ServiceConnectBuilder
 {
     internal BusConfiguration BusConfig { get; } = new();
     public List<Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>> AdditionalRegistrations { get; } = [];
+
+    /// <summary>
+    /// Assemblies to scan for message handlers. Populated explicitly via
+    /// <see cref="ScanAssemblies"/>; when empty and <see cref="IBusConfiguration.ScanForMessageHandlers"/>
+    /// is true, falls back to <see cref="AppDomain.CurrentDomain"/> assemblies. Explicit
+    /// registration is preferred because it is deterministic and testable (A-11).
+    /// </summary>
+    internal List<Assembly> ScanAssembliesList { get; } = [];
+
+    public ServiceConnectBuilder ScanAssemblies(params Assembly[] assemblies)
+    {
+        ArgumentNullException.ThrowIfNull(assemblies);
+        ScanAssembliesList.AddRange(assemblies);
+        return this;
+    }
 
     public ServiceConnectBuilder ConfigureTransport(Action<ITransportConfiguration> configure)
     {

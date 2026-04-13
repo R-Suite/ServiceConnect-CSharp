@@ -36,44 +36,10 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         _connection = await connectionFactory.CreateConnectionAsync(_hosts, queueName).ConfigureAwait(false);
     }
 
-    private ConnectionFactory BuildConnectionFactory()
-    {
-        var port = transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal)
-            ? Convert.ToInt32(portVal)
-            : AmqpTcpEndpoint.UseDefaultPort;
-
-        var factory = new ConnectionFactory
-        {
-            VirtualHost = "/",
-            Port = port,
-            AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true,
-            RequestedHeartbeat = _heartbeatEnabled ? _heartbeatTime : TimeSpan.Zero
-        };
-
-        if (!string.IsNullOrEmpty(transportSettings.Username))
-        {
-            factory.UserName = transportSettings.Username;
-        }
-
-        if (!string.IsNullOrEmpty(transportSettings.Password))
-        {
-            factory.Password = transportSettings.Password;
-        }
-
-        if (transportSettings.SslEnabled)
-        {
-            factory.Ssl = SslConfigurationBuilder.BuildSslOptions(transportSettings);
-            factory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
-        }
-
-        if (!string.IsNullOrEmpty(transportSettings.VirtualHost))
-        {
-            factory.VirtualHost = transportSettings.VirtualHost;
-        }
-
-        return factory;
-    }
+    private ConnectionFactory BuildConnectionFactory() =>
+        ConnectionFactoryBuilder.Build(
+            transportSettings,
+            _heartbeatEnabled ? _heartbeatTime : TimeSpan.Zero);
 
     public bool IsConnected()
     {

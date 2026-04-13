@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,8 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class StreamHandlerRegistry
 {
-    private readonly Dictionary<Type, (StreamHandlerDescriptor Descriptor, Type HandlerType)> _descriptors = new();
+    // Built once at construction; FrozenDictionary for read-heavy lookup (A-12).
+    private readonly FrozenDictionary<Type, StreamHandlerDescriptor> _descriptors;
 
     internal StreamHandlerRegistry(
         IList<HandlerReference> handlerReferences,
@@ -16,13 +18,14 @@ internal sealed class StreamHandlerRegistry
         ArgumentNullException.ThrowIfNull(handlerReferences);
         ArgumentNullException.ThrowIfNull(logger);
 
+        var builder = new Dictionary<Type, (StreamHandlerDescriptor Descriptor, Type HandlerType)>();
         foreach (var href in handlerReferences)
         {
             var streamInterface = FindStreamHandlerInterface(href.HandlerType, href.MessageType);
             if (streamInterface == null)
                 continue;
 
-            if (_descriptors.TryGetValue(href.MessageType, out var existing))
+            if (builder.TryGetValue(href.MessageType, out var existing))
             {
                 if (existing.HandlerType == href.HandlerType)
                     continue; // identical (MessageType, HandlerType) pair registered twice — dedupe silently
@@ -32,24 +35,18 @@ internal sealed class StreamHandlerRegistry
             }
 
             var descriptor = BuildDescriptor(href.MessageType, streamInterface);
-            _descriptors[href.MessageType] = (descriptor, href.HandlerType);
+            builder[href.MessageType] = (descriptor, href.HandlerType);
 
             logger.LogDebug(
                 "Registered stream-handler descriptor: message={MessageType}, handler={HandlerType}",
                 href.MessageType.Name, href.HandlerType.Name);
         }
+
+        _descriptors = builder.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Descriptor).ToFrozenDictionary();
     }
 
     internal bool TryGet(Type messageType, [NotNullWhen(true)] out StreamHandlerDescriptor? descriptor)
-    {
-        if (_descriptors.TryGetValue(messageType, out var entry))
-        {
-            descriptor = entry.Descriptor;
-            return true;
-        }
-        descriptor = null;
-        return false;
-    }
+        => _descriptors.TryGetValue(messageType, out descriptor);
 
     private static Type? FindStreamHandlerInterface(Type handlerType, Type messageType)
     {

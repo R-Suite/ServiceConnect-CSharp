@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,7 +10,8 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class AggregatorRegistry
 {
-    private readonly Dictionary<Type, (AggregatorDescriptor Descriptor, Type HandlerType)> _descriptors = new();
+    // Built once at construction; FrozenDictionary for read-heavy lookup (A-12).
+    private readonly FrozenDictionary<Type, AggregatorDescriptor> _descriptors;
 
     internal AggregatorRegistry(
         IList<HandlerReference> handlerReferences,
@@ -20,13 +22,14 @@ internal sealed class AggregatorRegistry
         ArgumentNullException.ThrowIfNull(serviceProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
+        var builder = new Dictionary<Type, (AggregatorDescriptor Descriptor, Type HandlerType)>();
         foreach (var href in handlerReferences)
         {
             var aggregatorBaseType = FindAggregatorBaseType(href.HandlerType, href.MessageType);
             if (aggregatorBaseType == null)
                 continue;
 
-            if (_descriptors.TryGetValue(href.MessageType, out var existing))
+            if (builder.TryGetValue(href.MessageType, out var existing))
             {
                 if (existing.HandlerType == href.HandlerType)
                     continue; // identical (MessageType, HandlerType) pair registered twice — dedupe silently
@@ -36,24 +39,18 @@ internal sealed class AggregatorRegistry
             }
 
             var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, serviceProvider);
-            _descriptors[href.MessageType] = (descriptor, href.HandlerType);
+            builder[href.MessageType] = (descriptor, href.HandlerType);
 
             logger.LogDebug(
                 "Registered aggregator descriptor: message={MessageType}, aggregator={AggregatorType}, batchSize={BatchSize}, timeout={Timeout}",
                 href.MessageType.Name, href.HandlerType.Name, descriptor.BatchSize, descriptor.Timeout);
         }
+
+        _descriptors = builder.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Descriptor).ToFrozenDictionary();
     }
 
     internal bool TryGet(Type messageType, [NotNullWhen(true)] out AggregatorDescriptor? descriptor)
-    {
-        if (_descriptors.TryGetValue(messageType, out var entry))
-        {
-            descriptor = entry.Descriptor;
-            return true;
-        }
-        descriptor = null;
-        return false;
-    }
+        => _descriptors.TryGetValue(messageType, out descriptor);
 
     private static Type? FindAggregatorBaseType(Type handlerType, Type messageType)
     {

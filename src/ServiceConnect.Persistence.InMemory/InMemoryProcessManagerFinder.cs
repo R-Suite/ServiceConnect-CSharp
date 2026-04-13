@@ -1,17 +1,19 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
-using System.Reflection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 
 namespace ServiceConnect.Persistence.InMemory;
 
 /// <summary>
-/// InMemory implementation of IProcessManagerFinder for testing and rapid development
+/// InMemory implementation of IProcessManagerFinder for testing and rapid development.
+/// Compiled predicates are cached by mapping shape so correlation lookups avoid both
+/// Expression.Compile and reflection on the hot path (A-05).
 /// </summary>
 public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeoutStore
 {
-    // Parameters required by IProcessManagerFinder factory convention but unused in InMemory implementation
     public InMemoryProcessManagerFinder(string connectionString, string databaseName) { }
+
 #if NET9_0_OR_GREATER
     private readonly Lock _memoryCacheLock = new();
 #else
@@ -21,134 +23,141 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
     private const int InitialVersion = 1;
     private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
-    private CacheProvider _provider = new();
+    private readonly CacheProvider _provider = new();
+
+    // Cached predicates of shape (MemoryData<T>, object) -> bool. Key is the mapping shape.
+    private static readonly ConcurrentDictionary<PredicateCacheKey, Delegate> CompiledPredicates = new();
+
+    // Cached factories that produce MemoryData<TConcrete> from IProcessManagerData, keyed by concrete type.
+    private static readonly ConcurrentDictionary<Type, Func<IProcessManagerData, object>> MemoryDataFactories = new();
 
     public Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(mapper);
+        ArgumentNullException.ThrowIfNull(message);
+
+        var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
+                  ?? mapper.Mappings.FirstOrDefault(m => m.MessageType == typeof(Message));
+
+        if (mapping == null)
+            throw new InvalidOperationException(
+                $"No property mapping configured for message type '{message.GetType().FullName}' or the base Message type.");
+
+        object? msgPropValue;
+        try
+        {
+            msgPropValue = mapping.MessageProp.Invoke(message);
+        }
+        catch (Exception ex)
+        {
+            throw new PersistenceException(
+                $"Failed to evaluate message property mapping for message type '{message.GetType().Name}'.", ex);
+        }
+
+        if (msgPropValue is null)
+            throw new ArgumentException("Message property expression evaluates to null");
+
+        var predicate = GetPredicate<T>(mapping.PropertiesHierarchy, msgPropValue.GetType());
 
         lock (_memoryCacheLock)
         {
-            var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
-                      ?? mapper.Mappings.FirstOrDefault(m => m.MessageType == typeof(Message));
+            return Task.FromResult<IPersistenceData<T>?>(FindMatchingItem<T>(msgPropValue, predicate));
+        }
+    }
 
-            if (mapping == null)
-                throw new InvalidOperationException(
-                    $"No property mapping configured for message type '{message.GetType().FullName}' or the base Message type.");
-
-            object? msgPropValue = null;
-
-            try
+    private MemoryData<T>? FindMatchingItem<T>(object msgPropValue, Func<MemoryData<T>, object, bool> predicate)
+        where T : class, IProcessManagerData
+    {
+        foreach (var key in _provider.Keys())
+        {
+            var value = _provider.Get<string, object>(key.ToString()!);
+            if (value is MemoryData<T> typed)
             {
-                msgPropValue = mapping.MessageProp.Invoke(message);
+                var candidate = new MemoryData<T> { Data = typed.Data, Version = typed.Version };
+                if (predicate(candidate, msgPropValue)) return candidate;
             }
-            catch (Exception)
+            else
             {
-                // Property mapping invocation failed — no matching data for this message
-                return Task.FromResult<IPersistenceData<T>?>(null);
+                // Support case where data was stored with a different generic parameter
+                // (e.g., concrete vs interface T).
+                var valueType = value.GetType();
+                var dataProp = valueType.GetProperty("Data");
+                var versionProp = valueType.GetProperty("Version");
+                if (dataProp?.GetValue(value) is T typedData && versionProp != null)
+                {
+                    var candidate = new MemoryData<T> { Data = typedData, Version = (int)versionProp.GetValue(value)! };
+                    if (predicate(candidate, msgPropValue)) return candidate;
+                }
             }
+        }
+        return null;
+    }
 
-            if (msgPropValue is null)
-            {
-                throw new ArgumentException("Message property expression evaluates to null");
-            }
+    private static Func<MemoryData<T>, object, bool> GetPredicate<T>(
+        IReadOnlyDictionary<string, Type> propertiesHierarchy, Type propertyType)
+        where T : class, IProcessManagerData
+    {
+        var cacheKey = new PredicateCacheKey(typeof(T), propertiesHierarchy, propertyType);
+        var compiled = CompiledPredicates.GetOrAdd(cacheKey, static key =>
+        {
+            var dataParam = Expression.Parameter(typeof(MemoryData<>).MakeGenericType(key.T), "d");
+            var valueParam = Expression.Parameter(typeof(object), "value");
 
-            //Left
-            ParameterExpression pe = Expression.Parameter(typeof(MemoryData<T>), "t");
-            Expression left = Expression.Property(pe, typeof(MemoryData<T>).GetTypeInfo().GetProperty("Data")!);
-            foreach (var prop in mapping.PropertiesHierarchy.Reverse())
+            Expression left = Expression.Property(dataParam, dataParam.Type.GetProperty(nameof(MemoryData<IProcessManagerData>.Data))!);
+            foreach (var prop in key.PropertiesHierarchy.Reverse())
             {
                 left = Expression.Property(left, left.Type, prop.Key);
             }
 
-            //Right
-            Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
+            Expression right = Expression.Convert(valueParam, key.PropertyType);
+            var eq = Expression.Equal(left, right);
 
-            Expression expression;
-
-            try
-            {
-                expression = Expression.Equal(left, right);
-            }
-            catch (InvalidOperationException ex)
-            {
-                throw new InvalidOperationException("Mapped incompatible types of ProcessManager Data and Message properties.", ex);
-            }
-
-            Expression<Func<MemoryData<T>, bool>> lambda = Expression.Lambda<Func<MemoryData<T>, bool>>(expression, pe);
-
-            var newCacheItems = new List<MemoryData<T>>();
-
-            foreach (var key in _provider.Keys())
-            {
-                var value = _provider.Get<string, object>(key.ToString()!);
-                if (value.GetType() == typeof(MemoryData<T>))
-                {
-                    var typed = (MemoryData<T>)value;
-                    newCacheItems.Add(new MemoryData<T> { Data = typed.Data, Version = typed.Version });
-                }
-                else
-                {
-                    // Support case where data was stored with a different generic parameter
-                    // (e.g., stored as MemoryData<ConcreteType>, queried as MemoryData<IProcessManagerData>)
-                    var valueType = value.GetType();
-                    var dataProp = valueType.GetProperty("Data");
-                    var versionProp = valueType.GetProperty("Version");
-                    if (dataProp != null && versionProp != null)
-                    {
-                        var data = dataProp.GetValue(value);
-                        if (data is T typedData)
-                        {
-                            newCacheItems.Add(new MemoryData<T> { Data = typedData, Version = (int)versionProp.GetValue(value)! });
-                        }
-                    }
-                }
-            }
-
-            MemoryData<T>? retval = newCacheItems.FirstOrDefault(lambda.Compile());
-
-            return Task.FromResult<IPersistenceData<T>?>(retval);
-        }
+            var delegateType = typeof(Func<,,>).MakeGenericType(dataParam.Type, typeof(object), typeof(bool));
+            return Expression.Lambda(delegateType, eq, dataParam, valueParam).Compile();
+        });
+        return (Func<MemoryData<T>, object, bool>)compiled;
     }
 
     public Task InsertDataAsync(IProcessManagerData data, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(data);
 
-        Type typeParameterType = data.GetType();
-
-        MethodInfo md = GetType().GetTypeInfo().GetMethods().First(m => m.Name == "GetMemoryData" && m.GetParameters()[0].Name == "data");
-        MethodInfo genericMd = md.MakeGenericMethod(typeParameterType);
+        var factory = MemoryDataFactories.GetOrAdd(data.GetType(), BuildMemoryDataFactory);
+        var memoryData = factory(data);
 
         lock (_memoryCacheLock)
         {
-            var memoryData = genericMd.Invoke(this, [data]);
-
             string key = data.CorrelationId.ToString();
-
-            if (!_provider.Contains(key))
-            {
-                _provider.Add(key, memoryData!, DateTime.UtcNow.Add(ExpiryDuration));
-            }
-            else
-            {
+            if (_provider.Contains(key))
                 throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
-            }
+
+            _provider.Add(key, memoryData, DateTime.UtcNow.Add(ExpiryDuration));
         }
 
         return Task.CompletedTask;
     }
 
-    public MemoryData<DT> GetMemoryData<DT>(DT data) where DT : class, IProcessManagerData
+    // One-time compiled factory per concrete data type. Replaces the previous
+    // GetType().GetMethods().First(...) + MakeGenericMethod + Invoke per call (A-05).
+    private static Func<IProcessManagerData, object> BuildMemoryDataFactory(Type dataType)
     {
-        var memoryData = new MemoryData<DT>
-        {
-            Data = data,
-            Version = InitialVersion,
-            Id = Guid.NewGuid()
-        };
-
-        return memoryData;
+        var memoryDataType = typeof(MemoryData<>).MakeGenericType(dataType);
+        var param = Expression.Parameter(typeof(IProcessManagerData), "d");
+        var casted = Expression.Convert(param, dataType);
+        var dataProp = memoryDataType.GetProperty(nameof(MemoryData<IProcessManagerData>.Data))!;
+        var versionProp = memoryDataType.GetProperty(nameof(MemoryData<IProcessManagerData>.Version))!;
+        var idProp = memoryDataType.GetProperty(nameof(MemoryData<IProcessManagerData>.Id))!;
+        var guidNewGuid = typeof(Guid).GetMethod(nameof(Guid.NewGuid))!;
+        var initExpr = Expression.MemberInit(
+            Expression.New(memoryDataType),
+            Expression.Bind(dataProp, casted),
+            Expression.Bind(versionProp, Expression.Constant(InitialVersion)),
+            Expression.Bind(idProp, Expression.Call(guidNewGuid)));
+        var lambda = Expression.Lambda<Func<IProcessManagerData, object>>(
+            Expression.Convert(initExpr, typeof(object)), param);
+        return lambda.Compile();
     }
 
     public Task UpdateDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
@@ -163,10 +172,13 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
 
             if (_provider.Contains(key))
             {
-                // Use dynamic to read the version, since the stored MemoryData<X>
-                // generic parameter may differ from T (e.g., concrete vs interface).
-                dynamic storedData = _provider.Get<string, object>(key);
-                int currentVersion = (int)storedData.Version;
+                // Read version via a typed IVersioned interface so the cast is
+                // compile-time-checked rather than the old dynamic dispatch (A-05).
+                var storedData = _provider.Get<string, object>(key);
+                int currentVersion = storedData is IVersioned versioned
+                    ? versioned.Version
+                    : throw new PersistenceException(
+                        $"Stored item for CorrelationId {key} is of unexpected type {storedData.GetType()} and does not implement IVersioned.");
 
                 var updatedData = new MemoryData<T>
                 {
@@ -190,9 +202,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
             }
 
             if (!string.IsNullOrEmpty(error))
-            {
                 throw new PersistenceException(error);
-            }
         }
 
         return Task.CompletedTask;
@@ -219,14 +229,10 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         {
             string key = timeoutData.Id.ToString();
 
-            if (!_provider.Contains(key))
-            {
-                _provider.Add(key, timeoutData, DateTime.UtcNow.Add(ExpiryDuration));
-            }
-            else
-            {
+            if (_provider.Contains(key))
                 throw new PersistenceException($"TimeoutData with Id {key} already exists in the cache.");
-            }
+
+            _provider.Add(key, timeoutData, DateTime.UtcNow.Add(ExpiryDuration));
         }
 
         return Task.CompletedTask;
@@ -237,46 +243,28 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         cancellationToken.ThrowIfCancellationRequested();
 
         var retval = new TimeoutsBatch { DueTimeouts = [] };
-
         DateTime utcNow = DateTime.UtcNow;
-
         var nextQueryTime = DateTime.MaxValue;
 
         lock (_memoryCacheLock)
         {
-            Dictionary<string, object> cacheItems = new Dictionary<string, object>();
-
             foreach (var key in _provider.Keys())
             {
                 var value = _provider.Get<string, object>(key.ToString()!);
-                if (value.GetType() == typeof(TimeoutData))
+                if (value is TimeoutData timeoutData)
                 {
-                    cacheItems.Add(key.ToString()!, value);
-                }
-            }
-
-            foreach (var data in cacheItems)
-            {
-                var timeoutData = (TimeoutData)data.Value;
-                if (timeoutData.Time <= utcNow)
-                {
-                    retval.DueTimeouts.Add(timeoutData);
-                }
-
-                if (timeoutData.Time > utcNow && timeoutData.Time < nextQueryTime)
-                {
-                    nextQueryTime = timeoutData.Time;
+                    if (timeoutData.Time <= utcNow)
+                        retval.DueTimeouts.Add(timeoutData);
+                    else if (timeoutData.Time < nextQueryTime)
+                        nextQueryTime = timeoutData.Time;
                 }
             }
         }
 
         if (nextQueryTime == DateTime.MaxValue)
-        {
             nextQueryTime = utcNow.Add(DefaultNextQueryInterval);
-        }
 
         retval.NextQueryTime = nextQueryTime;
-
         return Task.FromResult(retval);
     }
 
@@ -290,5 +278,46 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         }
 
         return Task.CompletedTask;
+    }
+
+    private readonly struct PredicateCacheKey : IEquatable<PredicateCacheKey>
+    {
+        public readonly Type T;
+        public readonly IReadOnlyDictionary<string, Type> PropertiesHierarchy;
+        public readonly Type PropertyType;
+
+        public PredicateCacheKey(Type t, IReadOnlyDictionary<string, Type> propertiesHierarchy, Type propertyType)
+        {
+            T = t;
+            PropertiesHierarchy = propertiesHierarchy;
+            PropertyType = propertyType;
+        }
+
+        public bool Equals(PredicateCacheKey other)
+        {
+            if (T != other.T || PropertyType != other.PropertyType) return false;
+            if (PropertiesHierarchy.Count != other.PropertiesHierarchy.Count) return false;
+            foreach (var kvp in PropertiesHierarchy)
+            {
+                if (!other.PropertiesHierarchy.TryGetValue(kvp.Key, out var otherType) || otherType != kvp.Value)
+                    return false;
+            }
+            return true;
+        }
+
+        public override bool Equals(object? obj) => obj is PredicateCacheKey k && Equals(k);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(T);
+            hash.Add(PropertyType);
+            foreach (var kvp in PropertiesHierarchy)
+            {
+                hash.Add(kvp.Key);
+                hash.Add(kvp.Value);
+            }
+            return hash.ToHashCode();
+        }
     }
 }
