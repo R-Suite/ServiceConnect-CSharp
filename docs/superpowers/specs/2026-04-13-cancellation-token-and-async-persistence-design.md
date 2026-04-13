@@ -385,6 +385,20 @@ User message handlers (`IMessageHandler<T>`, `IStreamHandler<T>`, `Aggregator<T>
 | Modify | Existing unit tests under `src/ServiceConnect.UnitTests/` to use new async persistor methods where relevant |
 | Modify | `docs/remaining-issues.md` (mark R-016/B-01, R-034 as Done at end of work) |
 
+## Wrap-up (final tasks of the plan)
+
+The last two tasks of the implementation plan must be:
+
+1. **Update the deferred notes** -- edit `docs/remaining-issues.md` to mark **R-016 / B-01** (CancellationToken) and **R-034** (race condition) as **Done**, noting they were completed together. Leave R-017/R-018, R-009, R-020/R-021, R-032, R-028 as still-deferred.
+
+2. **Run the end-to-end tests with `sg docker`** -- dispatch the test run in the background so progress can be monitored:
+   ```bash
+   sg docker -c "dotnet test src/ServiceConnect.EndToEndTests -v quiet"
+   ```
+   The `sg docker -c "..."` form is required because `sg docker <command>` drops arguments. All 71 existing E2E tests plus the new `CancellationE2ETests` cases must pass.
+
+Do not mark the branch complete until both tasks succeed.
+
 ## Out of scope
 
 - `IMessageDeduplicationPersistor` (filter persistor) stays synchronous -- making it async requires `IFilter.Process` to become async, which is R-017/R-018 territory deferred to a later Group C spec.
