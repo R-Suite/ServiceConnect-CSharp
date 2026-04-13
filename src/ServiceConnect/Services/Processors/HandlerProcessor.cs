@@ -49,6 +49,13 @@ internal sealed class HandlerProcessor(
         return ProcessResult.Handled;
     }
 
+    // AMQP queue/exchange names are at most 255 bytes; we clamp tighter and reject
+    // characters that are either structural in AMQP routing or commonly used in
+    // injection attempts. This guards against attacker-controlled RoutingSlip headers
+    // redirecting traffic to arbitrary queues.
+    private const int MaxRoutingSlipDestinationLength = 128;
+    private static readonly char[] ForbiddenRoutingSlipChars = ['*', '#', '\0', '\r', '\n', '\t', '"', '\''];
+
     private static async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus, CancellationToken cancellationToken)
     {
         if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
@@ -59,9 +66,15 @@ internal sealed class HandlerProcessor(
         if (string.IsNullOrWhiteSpace(routingSlip))
             return;
 
-        var destinations = routingSlip.Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(d => d.Trim())
-            .ToList();
+        var destinations = new List<string>();
+        foreach (var raw in routingSlip.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = raw.Trim();
+            if (!IsValidRoutingSlipDestination(trimmed))
+                throw new InvalidOperationException(
+                    $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {MaxRoutingSlipDestinationLength} characters, and must not contain AMQP wildcards or control characters.");
+            destinations.Add(trimmed);
+        }
 
         if (destinations.Count == 0)
             return;
@@ -70,6 +83,14 @@ internal sealed class HandlerProcessor(
         // with no descriptor to compile against. Separate concern from R-009.
         var routeMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!.MakeGenericMethod(messageType);
         var task = (Task)routeMethod.Invoke(bus, [message, destinations, cancellationToken])!;
-        await task;
+        await task.ConfigureAwait(false);
+    }
+
+    private static bool IsValidRoutingSlipDestination(string destination)
+    {
+        if (string.IsNullOrWhiteSpace(destination)) return false;
+        if (destination.Length > MaxRoutingSlipDestinationLength) return false;
+        if (destination.IndexOfAny(ForbiddenRoutingSlipChars) >= 0) return false;
+        return true;
     }
 }

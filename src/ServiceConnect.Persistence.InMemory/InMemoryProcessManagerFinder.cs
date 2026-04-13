@@ -23,8 +23,6 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private CacheProvider _provider = new();
 
-    public event TimeoutInsertedDelegate? TimeoutInserted;
-
     public Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -230,8 +228,6 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
                 throw new PersistenceException($"TimeoutData with Id {key} already exists in the cache.");
             }
         }
-
-        TimeoutInserted?.Invoke(timeoutData.Time);
 
         return Task.CompletedTask;
     }

@@ -43,7 +43,6 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 
     internal sealed class CacheItem
     {
-        public object Value { get; set; }
         public DateTime MessageExpiry { get; set; }
     }
 }

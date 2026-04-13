@@ -8,7 +8,8 @@ public class MessageBusReadStreamTests
     [Fact]
     public void Write_And_Read_ReassemblesPacketsInOrder()
     {
-        var stream = new MessageBusReadStream { LastPacketNumber = 2 };
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
         stream.Write(new byte[] { 1, 2 }, 0);
         stream.Write(new byte[] { 5, 6 }, 2);
         stream.Write(new byte[] { 3, 4 }, 1);
@@ -20,7 +21,8 @@ public class MessageBusReadStreamTests
     [Fact]
     public void IsComplete_MissingPacket_ReturnsFalse()
     {
-        var stream = new MessageBusReadStream { LastPacketNumber = 2 };
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
         stream.Write(new byte[] { 1 }, 0);
         stream.Write(new byte[] { 3 }, 2);
 
@@ -30,7 +32,7 @@ public class MessageBusReadStreamTests
     [Fact]
     public void IsComplete_NoLastPacketNumber_ReturnsFalse()
     {
-        var stream = new MessageBusReadStream();
+        var stream = new MessageBusReadStream("seq");
         stream.Write(new byte[] { 1 }, 0);
 
         Assert.False(stream.IsComplete());
@@ -39,9 +41,17 @@ public class MessageBusReadStreamTests
     [Fact]
     public void Read_WhenNotComplete_ThrowsInvalidOperationException()
     {
-        var stream = new MessageBusReadStream();
+        var stream = new MessageBusReadStream("seq");
         stream.Write(new byte[] { 1 }, 0);
 
         Assert.Throws<InvalidOperationException>(() => stream.Read());
+    }
+
+    [Fact]
+    public void Write_DuplicatePacketNumber_Throws()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1, 2 }, 0);
+        Assert.Throws<InvalidOperationException>(() => stream.Write(new byte[] { 3, 4 }, 0));
     }
 }

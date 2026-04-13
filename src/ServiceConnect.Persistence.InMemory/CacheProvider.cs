@@ -3,10 +3,8 @@ using System.Reactive.Linq;
 
 namespace ServiceConnect.Persistence.InMemory;
 
-public class CacheProvider : ICacheProvider
+public sealed class CacheProvider : ICacheProvider
 {
-    internal static CacheProvider Default { get; } = new CacheProvider();
-
     private readonly ConcurrentDictionary<object, CacheItem> _cache = new ConcurrentDictionary<object, CacheItem>();
     private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new ConcurrentDictionary<object, SlidingDetails>();
 
@@ -107,11 +105,11 @@ public class CacheProvider : ICacheProvider
     }
 
     /// <summary>
-    /// Determines whether [contains] [the specified key].
+    /// Determines whether the cache contains the specified key.
     /// </summary>
-    public bool Contains(object key)
+    public bool Contains<TKey>(TKey key)
     {
-        return _cache.ContainsKey(key);
+        return key is not null && _cache.ContainsKey(key);
     }
 
     #endregion

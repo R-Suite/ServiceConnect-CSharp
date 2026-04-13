@@ -202,6 +202,8 @@ public sealed class Producer : IProducer
     {
         await DisposeModelAsync().ConfigureAwait(false);
         await DisposeConnectionInstanceAsync().ConfigureAwait(false);
+        _publishLock.Dispose();
+        _connectionSemaphore.Dispose();
     }
 
     public long MaximumMessageSize { get; }

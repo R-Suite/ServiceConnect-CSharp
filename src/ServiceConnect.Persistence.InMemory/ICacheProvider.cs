@@ -53,7 +53,7 @@ public interface ICacheProvider
     int PurgeNormalPriorities();
 
     /// <summary>
-    /// Determines whether [contains] [the specified key].
+    /// Determines whether the cache contains the specified key.
     /// </summary>
-    bool Contains(object key);
+    bool Contains<TKey>(TKey key);
 }

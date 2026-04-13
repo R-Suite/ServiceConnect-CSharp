@@ -20,8 +20,6 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
     private volatile bool _timeoutIndexEnsured;
     private const string TimeoutsCollectionName = "Timeouts";
 
-    public event TimeoutInsertedDelegate? TimeoutInserted;
-
     public MongoDbProcessManagerFinder(MongoDbPersistenceOptions options, ILogger<MongoDbProcessManagerFinder> logger)
     {
         _logger = logger;
@@ -226,7 +224,6 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
             EnsureTimeoutIndex(collection);
 
             await collection.InsertOneAsync(timeoutData, cancellationToken: cancellationToken).ConfigureAwait(false);
-            TimeoutInserted?.Invoke(timeoutData.Time);
         }
         catch (MongoException ex)
         {
@@ -319,17 +316,34 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
 
         var indexKeys = Builders<MongoDbData<T>>.IndexKeys.Ascending(x => x.Data.CorrelationId);
         var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys);
-        collection.Indexes.CreateOne(indexModel);
+        try
+        {
+            collection.Indexes.CreateOne(indexModel);
+        }
+        catch
+        {
+            // Roll back the marker so a subsequent call retries index creation (C-06).
+            _indexedCollections.TryRemove(collectionName, out _);
+            throw;
+        }
     }
 
     private void EnsureTimeoutIndex(IMongoCollection<TimeoutData> collection)
     {
         if (_timeoutIndexEnsured) return;
-        _timeoutIndexEnsured = true;
 
         var indexKeys = Builders<TimeoutData>.IndexKeys.Ascending(x => x.Id);
         var indexModel = new CreateIndexModel<TimeoutData>(indexKeys);
-        collection.Indexes.CreateOne(indexModel);
+        try
+        {
+            collection.Indexes.CreateOne(indexModel);
+            _timeoutIndexEnsured = true;
+        }
+        catch
+        {
+            // Leave the flag false so a subsequent call retries (C-06).
+            throw;
+        }
     }
 
     private static string GetCollectionName(IProcessManagerData data)

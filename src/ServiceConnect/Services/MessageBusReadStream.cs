@@ -9,16 +9,37 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     private readonly ConcurrentDictionary<long, byte[]> _packets = new();
     private long _totalBytesWritten;
 
-    public string SequenceId { get; set; } = string.Empty;
-    public long LastPacketNumber { get; set; } = -1;
-    public MessageBusStreamComplete CompleteEventHandler { get; set; } = null!;
-    public int HandlerCount { get; set; }
+    public MessageBusReadStream(string sequenceId)
+    {
+        SequenceId = sequenceId ?? throw new ArgumentNullException(nameof(sequenceId));
+    }
+
+    public string SequenceId { get; }
+    public long LastPacketNumber { get; private set; } = -1;
+
+    public void SetLastPacketNumber(long lastPacketNumber)
+    {
+        if (lastPacketNumber < 0) throw new ArgumentOutOfRangeException(nameof(lastPacketNumber));
+        LastPacketNumber = lastPacketNumber;
+    }
 
     public void Write(byte[] data, long packetNumber)
     {
-        if (Interlocked.Add(ref _totalBytesWritten, data.Length) > MaxTotalStreamSize)
+        // Atomically reserve capacity: if the reservation pushes us past the cap,
+        // roll it back before any concurrent writer can observe the inflated total
+        // and before we insert into the packet dictionary (C-03).
+        long newTotal = Interlocked.Add(ref _totalBytesWritten, data.Length);
+        if (newTotal > MaxTotalStreamSize)
+        {
+            Interlocked.Add(ref _totalBytesWritten, -data.Length);
             throw new InvalidOperationException($"Stream exceeds maximum size of {MaxTotalStreamSize / (1024 * 1024)} MB.");
-        _packets[packetNumber] = data;
+        }
+        if (!_packets.TryAdd(packetNumber, data))
+        {
+            // Duplicate packet — roll back the reservation to keep the size check honest.
+            Interlocked.Add(ref _totalBytesWritten, -data.Length);
+            throw new InvalidOperationException($"Duplicate packet number {packetNumber} received for stream {SequenceId}.");
+        }
     }
 
     public byte[] Read()

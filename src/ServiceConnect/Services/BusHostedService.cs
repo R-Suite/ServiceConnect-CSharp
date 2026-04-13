@@ -15,15 +15,10 @@ public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger
             return;
         }
 
-        try
-        {
-            await bus.StartConsumingAsync(cancellationToken).ConfigureAwait(false);
-            logger.LogInformation("Bus auto-started consuming.");
-        }
-        catch (InvalidOperationException ex)
-        {
-            logger.LogWarning(ex, "Could not auto-start consuming. No consumer may be registered.");
-        }
+        // Let exceptions propagate — the host should observe startup failures
+        // rather than silently report success when consuming never started (C-07).
+        await bus.StartConsumingAsync(cancellationToken).ConfigureAwait(false);
+        logger.LogInformation("Bus auto-started consuming.");
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)

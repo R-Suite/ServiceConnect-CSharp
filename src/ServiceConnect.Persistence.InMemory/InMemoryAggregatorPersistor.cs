@@ -63,7 +63,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         return Task.CompletedTask;
     }
 
-    public void RemoveAll(string name)
+    internal void RemoveAll(string name)
     {
         lock (_memoryCacheLock)
         {

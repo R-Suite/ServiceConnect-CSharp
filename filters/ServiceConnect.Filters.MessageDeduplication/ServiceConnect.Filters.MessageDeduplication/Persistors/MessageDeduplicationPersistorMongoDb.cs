@@ -49,10 +49,12 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             var mongoDatabase = mongoClient.GetDatabase(settings.DatabaseNameMongoDb);
             _collection = mongoDatabase.GetCollection<ProcessedMessage>(settings.CollectionNameMongoDb);
 
-            // Ensure indexes (fire-and-forget during construction is existing behavior).
-            _collection.Indexes.CreateOneAsync(
+            // Ensure indexes synchronously at construction (C-08). A failure here
+            // must surface so the caller can react rather than silently proceed
+            // without indexes.
+            _collection.Indexes.CreateOne(
                 new CreateIndexModel<ProcessedMessage>(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id)));
-            _collection.Indexes.CreateOneAsync(
+            _collection.Indexes.CreateOne(
                 new CreateIndexModel<ProcessedMessage>(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.ExpiryDateTime)));
         }
 

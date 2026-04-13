@@ -165,29 +165,6 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task InsertTimeout_RaisesTimeoutInsertedEvent()
-        {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            DateTime? capturedTime = null;
-            finder.TimeoutInserted += time => capturedTime = time;
-
-            var expectedTime = DateTime.UtcNow.AddMinutes(5);
-            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), expectedTime), CancellationToken.None);
-
-            Assert.Equal(expectedTime, capturedTime);
-        }
-
-        [Fact]
-        public async Task InsertTimeout_NoTimeoutInsertedSubscriber_DoesNotThrow()
-        {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-
-            var ex = await Record.ExceptionAsync(() => finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(5)), CancellationToken.None));
-
-            Assert.Null(ex);
-        }
-
-        [Fact]
         public async Task GetTimeoutsBatch_WhenNoTimeouts_ReturnEmptyDueList()
         {
             ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);

@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessageProcessor
+internal sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessageProcessor
 {
     public bool RunBeforeDeserialization => true;
 

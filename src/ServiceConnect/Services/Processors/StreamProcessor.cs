@@ -57,7 +57,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
             return Task.FromResult(ProcessResult.Handled); // Handled to prevent infinite requeue
         }
 
-        var stream = _activeStreams.GetOrAdd(sequenceId, _ => new MessageBusReadStream { SequenceId = sequenceId });
+        var stream = _activeStreams.GetOrAdd(sequenceId, id => new MessageBusReadStream(id));
 
         stream.Write(messageBytes, packetNumber);
         _streamTimestamps[sequenceId] = DateTime.UtcNow;
@@ -70,7 +70,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
                 _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
                 return Task.FromResult(ProcessResult.Handled);
             }
-            stream.LastPacketNumber = lastPacketNumber;
+            stream.SetLastPacketNumber(lastPacketNumber);
         }
 
         if (stream.IsComplete())

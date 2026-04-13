@@ -13,7 +13,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private readonly TimeSpan _heartbeatTime = transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var hbTime) ? new TimeSpan(0, 0, (int)hbTime) : new TimeSpan(0, 0, 120);
     private readonly string[] _hosts = transportSettings.Host.Split(',');
 
-    public async Task ConnectAsync()
+    private async Task ConnectAsync()
     {
         if (_connection != null) return;
 

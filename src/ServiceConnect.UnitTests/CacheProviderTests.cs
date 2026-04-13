@@ -217,12 +217,6 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Default_StaticInstance_IsNotNull()
-        {
-            Assert.NotNull(CacheProvider.Default);
-        }
-
-        [Fact]
         public void Add_SameKeyTwice_FirstValueIsKept()
         {
             // ConcurrentDictionary.TryAdd does not overwrite existing keys

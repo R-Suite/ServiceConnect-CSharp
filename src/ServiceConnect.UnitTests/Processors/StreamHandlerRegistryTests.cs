@@ -81,7 +81,7 @@ public class StreamHandlerRegistryTests
         Assert.True(registry.TryGet(typeof(ShrFoo), out var descriptor));
 
         var handler = new ShrFooStreamHandler();
-        var stream = new MessageBusReadStream { SequenceId = "seq" };
+        var stream = new MessageBusReadStream("seq");
 
         descriptor!.SetStream(handler, stream);
 

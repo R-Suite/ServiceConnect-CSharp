@@ -86,55 +86,6 @@ After all sub-agents complete:
 2. Sort by severity (Critical → Info), then by file path
 3. Group related findings that should be fixed together
 4. Assign a sequential ID to each finding (e.g., R-001, R-002, ...)
-5. Output the full report to the console
-
-## PHASE 3 — FIX
-
-Work through the master report systematically:
-1. Start with Critical and High severity findings
-2. For each fix:
-   - State the finding ID you are addressing
-   - Explain the change briefly
-   - Apply the fix
-3. When a fix requires refactoring (e.g., extracting a class, introducing an interface), make the full structural change — do not leave partial refactors
-4. If a fix could break existing tests, update the tests to match the corrected behaviour
-5. Add new unit tests for any fix that addresses a bug or a previously untested code path
-
-## PHASE 4 — VERIFY
-
-1. Build the entire solution: `dotnet build` — it must compile with zero errors and zero warnings
-2. Run all tests: `dotnet test` — all tests must pass
-3. If there are any build errors, warnings, or test failures, fix them immediately before proceeding
-
-## PHASE 5 — RE-REVIEW
-
-Perform a second full review by spawning fresh sub-agents for all six areas above. The scope is now:
-- Verify that every finding from the Phase 2 master report has been resolved
-- Identify any NEW issues introduced by the fixes
-- Check that refactored code maintains the same external behaviour
-
-Produce a delta report showing:
-- ✅ Resolved findings (by ID)
-- 🔄 Partially resolved findings (with explanation)
-- 🆕 New findings introduced by fixes
-- ❌ Unresolved findings (with explanation of why)
-
-## PHASE 6 — ITERATE
-
-If the delta report contains any 🔄, 🆕, or ❌ items at Critical, High, or Medium severity:
-1. Return to Phase 3 and fix them
-2. Return to Phase 4 and verify
-3. Return to Phase 5 and re-review
-
-Continue this loop until the delta report shows only ✅ resolved items and at most Low/Info new findings.
-
-## PHASE 7 — FINAL SUMMARY
-
-Produce a final summary containing:
-1. **Iteration count** — how many review-fix cycles were needed
-2. **Statistics** — total findings by severity, total fixed, total remaining (Low/Info only)
-3. **Key architectural changes** — a bulleted list of significant structural refactors made
-4. **Risk areas** — anything that warrants manual human review or further testing
-5. **Recommendations** — suggestions for ongoing code quality (e.g., analyzers to enable, CI checks to add, patterns to adopt going forward)
+5. Write the full report to a markdown file in the docs directory
 
 Begin now. Start Phase 1.
