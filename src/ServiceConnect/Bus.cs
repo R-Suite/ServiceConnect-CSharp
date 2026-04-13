@@ -122,6 +122,7 @@ public sealed class Bus(
     public async Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where TRequest : Message where TReply : Message
     {
+        ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         var replies = await SendRequestMultiAsync<TRequest, TReply>(message, options, cancellationToken).ConfigureAwait(false);
 

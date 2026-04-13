@@ -17,7 +17,7 @@ public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger
 
         try
         {
-            await bus.StartConsumingAsync();
+            await bus.StartConsumingAsync(cancellationToken).ConfigureAwait(false);
             logger.LogInformation("Bus auto-started consuming.");
         }
         catch (InvalidOperationException ex)
@@ -28,6 +28,6 @@ public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await bus.StopConsumingAsync().ConfigureAwait(false);
+        await bus.StopConsumingAsync(cancellationToken).ConfigureAwait(false);
     }
 }
