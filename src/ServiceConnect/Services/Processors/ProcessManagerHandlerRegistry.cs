@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,7 @@ internal sealed class ProcessManagerHandlerRegistry
 {
     private readonly Dictionary<Type, ProcessManagerDescriptor> _descriptors = new();
 
-    public ProcessManagerHandlerRegistry(
+    internal ProcessManagerHandlerRegistry(
         IList<HandlerReference> handlerReferences,
         ILogger<ProcessManagerHandlerRegistry> logger)
     {
@@ -40,7 +41,7 @@ internal sealed class ProcessManagerHandlerRegistry
         }
     }
 
-    public bool TryGet(Type messageType, out ProcessManagerDescriptor? descriptor)
+    internal bool TryGet(Type messageType, [NotNullWhen(true)] out ProcessManagerDescriptor? descriptor)
         => _descriptors.TryGetValue(messageType, out descriptor);
 
     internal static ProcessManagerDescriptor BuildDescriptor(
@@ -57,7 +58,7 @@ internal sealed class ProcessManagerHandlerRegistry
             SetHandlerContext: CompileSetHandlerContext(processHandlerInterfaceType),
             ConfigureMapper: CompileConfigureMapper(processHandlerInterfaceType),
             FindData: CompileFindData(dataType),
-            GetPersistenceDataData: CompileGetPersistenceDataData(persistenceInterfaceType),
+            ExtractData: CompileExtractData(persistenceInterfaceType),
             UpdateData: CompileUpdateData(dataType, persistenceInterfaceType),
             InvokeHandleAsync: CompileInvokeHandleAsync(processHandlerInterfaceType, messageType, dataType));
     }
@@ -125,7 +126,7 @@ internal sealed class ProcessManagerHandlerRegistry
     private static async Task<object?> ToObjectTask<T>(Task<T?> task) where T : class
         => await task.ConfigureAwait(false);
 
-    private static Func<object, object> CompileGetPersistenceDataData(Type persistenceInterfaceType)
+    private static Func<object, object> CompileExtractData(Type persistenceInterfaceType)
     {
         var persistenceParam = Expression.Parameter(typeof(object), "persistence");
         var cast = Expression.Convert(persistenceParam, persistenceInterfaceType);

@@ -6,32 +6,49 @@ using ServiceConnect.Services;
 
 namespace ServiceConnect;
 
-public sealed class Bus(
-    IMessageSerializer serializer,
-    IFilterPipeline filterPipeline,
-    ISendMessagePipeline sendPipeline,
-    IRequestReplyManager requestReplyManager,
-    ILogger<Bus> logger,
-    IQueueConfiguration queueConfig,
-    IMessageDispatcher dispatcher,
-    IList<HandlerReference> handlerReferences,
-    IConsumer? consumer = null,
-    IProducer? producer = null) : IBus
+public sealed class Bus : IBus
 {
-    private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-    private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
-    private readonly ISendMessagePipeline _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
-    private readonly IRequestReplyManager _requestReplyManager = requestReplyManager ?? throw new ArgumentNullException(nameof(requestReplyManager));
-    private readonly ILogger<Bus> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IQueueConfiguration _queueConfig = queueConfig ?? throw new ArgumentNullException(nameof(queueConfig));
-    private readonly IMessageDispatcher _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
-    private readonly IList<HandlerReference> _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
-    private readonly IConsumer? _consumer = consumer;
-    private readonly IProducer? _producer = producer;
+    private readonly IMessageSerializer _serializer;
+    private readonly IFilterPipeline _filterPipeline;
+    private readonly ISendMessagePipeline _sendPipeline;
+    private readonly IRequestReplyManager _requestReplyManager;
+    private readonly ILogger<Bus> _logger;
+    private readonly IQueueConfiguration _queueConfig;
+    private readonly IMessageDispatcher _dispatcher;
+    private readonly IList<HandlerReference> _handlerReferences;
+    private readonly Services.Processors.ProcessManagerHandlerRegistry _processManagerRegistry;
+    private readonly IConsumer? _consumer;
+    private readonly IProducer? _producer;
     private readonly object _stateLock = new();
     private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private bool _consuming;
     private volatile bool _disposed;
+
+    internal Bus(
+        IMessageSerializer serializer,
+        IFilterPipeline filterPipeline,
+        ISendMessagePipeline sendPipeline,
+        IRequestReplyManager requestReplyManager,
+        ILogger<Bus> logger,
+        IQueueConfiguration queueConfig,
+        IMessageDispatcher dispatcher,
+        IList<HandlerReference> handlerReferences,
+        Services.Processors.ProcessManagerHandlerRegistry processManagerRegistry,
+        IConsumer? consumer = null,
+        IProducer? producer = null)
+    {
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
+        _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
+        _requestReplyManager = requestReplyManager ?? throw new ArgumentNullException(nameof(requestReplyManager));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _queueConfig = queueConfig ?? throw new ArgumentNullException(nameof(queueConfig));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
+        _processManagerRegistry = processManagerRegistry ?? throw new ArgumentNullException(nameof(processManagerRegistry));
+        _consumer = consumer;
+        _producer = producer;
+    }
 
     public bool IsConnected => _consuming;
 
@@ -191,6 +208,7 @@ public sealed class Bus(
                 localConsumer = _consumer;
             }
 
+            _ = _processManagerRegistry; // touch singleton; duplicate-handler registration would have thrown at DI resolution time
             _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
                 _queueConfig.QueueName, messageTypeNames.Count);
 

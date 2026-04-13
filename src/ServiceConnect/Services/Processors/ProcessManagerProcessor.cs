@@ -17,7 +17,7 @@ internal sealed class ProcessManagerProcessor(
         cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
-        if (!registry.TryGet(messageType, out var descriptor) || descriptor == null)
+        if (!registry.TryGet(messageType, out var descriptor))
             return ProcessResult.NotHandled;
 
         var finder = serviceProvider.GetService<IProcessManagerFinder>();
@@ -30,7 +30,13 @@ internal sealed class ProcessManagerProcessor(
         }
 
         var handler = serviceProvider.GetService(descriptor.ProcessHandlerInterfaceType);
-        if (handler == null) return ProcessResult.NotHandled;
+        if (handler == null)
+        {
+            logger.LogWarning(
+                "Process-manager handler not registered in DI for interface {HandlerInterface}; cannot process message {MessageType}",
+                descriptor.ProcessHandlerInterfaceType.Name, messageType.Name);
+            return ProcessResult.NotHandled;
+        }
 
         var mapper = new DefaultProcessManagerPropertyMapper();
         descriptor.ConfigureMapper(handler, mapper);
@@ -47,7 +53,7 @@ internal sealed class ProcessManagerProcessor(
         }
         else
         {
-            data = descriptor.GetPersistenceDataData(persistenceData!);
+            data = descriptor.ExtractData(persistenceData!);
         }
 
         var bus = serviceProvider.GetRequiredService<IBus>();

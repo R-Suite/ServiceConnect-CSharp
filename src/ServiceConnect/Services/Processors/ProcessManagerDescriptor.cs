@@ -11,6 +11,6 @@ internal sealed record ProcessManagerDescriptor(
     Action<object, IConsumeContext> SetHandlerContext,
     Action<object, IProcessManagerPropertyMapper> ConfigureMapper,
     Func<IProcessManagerFinder, IProcessManagerPropertyMapper, Message, CancellationToken, Task<object?>> FindData,
-    Func<object, object> GetPersistenceDataData,
+    Func<object, object> ExtractData,
     Func<IProcessManagerFinder, object, CancellationToken, Task> UpdateData,
     Func<object, Message, object, Task> InvokeHandleAsync);

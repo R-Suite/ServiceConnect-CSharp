@@ -30,7 +30,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
 
         // Process manager descriptor registry (eagerly built, singleton)
-        services.TryAddSingleton<ProcessManagerHandlerRegistry>();
+        // Factory required because the ctor is internal (same-assembly access only)
+        services.TryAddSingleton<Services.Processors.ProcessManagerHandlerRegistry>(sp => new Services.Processors.ProcessManagerHandlerRegistry(
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.ProcessManagerHandlerRegistry>>()));
 
         // Message processors (order matters: ReplyProcessor first, then HandlerProcessor last)
         services.TryAddSingleton<ReplyProcessor>();
@@ -117,8 +120,19 @@ public static class ServiceCollectionExtensions
             registration(services);
         }
 
-        // Bus
-        services.TryAddSingleton<IBus, Bus>();
+        // Bus — uses a factory so that DI can resolve the internal ctor
+        services.TryAddSingleton<IBus>(sp => new Bus(
+            sp.GetRequiredService<IMessageSerializer>(),
+            sp.GetRequiredService<IFilterPipeline>(),
+            sp.GetRequiredService<ISendMessagePipeline>(),
+            sp.GetRequiredService<IRequestReplyManager>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Bus>>(),
+            sp.GetRequiredService<IQueueConfiguration>(),
+            sp.GetRequiredService<IMessageDispatcher>(),
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>(),
+            sp.GetService<IConsumer>(),
+            sp.GetService<IProducer>()));
 
         // Hosted service for auto-start consuming
         services.AddHostedService<BusHostedService>();

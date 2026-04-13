@@ -133,7 +133,7 @@ public class ProcessManagerHandlerRegistryTests
     }
 
     [Fact]
-    public void Descriptor_GetPersistenceDataData_ReadsDataProperty()
+    public void Descriptor_ExtractData_ReadsDataProperty()
     {
         var registry = BuildFooRegistry();
         Assert.True(registry.TryGet(typeof(FooMessage), out var descriptor));
@@ -141,7 +141,7 @@ public class ProcessManagerHandlerRegistryTests
         var data = new FooData();
         var persistence = new FooPersistenceData { Data = data };
 
-        var result = descriptor!.GetPersistenceDataData(persistence);
+        var result = descriptor.ExtractData(persistence);
 
         Assert.Same(data, result);
     }
