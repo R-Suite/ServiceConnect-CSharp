@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
-using Common.Logging;
+using System.Threading;
+using System.Threading.Tasks;
 using MongoDB.Driver;
 
 namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 {
     public class MessageDeduplicationPersistorMongoDb : IMessageDeduplicationPersistor
     {
-        private static readonly ILog Logger = LogManager.GetLogger(typeof(MessageDeduplicationPersistorMongoDb));
         private readonly IMongoCollection<ProcessedMessage> _collection;
 
         public MessageDeduplicationPersistorMongoDb()
@@ -36,7 +36,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
                         : new X509Certificate2(certBytes, filterSettings.MongoDbCertPassphrase);
                 }
 
-                clientSettings.UseSsl = true;
+                clientSettings.UseTls = true;
                 clientSettings.SslSettings = new SslSettings
                 {
                     ClientCertificates = new List<X509Certificate> { cert },
@@ -48,42 +48,37 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             var mongoClient = new MongoClient(clientSettings);
             var mongoDatabase = mongoClient.GetDatabase(filterSettings.DatabaseNameMongoDb);
             _collection = mongoDatabase.GetCollection<ProcessedMessage>(filterSettings.CollectionNameMongoDb);
-            _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id));
-            _collection.Indexes.CreateOneAsync(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.ExpiryDateTime));
+
+            // Ensure indexes (fire-and-forget during construction is existing behavior).
+            _collection.Indexes.CreateOneAsync(
+                new CreateIndexModel<ProcessedMessage>(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.Id)));
+            _collection.Indexes.CreateOneAsync(
+                new CreateIndexModel<ProcessedMessage>(Builders<ProcessedMessage>.IndexKeys.Ascending(_ => _.ExpiryDateTime)));
         }
 
-        public bool GetMessageExists(Guid messageId)
+        public async Task<bool> GetMessageExistsAsync(Guid messageId, CancellationToken cancellationToken = default)
         {
-            IAsyncCursor<ProcessedMessage> result = _collection.FindAsync(i => i.Id == messageId).Result;
-            return result.Any();
+            var found = await _collection.Find(i => i.Id == messageId)
+                .FirstOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
+            return found != null;
         }
 
-        public void Insert(Guid messageId, DateTime messagExpiry)
+        public Task InsertAsync(Guid messageId, DateTime messageExpiry, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                _collection.InsertOne(new ProcessedMessage
+            return _collection.InsertOneAsync(
+                new ProcessedMessage
                 {
                     Id = messageId,
-                    ExpiryDateTime = messagExpiry
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.Fatal("Error inserting into ProcessedMessage collection", ex);
-            }
+                    ExpiryDateTime = messageExpiry
+                },
+                options: null,
+                cancellationToken: cancellationToken);
         }
 
-        public void RemoveExpiredMessages(DateTime messagExpiry)
+        public Task RemoveExpiredMessagesAsync(DateTime messageExpiry, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                _collection.DeleteMany(i => i.ExpiryDateTime < messagExpiry);
-            }
-            catch (Exception ex)
-            {
-                Logger.Fatal("Error cleaning up expired ProcessedMessages", ex);
-            }
+            return _collection.DeleteManyAsync(i => i.ExpiryDateTime < messageExpiry, cancellationToken);
         }
     }
 }

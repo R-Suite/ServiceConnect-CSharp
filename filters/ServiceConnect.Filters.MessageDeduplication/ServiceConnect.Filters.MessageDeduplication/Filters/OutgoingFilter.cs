@@ -53,7 +53,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
         {
             try
             {
-                _messageDeduplicationPersistor.RemoveExpiredMessages(DateTime.UtcNow);
+                _messageDeduplicationPersistor.RemoveExpiredMessagesAsync(DateTime.UtcNow).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
@@ -65,9 +65,10 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
         {
             try
             {
-                _messageDeduplicationPersistor.Insert(
+                _messageDeduplicationPersistor.InsertAsync(
                     new Guid(HeaderDecoder.Decode(envelope.Headers["MessageId"]) ?? string.Empty),
-                    DateTime.UtcNow.AddHours(_settings.MsgExpiryHours));
+                    DateTime.UtcNow.AddHours(_settings.MsgExpiryHours))
+                    .GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {

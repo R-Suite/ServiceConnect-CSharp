@@ -39,8 +39,9 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
                 {
                     // if exists in persistant storage
                     bool msgAlreadyProcessed =
-                        _messageDeduplicationPersistor.GetMessageExists(
-                            new Guid(HeaderDecoder.Decode(envelope.Headers["MessageId"]) ?? string.Empty));
+                        _messageDeduplicationPersistor.GetMessageExistsAsync(
+                            new Guid(HeaderDecoder.Decode(envelope.Headers["MessageId"]) ?? string.Empty))
+                            .GetAwaiter().GetResult();
                     if (msgAlreadyProcessed)
                     {
                         processMessage = false;

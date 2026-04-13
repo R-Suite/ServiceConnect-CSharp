@@ -1,6 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Moq;
 using ServiceConnect.Filters.MessageDeduplication.Filters;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
@@ -27,7 +29,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
             var deduplicationSettings = DeduplicationFilterSettings.Instance;
             deduplicationSettings.DisableMsgExpiry = true;
 
-            _persistor.Setup(i => i.Insert(messageId, It.IsAny<DateTime>()));
+            _persistor.Setup(i => i.InsertAsync(messageId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
             var outgoingFilter = new OutgoingFilter(_persistor.Object);
             var envelope = new Envelope();
@@ -53,7 +55,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
             var deduplicationSettings = DeduplicationFilterSettings.Instance;
             deduplicationSettings.DisableMsgExpiry = true;
 
-            _persistor.Setup(i => i.Insert(messageId, It.IsAny<DateTime>())).Throws(new Exception());
+            _persistor.Setup(i => i.InsertAsync(messageId, It.IsAny<DateTime>(), It.IsAny<CancellationToken>())).ThrowsAsync(new Exception());
 
             var outgoingFilter = new OutgoingFilter(_persistor.Object);
             var envelope = new Envelope();

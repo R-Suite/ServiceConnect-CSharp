@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using Moq;
 using ServiceConnect.Filters.MessageDeduplication.Filters;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
@@ -58,7 +59,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
         {
             // Arrange
             Guid messageId = Guid.NewGuid();
-            _persistor.Setup(i => i.GetMessageExists(messageId)).Returns(true);
+            _persistor.Setup(i => i.GetMessageExistsAsync(messageId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
             var incomingFilter = new IncomingFilter(_persistor.Object);
             var envelope = new Envelope();
             envelope.Headers = new Dictionary<string, object> { { "Redelivered", true }, { "MessageId", Encoding.ASCII.GetBytes(messageId.ToString()) } };
@@ -77,7 +78,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
         {
             // Arrange
             Guid messageId = Guid.NewGuid();
-            _persistor.Setup(i => i.GetMessageExists(messageId)).Throws(new Exception());
+            _persistor.Setup(i => i.GetMessageExistsAsync(messageId, It.IsAny<CancellationToken>())).ThrowsAsync(new Exception());
             var incomingFilter = new IncomingFilter(_persistor.Object);
             var envelope = new Envelope();
             envelope.Headers = new Dictionary<string, object> { { "Redelivered", true }, { "MessageId", Encoding.ASCII.GetBytes(messageId.ToString()) } };
