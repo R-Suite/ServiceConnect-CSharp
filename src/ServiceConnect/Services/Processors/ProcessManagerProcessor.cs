@@ -1,11 +1,13 @@
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public sealed class ProcessManagerProcessor(IServiceProvider serviceProvider, ILogger<ProcessManagerProcessor> logger) : IMessageProcessor
+internal sealed class ProcessManagerProcessor(
+    ProcessManagerHandlerRegistry registry,
+    IServiceProvider serviceProvider,
+    ILogger<ProcessManagerProcessor> logger) : IMessageProcessor
 {
     public async Task<ProcessResult> ProcessAsync(
         byte[] messageBytes, Type messageType, object? message,
@@ -15,98 +17,53 @@ public sealed class ProcessManagerProcessor(IServiceProvider serviceProvider, IL
         cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
-        // 1. Find a HandlerReference whose HandlerType implements IProcessHandler<,> for this message type
-        var handlerRefs = serviceProvider.GetService<IList<HandlerReference>>();
-        if (handlerRefs == null || handlerRefs.Count == 0)
+        if (!registry.TryGet(messageType, out var descriptor) || descriptor == null)
             return ProcessResult.NotHandled;
 
-        Type? processHandlerInterfaceType = null;
-        Type? dataType = null;
-
-        foreach (var href in handlerRefs)
-        {
-            var iface = href.HandlerType.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType
-                    && i.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
-                    && i.GetGenericArguments()[1] == messageType);
-
-            if (iface != null)
-            {
-                processHandlerInterfaceType = iface;
-                dataType = iface.GetGenericArguments()[0];
-                break;
-            }
-        }
-
-        if (processHandlerInterfaceType == null || dataType == null)
-            return ProcessResult.NotHandled;
-
-        // 3. Resolve IProcessManagerFinder
         var finder = serviceProvider.GetService<IProcessManagerFinder>();
         if (finder == null)
         {
-            logger.LogWarning("IProcessManagerFinder not registered; cannot process process-manager message {MessageType}", messageType.Name);
+            logger.LogWarning(
+                "IProcessManagerFinder not registered; cannot process process-manager message {MessageType}",
+                messageType.Name);
             return ProcessResult.NotHandled;
         }
 
-        // 4. Resolve the handler
-        var handler = serviceProvider.GetService(processHandlerInterfaceType);
-        if (handler == null)
-            return ProcessResult.NotHandled;
+        var handler = serviceProvider.GetService(descriptor.ProcessHandlerInterfaceType);
+        if (handler == null) return ProcessResult.NotHandled;
 
-        // 5. Configure mapper
         var mapper = new DefaultProcessManagerPropertyMapper();
-        var configureMapperMethod = processHandlerInterfaceType.GetMethod("ConfigureMapper");
-        configureMapperMethod?.Invoke(handler, [mapper]);
+        descriptor.ConfigureMapper(handler, mapper);
 
-        // 6. FindDataAsync<TData>(mapper, message, cancellationToken)
-        var findDataMethod = typeof(IProcessManagerFinder).GetMethod("FindDataAsync")!.MakeGenericMethod(dataType);
-        var findTaskObj = findDataMethod.Invoke(finder, [mapper, message, cancellationToken])!;
-        await ((Task)findTaskObj).ConfigureAwait(false);
-        // Read .Result from the Task<IPersistenceData<TData>?> via the actual runtime type
-        var persistenceData = findTaskObj.GetType().GetProperty("Result")!.GetValue(findTaskObj);
+        var persistenceData = await descriptor.FindData(finder, mapper, (Message)message, cancellationToken).ConfigureAwait(false);
 
-        // 7. If null, create new TData and set CorrelationId
         bool isNew = persistenceData == null;
         object data;
-
         if (isNew)
         {
-            data = Activator.CreateInstance(dataType)!;
-            var correlationIdProp = dataType.GetProperty("CorrelationId");
-            var msgCorrelationId = ((Message)message).CorrelationId;
-            correlationIdProp?.SetValue(data, msgCorrelationId);
+            var newData = descriptor.CreateData();
+            descriptor.SetCorrelationId(newData, ((Message)message).CorrelationId);
+            data = newData;
         }
         else
         {
-            // Get Data property from IPersistenceData<T>
-            var dataProp = persistenceData!.GetType().GetProperty("Data");
-            data = dataProp!.GetValue(persistenceData)
-                ?? throw new InvalidOperationException($"Persisted data for type '{dataType.Name}' has null Data property.");
+            data = descriptor.GetPersistenceDataData(persistenceData!);
         }
 
-        // 8. Set Context, invoke HandleAsync
         var bus = serviceProvider.GetRequiredService<IBus>();
-        var context = new ConsumeContext(bus, headers) { CancellationToken = cancellationToken };
+        descriptor.SetHandlerContext(
+            handler,
+            new ConsumeContext(bus, headers) { CancellationToken = cancellationToken });
 
-        var contextProp = processHandlerInterfaceType.GetProperty("Context");
-        contextProp?.SetValue(handler, context);
+        await descriptor.InvokeHandleAsync(handler, (Message)message, data).ConfigureAwait(false);
 
-        var handleAsyncMethod = processHandlerInterfaceType.GetMethod("HandleAsync");
-        var task = (Task?)handleAsyncMethod?.Invoke(handler, [message, data]);
-        if (task != null)
-            await task;
-
-        // 9. Insert or Update
         if (isNew)
         {
             await finder.InsertDataAsync((IProcessManagerData)data, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            var updateMethod = typeof(IProcessManagerFinder).GetMethod("UpdateDataAsync")!.MakeGenericMethod(dataType);
-            var updateTask = (Task)updateMethod.Invoke(finder, [persistenceData, cancellationToken])!;
-            await updateTask.ConfigureAwait(false);
+            await descriptor.UpdateData(finder, persistenceData!, cancellationToken).ConfigureAwait(false);
         }
 
         return ProcessResult.Handled;

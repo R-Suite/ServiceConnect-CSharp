@@ -24,7 +24,9 @@ public class ServiceCollectionExtensionsTests
     {
         var services = CreateServices();
 
-        services.AddServiceConnect(b => b.ConfigureQueues(q => q.QueueName = "test"));
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
 
         var provider = services.BuildServiceProvider();
         var bus = provider.GetService<IBus>();
@@ -42,6 +44,7 @@ public class ServiceCollectionExtensionsTests
         {
             callbackInvoked = true;
             b.ConfigureQueues(q => q.QueueName = "callback-queue");
+            b.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();
@@ -56,7 +59,9 @@ public class ServiceCollectionExtensionsTests
     {
         var services = CreateServices();
 
-        services.AddServiceConnect(b => b.ConfigureQueues(q => q.QueueName = "test"));
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
 
         var provider = services.BuildServiceProvider();
 

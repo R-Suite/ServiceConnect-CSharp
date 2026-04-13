@@ -13,7 +13,7 @@ public class PublishAfterDisposeTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IProducer>(new Mock<IProducer>().Object);
-        services.AddServiceConnect(_ => { });
+        services.AddServiceConnect(b => b.ConfigureBus(c => c.ScanForMessageHandlers = false));
 
         var provider = services.BuildServiceProvider();
         IBus bus;

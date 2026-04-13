@@ -35,6 +35,7 @@ public class PointToPointTests
                 t.SetClientSetting("RetrySeconds", 1);
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();

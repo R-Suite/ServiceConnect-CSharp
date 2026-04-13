@@ -45,6 +45,7 @@ public class FilterPipelineE2ETests
         services.AddServiceConnect(builder =>
         {
             builder.AddOutgoingFilter<BlockingFilter>();
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();
@@ -75,6 +76,7 @@ public class FilterPipelineE2ETests
         services.AddServiceConnect(builder =>
         {
             builder.AddOutgoingFilter<HeaderAddingFilter>();
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();

@@ -27,6 +27,7 @@ public class RequestReplyTests
         services.AddServiceConnect(builder =>
         {
             builder.ConfigureQueues(q => q.QueueName = "request-reply-timeout-test");
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();
@@ -66,6 +67,7 @@ public class RequestReplyTests
         services.AddServiceConnect(builder =>
         {
             builder.ConfigureQueues(q => q.QueueName = "request-reply-success-test");
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();
@@ -97,6 +99,7 @@ public class RequestReplyTests
         {
             builder.ConfigureQueues(q => q.QueueName = "request-reply-blocked-test");
             builder.AddOutgoingFilter<BlockAllFilter>();
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();

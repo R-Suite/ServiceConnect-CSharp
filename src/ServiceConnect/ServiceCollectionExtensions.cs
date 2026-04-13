@@ -29,6 +29,9 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IRequestReplyManager, RequestReplyManager>();
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
 
+        // Process manager descriptor registry (eagerly built, singleton)
+        services.TryAddSingleton<ProcessManagerHandlerRegistry>();
+
         // Message processors (order matters: ReplyProcessor first, then HandlerProcessor last)
         services.TryAddSingleton<ReplyProcessor>();
         services.TryAddSingleton<StreamProcessor>();

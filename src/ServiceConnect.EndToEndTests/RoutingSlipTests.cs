@@ -30,6 +30,7 @@ public class RoutingSlipTests
         services.AddServiceConnect(builder =>
         {
             builder.ConfigureQueues(q => q.QueueName = "routing-slip-test");
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();
@@ -67,6 +68,7 @@ public class RoutingSlipTests
         services.AddServiceConnect(builder =>
         {
             builder.ConfigureQueues(q => q.QueueName = "routing-slip-single-test");
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();
@@ -92,6 +94,7 @@ public class RoutingSlipTests
         services.AddServiceConnect(builder =>
         {
             builder.ConfigureQueues(q => q.QueueName = "routing-slip-empty-test");
+            builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
 
         var provider = services.BuildServiceProvider();

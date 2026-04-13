@@ -1,8 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
-using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using Xunit;
 
@@ -20,108 +19,157 @@ public class ProcessManagerProcessorTests
         return (services, mockBus, mockFinder);
     }
 
+    private static ProcessManagerHandlerRegistry BuildRegistry(params HandlerReference[] refs)
+        => new(refs.ToList(), NullLogger<ProcessManagerHandlerRegistry>.Instance);
+
     [Fact]
-    public async Task ProcessAsync_NoProcessHandler_ReturnsNotHandled()
+    public async Task ProcessAsync_NullMessage_ReturnsNotHandled()
     {
-        var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
-        services.AddSingleton(new Mock<IBus>().Object);
-        var provider = services.BuildServiceProvider();
+        var registry = BuildRegistry();
+        var provider = new ServiceCollection().BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
 
-        var processor = new ProcessManagerProcessor(provider, new Mock<ILogger<ProcessManagerProcessor>>().Object);
-        var msg = new PmTestMessage(Guid.NewGuid()) { Content = "hello" };
-        var headers = new Dictionary<string, object>();
-        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
-
-        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg, headers, envelope);
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), null,
+            new Dictionary<string, object>(), new Envelope());
 
         Assert.Equal(ProcessResult.NotHandled, result);
     }
 
     [Fact]
-    public async Task ProcessAsync_WithProcessHandler_NewState_InsertsData()
+    public async Task ProcessAsync_NoDescriptor_ReturnsNotHandled()
     {
-        var (services, mockBus, mockFinder) = CreateBaseServices();
-
-        var handler = new PmTestHandler();
-        var handlerRefs = new List<HandlerReference>
-        {
-            new HandlerReference
-            {
-                MessageType = typeof(PmTestMessage),
-                HandlerType = typeof(PmTestHandler),
-                RoutingKeys = new List<string>()
-            }
-        };
-
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
-        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
-
-        // FindDataAsync returns null => new state
-        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
-                It.IsAny<IProcessManagerPropertyMapper>(),
-                It.IsAny<Message>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IPersistenceData<PmTestData>?)null);
-
+        var (services, _, _) = CreateBaseServices();
+        var registry = BuildRegistry(); // empty
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(provider, new Mock<ILogger<ProcessManagerProcessor>>().Object);
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
 
-        var correlationId = Guid.NewGuid();
-        var msg = new PmTestMessage(correlationId) { Content = "test" };
-        var headers = new Dictionary<string, object>();
-        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+        var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
+            new Dictionary<string, object>(), new Envelope());
 
-        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg, headers, envelope);
-
-        Assert.Equal(ProcessResult.Handled, result);
-        Assert.True(handler.Invoked);
-        mockFinder.Verify(f => f.InsertDataAsync(It.Is<IProcessManagerData>(d => d.CorrelationId == correlationId), It.IsAny<CancellationToken>()), Times.Once);
-        mockFinder.Verify(f => f.UpdateDataAsync(It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(ProcessResult.NotHandled, result);
     }
 
     [Fact]
-    public async Task ProcessAsync_WithProcessHandler_ExistingState_UpdatesData()
+    public async Task ProcessAsync_NoFinder_ReturnsNotHandled()
     {
-        var (services, mockBus, mockFinder) = CreateBaseServices();
-
-        var handler = new PmTestHandler();
-        var handlerRefs = new List<HandlerReference>
+        var services = new ServiceCollection();
+        services.AddSingleton(new Mock<IBus>().Object);
+        var registry = BuildRegistry(new HandlerReference
         {
-            new HandlerReference
-            {
-                MessageType = typeof(PmTestMessage),
-                HandlerType = typeof(PmTestHandler),
-                RoutingKeys = new List<string>()
-            }
-        };
+            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+        });
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(new PmTestHandler());
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
 
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
+            new Dictionary<string, object>(), new Envelope());
+
+        Assert.Equal(ProcessResult.NotHandled, result);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NoHandlerInDi_ReturnsNotHandled()
+    {
+        var (services, _, _) = CreateBaseServices();
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+        });
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
+
+        var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
+            new Dictionary<string, object>(), new Envelope());
+
+        Assert.Equal(ProcessResult.NotHandled, result);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NewData_InsertsAndReturnsHandled()
+    {
+        var (services, _, mockFinder) = CreateBaseServices();
+        var handler = new PmTestHandler();
         services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
 
-        var existingData = new PmTestData { CorrelationId = Guid.NewGuid(), Counter = 5 };
-        var persistenceData = new PmTestPersistenceData { Data = existingData };
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+        });
 
         mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
-                It.IsAny<IProcessManagerPropertyMapper>(),
-                It.IsAny<Message>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(persistenceData);
+            It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(provider, new Mock<ILogger<ProcessManagerProcessor>>().Object);
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
+
+        var correlationId = Guid.NewGuid();
+        var msg = new PmTestMessage(correlationId) { Content = "test" };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
+            new Dictionary<string, object>(), new Envelope());
+
+        Assert.Equal(ProcessResult.Handled, result);
+        Assert.True(handler.Invoked);
+        mockFinder.Verify(f => f.InsertDataAsync(
+            It.Is<IProcessManagerData>(d => d.CorrelationId == correlationId),
+            It.IsAny<CancellationToken>()), Times.Once);
+        mockFinder.Verify(f => f.UpdateDataAsync(
+            It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ExistingData_UpdatesAndReturnsHandled()
+    {
+        var (services, _, mockFinder) = CreateBaseServices();
+        var handler = new PmTestHandler();
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+        });
+
+        var existingData = new PmTestData { CorrelationId = Guid.NewGuid(), Counter = 5 };
+        var persistence = new PmTestPersistenceData { Data = existingData };
+
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
+            It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(persistence);
+
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
 
         var msg = new PmTestMessage(existingData.CorrelationId) { Content = "update" };
-        var headers = new Dictionary<string, object>();
-        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
-        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg, headers, envelope);
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
+            new Dictionary<string, object>(), new Envelope());
 
         Assert.Equal(ProcessResult.Handled, result);
         Assert.True(handler.Invoked);
         Assert.Equal(6, existingData.Counter);
-        mockFinder.Verify(f => f.UpdateDataAsync(persistenceData, It.IsAny<CancellationToken>()), Times.Once);
+        mockFinder.Verify(f => f.UpdateDataAsync(persistence, It.IsAny<CancellationToken>()), Times.Once);
         mockFinder.Verify(f => f.InsertDataAsync(It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_CancelledToken_ThrowsOce()
+    {
+        var (services, _, _) = CreateBaseServices();
+        var registry = BuildRegistry();
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), new PmTestMessage(Guid.NewGuid()),
+                new Dictionary<string, object>(), new Envelope(), cts.Token));
     }
 }
 
