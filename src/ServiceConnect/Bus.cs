@@ -319,10 +319,17 @@ public sealed class Bus : IBus
 
     private static Dictionary<string, string> ExtractHeaders(Envelope envelope)
     {
-        var headers = new Dictionary<string, string>();
+        // Pre-size the destination to the known envelope header count so the
+        // dictionary is not rehashed as we fill it (P-03).
+        var headers = new Dictionary<string, string>(envelope.Headers.Count);
         foreach (var kvp in envelope.Headers)
         {
-            headers[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+            headers[kvp.Key] = kvp.Value switch
+            {
+                null => string.Empty,
+                string s => s,
+                _ => kvp.Value.ToString() ?? string.Empty
+            };
         }
         return headers;
     }

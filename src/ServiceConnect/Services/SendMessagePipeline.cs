@@ -7,42 +7,56 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Default implementation of ISendMessagePipeline that delegates directly to IProducer,
 /// optionally wrapping calls in a middleware chain from IPipelineConfiguration.
+/// Chains are built once (lazily) and cached rather than rebuilt per message (P-04).
 /// </summary>
-public sealed class SendMessagePipeline(
-    IProducer producer,
-    IPipelineConfiguration pipelineConfig,
-    IServiceProvider serviceProvider) : ISendMessagePipeline
+public sealed class SendMessagePipeline : ISendMessagePipeline
 {
-    private readonly IProducer _producer = producer ?? throw new ArgumentNullException(nameof(producer));
-    private readonly IPipelineConfiguration _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
-    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+    private readonly IProducer _producer;
+    private readonly IPipelineConfiguration _pipelineConfig;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly Lazy<SendMessageDelegate> _publishChain;
+    private readonly Lazy<SendMessageDelegate> _sendChain;
     private volatile bool _disposed;
+
+    public SendMessagePipeline(IProducer producer, IPipelineConfiguration pipelineConfig, IServiceProvider serviceProvider)
+    {
+        _producer = producer ?? throw new ArgumentNullException(nameof(producer));
+        _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _publishChain = new Lazy<SendMessageDelegate>(BuildPublishChain, isThreadSafe: true);
+        _sendChain = new Lazy<SendMessageDelegate>(BuildSendChain, isThreadSafe: true);
+    }
 
     public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct, IProducer prod) =>
-            prod.PublishAsync(t, b, h, ct);
-
-        var chain = BuildChain((t, b, h, ep, ct) => Terminal(t, b, h, ep, ct, _producer));
-        return chain(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
+        return _publishChain.Value(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
     }
 
     public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct, IProducer prod)
-        {
-            if (!string.IsNullOrEmpty(ep))
-                return prod.SendAsync(ep, t, b, h, ct);
-            return prod.SendAsync(t, b, h, ct);
-        }
-
-        var chain = BuildChain((t, b, h, ep, ct) => Terminal(t, b, h, ep, ct, _producer));
-        return chain(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
+        return _sendChain.Value(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
     }
 
-    private SendMessageDelegate BuildChain(SendMessageDelegate terminal)
+    private SendMessageDelegate BuildPublishChain()
+    {
+        var producer = _producer;
+        SendMessageDelegate terminal = (t, b, h, ep, ct) => producer.PublishAsync(t, b, h, ct);
+        return WrapMiddleware(terminal);
+    }
+
+    private SendMessageDelegate BuildSendChain()
+    {
+        var producer = _producer;
+        SendMessageDelegate terminal = (t, b, h, ep, ct) =>
+            !string.IsNullOrEmpty(ep)
+                ? producer.SendAsync(ep, t, b, h, ct)
+                : producer.SendAsync(t, b, h, ct);
+        return WrapMiddleware(terminal);
+    }
+
+    private SendMessageDelegate WrapMiddleware(SendMessageDelegate terminal)
     {
         var middlewareTypes = _pipelineConfig.SendMessageMiddleware;
         if (middlewareTypes.Count == 0)

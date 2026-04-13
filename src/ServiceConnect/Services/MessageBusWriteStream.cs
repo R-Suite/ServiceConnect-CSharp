@@ -34,10 +34,12 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 
         var packetNum = Interlocked.Increment(ref _packetNumber) - 1;
 
-        var headers = new Dictionary<string, string>(_baseHeaders)
-        {
-            [HeaderKeys.PacketNumber] = packetNum.ToString()
-        };
+        // Pre-size the dict to avoid rehash during the copy (P-01). A separate dict
+        // per packet is required because the producer may mutate / enqueue the
+        // dictionary asynchronously, so reuse would race with concurrent writes.
+        var headers = new Dictionary<string, string>(_baseHeaders.Count + 1);
+        foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
+        headers[HeaderKeys.PacketNumber] = packetNum.ToString();
 
         await _producer.SendBytesAsync(_endpoint, packet, headers).ConfigureAwait(false);
     }
@@ -49,11 +51,10 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 
         var packetNum = Interlocked.Read(ref _packetNumber);
 
-        var headers = new Dictionary<string, string>(_baseHeaders)
-        {
-            [HeaderKeys.PacketNumber] = packetNum.ToString(),
-            [HeaderKeys.LastPacketNumber] = packetNum.ToString()
-        };
+        var headers = new Dictionary<string, string>(_baseHeaders.Count + 2);
+        foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
+        headers[HeaderKeys.PacketNumber] = packetNum.ToString();
+        headers[HeaderKeys.LastPacketNumber] = packetNum.ToString();
 
         await _producer.SendBytesAsync(_endpoint, [], headers).ConfigureAwait(false);
     }

@@ -15,9 +15,10 @@ internal sealed class HandlerProcessor(
         cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
-        // Walk up the message hierarchy — stop at Message and object.
-        // All matching handlers in the hierarchy are invoked.
-        var invocations = new List<(object Handler, MessageHandlerDescriptor Descriptor)>();
+        // Walk up the message hierarchy — stop at Message and object. All matching
+        // handlers in the hierarchy are invoked. Defer list allocation until we
+        // actually find a handler (P-05); most no-op dispatches keep the list null.
+        List<(object Handler, MessageHandlerDescriptor Descriptor)>? invocations = null;
         var checkedType = messageType;
         while (checkedType != null && checkedType != typeof(Message) && checkedType != typeof(object))
         {
@@ -26,13 +27,13 @@ internal sealed class HandlerProcessor(
                 foreach (var h in serviceProvider.GetServices(descriptor.HandlerInterfaceType))
                 {
                     if (h != null)
-                        invocations.Add((h, descriptor));
+                        (invocations ??= new(capacity: 1)).Add((h, descriptor));
                 }
             }
             checkedType = checkedType.BaseType;
         }
 
-        if (invocations.Count == 0)
+        if (invocations is null)
             return ProcessResult.NotHandled;
 
         var bus = serviceProvider.GetRequiredService<IBus>();

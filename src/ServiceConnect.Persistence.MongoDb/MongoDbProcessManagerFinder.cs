@@ -247,29 +247,21 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             var utcNow = DateTime.UtcNow;
 
-            // Find all due timeouts and lock each one to prevent duplicate dispatch
-            bool doQuery = true;
-            while (doQuery)
-            {
-                var filter = Builders<TimeoutData>.Filter.Eq(x => x.Locked, false) &
-                             Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
+            // Lock and retrieve all due timeouts in two round-trips rather than N (P-14):
+            //  1. UpdateMany flips the Locked flag for every currently-unlocked, due row.
+            //  2. Find returns all now-locked rows whose time is <= utcNow.
+            // A losing concurrent consumer's subsequent UpdateMany will simply flip zero
+            // rows (they are already Locked), so there is no duplicate dispatch.
+            var dueUnlockedFilter = Builders<TimeoutData>.Filter.Eq(x => x.Locked, false) &
+                                    Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
+            var lockUpdate = Builders<TimeoutData>.Update.Set(x => x.Locked, true);
+            await collection.UpdateManyAsync(dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                var update = Builders<TimeoutData>.Update.Set(x => x.Locked, true);
-                var result = await collection.FindOneAndUpdateAsync(
-                    filter,
-                    update,
-                    new FindOneAndUpdateOptions<TimeoutData> { ReturnDocument = ReturnDocument.After },
-                    cancellationToken).ConfigureAwait(false);
-
-                if (result is null)
-                {
-                    doQuery = false;
-                }
-                else
-                {
-                    retval.DueTimeouts.Add(result);
-                }
-            }
+            var lockedDueFilter = Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
+                                  Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
+            var dueLocked = await collection.Find(lockedDueFilter).ToListAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var doc in dueLocked)
+                retval.DueTimeouts.Add(doc);
 
             // Determine next query time from the earliest future unlocked timeout
             var nextQueryTime = DateTime.MaxValue;

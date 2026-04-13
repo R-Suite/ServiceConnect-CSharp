@@ -139,10 +139,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private async Task ProcessMessageAsync(BasicDeliverEventArgs args)
     {
         ConsumeEventResult result;
-        var headers = new Dictionary<string, object>();
-        if (args.BasicProperties.Headers != null)
+        // Pre-size the dict to the incoming header count so we avoid rehashes
+        // during the copy — this is the per-message hot path (P-09).
+        var sourceHeaders = args.BasicProperties.Headers;
+        var headers = new Dictionary<string, object>(sourceHeaders?.Count ?? 4);
+        if (sourceHeaders != null)
         {
-            foreach (var kvp in args.BasicProperties.Headers)
+            foreach (var kvp in sourceHeaders)
             {
                 if (kvp.Value is not null) headers[kvp.Key] = kvp.Value;
             }
