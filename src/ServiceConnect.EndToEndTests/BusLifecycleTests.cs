@@ -21,7 +21,9 @@ public class BusLifecycleTests
             services.AddSingleton<IConsumer>(mockConsumer.Object);
         }
 
-        services.AddServiceConnect(b => b.ConfigureBus(c => c.ScanForMessageHandlers = false));
+        services.AddServiceConnect(b =>
+            b.ConfigureBus(c => c.ScanForMessageHandlers = false)
+             .ConfigureQueues(q => q.QueueName = "bus-lifecycle-test"));
 
         var provider = services.BuildServiceProvider();
         return provider.GetRequiredService<IBus>();

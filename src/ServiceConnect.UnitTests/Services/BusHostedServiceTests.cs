@@ -40,16 +40,16 @@ public class BusHostedServiceTests
     }
 
     [Fact]
-    public async Task StartAsync_NoConsumerRegistered_LogsWarningDoesNotThrow()
+    public async Task StartAsync_NoConsumerRegistered_PropagatesException()
     {
+        // C-07: the hosted service must surface startup failures to the host rather
+        // than log a warning and silently report success.
         _mockConfig.Setup(c => c.AutoStartConsuming).Returns(true);
         _mockBus.Setup(b => b.StartConsumingAsync())
             .ThrowsAsync(new InvalidOperationException("No consumer registered."));
 
         var sut = CreateSut();
-        var exception = await Record.ExceptionAsync(() => sut.StartAsync(CancellationToken.None));
-
-        Assert.Null(exception);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.StartAsync(CancellationToken.None));
     }
 
     [Fact]
