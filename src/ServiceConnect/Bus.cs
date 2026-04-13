@@ -29,6 +29,7 @@ public sealed class Bus(
     private readonly IConsumer? _consumer = consumer;
     private readonly IProducer? _producer = producer;
     private readonly object _stateLock = new();
+    private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private bool _consuming;
     private volatile bool _disposed;
 
@@ -166,52 +167,69 @@ public sealed class Bus(
 
     public async Task StartConsumingAsync(CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        IConsumer localConsumer;
-        List<string> messageTypeNames;
-
-        lock (_stateLock)
+        ThrowIfDisposed();
+        await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            if (_consumer == null)
-                throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
+            IConsumer localConsumer;
+            List<string> messageTypeNames;
 
-            messageTypeNames =
-            [
-                .. _handlerReferences
-                    .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
-                    .Distinct()
-            ];
+            lock (_stateLock)
+            {
+                if (_consumer == null)
+                    throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
 
-            localConsumer = _consumer;
+                messageTypeNames =
+                [
+                    .. _handlerReferences
+                        .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
+                        .Distinct()
+                ];
+
+                localConsumer = _consumer;
+            }
+
+            _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
+                _queueConfig.QueueName, messageTypeNames.Count);
+
+            await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch).ConfigureAwait(false);
+
+            lock (_stateLock) { _consuming = true; }
         }
-
-        _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
-            _queueConfig.QueueName, messageTypeNames.Count);
-
-        await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.Dispatch).ConfigureAwait(false);
-
-        lock (_stateLock)
+        finally
         {
-            _consuming = true;
+            _lifecycleSemaphore.Release();
         }
     }
 
     public async Task StopConsumingAsync(CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-        bool shouldDispose = false;
-        lock (_stateLock)
+        ThrowIfDisposed();
+        await StopConsumingCoreAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task StopConsumingCoreAsync(CancellationToken cancellationToken = default)
+    {
+        await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            _logger.LogInformation("Bus stopping message consumption.");
-            if (_consuming)
+            IConsumer? localConsumer = null;
+            lock (_stateLock)
             {
-                _consuming = false;
-                shouldDispose = true;
+                _logger.LogInformation("Bus stopping message consumption.");
+                if (_consuming)
+                {
+                    _consuming = false;
+                    localConsumer = _consumer;
+                }
             }
+            if (localConsumer != null)
+                await localConsumer.DisposeAsync().ConfigureAwait(false);
         }
-        // Dispose outside the lock to avoid deadlock with consumer callback chain
-        if (shouldDispose && _consumer != null)
-            await _consumer.DisposeAsync().ConfigureAwait(false);
+        finally
+        {
+            _lifecycleSemaphore.Release();
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -222,10 +240,11 @@ public sealed class Bus(
             _disposed = true;
         }
 
-        await StopConsumingAsync().ConfigureAwait(false);
+        await StopConsumingCoreAsync().ConfigureAwait(false);
         _sendPipeline.Dispose();
         if (_producer != null)
             await _producer.DisposeAsync().ConfigureAwait(false);
+        _lifecycleSemaphore.Dispose();
     }
 
     private void ThrowIfDisposed()

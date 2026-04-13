@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -284,6 +285,66 @@ namespace ServiceConnect.UnitTests
             Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, null!, _mockDispatcher.Object, _handlerReferences));
             Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, (IMessageDispatcher)null!, _handlerReferences));
             Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, null!));
+        }
+
+        // --- Helper ---
+
+        private Bus CreateBusWithConsumer(IConsumer consumer) =>
+            new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                consumer);
+
+        // --- Lifecycle serialization tests (R-034) ---
+
+        [Fact]
+        public async Task StartConsumingAsync_ConcurrentWithStop_SerializesState()
+        {
+            var consumerStarted = new TaskCompletionSource();
+            var releaseStart = new TaskCompletionSource();
+            var mockConsumer = new Mock<IConsumer>();
+            mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+                .Returns(async () =>
+                {
+                    consumerStarted.SetResult();
+                    await releaseStart.Task;
+                });
+
+            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+
+            var startTask = bus.StartConsumingAsync();
+            await consumerStarted.Task;
+            var stopTask = bus.StopConsumingAsync();
+
+            // Stop must not complete before Start releases the semaphore
+            await Task.Delay(50);
+            Assert.False(stopTask.IsCompleted);
+
+            releaseStart.SetResult();
+            await startTask;
+            await stopTask;
+
+            Assert.False(bus.IsConnected);
+        }
+
+        [Fact]
+        public async Task StartConsumingAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var mockConsumer = new Mock<IConsumer>();
+            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => bus.StartConsumingAsync(cts.Token));
+            mockConsumer.Verify(c => c.StartConsumingAsync(
+                It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()),
+                Times.Never);
         }
     }
 }
