@@ -25,9 +25,9 @@ public sealed class Client : IAsyncDisposable
     private readonly bool _disablePrefetch;
     private readonly IDictionary<string, object?> _queueArguments;
     private string _retryQueueName = "";
-    private string _auditExchange = "";
 
     private readonly MessageRetryHandler _retryHandler;
+    private readonly MessageAuditPublisher _auditPublisher;
 
     private int _messagesBeingProcessed;
     private AsyncEventingBasicConsumer? _consumer;
@@ -47,6 +47,7 @@ public sealed class Client : IAsyncDisposable
         _disablePrefetch = settings.TryGetValue(RabbitMQSettingKeys.DisablePrefetch, out var disablePrefetchVal) && (bool)disablePrefetchVal;
         _queueArguments = settings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal) ? (IDictionary<string, object?>)argsVal : new Dictionary<string, object?>();
         _retryHandler = new MessageRetryHandler(_maxRetries, queueConfiguration.ErrorQueueName, logger);
+        _auditPublisher = new MessageAuditPublisher(queueConfiguration.AuditQueueName, queueConfiguration, logger);
     }
 
     /// <summary>
@@ -147,17 +148,7 @@ public sealed class Client : IAsyncDisposable
         }
         else if (!_errorsDisabled)
         {
-            string? messageType = null;
-            if (headers.TryGetValue(HeaderKeys.MessageType, out var mtRaw))
-            {
-                messageType = HeaderDecoder.Decode(mtRaw);
-            }
-
-            if (_queueConfiguration.AuditingEnabled && messageType != HeaderKeys.ByteStream)
-            {
-                var auditProps = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
-                await _model!.BasicPublishAsync(_auditExchange, string.Empty, mandatory: false, auditProps, args.Body).ConfigureAwait(false);
-            }
+            await _auditPublisher.PublishAuditIfEnabledAsync(_model!, args, headers).ConfigureAwait(false);
         }
     }
 
@@ -167,7 +158,6 @@ public sealed class Client : IAsyncDisposable
         _consumingCt = cancellationToken;
         _queueName = queueName;
         _retryQueueName = queueName + ".Retries";
-        _auditExchange = _queueConfiguration.AuditQueueName;
 
         if (autoDelete.HasValue)
         {
