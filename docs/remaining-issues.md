@@ -1,6 +1,6 @@
 # Remaining Issues — Verified but Deferred
 
-Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. R-017/R-018 (async filter pipeline + fail-closed dedup) and R-032 (settings DI) completed in Group C-2 on 2026-04-13. Tackle remaining items after further discussion.
+Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken) and R-034 (race condition) completed in Group C-1 on 2026-04-13. R-017/R-018 (async filter pipeline + fail-closed dedup) and R-032 (settings DI) completed in Group C-2 on 2026-04-13. R-020/R-021 (Client + ProcessManagerProcessor SRP refactor) completed in Group C-3 on 2026-04-13. Tackle remaining items after further discussion.
 
 ## From Code Review Plan (Medium Priority)
 
@@ -18,7 +18,7 @@ Issues verified against source code on 2026-04-12. R-016/B-01 (CancellationToken
 | R-009 | Architecture | Service locator anti-pattern in all Processors (HandlerProcessor, ProcessManagerProcessor, StreamProcessor, AggregatorProcessor) | Large — inherent to message dispatch design |
 | R-016 | .NET Best Practices | Missing CancellationToken on public async APIs | **Done** (Group C-1) — completed with B-01 |
 | R-017/R-018 | Error Handling | Silent exception swallowing in dedup filter persistors (OutgoingFilter, MongoDb persistors) | **Done** (Group C-2) — IFilter/pipeline async; outgoing dedup now fail-closed; MongoDb persistor inner swallows removed |
-| R-020/R-021 | SRP | ProcessManagerProcessor and Client have too many responsibilities | Large — internal structure refactor |
+| R-020/R-021 | SRP | ProcessManagerProcessor and Client have too many responsibilities | **Done** (Group C-3) — Client split into `RabbitMqConsumerHost` + `MessageRetryHandler` + `MessageAuditPublisher`; `ProcessManagerProcessor` thinned via `ProcessManagerHandlerRegistry` with compiled-expression delegates |
 | R-022 | Architecture | Dedup filter combinatorial explosion | **Done** (Group B) — collapsed 8 filter variants to 2 + PersistorFactory, removed Redis support |
 | R-027 | Tech Debt | MongoDbSsl manual connection string parsing | **Done** (Group B) — merged MongoDbSsl into MongoDb persistor with driver-native MongoUrl parsing |
 | R-028 | Testing | Zero unit test coverage | Large — ongoing effort |
