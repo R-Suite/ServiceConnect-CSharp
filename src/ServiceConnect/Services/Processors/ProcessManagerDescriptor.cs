@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public sealed record ProcessManagerDescriptor(
+internal sealed record ProcessManagerDescriptor(
     Type MessageType,
     Type DataType,
     Type ProcessHandlerInterfaceType,

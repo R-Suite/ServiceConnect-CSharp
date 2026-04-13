@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services.Processors;
 using Xunit;
@@ -143,6 +144,67 @@ public class ProcessManagerHandlerRegistryTests
         var result = descriptor!.GetPersistenceDataData(persistence);
 
         Assert.Same(data, result);
+    }
+
+    [Fact]
+    public async Task Descriptor_FindData_ReturnsNullFromFinder_WhenNoPersistence()
+    {
+        var registry = BuildFooRegistry();
+        Assert.True(registry.TryGet(typeof(FooMessage), out var descriptor));
+
+        var finder = new Mock<IProcessManagerFinder>();
+        finder.Setup(f => f.FindDataAsync<FooData>(
+                It.IsAny<IProcessManagerPropertyMapper>(),
+                It.IsAny<Message>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IPersistenceData<FooData>?)null);
+
+        var mapper = new DefaultProcessManagerPropertyMapperStub();
+        var result = await descriptor!.FindData(finder.Object, mapper, new FooMessage(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Null(result);
+        finder.Verify(f => f.FindDataAsync<FooData>(
+            It.IsAny<IProcessManagerPropertyMapper>(),
+            It.IsAny<Message>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Descriptor_FindData_ReturnsPersistence_WhenFinderReturnsData()
+    {
+        var registry = BuildFooRegistry();
+        Assert.True(registry.TryGet(typeof(FooMessage), out var descriptor));
+
+        var persistence = new FooPersistenceData { Data = new FooData { CorrelationId = Guid.NewGuid() } };
+        var finder = new Mock<IProcessManagerFinder>();
+        finder.Setup(f => f.FindDataAsync<FooData>(
+                It.IsAny<IProcessManagerPropertyMapper>(),
+                It.IsAny<Message>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(persistence);
+
+        var mapper = new DefaultProcessManagerPropertyMapperStub();
+        var result = await descriptor!.FindData(finder.Object, mapper, new FooMessage(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.Same(persistence, result);
+    }
+
+    [Fact]
+    public async Task Descriptor_UpdateData_CallsFinderWithPersistenceObject()
+    {
+        var registry = BuildFooRegistry();
+        Assert.True(registry.TryGet(typeof(FooMessage), out var descriptor));
+
+        var persistence = new FooPersistenceData { Data = new FooData() };
+        var finder = new Mock<IProcessManagerFinder>();
+        finder.Setup(f => f.UpdateDataAsync<FooData>(
+                It.IsAny<IPersistenceData<FooData>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await descriptor!.UpdateData(finder.Object, persistence, CancellationToken.None);
+
+        finder.Verify(f => f.UpdateDataAsync<FooData>(persistence, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static ProcessManagerHandlerRegistry BuildFooRegistry()

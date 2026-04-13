@@ -5,7 +5,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-public sealed class ProcessManagerHandlerRegistry
+internal sealed class ProcessManagerHandlerRegistry
 {
     private readonly Dictionary<Type, ProcessManagerDescriptor> _descriptors = new();
 
@@ -26,14 +26,13 @@ public sealed class ProcessManagerHandlerRegistry
             if (processHandlerInterface == null)
                 continue;
 
-            if (_descriptors.ContainsKey(href.MessageType))
+            var dataType = processHandlerInterface.GetGenericArguments()[0];
+            var descriptor = BuildDescriptor(href.MessageType, dataType, processHandlerInterface);
+            if (!_descriptors.TryAdd(href.MessageType, descriptor))
             {
                 throw new InvalidOperationException(
                     $"Duplicate process-manager handler registration for message type '{href.MessageType.FullName}'. Only one IProcessHandler<TData,TMessage> may be registered per message type.");
             }
-
-            var dataType = processHandlerInterface.GetGenericArguments()[0];
-            _descriptors[href.MessageType] = BuildDescriptor(href.MessageType, dataType, processHandlerInterface);
 
             logger.LogDebug(
                 "Registered process-manager descriptor: message={MessageType}, data={DataType}, handler={HandlerType}",
