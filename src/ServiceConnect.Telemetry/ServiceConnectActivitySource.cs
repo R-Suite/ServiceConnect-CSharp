@@ -218,6 +218,7 @@ public static class ServiceConnectActivitySource
             case Dictionary<string, object> objHeaders when objHeaders.TryGetValue(name, out object? objVal):
                 value = HeaderDecoder.Decode(objVal);
                 return;
+            // string branch: values are already decoded; HeaderDecoder.Decode is for byte[] RabbitMQ headers only.
             case Dictionary<string, string> strHeaders when strHeaders.TryGetValue(name, out string? strVal):
                 value = strVal;
                 return;
