@@ -2,39 +2,18 @@ namespace ServiceConnect.Client.RabbitMQ;
 
 public static class Retry
 {
-    public static async Task DoAsync(Func<Task> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount)
+    // Non-generic overload delegates to the generic one to avoid duplicated retry
+    // body logic (L-15). We produce a uniform return type by wrapping the void action.
+    public static Task DoAsync(Func<Task> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount)
     {
-        List<Exception> exceptions = [];
-
-        for (int retry = 0; retry < retryCount; retry++)
-        {
-            try
-            {
-                await action().ConfigureAwait(false);
-                return;
-            }
-            catch (Exception ex)
-            {
-                exceptions.Add(ex);
-                try
-                {
-                    await exceptionAction(ex).ConfigureAwait(false);
-                }
-                catch (Exception callbackEx)
-                {
-                    exceptions.Add(callbackEx);
-                }
-
-                var delay = CalculateDelay(retryInterval, retry);
-                await Task.Delay(delay).ConfigureAwait(false);
-            }
-        }
-
-        throw new AggregateException(exceptions);
+        ArgumentNullException.ThrowIfNull(action);
+        return DoAsync<int>(async () => { await action().ConfigureAwait(false); return 0; }, exceptionAction, retryInterval, retryCount);
     }
 
     public static async Task<T> DoAsync<T>(Func<Task<T>> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount)
     {
+        ArgumentNullException.ThrowIfNull(action);
+        ArgumentNullException.ThrowIfNull(exceptionAction);
         List<Exception> exceptions = [];
 
         for (int retry = 0; retry < retryCount; retry++)

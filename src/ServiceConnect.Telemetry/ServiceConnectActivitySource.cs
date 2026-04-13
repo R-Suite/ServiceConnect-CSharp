@@ -20,6 +20,10 @@ public static class ServiceConnectActivitySource
     private static readonly ActivitySource _consumeActivitySource = new(ConsumeActivitySourceName, Version?.ToString() ?? "0.0.0");
     private static readonly ActivitySource _sendActivitySource = new(SendActivitySourceName, Version?.ToString() ?? "0.0.0");
 
+    /// <summary>
+    /// Starts a publish-side activity. Returns <c>null</c> when no listeners are
+    /// registered for <see cref="PublishActivitySourceName"/>.
+    /// </summary>
     public static Activity? Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
     {
         if (!_publishActivitySource.HasListeners())
@@ -73,6 +77,12 @@ public static class ServiceConnectActivitySource
         return activity;
     }
 
+    /// <summary>
+    /// Starts a consume-side activity, extracting the W3C traceparent/tracestate
+    /// from <paramref name="eventArgs"/>.Headers so the resulting span is linked to
+    /// the publishing activity. Returns <c>null</c> when no listeners are registered
+    /// for <see cref="ConsumeActivitySourceName"/>.
+    /// </summary>
     public static Activity? Consume(ConsumeEventArgs eventArgs)
     {
         if (!_consumeActivitySource.HasListeners())
@@ -136,6 +146,10 @@ public static class ServiceConnectActivitySource
         return activity;
     }
 
+    /// <summary>
+    /// Starts a send-side activity. Returns <c>null</c> when no listeners are
+    /// registered for <see cref="SendActivitySourceName"/>.
+    /// </summary>
     public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
     {
         if (!_sendActivitySource.HasListeners())
@@ -185,6 +199,11 @@ public static class ServiceConnectActivitySource
         return activity;
     }
 
+    /// <summary>
+    /// Attempts to parse a W3C trace context from the supplied headers. Returns
+    /// <c>true</c> and populates <paramref name="context"/> when the headers contain
+    /// a well-formed traceparent; otherwise returns <c>false</c>.
+    /// </summary>
     public static bool TryGetExistingContext(Dictionary<string, string> headers, out ActivityContext context)
     {
         if (headers == null)
