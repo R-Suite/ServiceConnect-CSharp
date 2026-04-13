@@ -24,7 +24,7 @@ public sealed class MessageDispatcher(
     private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
 
-    public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers)
+    public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -45,7 +45,7 @@ public sealed class MessageDispatcher(
             foreach (var proc in _processors)
             {
                 if (!proc.RunBeforeDeserialization) continue;
-                var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope);
+                var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope, cancellationToken);
                 if (preResult == ProcessResult.Handled)
                     return new ConsumeEventResult { Success = true };
             }
@@ -66,12 +66,12 @@ public sealed class MessageDispatcher(
                 return new ConsumeEventResult { Success = true };
 
             // 7. Run post-deserialization processors, wrapped in processing middleware
-            async Task<ConsumeEventResult> RunProcessors(byte[] mb, Type mt, object m, IDictionary<string, object> h, Envelope e)
+            async Task<ConsumeEventResult> RunProcessors(byte[] mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
             {
                 foreach (var proc in _processors)
                 {
                     if (proc.RunBeforeDeserialization) continue;
-                    var result = await proc.ProcessAsync(mb, mt, m, h, e);
+                    var result = await proc.ProcessAsync(mb, mt, m, h, e, ct);
                     if (result == ProcessResult.Handled)
                     {
                         _filterPipeline.ExecuteAfterConsumingFilters(e);
@@ -86,16 +86,16 @@ public sealed class MessageDispatcher(
 
             var middlewareTypes = _pipelineConfig.MessageProcessingMiddleware;
             if (middlewareTypes.Count == 0)
-                return await RunProcessors(messageBytes, type, message, headers, envelope);
+                return await RunProcessors(messageBytes, type, message, headers, envelope, cancellationToken);
 
-            MessageProcessingDelegate chain = (mb, mt, m, h, e) => RunProcessors(mb, mt, m, h, e);
+            MessageProcessingDelegate chain = (mb, mt, m, h, e, ct) => RunProcessors(mb, mt, m, h, e, ct);
             for (int i = middlewareTypes.Count - 1; i >= 0; i--)
             {
                 var mw = (IMessageProcessingMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
                 var next = chain;
-                chain = (mb, mt, m, h, e) => mw.Process(mb, mt, m, h, e, next);
+                chain = (mb, mt, m, h, e, ct) => mw.Process(mb, mt, m, h, e, next, ct);
             }
-            return await chain(messageBytes, type, message, headers, envelope);
+            return await chain(messageBytes, type, message, headers, envelope, cancellationToken);
         }
         catch (Exception ex)
         {

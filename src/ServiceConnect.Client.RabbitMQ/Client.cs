@@ -32,6 +32,7 @@ public sealed class Client : IAsyncDisposable
 
     private int _messagesBeingProcessed;
     private AsyncEventingBasicConsumer? _consumer;
+    private CancellationToken _consumingCt;
 
     public Client(IServiceConnectConnection connection, ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, ILogger logger)
     {
@@ -126,7 +127,7 @@ public sealed class Client : IAsyncDisposable
             }
             else
             {
-                result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers).ConfigureAwait(false);
+                result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers, _consumingCt).ConfigureAwait(false);
             }
 
             SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));
@@ -198,9 +199,10 @@ public sealed class Client : IAsyncDisposable
         }
     }
 
-    public async Task StartConsumingAsync(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null)
+    public async Task StartConsumingAsync(ConsumerEventHandler messageReceived, string queueName, bool? exclusive = null, bool? autoDelete = null, CancellationToken cancellationToken = default)
     {
         _consumerEventHandler = messageReceived;
+        _consumingCt = cancellationToken;
         _queueName = queueName;
         _retryQueueName = queueName + ".Retries";
         _errorExchange = _queueConfiguration.ErrorQueueName;

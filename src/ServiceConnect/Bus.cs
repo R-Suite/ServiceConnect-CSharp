@@ -50,7 +50,7 @@ public sealed class Bus(
         if (options?.RoutingKey is not null)
             headers[HeaderKeys.RoutingKey] = options.RoutingKey;
 
-        await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(T), messageBytes, headers).ConfigureAwait(false);
+        await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(T), messageBytes, headers, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
@@ -69,12 +69,12 @@ public sealed class Bus(
         {
             foreach (var endpoint in endpoints)
             {
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, endpoint).ConfigureAwait(false);
+                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, endpoint, cancellationToken).ConfigureAwait(false);
             }
         }
         else
         {
-            await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, options?.EndPoint).ConfigureAwait(false);
+            await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, options?.EndPoint, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -95,7 +95,7 @@ public sealed class Bus(
         return await _requestReplyManager.SendRequestAsync<T, TReply>(
             messageBytes,
             headers,
-            (type, bytes, hdrs, endpoint) => _sendPipeline.ExecuteSendMessagePipelineAsync(type, bytes, hdrs, endpoint),
+            (type, bytes, hdrs, endpoint) => _sendPipeline.ExecuteSendMessagePipelineAsync(type, bytes, hdrs, endpoint, cancellationToken),
             requestOptions).ConfigureAwait(false);
     }
 
@@ -116,7 +116,7 @@ public sealed class Bus(
         return await _requestReplyManager.SendRequestMultiAsync<T, TReply>(
             messageBytes,
             headers,
-            (type, bytes, hdrs, endpoint) => _sendPipeline.ExecuteSendMessagePipelineAsync(type, bytes, hdrs, endpoint),
+            (type, bytes, hdrs, endpoint) => _sendPipeline.ExecuteSendMessagePipelineAsync(type, bytes, hdrs, endpoint, cancellationToken),
             requestOptions).ConfigureAwait(false);
     }
 
@@ -154,7 +154,7 @@ public sealed class Bus(
             headers[HeaderKeys.RoutingSlip] = string.Join(",", destinations.Skip(1));
         }
 
-        await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination).ConfigureAwait(false);
+        await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination, cancellationToken).ConfigureAwait(false);
     }
 
     public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message

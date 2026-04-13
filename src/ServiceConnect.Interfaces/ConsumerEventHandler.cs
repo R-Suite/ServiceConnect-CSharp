@@ -1,3 +1,3 @@
 ﻿namespace ServiceConnect.Interfaces;
 
-public delegate Task<ConsumeEventResult> ConsumerEventHandler(byte[] message, string type, IDictionary<string, object> headers);
+public delegate Task<ConsumeEventResult> ConsumerEventHandler(byte[] message, string type, IDictionary<string, object> headers, CancellationToken cancellationToken);

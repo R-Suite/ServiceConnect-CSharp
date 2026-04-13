@@ -27,17 +27,17 @@ file class RecordingSendMiddleware : ISendMessageMiddleware
         _log = log;
     }
 
-    public async Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next)
+    public async Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         _log.Add("before");
-        await next(typeObject, messageBytes, headers, endPoint);
+        await next(typeObject, messageBytes, headers, endPoint, cancellationToken);
         _log.Add("after");
     }
 }
 
 file class ShortCircuitSendMiddleware : ISendMessageMiddleware
 {
-    public Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next)
+    public Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         // Intentionally does NOT call next
         return Task.CompletedTask;
@@ -58,10 +58,10 @@ file class RecordingProcessingMiddleware : IMessageProcessingMiddleware
     }
 
     public async Task<ConsumeEventResult> Process(byte[] messageBytes, Type messageType, object message,
-        IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next)
+        IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {
         _log.Add("before");
-        var result = await next(messageBytes, messageType, message, headers, envelope);
+        var result = await next(messageBytes, messageType, message, headers, envelope, cancellationToken);
         _log.Add("after");
         return result;
     }
@@ -70,7 +70,7 @@ file class RecordingProcessingMiddleware : IMessageProcessingMiddleware
 file class ShortCircuitProcessingMiddleware : IMessageProcessingMiddleware
 {
     public Task<ConsumeEventResult> Process(byte[] messageBytes, Type messageType, object message,
-        IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next)
+        IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {
         return Task.FromResult(new ConsumeEventResult { Success = true });
     }

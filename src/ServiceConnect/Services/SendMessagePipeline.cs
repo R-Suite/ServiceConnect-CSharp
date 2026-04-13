@@ -18,28 +18,28 @@ public sealed class SendMessagePipeline(
     private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
     private volatile bool _disposed;
 
-    public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null)
+    public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, IProducer prod) =>
+        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct, IProducer prod) =>
             prod.PublishAsync(t, b, h);
 
-        var chain = BuildChain((t, b, h, ep) => Terminal(t, b, h, ep, _producer));
-        return chain(typeObject, messageBytes, headers ?? [], endPoint);
+        var chain = BuildChain((t, b, h, ep, ct) => Terminal(t, b, h, ep, ct, _producer));
+        return chain(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
     }
 
-    public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null)
+    public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, IProducer prod)
+        static Task Terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct, IProducer prod)
         {
             if (!string.IsNullOrEmpty(ep))
                 return prod.SendAsync(ep, t, b, h);
             return prod.SendAsync(t, b, h);
         }
 
-        var chain = BuildChain((t, b, h, ep) => Terminal(t, b, h, ep, _producer));
-        return chain(typeObject, messageBytes, headers ?? [], endPoint);
+        var chain = BuildChain((t, b, h, ep, ct) => Terminal(t, b, h, ep, ct, _producer));
+        return chain(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
     }
 
     private SendMessageDelegate BuildChain(SendMessageDelegate terminal)
@@ -53,7 +53,7 @@ public sealed class SendMessagePipeline(
         {
             var mw = (ISendMessageMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
             var next = chain;
-            chain = (t, b, h, ep) => mw.Process(t, b, h, ep, next);
+            chain = (t, b, h, ep, ct) => mw.Process(t, b, h, ep, next, ct);
         }
         return chain;
     }
