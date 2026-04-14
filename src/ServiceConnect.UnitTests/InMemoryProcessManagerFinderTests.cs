@@ -336,12 +336,7 @@ namespace ServiceConnect.UnitTests
             System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
             where TProcessManagerData : IProcessManagerData
         {
-            var map = new ProcessManagerToMessageMap
-            {
-                MessageType = typeof(TMessage),
-                PropertiesHierarchy = new Dictionary<string, Type>(),
-                MessageProp = BuildMessageFunc(messageExpression)
-            };
+            var propertiesHierarchy = new Dictionary<string, Type>();
 
             // Extract property hierarchy from processManagerProperty
             var body = processManagerProperty.Body;
@@ -351,8 +346,15 @@ namespace ServiceConnect.UnitTests
             if (body is System.Linq.Expressions.MemberExpression member)
             {
                 var propInfo = (System.Reflection.PropertyInfo)member.Member;
-                map.PropertiesHierarchy[propInfo.Name] = propInfo.PropertyType;
+                propertiesHierarchy[propInfo.Name] = propInfo.PropertyType;
             }
+
+            var map = new ProcessManagerToMessageMap
+            {
+                MessageType = typeof(TMessage),
+                PropertiesHierarchy = propertiesHierarchy,
+                MessageProp = BuildMessageFunc(messageExpression)
+            };
 
             _mappings.Add(map);
         }

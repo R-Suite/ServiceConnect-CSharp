@@ -59,7 +59,7 @@ public sealed class ServiceConnectBuilder
         return this;
     }
 
-    public ServiceConnectBuilder ConfigurePipeline(Action<IPipelineConfiguration> configure)
+    public ServiceConnectBuilder ConfigurePipeline(Action<PipelineConfiguration> configure)
     {
         configure(BusConfig.Pipeline);
         return this;

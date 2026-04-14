@@ -13,20 +13,22 @@ internal sealed class DefaultProcessManagerPropertyMapper : IProcessManagerPrope
         System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
         where TProcessManagerData : IProcessManagerData
     {
-        var map = new ProcessManagerToMessageMap
-        {
-            MessageType = typeof(TMessage),
-            PropertiesHierarchy = new Dictionary<string, Type>(),
-            MessageProp = BuildMessageFunc(messageExpression)
-        };
+        var propertiesHierarchy = new Dictionary<string, Type>();
 
         var body = processManagerProperty.Body;
         if (body is System.Linq.Expressions.UnaryExpression unary) body = unary.Operand;
         if (body is System.Linq.Expressions.MemberExpression member)
         {
             var propInfo = (PropertyInfo)member.Member;
-            map.PropertiesHierarchy[propInfo.Name] = propInfo.PropertyType;
+            propertiesHierarchy[propInfo.Name] = propInfo.PropertyType;
         }
+
+        var map = new ProcessManagerToMessageMap
+        {
+            MessageType = typeof(TMessage),
+            PropertiesHierarchy = propertiesHierarchy,
+            MessageProp = BuildMessageFunc(messageExpression)
+        };
 
         _mappings.Add(map);
     }

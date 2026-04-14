@@ -2,7 +2,7 @@ namespace ServiceConnect.Interfaces;
 
 public sealed class ProcessManagerToMessageMap
 {
-    public required Func<object, object> MessageProp { get; set; }
-    public required Type MessageType { get; set; }
-    public Dictionary<string, Type> PropertiesHierarchy { get; set; } = [];
+    public required Func<object, object> MessageProp { get; init; }
+    public required Type MessageType { get; init; }
+    public IReadOnlyDictionary<string, Type> PropertiesHierarchy { get; init; } = new Dictionary<string, Type>();
 }

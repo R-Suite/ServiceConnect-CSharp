@@ -14,5 +14,6 @@ public sealed class BusConfiguration : IBusConfiguration
     public ITransportConfiguration Transport { get; } = new TransportConfiguration();
     public IQueueConfiguration Queues { get; } = new QueueConfiguration();
     public IPersistenceConfiguration Persistence { get; } = new PersistenceConfiguration();
-    public IPipelineConfiguration Pipeline { get; } = new PipelineConfiguration();
+    public PipelineConfiguration Pipeline { get; } = new PipelineConfiguration();
+    IPipelineConfiguration IBusConfiguration.Pipeline => Pipeline;
 }

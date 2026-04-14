@@ -21,7 +21,7 @@ public sealed class FilterPipeline(IPipelineConfiguration config, IServiceProvid
         return ExecuteFiltersAsync(config.AfterConsumingFilters, envelope, cancellationToken);
     }
 
-    private async Task<bool> ExecuteFiltersAsync(IList<Type> filterTypes, Envelope envelope, CancellationToken cancellationToken)
+    private async Task<bool> ExecuteFiltersAsync(IReadOnlyList<Type> filterTypes, Envelope envelope, CancellationToken cancellationToken)
     {
         if (filterTypes == null || filterTypes.Count == 0)
             return false;
