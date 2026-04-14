@@ -57,31 +57,56 @@ internal sealed class AggregatorProcessor(
 
     private void ResetTimer(AggregatorDescriptor descriptor)
     {
-        // Reuse existing timer via Change() instead of allocating a new Timer per message (R-028 / P-013).
-        // Only create a new timer on first use for a given aggregator name.
+        // Create a new timer on every update instead of reusing via Change().
+        // Change() on a timer that FlushAggregatorAsync concurrently TryRemove+Dispose'd
+        // causes ObjectDisposedException (I-1). The new-timer-per-update pattern is safe
+        // because we dispose the previous timer after AddOrUpdate returns.
+        Timer? previous = null;
         _timers.AddOrUpdate(
             descriptor.AggregatorName,
             _ => new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan),
             (_, existing) =>
             {
-                existing.Change(descriptor.Timeout, Timeout.InfiniteTimeSpan);
-                return existing;
+                previous = existing;
+                return new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan);
             });
+        previous?.Dispose();
     }
 
     private void OnTimerFired(AggregatorDescriptor descriptor)
     {
         // Fire and forget from timer callback — log any errors.
         // Use _disposeCts.Token so timer-fired flushes cancel on dispose (R-002).
+        //
+        // Register a TaskCompletionSource in _activeFlushes BEFORE starting the flush
+        // so that DisposeAsync's snapshot always includes it (I-2).
         var id = Interlocked.Increment(ref _flushId);
-        var task = FlushAggregatorAsync(descriptor, _disposeCts.Token);
-        _activeFlushes.TryAdd(id, task);
-        _ = task.ContinueWith(_ => _activeFlushes.TryRemove(id, out var _ignored), TaskContinuationOptions.ExecuteSynchronously);
-        _ = task.ContinueWith(t =>
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _activeFlushes.TryAdd(id, tcs.Task);
+
+        _ = RunFlushAsync(id, tcs, descriptor);
+    }
+
+    private async Task RunFlushAsync(int id, TaskCompletionSource tcs, AggregatorDescriptor descriptor)
+    {
+        try
         {
-            if (t.IsFaulted)
-                logger.LogError(t.Exception, "Error flushing aggregator {AggregatorName} on timeout", descriptor.AggregatorName);
-        }, TaskContinuationOptions.OnlyOnFaulted);
+            await FlushAggregatorAsync(descriptor, _disposeCts.Token).ConfigureAwait(false);
+            tcs.TrySetResult();
+        }
+        catch (OperationCanceledException ex)
+        {
+            tcs.TrySetCanceled(ex.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error flushing aggregator {AggregatorName} on timeout", descriptor.AggregatorName);
+            tcs.TrySetException(ex);
+        }
+        finally
+        {
+            _activeFlushes.TryRemove(id, out _);
+        }
     }
 
     private async Task FlushAggregatorAsync(AggregatorDescriptor descriptor, CancellationToken cancellationToken)
