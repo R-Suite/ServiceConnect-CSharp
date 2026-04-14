@@ -42,11 +42,20 @@ public static class Retry
         throw new AggregateException(exceptions);
     }
 
+    private static readonly double MaxDelayMs = TimeSpan.FromMinutes(5).TotalMilliseconds;
+
     private static TimeSpan CalculateDelay(TimeSpan baseInterval, int retryAttempt)
     {
-        var exponentialDelay = TimeSpan.FromMilliseconds(baseInterval.TotalMilliseconds * Math.Pow(2, retryAttempt));
+        // Cap at 52 to prevent double overflow: 2^53 exceeds IEEE-754 double precision
+        // and 2^1024 is +Infinity, both of which break TimeSpan construction (R-087).
+        // Clamp the raw millisecond value to the ceiling before constructing TimeSpan
+        // to avoid OverflowException on huge retry counts.
+        var cappedAttempt = Math.Min(retryAttempt, 52);
+        var backoff = baseInterval.TotalMilliseconds * Math.Pow(2, cappedAttempt);
+        var clampedBackoffMs = Math.Min(backoff, MaxDelayMs);
+        var exponentialDelay = TimeSpan.FromMilliseconds(clampedBackoffMs);
         var jitterMs = Random.Shared.Next(0, (int)Math.Min(baseInterval.TotalMilliseconds, 1000));
         var totalDelay = exponentialDelay + TimeSpan.FromMilliseconds(jitterMs);
-        return TimeSpan.FromMilliseconds(Math.Min(totalDelay.TotalMilliseconds, TimeSpan.FromMinutes(5).TotalMilliseconds));
+        return TimeSpan.FromMilliseconds(Math.Min(totalDelay.TotalMilliseconds, MaxDelayMs));
     }
 }

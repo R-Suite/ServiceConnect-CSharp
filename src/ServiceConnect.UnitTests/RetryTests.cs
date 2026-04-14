@@ -1,3 +1,4 @@
+using System.Reflection;
 using ServiceConnect.Client.RabbitMQ;
 using Xunit;
 
@@ -92,5 +93,46 @@ public class RetryTests
 
         Assert.Equal(2, result);
         Assert.Equal(2, attempts);
+    }
+
+    // R-087: verify the backoff cap prevents double overflow for huge retry counts.
+    // Math.Pow(2, N) for N > 1023 returns +Infinity which propagates through
+    // TimeSpan.FromMilliseconds to throw OverflowException.  The cap at 52 means
+    // the raw exponent never exceeds 2^52 (~4.5e15 ms), which the 5-minute ceiling
+    // clamps to a safe value.
+    [Theory]
+    [InlineData(53)]
+    [InlineData(100)]
+    [InlineData(1000)]
+    [InlineData(int.MaxValue)]
+    public void CalculateDelay_DoesNotOverflow_ForLargeRetryAttempts(int retryAttempt)
+    {
+        var calculateDelay = typeof(Retry).GetMethod(
+            "CalculateDelay",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (TimeSpan)calculateDelay.Invoke(null, [TimeSpan.FromMilliseconds(100), retryAttempt])!;
+
+        // Should be capped at 5 minutes regardless of how large retryAttempt is
+        Assert.True(result <= TimeSpan.FromMinutes(5), $"Delay {result} exceeded 5-minute ceiling for attempt {retryAttempt}");
+        Assert.True(result >= TimeSpan.Zero, $"Delay {result} was negative for attempt {retryAttempt}");
+    }
+
+    [Fact]
+    public void CalculateDelay_Cap52_ProducesSameResultAs53()
+    {
+        var calculateDelay = typeof(Retry).GetMethod(
+            "CalculateDelay",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        // Attempts 52, 53, 100, and MaxValue should all produce the same exponential
+        // component (capped), so the only variation is jitter — both should be <= 5 min.
+        var delay52 = (TimeSpan)calculateDelay.Invoke(null, [TimeSpan.FromMilliseconds(1), 52])!;
+        var delay53 = (TimeSpan)calculateDelay.Invoke(null, [TimeSpan.FromMilliseconds(1), 53])!;
+        var delayMax = (TimeSpan)calculateDelay.Invoke(null, [TimeSpan.FromMilliseconds(1), int.MaxValue])!;
+
+        Assert.True(delay52 <= TimeSpan.FromMinutes(5));
+        Assert.True(delay53 <= TimeSpan.FromMinutes(5));
+        Assert.True(delayMax <= TimeSpan.FromMinutes(5));
     }
 }

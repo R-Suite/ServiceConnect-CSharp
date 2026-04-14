@@ -13,6 +13,7 @@ public interface IBusConfiguration
     /// headers. Leaking an internal hostname to broker audit consumers is information
     /// disclosure in shared-broker deployments, so this defaults off (S-04).
     /// </summary>
+    /// <remarks>WARNING: When enabled, Environment.MachineName is stamped into every message header, exposing internal host names to any consumer. Do not enable where messages cross trust boundaries.</remarks>
     bool IncludeMachineNameInHeaders { get; set; }
     /// <summary>
     /// When <c>true</c> (default), <see cref="IConsumeContext.ReplyAsync{TReply}"/> validates

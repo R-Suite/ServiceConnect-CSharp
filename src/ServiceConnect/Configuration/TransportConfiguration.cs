@@ -16,8 +16,11 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// <summary>Default RabbitMQ graceful-shutdown drain timeout, in milliseconds.</summary>
     public const int DefaultGracefulShutdownTimeoutMilliseconds = 5000;
 
+    /// <remarks>WARNING: Default connects to localhost without authentication. Override in production.</remarks>
     public string Host { get; set; } = "localhost";
+    /// <remarks>WARNING: Default connects to localhost without authentication. Override in production.</remarks>
     public string? Username { get; set; }
+    /// <remarks>WARNING: Default connects to localhost without authentication. Override in production.</remarks>
     public string? Password { get; set; }
     public string? VirtualHost { get; set; }
     /// <summary>Dead-letter retry delay, in milliseconds. Must be non-negative.</summary>
@@ -28,6 +31,7 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// Time to wait for in-flight messages to drain during graceful shutdown, in milliseconds. (C-09)
     /// </summary>
     public int GracefulShutdownTimeoutMilliseconds { get; set; } = DefaultGracefulShutdownTimeoutMilliseconds;
+    /// <remarks>Defaults to false. Consider logging a warning when disabled on non-localhost hosts.</remarks>
     public bool SslEnabled { get; set; }
     /// <summary>
     /// Gets or sets the SSL policy errors that are acceptable.
@@ -37,6 +41,7 @@ public sealed class TransportConfiguration : ITransportConfiguration
     public SslPolicyErrors AcceptablePolicyErrors { get; set; } = SslPolicyErrors.None;
     public string? ServerName { get; set; }
     public string? CertPath { get; set; }
+    /// <remarks>SECURITY: This value is held in memory as plain text. Avoid logging or serializing this configuration object.</remarks>
     public string? CertPassphrase { get; set; }
     public X509CertificateCollection? Certs { get; set; }
     /// <summary>
@@ -51,6 +56,7 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// all TLS certificate validation, enabling man-in-the-middle attacks.
     /// Only use this in development/testing with full understanding of the risks.
     /// </summary>
+    /// <remarks>WARNING: Setting this to a callback that always returns true disables all certificate validation.</remarks>
     public RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
     private readonly Dictionary<string, object> _clientSettings = new();
     public IReadOnlyDictionary<string, object> ClientSettings => _clientSettings;

@@ -16,6 +16,7 @@ public sealed class MongoDbSslOptions
     /// against the MongoDB endpoint, enabling man-in-the-middle attacks. Only use in
     /// development / testing with full understanding of the risks (S-03).
     /// </summary>
+    /// <remarks>WARNING: When true, all MongoDB TLS certificate validation is disabled. Use only in development/testing.</remarks>
     public bool AllowInsecureTls { get; set; }
     public bool CheckCertificateRevocation { get; set; } = true;
 }
