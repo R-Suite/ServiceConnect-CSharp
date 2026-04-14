@@ -8,7 +8,7 @@ internal sealed class HandlerProcessor(
     IServiceProvider serviceProvider) : IMessageProcessor
 {
     public async Task<ProcessResult> ProcessAsync(
-        byte[] messageBytes, Type messageType, object? message,
+        ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope,
         CancellationToken cancellationToken = default)
     {

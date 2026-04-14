@@ -11,7 +11,7 @@ internal sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessa
     public bool RunBeforeDeserialization => true;
 
     public Task<ProcessResult> ProcessAsync(
-        byte[] messageBytes, Type messageType, object? message,
+        ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope,
         CancellationToken cancellationToken = default)
     {

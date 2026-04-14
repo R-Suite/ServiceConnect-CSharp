@@ -27,7 +27,7 @@ file sealed class HeaderCapturingMiddleware : IMessageProcessingMiddleware
     }
 
     public async Task<ConsumeEventResult> Process(
-        byte[] messageBytes, Type messageType, object message,
+        ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {
         _tcs.TrySetResult(headers);

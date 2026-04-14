@@ -68,7 +68,7 @@ public class ExceptionHandlerTests
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
         mockProcessor
             .Setup(p => p.ProcessAsync(
-                It.IsAny<byte[]>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
                 It.IsAny<Type>(),
                 It.IsAny<object?>(),
                 It.IsAny<IDictionary<string, object>>(),
@@ -101,7 +101,7 @@ public class ExceptionHandlerTests
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
         mockProcessor
             .Setup(p => p.ProcessAsync(
-                It.IsAny<byte[]>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
                 It.IsAny<Type>(),
                 It.IsAny<object?>(),
                 It.IsAny<IDictionary<string, object>>(),
@@ -132,7 +132,7 @@ public class ExceptionHandlerTests
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
         mockProcessor
             .Setup(p => p.ProcessAsync(
-                It.IsAny<byte[]>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
                 It.IsAny<Type>(),
                 It.IsAny<object?>(),
                 It.IsAny<IDictionary<string, object>>(),

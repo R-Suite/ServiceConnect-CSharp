@@ -38,7 +38,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
     public bool RunBeforeDeserialization => true;
 
     public Task<ProcessResult> ProcessAsync(
-        byte[] messageBytes, Type messageType, object? message,
+        ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope,
         CancellationToken cancellationToken = default)
     {
@@ -65,7 +65,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
 
         var stream = _activeStreams.GetOrAdd(sequenceId, id => new MessageBusReadStream(id));
 
-        stream.Write(messageBytes, packetNumber);
+        stream.Write(messageBytes.ToArray(), packetNumber);
         _streamTimestamps[sequenceId] = DateTime.UtcNow;
 
         if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))

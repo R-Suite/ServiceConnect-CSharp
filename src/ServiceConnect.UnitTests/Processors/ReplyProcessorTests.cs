@@ -23,7 +23,7 @@ public class ReplyProcessorTests
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestReplyMsg), null, headers, envelope);
 
         Assert.Equal(ProcessResult.Handled, result);
-        _mockReplyManager.Verify(r => r.ProcessReply("reply-123", It.IsAny<byte[]>(), typeof(TestReplyMsg)), Times.Once);
+        _mockReplyManager.Verify(r => r.ProcessReply("reply-123", It.IsAny<ReadOnlyMemory<byte>>(), typeof(TestReplyMsg)), Times.Once);
     }
 
     [Fact]

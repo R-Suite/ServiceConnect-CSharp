@@ -22,5 +22,5 @@ public interface IRequestReplyManager
         where TRequest : Message
         where TReply : Message;
 
-    void ProcessReply(string messageId, byte[] messageBytes, Type type);
+    void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type);
 }

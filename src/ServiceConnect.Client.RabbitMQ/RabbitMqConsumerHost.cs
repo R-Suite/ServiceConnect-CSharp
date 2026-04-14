@@ -178,7 +178,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             }
             else
             {
-                result = await _consumerEventHandler(args.Body.ToArray(), typeName, headers, _consumingCt).ConfigureAwait(false);
+                result = await _consumerEventHandler(args.Body, typeName, headers, _consumingCt).ConfigureAwait(false);
             }
 
             HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));

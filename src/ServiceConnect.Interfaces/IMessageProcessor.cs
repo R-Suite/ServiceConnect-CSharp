@@ -12,7 +12,7 @@ public interface IMessageProcessor
     bool RunBeforeDeserialization => false;
 
     Task<ProcessResult> ProcessAsync(
-        byte[] messageBytes,
+        ReadOnlyMemory<byte> messageBytes,
         Type messageType,
         object? message,
         IDictionary<string, object> headers,

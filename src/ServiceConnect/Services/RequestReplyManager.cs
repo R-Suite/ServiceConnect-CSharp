@@ -128,14 +128,15 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         }
     }
 
-    public void ProcessReply(string messageId, byte[] messageBytes, Type type)
+    public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
     {
         if (!_pendingRequests.TryGetValue(messageId, out var state))
             return;
 
         // Use the expected reply type stored at request time, not the wire-provided type.
         // This prevents deserialization into attacker-controlled types via crafted reply messages.
-        object reply = _serializer.Deserialize(messageBytes, state.ReplyType);
+        // .ToArray() at the serializer boundary (P-003); removed when P-040 adds span overloads.
+        object reply = _serializer.Deserialize(messageBytes.ToArray(), state.ReplyType);
 
         if (state.OnReply != null)
         {

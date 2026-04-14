@@ -42,7 +42,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         _processingChain = new Lazy<MessageProcessingDelegate>(BuildProcessingChain, isThreadSafe: true);
     }
 
-    public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
+    public async Task<ConsumeEventResult> Dispatch(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -75,8 +75,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
                 return new ConsumeEventResult { Success = false };
             }
 
-            // 5. Deserialize the message
-            var message = _serializer.Deserialize(messageBytes, type);
+            // 5. Deserialize the message — .ToArray() at the serializer boundary (P-003).
+            //    When P-040 adds span-based overloads, this allocation goes away.
+            var message = _serializer.Deserialize(messageBytes.ToArray(), type);
 
             // 6. Run BeforeConsumingFilters
             bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
@@ -101,7 +102,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         }
     }
 
-    private async Task<ConsumeEventResult> RunProcessors(byte[] mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
+    private async Task<ConsumeEventResult> RunProcessors(ReadOnlyMemory<byte> mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
     {
         foreach (var proc in _processors)
         {

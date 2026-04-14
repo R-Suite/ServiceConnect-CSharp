@@ -57,7 +57,7 @@ file class RecordingProcessingMiddleware : IMessageProcessingMiddleware
         _log = log;
     }
 
-    public async Task<ConsumeEventResult> Process(byte[] messageBytes, Type messageType, object message,
+    public async Task<ConsumeEventResult> Process(ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {
         _log.Add("before");
@@ -69,7 +69,7 @@ file class RecordingProcessingMiddleware : IMessageProcessingMiddleware
 
 file class ShortCircuitProcessingMiddleware : IMessageProcessingMiddleware
 {
-    public Task<ConsumeEventResult> Process(byte[] messageBytes, Type messageType, object message,
+    public Task<ConsumeEventResult> Process(ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {
         return Task.FromResult(new ConsumeEventResult { Success = true });
@@ -195,7 +195,7 @@ public class ProcessingMiddlewarePipelineTests
 
         var mockProcessor = new Mock<IMessageProcessor>();
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
-        mockProcessor.Setup(p => p.ProcessAsync(It.IsAny<byte[]>(), It.IsAny<Type>(), It.IsAny<object?>(),
+        mockProcessor.Setup(p => p.ProcessAsync(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>(), It.IsAny<object?>(),
                 It.IsAny<IDictionary<string, object>>(), It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
             .Returns(() => { log.Add("processor"); return Task.FromResult(ProcessResult.Handled); });
 
@@ -261,7 +261,7 @@ public class ProcessingMiddlewarePipelineTests
 
         // Assert
         Assert.True(result.Success);
-        mockProcessor.Verify(p => p.ProcessAsync(It.IsAny<byte[]>(), It.IsAny<Type>(), It.IsAny<object?>(),
+        mockProcessor.Verify(p => p.ProcessAsync(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>(), It.IsAny<object?>(),
             It.IsAny<IDictionary<string, object>>(), It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

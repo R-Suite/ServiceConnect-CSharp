@@ -239,7 +239,7 @@ public class MessageDispatcherTests
         Assert.True(result.Success);
         // Pre-deserialization processors receive typeof(Message) as a placeholder;
         // ReplyProcessor uses the expected reply type stored in RequestState, not this.
-        _mockReplyManager.Verify(r => r.ProcessReply(replyId, messageBytes, typeof(Message)), Times.Once);
+        _mockReplyManager.Verify(r => r.ProcessReply(replyId, It.IsAny<ReadOnlyMemory<byte>>(), typeof(Message)), Times.Once);
         _mockSerializer.Verify(s => s.Deserialize(It.IsAny<byte[]>(), It.IsAny<Type>()), Times.Never);
     }
 
