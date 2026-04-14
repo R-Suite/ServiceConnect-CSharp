@@ -21,6 +21,16 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
     private static readonly TimeSpan StreamTimeout = TimeSpan.FromMinutes(5);
     /// <summary>Interval at which the sweeper runs to evict stale partial streams.</summary>
     private static readonly TimeSpan StreamCleanupInterval = TimeSpan.FromMinutes(1);
+    /// <summary>
+    /// Maximum number of concurrently tracked partial streams.
+    /// Prevents DoS via stream slot exhaustion (R-085).
+    /// </summary>
+    private const int MaxActiveStreams = 1000;
+    /// <summary>
+    /// Upper bound on LastPacketNumber to prevent attacker-controlled allocation
+    /// of unbounded packet-count state (R-086).
+    /// </summary>
+    private const long MaxPacketNumber = 100_000;
 
     // P-011: cache completed Task<ProcessResult> instances to avoid per-call allocations.
     private static readonly Task<ProcessResult> NotHandledTask = Task.FromResult(ProcessResult.NotHandled);
@@ -58,6 +68,20 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
             return NotHandledTask;
         var sequenceId = HeaderDecoder.Decode(seqIdRaw)!;
 
+        // R-085: SequenceId must be a valid GUID to prevent arbitrary-string abuse.
+        if (!Guid.TryParse(sequenceId, out _))
+        {
+            _logger.LogWarning("Stream packet has non-GUID SequenceId '{Value}'; discarding", sequenceId);
+            return NotHandledTask;
+        }
+
+        // R-085: Reject new streams when the active-stream limit is reached.
+        if (!_activeStreams.ContainsKey(sequenceId) && _activeStreams.Count >= MaxActiveStreams)
+        {
+            _logger.LogWarning("Active stream limit ({Limit}) reached; rejecting new stream {SequenceId}", MaxActiveStreams, sequenceId);
+            return NotHandledTask;
+        }
+
         if (!headers.TryGetValue(HeaderKeys.PacketNumber, out var pnRaw))
             return NotHandledTask;
         var pnString = HeaderDecoder.Decode(pnRaw);
@@ -78,6 +102,12 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
             if (!long.TryParse(lpnString, out var lastPacketNumber))
             {
                 _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
+                return HandledTask;
+            }
+            // R-086: Cap LastPacketNumber to prevent attacker-controlled unbounded state.
+            if (lastPacketNumber > MaxPacketNumber)
+            {
+                _logger.LogWarning("Stream {SequenceId} LastPacketNumber {Value} exceeds maximum {Max}; discarding", sequenceId, lastPacketNumber, MaxPacketNumber);
                 return HandledTask;
             }
             stream.SetLastPacketNumber(lastPacketNumber);

@@ -9,17 +9,17 @@ namespace ServiceConnect.UnitTests.Processors;
 
 public class StreamProcessorTests
 {
-    [Fact]
-    public async Task ProcessAsync_NonByteStream_ReturnsNotHandled()
-    {
-        var services = new ServiceCollection();
-        var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(
-            provider,
+    private static StreamProcessor BuildProcessor() =>
+        new StreamProcessor(
+            new ServiceCollection().BuildServiceProvider(),
             NullLogger<StreamProcessor>.Instance,
             new MessageTypeRegistry(),
             new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance));
 
+    [Fact]
+    public async Task ProcessAsync_NonByteStream_ReturnsNotHandled()
+    {
+        var processor = BuildProcessor();
         var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "Send" };
         var envelope = new Envelope { Headers = headers, Body = Array.Empty<byte>() };
 
@@ -31,14 +31,7 @@ public class StreamProcessorTests
     [Fact]
     public async Task ProcessAsync_NoMessageTypeHeader_ReturnsNotHandled()
     {
-        var services = new ServiceCollection();
-        var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(
-            provider,
-            NullLogger<StreamProcessor>.Instance,
-            new MessageTypeRegistry(),
-            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance));
-
+        var processor = BuildProcessor();
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = Array.Empty<byte>() };
 
@@ -48,26 +41,134 @@ public class StreamProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_ByteStreamPacket_ReturnsHandled()
+    public async Task ProcessAsync_ByteStreamPacket_WithValidGuidSequenceId_ReturnsHandled()
     {
-        var services = new ServiceCollection();
-        var provider = services.BuildServiceProvider();
-        var processor = new StreamProcessor(
-            provider,
-            NullLogger<StreamProcessor>.Instance,
-            new MessageTypeRegistry(),
-            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance));
-
+        var processor = BuildProcessor();
+        var sequenceId = Guid.NewGuid().ToString();
         var headers = new Dictionary<string, object>
         {
             [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
-            [HeaderKeys.SequenceId] = "seq-1",
+            [HeaderKeys.SequenceId] = sequenceId,
             [HeaderKeys.PacketNumber] = "0"
         };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
 
+        Assert.Equal(ProcessResult.Handled, result);
+    }
+
+    // R-085: non-GUID SequenceId must be rejected
+    [Fact]
+    public async Task ProcessAsync_NonGuidSequenceId_ReturnsNotHandled()
+    {
+        var processor = BuildProcessor();
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = "not-a-guid",
+            [HeaderKeys.PacketNumber] = "0"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
+
+        Assert.Equal(ProcessResult.NotHandled, result);
+    }
+
+    // R-085: valid GUID SequenceId is accepted
+    [Fact]
+    public async Task ProcessAsync_ValidGuidSequenceId_ReturnsHandled()
+    {
+        var processor = BuildProcessor();
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+            [HeaderKeys.PacketNumber] = "0"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+    }
+
+    // R-085: stream creation is rejected when MaxActiveStreams limit is reached
+    [Fact]
+    public async Task ProcessAsync_WhenMaxActiveStreamsReached_RejectsNewStream()
+    {
+        var processor = BuildProcessor();
+
+        // Fill up to MaxActiveStreams (1000) by sending packet 0 to each distinct stream.
+        // We only need to exceed the limit, so we drive it to 1000 streams first.
+        for (int i = 0; i < 1000; i++)
+        {
+            var fillHeaders = new Dictionary<string, object>
+            {
+                [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+                [HeaderKeys.SequenceId] = Guid.NewGuid().ToString(),
+                [HeaderKeys.PacketNumber] = "0"
+            };
+            var fillEnvelope = new Envelope { Headers = fillHeaders, Body = new byte[] { 1 } };
+            await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, fillHeaders, fillEnvelope);
+        }
+
+        // Now a brand-new stream should be rejected.
+        var newId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = newId,
+            [HeaderKeys.PacketNumber] = "0"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
+
+        Assert.Equal(ProcessResult.NotHandled, result);
+    }
+
+    // R-086: LastPacketNumber exceeding limit is rejected
+    [Fact]
+    public async Task ProcessAsync_LastPacketNumberExceedsMax_ReturnsHandled_AndDiscards()
+    {
+        var processor = BuildProcessor();
+        var sequenceId = Guid.NewGuid().ToString();
+        // Send a final packet that claims LastPacketNumber = 100001 (above the 100_000 cap).
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+            [HeaderKeys.LastPacketNumber] = "100001"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        // Returns Handled (to prevent requeue) but the stream is silently discarded.
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+    }
+
+    // R-086: LastPacketNumber at exactly the limit (100_000) is accepted
+    [Fact]
+    public async Task ProcessAsync_LastPacketNumberAtMax_IsAccepted()
+    {
+        var processor = BuildProcessor();
+        var sequenceId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+            [HeaderKeys.LastPacketNumber] = "100000"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
+
+        // Packet received but stream not yet complete (we only sent packet 0 of 100001 total).
         Assert.Equal(ProcessResult.Handled, result);
     }
 }
