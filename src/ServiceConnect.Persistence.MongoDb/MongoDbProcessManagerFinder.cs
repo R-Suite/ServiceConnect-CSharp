@@ -18,6 +18,11 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
     private volatile bool _timeoutIndexEnsured;
+
+    // Cached compiled delegates for InsertDataTypedAsync<T>, keyed by concrete data type.
+    // Avoids MakeGenericMethod + MethodInfo.Invoke on every insert call (R-007, P-006).
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>>
+        InsertDelegateCache = new();
     private const string TimeoutsCollectionName = "Timeouts";
     /// <summary>
     /// Interval after which the polling service is asked to re-query when no future timeouts
@@ -117,20 +122,35 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         var collectionName = GetCollectionName(data);
         var dataType = data.GetType();
 
+        // Look up or build the compiled delegate for this concrete type. MakeGenericMethod
+        // is called only once per type; subsequent calls use the cached delegate directly,
+        // avoiding reflection overhead on the hot path (R-007, P-006).
+        //
+        // InsertDataTypedAsync<T> takes a T parameter, so we build a thin Expression wrapper
+        // that accepts IProcessManagerData and down-casts to T before the real call — matching
+        // the pattern used by InMemoryProcessManagerFinder.BuildMemoryDataFactory.
+        var insertDelegate = InsertDelegateCache.GetOrAdd(dataType, static t =>
+        {
+            var genericMethod = typeof(MongoDbProcessManagerFinder)
+                .GetMethod(nameof(InsertDataTypedAsync), BindingFlags.NonPublic | BindingFlags.Instance)!
+                .MakeGenericMethod(t);
+
+            var finderParam    = Expression.Parameter(typeof(MongoDbProcessManagerFinder), "finder");
+            var dataParam      = Expression.Parameter(typeof(IProcessManagerData), "data");
+            var collectionParam = Expression.Parameter(typeof(string), "collectionName");
+            var ctParam        = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
+
+            // Cast IProcessManagerData → T so the call matches the typed parameter.
+            var castedData = Expression.Convert(dataParam, t);
+            var call = Expression.Call(finderParam, genericMethod, castedData, collectionParam, ctParam);
+
+            return Expression.Lambda<Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>>(
+                call, finderParam, dataParam, collectionParam, ctParam).Compile();
+        });
+
         try
         {
-            // Use reflection to call the generic InsertDataTypedAsync<T> method with the actual
-            // data type rather than the interface, so MongoDB serializes/deserializes with
-            // a consistent generic type parameter across Insert and Find operations.
-            var method = GetType().GetMethod(nameof(InsertDataTypedAsync),
-                BindingFlags.NonPublic | BindingFlags.Instance)!;
-            var genericMethod = method.MakeGenericMethod(dataType);
-            await ((Task)genericMethod.Invoke(this, [data, collectionName, cancellationToken])!).ConfigureAwait(false);
-        }
-        catch (TargetInvocationException ex) when (ex.InnerException is MongoException mongoEx)
-        {
-            throw new PersistenceException(
-                $"Failed to insert process manager data with CorrelationId '{data.CorrelationId}'.", mongoEx);
+            await insertDelegate(this, data, collectionName, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
