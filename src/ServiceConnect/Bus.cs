@@ -16,10 +16,6 @@ public sealed class Bus : IBus
     private readonly IQueueConfiguration _queueConfig;
     private readonly IMessageDispatcher _dispatcher;
     private readonly IList<HandlerReference> _handlerReferences;
-    private readonly Services.Processors.ProcessManagerHandlerRegistry _processManagerRegistry;
-    private readonly Services.Processors.MessageHandlerRegistry _messageHandlerRegistry;
-    private readonly Services.Processors.StreamHandlerRegistry _streamHandlerRegistry;
-    private readonly Services.Processors.AggregatorRegistry _aggregatorRegistry;
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
     private readonly bool _hasOutgoingFilters;
@@ -37,10 +33,6 @@ public sealed class Bus : IBus
         IQueueConfiguration queueConfig,
         IMessageDispatcher dispatcher,
         IList<HandlerReference> handlerReferences,
-        Services.Processors.ProcessManagerHandlerRegistry processManagerRegistry,
-        Services.Processors.MessageHandlerRegistry messageHandlerRegistry,
-        Services.Processors.StreamHandlerRegistry streamHandlerRegistry,
-        Services.Processors.AggregatorRegistry aggregatorRegistry,
         IPipelineConfiguration pipelineConfig,
         IConsumer? consumer = null,
         IProducer? producer = null)
@@ -53,17 +45,13 @@ public sealed class Bus : IBus
         _queueConfig = queueConfig ?? throw new ArgumentNullException(nameof(queueConfig));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
-        _processManagerRegistry = processManagerRegistry ?? throw new ArgumentNullException(nameof(processManagerRegistry));
-        _messageHandlerRegistry = messageHandlerRegistry ?? throw new ArgumentNullException(nameof(messageHandlerRegistry));
-        _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
-        _aggregatorRegistry = aggregatorRegistry ?? throw new ArgumentNullException(nameof(aggregatorRegistry));
         if (pipelineConfig == null) throw new ArgumentNullException(nameof(pipelineConfig));
         _hasOutgoingFilters = pipelineConfig.OutgoingFilters.Count > 0;
         _consumer = consumer;
         _producer = producer;
     }
 
-    public bool IsConnected => _consuming;
+    public bool IsConsuming => _consuming;
 
     public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
@@ -224,7 +212,7 @@ public sealed class Bus : IBus
         await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination, cancellationToken).ConfigureAwait(false);
     }
 
-    public IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message
+    public IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message
     {
         ThrowIfDisposed();
         if (_producer == null)
@@ -260,11 +248,6 @@ public sealed class Bus : IBus
                 localConsumer = _consumer;
             }
 
-            // touch singletons; any duplicate-handler registration in the registries would have thrown at DI resolution time
-            _ = _processManagerRegistry;
-            _ = _messageHandlerRegistry;
-            _ = _streamHandlerRegistry;
-            _ = _aggregatorRegistry;
             _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
                 _queueConfig.QueueName, messageTypeNames.Count);
 

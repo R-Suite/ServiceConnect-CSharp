@@ -100,7 +100,7 @@ public class StreamingTests
         try
         {
             // Act: create stream, write chunks, close
-            await using var stream = producerBus.CreateStream(consumerQueue, originalMessage);
+            await using var stream = producerBus.CreateStream<TestMessage>(consumerQueue);
 
             await stream.WriteAsync(chunk1, 0, chunk1.Length);
             await stream.WriteAsync(chunk2, 0, chunk2.Length);

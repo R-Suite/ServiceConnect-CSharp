@@ -43,7 +43,7 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Creates a streaming connection for sending large messages in chunks.
     /// </summary>
-    IMessageBusWriteStream CreateStream<T>(string endpoint, T message) where T : Message;
+    IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message;
 
     /// <summary>
     /// Starts consuming messages from the configured queue.
@@ -58,5 +58,5 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Gets whether the bus is currently consuming messages.
     /// </summary>
-    bool IsConnected { get; }
+    bool IsConsuming { get; }
 }

@@ -151,23 +151,29 @@ public static class ServiceCollectionExtensions
         // completes, avoiding a DI cycle while still caching the resolved instance.
         services.TryAddSingleton(sp => new Lazy<IBus>(() => sp.GetRequiredService<IBus>()));
 
-        // Bus — uses a factory so that DI can resolve the internal ctor
-        services.TryAddSingleton<IBus>(sp => new Bus(
-            sp.GetRequiredService<IMessageSerializer>(),
-            sp.GetRequiredService<IFilterPipeline>(),
-            sp.GetRequiredService<ISendMessagePipeline>(),
-            sp.GetRequiredService<IRequestReplyManager>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Bus>>(),
-            sp.GetRequiredService<IQueueConfiguration>(),
-            sp.GetRequiredService<IMessageDispatcher>(),
-            sp.GetRequiredService<IList<HandlerReference>>(),
-            sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>(),
-            sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>(),
-            sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>(),
-            sp.GetRequiredService<Services.Processors.AggregatorRegistry>(),
-            sp.GetRequiredService<IPipelineConfiguration>(),
-            sp.GetService<IConsumer>(),
-            sp.GetService<IProducer>()));
+        // Bus — uses a factory so that DI can resolve the internal ctor.
+        // Force-resolve the four handler registries so they are eagerly constructed
+        // (validates handler registrations at startup) without storing them in Bus.
+        services.TryAddSingleton<IBus>(sp =>
+        {
+            _ = sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>();
+            _ = sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>();
+            _ = sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>();
+            _ = sp.GetRequiredService<Services.Processors.AggregatorRegistry>();
+
+            return new Bus(
+                sp.GetRequiredService<IMessageSerializer>(),
+                sp.GetRequiredService<IFilterPipeline>(),
+                sp.GetRequiredService<ISendMessagePipeline>(),
+                sp.GetRequiredService<IRequestReplyManager>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Bus>>(),
+                sp.GetRequiredService<IQueueConfiguration>(),
+                sp.GetRequiredService<IMessageDispatcher>(),
+                sp.GetRequiredService<IList<HandlerReference>>(),
+                sp.GetRequiredService<IPipelineConfiguration>(),
+                sp.GetService<IConsumer>(),
+                sp.GetService<IProducer>());
+        });
 
         // Hosted service for auto-start consuming
         services.AddHostedService<BusHostedService>();

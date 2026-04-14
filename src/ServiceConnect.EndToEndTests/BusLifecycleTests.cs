@@ -34,13 +34,13 @@ public class BusLifecycleTests
     {
         var bus = CreateBus(withConsumer: true);
 
-        Assert.False(bus.IsConnected);
+        Assert.False(bus.IsConsuming);
 
         await bus.StartConsumingAsync();
-        Assert.True(bus.IsConnected);
+        Assert.True(bus.IsConsuming);
 
         await bus.StopConsumingAsync();
-        Assert.False(bus.IsConnected);
+        Assert.False(bus.IsConsuming);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class BusLifecycleTests
     {
         var bus = CreateBus(withConsumer: false);
 
-        Assert.False(bus.IsConnected);
+        Assert.False(bus.IsConsuming);
         await Assert.ThrowsAsync<InvalidOperationException>(() => bus.StartConsumingAsync());
     }
 
@@ -58,10 +58,10 @@ public class BusLifecycleTests
         var bus = CreateBus(withConsumer: true);
 
         await bus.StartConsumingAsync();
-        Assert.True(bus.IsConnected);
+        Assert.True(bus.IsConsuming);
 
         await bus.DisposeAsync();
-        Assert.False(bus.IsConnected);
+        Assert.False(bus.IsConsuming);
     }
 
     [Fact]
