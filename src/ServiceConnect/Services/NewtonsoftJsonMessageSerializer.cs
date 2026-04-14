@@ -7,12 +7,30 @@ namespace ServiceConnect.Services;
 public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
 {
     private readonly JsonSerializerSettings _settings;
+    private readonly JsonSerializer _serializer;
 
     public NewtonsoftJsonMessageSerializer(JsonSerializerSettings? settings = null)
     {
-        _settings = settings ?? new JsonSerializerSettings();
-        // Prevent deserialization gadget attacks via $type metadata
-        _settings.TypeNameHandling = TypeNameHandling.None;
+        // Clone settings before mutating to avoid side-effects on the caller's instance (R-097)
+        var cloned = new JsonSerializerSettings
+        {
+            // Copy properties that callers commonly set
+            NullValueHandling     = settings?.NullValueHandling     ?? NullValueHandling.Include,
+            DefaultValueHandling  = settings?.DefaultValueHandling  ?? DefaultValueHandling.Include,
+            ReferenceLoopHandling = settings?.ReferenceLoopHandling ?? ReferenceLoopHandling.Error,
+            DateFormatHandling    = settings?.DateFormatHandling    ?? DateFormatHandling.IsoDateFormat,
+            DateTimeZoneHandling  = settings?.DateTimeZoneHandling  ?? DateTimeZoneHandling.Local,
+            Formatting            = settings?.Formatting            ?? Formatting.None,
+            ContractResolver      = settings?.ContractResolver,
+            Converters            = settings?.Converters != null
+                                        ? new System.Collections.Generic.List<JsonConverter>(settings.Converters)
+                                        : new System.Collections.Generic.List<JsonConverter>(),
+            // Prevent deserialization gadget attacks via $type metadata
+            TypeNameHandling      = TypeNameHandling.None,
+        };
+
+        _settings   = cloned;
+        _serializer = JsonSerializer.Create(cloned);
     }
 
     public byte[] Serialize<T>(T message) where T : Message
@@ -23,8 +41,13 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
 
         try
         {
-            string json = JsonConvert.SerializeObject(message, _settings);
-            return Encoding.UTF8.GetBytes(json);
+            using var ms = new MemoryStream();
+            using (var sw = new StreamWriter(ms, Encoding.UTF8, bufferSize: 1024, leaveOpen: true))
+            using (var jw = new JsonTextWriter(sw))
+            {
+                _serializer.Serialize(jw, message);
+            }
+            return ms.ToArray();
         }
         catch (JsonException ex)
         {
@@ -42,8 +65,10 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
     {
         try
         {
-            string json = Encoding.UTF8.GetString(data);
-            return JsonConvert.DeserializeObject(json, type, _settings)
+            using var ms = new MemoryStream(data, writable: false);
+            using var sr = new StreamReader(ms, Encoding.UTF8);
+            using var jr = new JsonTextReader(sr);
+            return _serializer.Deserialize(jr, type)
                 ?? throw new Interfaces.Exceptions.SerializationException(
                     $"Deserialization returned null for type {type.Name}", type);
         }
