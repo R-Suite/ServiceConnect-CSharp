@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
@@ -12,7 +11,15 @@ namespace ServiceConnect.Persistence.InMemory;
 /// </summary>
 public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeoutStore
 {
-    public InMemoryProcessManagerFinder(string connectionString, string databaseName) { }
+    private readonly ProcessManagerPredicateCache _cache;
+
+    public InMemoryProcessManagerFinder(string connectionString, string databaseName)
+        : this(new ProcessManagerPredicateCache()) { }
+
+    internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache)
+    {
+        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+    }
 
 #if NET9_0_OR_GREATER
     private readonly Lock _memoryCacheLock = new();
@@ -24,12 +31,6 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
     private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private readonly CacheProvider _provider = new();
-
-    // Cached predicates of shape (MemoryData<T>, object) -> bool. Key is the mapping shape.
-    private static readonly ConcurrentDictionary<PredicateCacheKey, Delegate> CompiledPredicates = new();
-
-    // Cached factories that produce MemoryData<TConcrete> from IProcessManagerData, keyed by concrete type.
-    private static readonly ConcurrentDictionary<Type, Func<IProcessManagerData, object>> MemoryDataFactories = new();
 
     public Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
@@ -103,12 +104,12 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         return null;
     }
 
-    private static Func<MemoryData<T>, object, bool> GetPredicate<T>(
+    private Func<MemoryData<T>, object, bool> GetPredicate<T>(
         IReadOnlyDictionary<string, Type> propertiesHierarchy, Type propertyType)
         where T : class, IProcessManagerData
     {
-        var cacheKey = new PredicateCacheKey(typeof(T), propertiesHierarchy, propertyType);
-        var compiled = CompiledPredicates.GetOrAdd(cacheKey, static key =>
+        var cacheKey = new ProcessManagerPredicateCache.PredicateCacheKey(typeof(T), propertiesHierarchy, propertyType);
+        var compiled = _cache.CompiledPredicates.GetOrAdd(cacheKey, static key =>
         {
             var dataParam = Expression.Parameter(typeof(MemoryData<>).MakeGenericType(key.T), "d");
             var valueParam = Expression.Parameter(typeof(object), "value");
@@ -133,7 +134,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(data);
 
-        var factory = MemoryDataFactories.GetOrAdd(data.GetType(), BuildMemoryDataFactory);
+        var factory = _cache.MemoryDataFactories.GetOrAdd(data.GetType(), BuildMemoryDataFactory);
         var memoryData = factory(data);
 
         lock (_memoryCacheLock)
@@ -288,46 +289,4 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         return Task.CompletedTask;
     }
 
-    private readonly struct PredicateCacheKey : IEquatable<PredicateCacheKey>
-    {
-        public readonly Type T;
-        public readonly IReadOnlyDictionary<string, Type> PropertiesHierarchy;
-        public readonly Type PropertyType;
-
-        public PredicateCacheKey(Type t, IReadOnlyDictionary<string, Type> propertiesHierarchy, Type propertyType)
-        {
-            T = t;
-            PropertiesHierarchy = propertiesHierarchy;
-            PropertyType = propertyType;
-        }
-
-        public bool Equals(PredicateCacheKey other)
-        {
-            if (T != other.T || PropertyType != other.PropertyType) return false;
-            if (PropertiesHierarchy.Count != other.PropertiesHierarchy.Count) return false;
-            foreach (var kvp in PropertiesHierarchy)
-            {
-                if (!other.PropertiesHierarchy.TryGetValue(kvp.Key, out var otherType) || otherType != kvp.Value)
-                    return false;
-            }
-            return true;
-        }
-
-        public override bool Equals(object? obj) => obj is PredicateCacheKey k && Equals(k);
-
-        public override int GetHashCode()
-        {
-            var hash = new HashCode();
-            hash.Add(T);
-            hash.Add(PropertyType);
-            // XOR-combine per-entry hashes so the result is independent of the
-            // dictionary's (undefined) iteration order (M-2). Otherwise Equals
-            // could be true while GetHashCode disagreed, violating the contract.
-            int entryHash = 0;
-            foreach (var kvp in PropertiesHierarchy)
-                entryHash ^= HashCode.Combine(kvp.Key, kvp.Value);
-            hash.Add(entryHash);
-            return hash.ToHashCode();
-        }
-    }
 }

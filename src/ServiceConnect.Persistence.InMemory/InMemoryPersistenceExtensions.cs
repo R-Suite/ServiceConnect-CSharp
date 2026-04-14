@@ -11,10 +11,11 @@ public static class InMemoryPersistenceExtensions
         builder.AdditionalRegistrations.Add(services =>
         {
             services.TryAddSingleton<ICacheProvider, CacheProvider>();
+            services.TryAddSingleton<ProcessManagerPredicateCache>();
             services.TryAddSingleton<IAggregatorPersistor>(_ =>
                 new InMemoryAggregatorPersistor("", "", ""));
-            services.TryAddSingleton<InMemoryProcessManagerFinder>(_ =>
-                new InMemoryProcessManagerFinder("", ""));
+            services.TryAddSingleton<InMemoryProcessManagerFinder>(sp =>
+                new InMemoryProcessManagerFinder(sp.GetRequiredService<ProcessManagerPredicateCache>()));
             services.TryAddSingleton<IProcessManagerFinder>(sp =>
                 sp.GetRequiredService<InMemoryProcessManagerFinder>());
             services.TryAddSingleton<ITimeoutStore>(sp =>
