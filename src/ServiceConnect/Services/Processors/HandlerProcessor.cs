@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Linq.Expressions;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Interfaces;
 
@@ -58,6 +60,31 @@ internal sealed class HandlerProcessor(
     private const int MaxRoutingSlipDestinationLength = 128;
     private static readonly char[] ForbiddenRoutingSlipChars = ['*', '#', '\0', '\r', '\n', '\t', '"', '\''];
 
+    // Cache compiled delegates for IBus.RouteAsync<T> keyed by message type (P-010, R-035).
+    // Building a delegate via Expression.Lambda avoids repeated MakeGenericMethod + Invoke
+    // overhead on every routed message.
+    private static readonly ConcurrentDictionary<Type, Func<IBus, object, IList<string>, CancellationToken, Task>>
+        RouteAsyncDelegateCache = new();
+
+    private static Func<IBus, object, IList<string>, CancellationToken, Task> BuildRouteAsyncDelegate(Type messageType)
+    {
+        // IBus.RouteAsync<T>(T message, IList<string> destinations, CancellationToken ct)
+        var openMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!;
+        var closedMethod = openMethod.MakeGenericMethod(messageType);
+
+        var busParam = Expression.Parameter(typeof(IBus), "bus");
+        var msgParam = Expression.Parameter(typeof(object), "message");
+        var destParam = Expression.Parameter(typeof(IList<string>), "destinations");
+        var ctParam = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
+
+        // Cast the untyped object parameter to the concrete message type expected by RouteAsync<T>.
+        var castMsg = Expression.Convert(msgParam, messageType);
+
+        var callExpr = Expression.Call(busParam, closedMethod, castMsg, destParam, ctParam);
+        return Expression.Lambda<Func<IBus, object, IList<string>, CancellationToken, Task>>(
+            callExpr, busParam, msgParam, destParam, ctParam).Compile();
+    }
+
     private static async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus, CancellationToken cancellationToken)
     {
         if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
@@ -81,11 +108,8 @@ internal sealed class HandlerProcessor(
         if (destinations.Count == 0)
             return;
 
-        // MakeGenericMethod here is intentionally retained — IBus.RouteAsync is a generic method
-        // with no descriptor to compile against. Separate concern from R-009.
-        var routeMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!.MakeGenericMethod(messageType);
-        var task = (Task)routeMethod.Invoke(bus, [message, destinations, cancellationToken])!;
-        await task.ConfigureAwait(false);
+        var routeDelegate = RouteAsyncDelegateCache.GetOrAdd(messageType, BuildRouteAsyncDelegate);
+        await routeDelegate(bus, message, destinations, cancellationToken).ConfigureAwait(false);
     }
 
     private static bool IsValidRoutingSlipDestination(string destination)
