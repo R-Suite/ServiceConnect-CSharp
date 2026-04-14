@@ -46,7 +46,8 @@ public class MongoDbProcessManagerFinderTests
             ConnectionString = connectionString,
             DatabaseName = dbName
         };
-        var finder = new MongoDbProcessManagerFinder(options, NullLogger<MongoDbProcessManagerFinder>.Instance);
+        var client = MongoClientFactory.Create(options);
+        var finder = new MongoDbProcessManagerFinder(client, options, NullLogger<MongoDbProcessManagerFinder>.Instance);
         return (finder, connectionString, dbName);
     }
 

@@ -31,14 +31,14 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
     /// </summary>
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
 
-    public MongoDbProcessManagerFinder(MongoDbPersistenceOptions options, ILogger<MongoDbProcessManagerFinder> logger)
+    public MongoDbProcessManagerFinder(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbProcessManagerFinder> logger)
     {
+        ArgumentNullException.ThrowIfNull(mongoClient);
         _logger = logger;
 
         try
         {
-            var client = MongoClientFactory.Create(options);
-            _mongoDatabase = client.GetDatabase(options.DatabaseName);
+            _mongoDatabase = mongoClient.GetDatabase(options.DatabaseName);
         }
         catch (MongoException ex)
         {
@@ -59,7 +59,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
 
         var collectionName = typeof(T).Name;
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-        EnsureCorrelationIdIndex(collection);
+        await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
 
         object? msgPropValue;
 
@@ -162,7 +162,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
     private async Task InsertDataTypedAsync<T>(T data, string collectionName, CancellationToken cancellationToken) where T : class, IProcessManagerData
     {
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-        EnsureCorrelationIdIndex(collection);
+        await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
 
         var mongoDbData = new MongoDbData<T>
         {
@@ -185,7 +185,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-            EnsureCorrelationIdIndex(collection);
+            await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
 
             var versionData = (MongoDbData<T>)persistenceData;
             int currentVersion = versionData.Version;
@@ -228,10 +228,11 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-            EnsureCorrelationIdIndex(collection);
+            await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
 
+            // CorrelationId is unique per process manager type; DeleteOneAsync is sufficient (P-057).
             var filter = Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, persistenceData.Data.CorrelationId);
-            await collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
+            await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
@@ -247,7 +248,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            EnsureTimeoutIndex(collection);
+            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
 
             await collection.InsertOneAsync(timeoutData, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
@@ -289,12 +290,20 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
                     retval.DueTimeouts.Add(doc);
             }
 
-            // Determine next query time from the earliest future unlocked timeout
+            // Determine next query time from the earliest future unlocked timeout.
+            // Project to Time only — avoids fetching the Headers dictionary and other
+            // large fields we don't need for scheduling purposes (P-055).
             var nextQueryTime = DateTime.MaxValue;
             var futureFilter = Builders<TimeoutData>.Filter.Gt(x => x.Time, utcNow) &
                                Builders<TimeoutData>.Filter.Eq(x => x.Locked, false);
             var futureSort = Builders<TimeoutData>.Sort.Ascending(x => x.Time);
-            var nextTimeout = await collection.Find(futureFilter).Sort(futureSort).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            var nextTimeProjection = Builders<TimeoutData>.Projection
+                .Include(x => x.Id)
+                .Include(x => x.Time);
+            var nextTimeout = await collection.Find(futureFilter)
+                .Sort(futureSort)
+                .Project<TimeoutData>(nextTimeProjection)
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
             if (nextTimeout is not null)
             {
@@ -333,7 +342,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    private void EnsureCorrelationIdIndex<T>(IMongoCollection<MongoDbData<T>> collection) where T : class, IProcessManagerData
+    private async Task EnsureCorrelationIdIndexAsync<T>(IMongoCollection<MongoDbData<T>> collection) where T : class, IProcessManagerData
     {
         var collectionName = typeof(T).Name;
         if (!_indexedCollections.TryAdd(collectionName, true)) return;
@@ -342,7 +351,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys);
         try
         {
-            collection.Indexes.CreateOne(indexModel);
+            await collection.Indexes.CreateOneAsync(indexModel).ConfigureAwait(false);
         }
         catch
         {
@@ -352,15 +361,29 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder, ITimeou
         }
     }
 
-    private void EnsureTimeoutIndex(IMongoCollection<TimeoutData> collection)
+    private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection)
     {
         if (_timeoutIndexEnsured) return;
 
-        var indexKeys = Builders<TimeoutData>.IndexKeys.Ascending(x => x.Id);
-        var indexModel = new CreateIndexModel<TimeoutData>(indexKeys);
         try
         {
-            collection.Indexes.CreateOne(indexModel);
+            // Primary Id index (used for exact-key deletes)
+            var idIndexModel = new CreateIndexModel<TimeoutData>(
+                Builders<TimeoutData>.IndexKeys.Ascending(x => x.Id));
+
+            // Compound index covering the due-timeout query: Locked + Time (P-022)
+            var lockedTimeIndexModel = new CreateIndexModel<TimeoutData>(
+                Builders<TimeoutData>.IndexKeys
+                    .Ascending(x => x.Locked)
+                    .Ascending(x => x.Time));
+
+            // Compound index covering the ownership query: LockedBy + Locked (P-022)
+            var lockedByIndexModel = new CreateIndexModel<TimeoutData>(
+                Builders<TimeoutData>.IndexKeys
+                    .Ascending(x => x.LockedBy)
+                    .Ascending(x => x.Locked));
+
+            await collection.Indexes.CreateManyAsync([idIndexModel, lockedTimeIndexModel, lockedByIndexModel]).ConfigureAwait(false);
             _timeoutIndexEnsured = true;
         }
         catch

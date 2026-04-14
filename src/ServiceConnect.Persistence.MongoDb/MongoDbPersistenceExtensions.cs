@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistence.MongoDb;
@@ -16,7 +17,9 @@ public static class MongoDbPersistenceExtensions
         builder.AdditionalRegistrations.Add(services =>
         {
             services.TryAddSingleton(options);
-            services.TryAddSingleton(_ => MongoClientFactory.Create(options));
+            // Single IMongoClient singleton — shared across all persistence classes so
+            // only one connection pool is created (P-021).
+            services.TryAddSingleton<IMongoClient>(_ => MongoClientFactory.Create(options));
             services.TryAddSingleton<IAggregatorPersistor, MongoDbAggregatorPersistor>();
             services.TryAddSingleton<MongoDbProcessManagerFinder>();
             services.TryAddSingleton<IProcessManagerFinder>(sp =>

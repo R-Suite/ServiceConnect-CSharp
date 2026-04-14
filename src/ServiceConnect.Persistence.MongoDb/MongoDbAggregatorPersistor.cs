@@ -17,21 +17,22 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     private readonly IMongoCollection<AggregatorDocument> _collection;
     private readonly ILogger<MongoDbAggregatorPersistor> _logger;
     private readonly IMessageTypeRegistry _typeRegistry;
+    private volatile bool _indexesEnsured;
 
-    public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
-        : this(options, "Aggregator", logger, typeRegistry)
+    public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
+        : this(mongoClient, options, "Aggregator", logger, typeRegistry)
     {
     }
 
-    public MongoDbAggregatorPersistor(MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
+    public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
     {
+        ArgumentNullException.ThrowIfNull(mongoClient);
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
 
         try
         {
-            var client = MongoClientFactory.Create(options);
-            var database = client.GetDatabase(options.DatabaseName);
+            var database = mongoClient.GetDatabase(options.DatabaseName);
             _collection = database.GetCollection<AggregatorDocument>(collectionName);
         }
         catch (MongoException ex)
@@ -44,6 +45,8 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
+            await EnsureIndexesAsync().ConfigureAwait(false);
+
             var dataType = data.GetType();
             var dataBson = data.ToBsonDocument(dataType);
 
@@ -100,7 +103,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
                 Builders<AggregatorDocument>.Filter.Eq("DataBson.CorrelationId", new BsonBinaryData(correlationId, GuidRepresentation.Standard))
             );
-            await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
+            // Name + CorrelationId is effectively unique; DeleteOneAsync avoids a full
+            // collection scan after the first match (P-057).
+            await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
@@ -132,6 +137,37 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to count aggregator data for '{name}'.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Ensures indexes on Name and the compound (Name, DataBson.CorrelationId) exist.
+    /// Called lazily on first write; the flag is checked before every write to avoid
+    /// a round-trip on every call while still retrying after a failure (P-053).
+    /// </summary>
+    private async Task EnsureIndexesAsync()
+    {
+        if (_indexesEnsured) return;
+
+        try
+        {
+            // Single-field index on Name supports GetDataAsync, RemoveAllAsync, CountAsync
+            var nameIndex = new CreateIndexModel<AggregatorDocument>(
+                Builders<AggregatorDocument>.IndexKeys.Ascending(x => x.Name));
+
+            // Compound index on (Name, DataBson.CorrelationId) supports RemoveDataAsync (P-053)
+            var nameCorrelationIndex = new CreateIndexModel<AggregatorDocument>(
+                Builders<AggregatorDocument>.IndexKeys
+                    .Ascending(x => x.Name)
+                    .Ascending("DataBson.CorrelationId"));
+
+            await _collection.Indexes.CreateManyAsync([nameIndex, nameCorrelationIndex]).ConfigureAwait(false);
+            _indexesEnsured = true;
+        }
+        catch
+        {
+            // Leave the flag false so a subsequent call retries (C-06).
+            throw;
         }
     }
 

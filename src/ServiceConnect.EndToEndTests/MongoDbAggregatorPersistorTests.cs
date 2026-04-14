@@ -24,7 +24,8 @@ public class MongoDbAggregatorPersistorTests
             ConnectionString = _fixture.MongoDbConnectionString,
             DatabaseName = dbName
         };
-        return new MongoDbAggregatorPersistor(options, collectionName, NullLogger<MongoDbAggregatorPersistor>.Instance, registry ?? new MessageTypeRegistry());
+        var client = MongoClientFactory.Create(options);
+        return new MongoDbAggregatorPersistor(client, options, collectionName, NullLogger<MongoDbAggregatorPersistor>.Instance, registry ?? new MessageTypeRegistry());
     }
 
     [Fact]
