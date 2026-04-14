@@ -56,4 +56,10 @@ public interface ICacheProvider
     /// Determines whether the cache contains the specified key.
     /// </summary>
     bool Contains<TKey>(TKey key);
+
+    /// <summary>
+    /// Replaces the value for an existing key without resetting its expiry timer or
+    /// sliding-time window. No-ops if the key is not present.
+    /// </summary>
+    void Update<TKey, TValue>(TKey key, TValue value);
 }

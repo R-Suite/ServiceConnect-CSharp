@@ -1,12 +1,12 @@
 using System.Collections.Concurrent;
-using System.Reactive.Linq;
 
 namespace ServiceConnect.Persistence.InMemory;
 
-public sealed class CacheProvider : ICacheProvider
+public sealed class CacheProvider : ICacheProvider, IDisposable
 {
-    private readonly ConcurrentDictionary<object, CacheItem> _cache = new ConcurrentDictionary<object, CacheItem>();
-    private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new ConcurrentDictionary<object, SlidingDetails>();
+    private readonly ConcurrentDictionary<object, CacheItem> _cache = new();
+    private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new();
+    private readonly ConcurrentDictionary<object, Timer> _timers = new();
 
     #region Implementation of ICacheProvider
 
@@ -57,6 +57,7 @@ public sealed class CacheProvider : ICacheProvider
         {
             _cache.TryRemove(key!, out _);
             _slidingTime.TryRemove(key!, out _);
+            DisposeTimer(key!);
 
             KeyRemoved?.Invoke(key, new EventArgs());
         }
@@ -69,6 +70,12 @@ public sealed class CacheProvider : ICacheProvider
     {
         _cache.Clear();
         _slidingTime.Clear();
+
+        foreach (var kvp in _timers)
+        {
+            kvp.Value.Dispose();
+        }
+        _timers.Clear();
     }
 
     /// <summary>
@@ -104,7 +111,17 @@ public sealed class CacheProvider : ICacheProvider
     public int PurgeNormalPriorities()
     {
         var keysToRemove = (from cacheItem in _cache where cacheItem.Value.Priority == CacheItemPriority.Normal select cacheItem.Key).ToList();
-        return keysToRemove.Count(key => _cache.TryRemove(key, out _));
+        int removed = 0;
+        foreach (var key in keysToRemove)
+        {
+            if (_cache.TryRemove(key, out _))
+            {
+                _slidingTime.TryRemove(key, out _);
+                DisposeTimer(key);
+                removed++;
+            }
+        }
+        return removed;
     }
 
     /// <summary>
@@ -113,6 +130,34 @@ public sealed class CacheProvider : ICacheProvider
     public bool Contains<TKey>(TKey key)
     {
         return key is not null && _cache.ContainsKey(key);
+    }
+
+    /// <summary>
+    /// Replaces the value for an existing key without resetting its expiry timer or
+    /// sliding-time window. No-ops if the key is not present.
+    /// </summary>
+    public void Update<TKey, TValue>(TKey key, TValue value)
+    {
+        if (key is null) return;
+
+        if (_cache.TryGetValue(key!, out var existing))
+        {
+            // Replace value in-place, keeping Priority and RelativeExpiry intact.
+            _cache[key!] = new CacheItem(value!, existing.Priority, existing.RelativeExpiry);
+        }
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    public void Dispose()
+    {
+        foreach (var kvp in _timers)
+        {
+            kvp.Value.Dispose();
+        }
+        _timers.Clear();
     }
 
     #endregion
@@ -133,12 +178,17 @@ public sealed class CacheProvider : ICacheProvider
 
     private void StartObserving<TKey>(TKey key, TimeSpan timeSpan)
     {
-        Observable.Timer(timeSpan)
-            .Subscribe(x => TryPurgeItem(key!),
-            exception =>
-            {
-                // Timer error during cache purge — item will remain until next observation cycle
-            });
+        // Clamp to at least 1 ms to avoid a zero-delay timer firing before the caller returns.
+        var delay = timeSpan.Ticks > 0 ? timeSpan : TimeSpan.FromMilliseconds(1);
+
+        var timer = new Timer(_ => TryPurgeItem(key!), null, delay, Timeout.InfiniteTimeSpan);
+
+        // Swap in the new timer and dispose any previous one (re-observation after sliding check).
+        var old = _timers.AddOrUpdate(key!, timer, (_, existing) =>
+        {
+            existing.Dispose();
+            return timer;
+        });
     }
 
     private void TryPurgeItem<TKey>(TKey key)
@@ -153,6 +203,14 @@ public sealed class CacheProvider : ICacheProvider
         }
 
         Remove(key);
+    }
+
+    private void DisposeTimer(object key)
+    {
+        if (_timers.TryRemove(key, out var timer))
+        {
+            timer.Dispose();
+        }
     }
 
     #endregion

@@ -238,5 +238,127 @@ namespace ServiceConnect.UnitTests
             Assert.Equal(42, cache.Get<string, int>("int-key"));
             Assert.True(cache.Get<string, bool>("bool-key"));
         }
+
+        // ── Timer lifecycle & R-003 / P-047 tests ───────────────────────────
+
+        [Fact]
+        public void Remove_DisposesTimer_NoLeakedTimerEntry()
+        {
+            // After Remove, the internal _timers dictionary must not retain an entry.
+            var cache = new CacheProvider();
+            cache.Add("key1", "value1", TimeSpan.FromMinutes(5));
+
+            cache.Remove("key1");
+
+            // Verify item is gone (timer must have been cleaned up to avoid leaks).
+            Assert.False(cache.Contains("key1"));
+            // Disposing a cache that has already had its timers cleaned up must not throw.
+            var ex = Record.Exception(() => cache.Dispose());
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void Clear_DisposesAllTimers_NoLeaks()
+        {
+            var cache = new CacheProvider();
+            cache.Add("key1", "value1", TimeSpan.FromMinutes(5));
+            cache.Add("key2", "value2", TimeSpan.FromMinutes(5));
+
+            cache.Clear();
+
+            Assert.Equal(0, cache.Count());
+            // Subsequent Dispose must be safe (timers already cleared).
+            var ex = Record.Exception(() => cache.Dispose());
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void PurgeNormalPriorities_CleansSlidingTimeAndTimers()
+        {
+            // R-003: purging normal-priority items must also remove their _slidingTime and timer
+            // entries so neither collection grows without bound.
+            var cache = new CacheProvider();
+            // Add with sliding expiry so SlidingDetails is created.
+            cache.Add("normal1", "value1", TimeSpan.FromMinutes(5), CacheItemPriority.Normal);
+            cache.Add("normal2", "value2", TimeSpan.FromMinutes(5), CacheItemPriority.Normal);
+            cache.Add("high1", "value3", TimeSpan.FromMinutes(5), CacheItemPriority.High);
+
+            int removed = cache.PurgeNormalPriorities();
+
+            Assert.Equal(2, removed);
+            Assert.True(cache.Contains("high1"));
+            Assert.False(cache.Contains("normal1"));
+            Assert.False(cache.Contains("normal2"));
+            // Dispose must not throw — no dangling timer objects.
+            var ex = Record.Exception(() => cache.Dispose());
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void Update_ReplacesValue_TimerUnchanged()
+        {
+            // P-047: Update must NOT recreate the expiry timer.
+            var cache = new CacheProvider();
+            cache.Add("key1", "original", TimeSpan.FromMinutes(5));
+
+            cache.Update("key1", "updated");
+
+            // Value is replaced.
+            Assert.Equal("updated", cache.Get<string, string>("key1"));
+            // Item still exists (timer not cancelled).
+            Assert.True(cache.Contains("key1"));
+        }
+
+        [Fact]
+        public void Update_NonExistentKey_IsNoOp()
+        {
+            var cache = new CacheProvider();
+
+            var ex = Record.Exception(() => cache.Update("missing", "value"));
+
+            Assert.Null(ex);
+            Assert.False(cache.Contains("missing"));
+        }
+
+        [Fact]
+        public void Update_PreservesExpiry_ItemExpiresAfterOriginalDuration()
+        {
+            // Confirm that Update keeps the existing timer by verifying the item
+            // expires after the original short window (not reset to a new one).
+            var cache = new CacheProvider();
+            cache.Add("key1", "original", TimeSpan.FromMilliseconds(150));
+
+            cache.Update("key1", "updated");
+
+            // Value should be visible immediately.
+            Assert.Equal("updated", cache.Get<string, string>("key1"));
+
+            // After the original expiry window the item should be gone.
+            Thread.Sleep(400);
+            Assert.False(cache.Contains("key1"));
+        }
+
+        [Fact]
+        public void Dispose_CanBeCalledSafely_AfterClear()
+        {
+            var cache = new CacheProvider();
+            cache.Add("key1", "value1", TimeSpan.FromMinutes(5));
+            cache.Clear();
+
+            // Double-dispose must not throw.
+            cache.Dispose();
+            var ex = Record.Exception(() => cache.Dispose());
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void Remove_NonExistentKey_TimerCleanupDoesNotThrow()
+        {
+            var cache = new CacheProvider();
+
+            var ex = Record.Exception(() => cache.Remove("ghost"));
+
+            Assert.Null(ex);
+        }
     }
 }

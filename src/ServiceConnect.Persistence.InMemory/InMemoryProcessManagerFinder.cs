@@ -188,8 +188,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
 
                 if (currentVersion == newData.Version)
                 {
-                    _provider.Remove(key);
-                    _provider.Add(key, updatedData, DateTime.UtcNow.Add(ExpiryDuration));
+                    _provider.Update(key, updatedData);
                 }
                 else
                 {
