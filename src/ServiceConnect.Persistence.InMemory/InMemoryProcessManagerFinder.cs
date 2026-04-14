@@ -37,8 +37,17 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         ArgumentNullException.ThrowIfNull(mapper);
         ArgumentNullException.ThrowIfNull(message);
 
-        var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
-                  ?? mapper.Mappings.FirstOrDefault(m => m.MessageType == typeof(Message));
+        // Single-pass scan: prefer an exact message-type match, fall back to the base
+        // Message wildcard. Previously two separate FirstOrDefault calls (P-046).
+        var exactMessageType = message.GetType();
+        ProcessManagerToMessageMap? mapping = null;
+        ProcessManagerToMessageMap? fallback = null;
+        foreach (var m in mapper.Mappings)
+        {
+            if (m.MessageType == exactMessageType) { mapping = m; break; }
+            if (fallback == null && m.MessageType == typeof(Message)) fallback = m;
+        }
+        mapping ??= fallback;
 
         if (mapping == null)
             throw new InvalidOperationException(

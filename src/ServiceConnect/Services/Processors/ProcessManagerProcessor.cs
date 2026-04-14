@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -9,6 +10,10 @@ internal sealed class ProcessManagerProcessor(
     IServiceProvider serviceProvider,
     ILogger<ProcessManagerProcessor> logger) : IMessageProcessor
 {
+    // Cached mapper per handler interface type. ConfigureMapper compiles expression lambdas
+    // that are identical for a given handler type, so we only pay the cost once (P-005/R-034).
+    private static readonly ConcurrentDictionary<Type, IProcessManagerPropertyMapper> MapperCache = new();
+
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope,
@@ -38,8 +43,12 @@ internal sealed class ProcessManagerProcessor(
             return ProcessResult.NotHandled;
         }
 
-        var mapper = new DefaultProcessManagerPropertyMapper();
-        descriptor.ConfigureMapper(handler, mapper);
+        var mapper = MapperCache.GetOrAdd(descriptor.ProcessHandlerInterfaceType, _ =>
+        {
+            var m = new DefaultProcessManagerPropertyMapper();
+            descriptor.ConfigureMapper(handler, m);
+            return m;
+        });
 
         var persistenceData = await descriptor.FindData(finder, mapper, (Message)message, cancellationToken).ConfigureAwait(false);
 
