@@ -9,7 +9,8 @@ namespace ServiceConnect.Services.Processors;
 internal sealed class AggregatorProcessor(
     AggregatorRegistry registry,
     IServiceProvider serviceProvider,
-    ILogger<AggregatorProcessor> logger) : IMessageProcessor, IAsyncDisposable
+    ILogger<AggregatorProcessor> logger,
+    IAggregatorPersistor? persistor = null) : IMessageProcessor, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, Timer> _timers = new();
     // Per-aggregator flush lock. Holding this across the full flush body prevents
@@ -32,7 +33,6 @@ internal sealed class AggregatorProcessor(
         if (!registry.TryGet(messageType, out var descriptor))
             return ProcessResult.NotHandled;
 
-        var persistor = serviceProvider.GetService<IAggregatorPersistor>();
         if (persistor == null)
         {
             logger.LogWarning("IAggregatorPersistor not registered. Cannot aggregate {MessageType}", messageType.FullName);
@@ -118,7 +118,6 @@ internal sealed class AggregatorProcessor(
             if (_timers.TryRemove(descriptor.AggregatorName, out var activeTimer))
                 activeTimer.Dispose();
 
-            var persistor = serviceProvider.GetService<IAggregatorPersistor>();
             if (persistor == null) return;
 
             var rawMessages = await persistor.GetDataAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);

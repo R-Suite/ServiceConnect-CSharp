@@ -21,7 +21,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -40,7 +40,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(), provider);
+        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => mockBus.Object));
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -56,7 +56,7 @@ public class HandlerProcessorTests
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(), provider);
+        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => new Mock<IBus>().Object));
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -75,7 +75,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -99,7 +99,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "Step2,Step3" };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -122,7 +122,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = System.Text.Encoding.UTF8.GetBytes("NextQueue") };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -142,7 +142,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };

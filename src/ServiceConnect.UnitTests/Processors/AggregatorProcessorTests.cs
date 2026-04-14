@@ -73,7 +73,7 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
+        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -131,7 +131,7 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
+        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -184,7 +184,7 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
+        var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
 
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -260,7 +260,7 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
+        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 

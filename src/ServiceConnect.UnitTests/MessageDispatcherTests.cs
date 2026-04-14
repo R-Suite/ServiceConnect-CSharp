@@ -103,7 +103,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_mockReplyManager.Object),
-            new HandlerProcessor(handlerRegistry, serviceProvider)
+            new HandlerProcessor(handlerRegistry, serviceProvider, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()))
         };
 
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
@@ -332,7 +332,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_mockReplyManager.Object),
-            new HandlerProcessor(BuildHandlerRegistry(), sp)
+            new HandlerProcessor(BuildHandlerRegistry(), sp, new Lazy<IBus>(() => new Mock<IBus>().Object))
         };
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,

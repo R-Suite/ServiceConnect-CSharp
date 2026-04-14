@@ -5,7 +5,8 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class HandlerProcessor(
     MessageHandlerRegistry registry,
-    IServiceProvider serviceProvider) : IMessageProcessor
+    IServiceProvider serviceProvider,
+    Lazy<IBus> bus) : IMessageProcessor
 {
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -36,8 +37,8 @@ internal sealed class HandlerProcessor(
         if (invocations is null)
             return ProcessResult.NotHandled;
 
-        var bus = serviceProvider.GetRequiredService<IBus>();
-        var context = new ConsumeContext(bus, headers) { CancellationToken = cancellationToken };
+        var resolvedBus = bus.Value;
+        var context = new ConsumeContext(resolvedBus, headers) { CancellationToken = cancellationToken };
 
         foreach (var (handler, descriptor) in invocations)
         {
@@ -45,7 +46,7 @@ internal sealed class HandlerProcessor(
             await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
         }
 
-        await ForwardRoutingSlipAsync(message, messageType, headers, bus, cancellationToken).ConfigureAwait(false);
+        await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, cancellationToken).ConfigureAwait(false);
 
         return ProcessResult.Handled;
     }

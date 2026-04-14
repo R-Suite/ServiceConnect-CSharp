@@ -146,6 +146,11 @@ public static class ServiceCollectionExtensions
             registration(services);
         }
 
+        // Lazy<IBus> breaks the circular dependency: Bus → IMessageDispatcher → processors → IBus.
+        // Processors receive a Lazy<IBus> so the IBus singleton is only resolved after construction
+        // completes, avoiding a DI cycle while still caching the resolved instance.
+        services.TryAddSingleton(sp => new Lazy<IBus>(() => sp.GetRequiredService<IBus>()));
+
         // Bus — uses a factory so that DI can resolve the internal ctor
         services.TryAddSingleton<IBus>(sp => new Bus(
             sp.GetRequiredService<IMessageSerializer>(),

@@ -8,6 +8,7 @@ namespace ServiceConnect.Services.Processors;
 internal sealed class ProcessManagerProcessor(
     ProcessManagerHandlerRegistry registry,
     IServiceProvider serviceProvider,
+    Lazy<IBus> bus,
     ILogger<ProcessManagerProcessor> logger) : IMessageProcessor
 {
     // Cached mapper per handler interface type. ConfigureMapper compiles expression lambdas
@@ -65,10 +66,9 @@ internal sealed class ProcessManagerProcessor(
             data = descriptor.ExtractData(persistenceData!);
         }
 
-        var bus = serviceProvider.GetRequiredService<IBus>();
         descriptor.SetHandlerContext(
             handler,
-            new ConsumeContext(bus, headers) { CancellationToken = cancellationToken });
+            new ConsumeContext(bus.Value, headers) { CancellationToken = cancellationToken });
 
         try
         {
