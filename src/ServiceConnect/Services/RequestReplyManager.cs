@@ -33,6 +33,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
 
         await using var reg = linkedCts.Token.Register(() =>
         {
+            // Remove atomically before signalling so ProcessReply cannot add to the
+            // entry after the timeout/cancel fires (closes TOCTOU race R-021).
+            _pendingRequests.TryRemove(messageIdStr, out _);
             if (cancellationToken.IsCancellationRequested)
                 tcs.TrySetCanceled(cancellationToken);
             else
@@ -92,6 +95,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
 
         await using var reg = linkedCts.Token.Register(() =>
         {
+            // Remove atomically before signalling so ProcessReply cannot append to the
+            // response list after the timeout/cancel fires (closes TOCTOU race R-021).
+            _pendingRequests.TryRemove(messageIdStr, out _);
             if (cancellationToken.IsCancellationRequested)
                 tcs.TrySetCanceled(cancellationToken);
             else
