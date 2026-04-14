@@ -8,9 +8,11 @@ public sealed class ConsumeEventArgs
 
     public IDictionary<string, object> Headers
     {
-        get => _headers;
-        init => _headers = value is not null ? value : new Dictionary<string, object>();
+        // Lazy getter: backing field is null! when ConsumeEventArgs is constructed without
+        // setting Headers — avoids the wasted allocation from the field initializer (P-033).
+        get => _headers ??= new Dictionary<string, object>();
+        init => _headers = value ?? new Dictionary<string, object>();
     }
 
-    private IDictionary<string, object> _headers = new Dictionary<string, object>();
+    private IDictionary<string, object> _headers = null!;
 }

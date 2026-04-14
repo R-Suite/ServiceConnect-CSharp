@@ -9,12 +9,39 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
     public IDictionary<string, object> Headers { get; } = headers;
     public CancellationToken CancellationToken { get; set; }
 
-    public string? MessageId =>
-        Headers.TryGetValue(HeaderKeys.MessageId, out var value) ? HeaderDecoder.Decode(value) : null;
+    // Cached backing fields — HeaderDecoder.Decode + Guid.TryParse are called only once
+    // per ConsumeContext instance regardless of how many times the properties are read (P-031).
+    private string? _messageId;
+    private bool _messageIdCached;
+    private Guid? _correlationId;
 
-    public Guid CorrelationId =>
-        Headers.TryGetValue(HeaderKeys.CorrelationId, out var value) && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
-            ? id : Guid.Empty;
+    public string? MessageId
+    {
+        get
+        {
+            if (!_messageIdCached)
+            {
+                _messageId = Headers.TryGetValue(HeaderKeys.MessageId, out var value)
+                    ? HeaderDecoder.Decode(value) : null;
+                _messageIdCached = true;
+            }
+            return _messageId;
+        }
+    }
+
+    public Guid CorrelationId
+    {
+        get
+        {
+            if (_correlationId is null)
+            {
+                _correlationId = Headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
+                    && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
+                    ? id : Guid.Empty;
+            }
+            return _correlationId.Value;
+        }
+    }
 
     public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default) where TReply : Message
     {

@@ -105,18 +105,16 @@ public static class ServiceConnectActivitySource
             .SetTag(MessagingAttributes.ProtocolName, "amqp")
             .SetTag(MessagingAttributes.MessagingOperation, "receive");
 
-        // Pre-size the dict and iterate the source directly — ToList() was a defensive
-        // copy that allocated a full KeyValuePair list per consumed message (P-64).
-        var readableHeaders = new Dictionary<string, string?>(eventArgs.Headers.Count);
-        foreach (var kvp in eventArgs.Headers)
-        {
-            readableHeaders[kvp.Key] = HeaderDecoder.Decode(kvp.Value);
-        }
+        // Targeted header lookups — decode only the two headers actually used here
+        // rather than allocating a full decode dictionary for all 15-20 headers (P-008).
+        string? destinationAddress = eventArgs.Headers.TryGetValue(HeaderKeys.DestinationAddress, out var daVal)
+            ? HeaderDecoder.Decode(daVal) : null;
+        string? messageId = eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out var miVal)
+            ? HeaderDecoder.Decode(miVal) : null;
 
-        readableHeaders.TryGetValue(HeaderKeys.DestinationAddress, out string? destinationAddress);
         activity.DisplayName = (string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive";
 
-        if (readableHeaders.TryGetValue(HeaderKeys.MessageId, out string? messageId))
+        if (messageId is not null)
         {
             activity.SetTag(MessagingAttributes.MessageId, messageId);
         }
