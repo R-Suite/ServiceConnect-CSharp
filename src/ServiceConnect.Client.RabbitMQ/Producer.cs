@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace ServiceConnect.Client.RabbitMQ;
@@ -14,6 +15,19 @@ public sealed class Producer : IProducer
     private const ushort DefaultRetryCount = 60;
     /// <summary>Default delay between publish retries, in seconds.</summary>
     private const ushort DefaultRetryTimeInSeconds = 10;
+
+    // P-049: cache process/assembly name — computed once at startup, reused on every reconnect.
+    private static readonly string ProducerName = Assembly.GetEntryAssembly()?.GetName().Name
+        ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+
+    // P-016: cache (FullName, AssemblyQualifiedName) per Type — these are constant for a given Type.
+    private static readonly ConcurrentDictionary<Type, (string FullName, string AQN)> _typeNameCache = new();
+
+    // P-017: cache the computed exchange name (FullName with dots stripped) per FullName string.
+    private readonly ConcurrentDictionary<string, string> _exchangeNameCache = new();
+    // P-004: track which exchange names have already been declared on the current connection.
+    //        Cleared on reconnect because exchange state is per-connection.
+    private readonly ConcurrentDictionary<string, bool> _declaredExchanges = new();
 
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
@@ -79,10 +93,10 @@ public sealed class Producer : IProducer
     {
         _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration, heartbeatInterval: null);
 
-        string producerName = Assembly.GetEntryAssembly()?.GetName().Name
-            ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+        // P-004: exchange declarations are per-connection — reset the cache on every (re)connect.
+        _declaredExchanges.Clear();
 
-        _connection = await _connectionFactory.CreateConnectionAsync(_hosts, producerName).ConfigureAwait(false);
+        _connection = await _connectionFactory.CreateConnectionAsync(_hosts, ProducerName).ConfigureAwait(false);
 
         if (_publisherAcks)
         {
@@ -107,7 +121,11 @@ public sealed class Producer : IProducer
             var messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
             var basicProperties = CreateBasicProperties(messageHeaders);
 
-            string exchangeName = await ConfigureExchangeAsync(type.FullName!.Replace(".", string.Empty), ExchangeType.Fanout).ConfigureAwait(false);
+            // P-017: compute the exchange name once per type and cache it.
+            // P-004: only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
+            string exchangeName = _exchangeNameCache.GetOrAdd(type.FullName!, static fn => fn.Replace(".", string.Empty));
+            if (!_declaredExchanges.ContainsKey(exchangeName))
+                await ConfigureExchangeAsync(exchangeName, ExchangeType.Fanout).ConfigureAwait(false);
             await PublishWithRetryAsync(exchangeName, "", basicProperties, message, cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
@@ -245,10 +263,12 @@ public sealed class Producer : IProducer
         if (_busConfiguration.IncludeMachineNameInHeaders)
             result[HeaderKeys.SourceMachine] = Environment.MachineName;
 
+        // P-016: cache FullName and AssemblyQualifiedName per Type — these never change.
+        var (fullName, aqn) = _typeNameCache.GetOrAdd(type, static t => (t.FullName!, t.AssemblyQualifiedName!));
         if (!result.ContainsKey(HeaderKeys.TypeName))
-            result[HeaderKeys.TypeName] = type.FullName!;
+            result[HeaderKeys.TypeName] = fullName;
         if (!result.ContainsKey(HeaderKeys.FullTypeName))
-            result[HeaderKeys.FullTypeName] = type.AssemblyQualifiedName!;
+            result[HeaderKeys.FullTypeName] = aqn;
 
         result[HeaderKeys.ConsumerType] = "RabbitMQ";
         result[HeaderKeys.Language] = "C#";
@@ -256,18 +276,18 @@ public sealed class Producer : IProducer
         return result;
     }
 
-    private async Task<string> ConfigureExchangeAsync(string exchangeName, string type)
+    private async Task ConfigureExchangeAsync(string exchangeName, string type)
     {
         try
         {
             await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null).ConfigureAwait(false);
+            // P-004: mark as declared so subsequent publishes skip the round-trip.
+            _declaredExchanges[exchangeName] = true;
         }
         catch (Exception ex)
         {
             _logger.LogWarning("Error declaring exchange - {Message}", ex.Message);
         }
-
-        return exchangeName;
     }
 
     private async Task DisposeModelAsync()
