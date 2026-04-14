@@ -61,8 +61,17 @@ internal sealed class ProcessManagerProcessor(
             handler,
             new ConsumeContext(bus, headers) { CancellationToken = cancellationToken });
 
-        await descriptor.InvokeHandleAsync(handler, (Message)message, data).ConfigureAwait(false);
+        try
+        {
+            await descriptor.InvokeHandleAsync(handler, (Message)message, data).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Process-manager handler threw for {MessageType}; persistence skipped", messageType.Name);
+            throw;
+        }
 
+        // Only persist if the handler succeeded — keeps business side-effects and persistence atomic.
         if (isNew)
         {
             await finder.InsertDataAsync((IProcessManagerData)data, cancellationToken).ConfigureAwait(false);

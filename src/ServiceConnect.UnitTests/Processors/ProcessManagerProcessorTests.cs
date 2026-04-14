@@ -171,6 +171,37 @@ public class ProcessManagerProcessorTests
             processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), new PmTestMessage(Guid.NewGuid()),
                 new Dictionary<string, object>(), new Envelope(), cts.Token));
     }
+
+    [Fact]
+    public async Task ProcessAsync_HandlerThrows_InsertDataAsyncNotCalled()
+    {
+        var (services, _, mockFinder) = CreateBaseServices();
+        var handler = new PmThrowingHandler();
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmThrowingHandler)
+        });
+
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
+            It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IPersistenceData<PmTestData>?)null);
+
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, NullLogger<ProcessManagerProcessor>.Instance);
+
+        var msg = new PmTestMessage(Guid.NewGuid()) { Content = "will-throw" };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
+                new Dictionary<string, object>(), new Envelope()));
+
+        mockFinder.Verify(f => f.InsertDataAsync(
+            It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockFinder.Verify(f => f.UpdateDataAsync(
+            It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }
 
 file class PmTestMessage : Message
@@ -203,4 +234,14 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
         Invoked = true;
         return Task.CompletedTask;
     }
+}
+
+file class PmThrowingHandler : IProcessHandler<PmTestData, PmTestMessage>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
+
+    public Task HandleAsync(PmTestMessage message, PmTestData data)
+        => throw new InvalidOperationException("handler failure");
 }
