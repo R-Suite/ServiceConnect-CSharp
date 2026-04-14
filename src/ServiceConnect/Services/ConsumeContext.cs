@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Options;
@@ -7,7 +8,14 @@ namespace ServiceConnect.Services;
 public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers, IQueueConfiguration queueConfig, IBusConfiguration busConfig) : IConsumeContext
 {
     public IBus Bus { get; } = bus;
-    public IDictionary<string, object> Headers { get; } = headers;
+
+    /// <summary>
+    /// Read-only view exposed to user handlers (R-088). The transport layer retains the
+    /// mutable <see cref="IDictionary{TKey,TValue}"/> and continues to write pipeline
+    /// headers (TimeProcessed, DestinationAddress, etc.) via that reference.
+    /// </summary>
+    public IReadOnlyDictionary<string, object> Headers { get; } = new ReadOnlyDictionary<string, object>(
+        headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers));
     public CancellationToken CancellationToken { get; set; }
 
     // Cached backing fields — HeaderDecoder.Decode + Guid.TryParse are called only once

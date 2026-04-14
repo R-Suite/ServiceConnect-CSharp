@@ -23,7 +23,7 @@ public class CustomHeaderTests
     public async Task PublishAsync_CustomHeaders_ReceivedByHandler()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<IDictionary<string, object>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs = new TaskCompletionSource<IReadOnlyDictionary<string, object>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("customheader");
 
         var handlerReferences = new List<HandlerReference>
@@ -81,7 +81,7 @@ public class CustomHeaderTests
 
             Assert.NotNull(receivedHeaders);
             Assert.True(receivedHeaders.ContainsKey("X-Custom"), "Expected 'X-Custom' header to be present");
-            var rawValue = receivedHeaders["X-Custom"];
+            var rawValue = receivedHeaders["X-Custom"];  // IReadOnlyDictionary supports indexer reads
             var headerValue = rawValue is byte[] b ? System.Text.Encoding.UTF8.GetString(b) : rawValue?.ToString();
             Assert.Equal("hello-world", headerValue);
         }
@@ -192,11 +192,11 @@ public class CustomHeaderTests
 
 file class HeaderCaptureHandler : IMessageHandler<TestMessage>
 {
-    private readonly Action<IDictionary<string, object>> _callback;
+    private readonly Action<IReadOnlyDictionary<string, object>> _callback;
 
     public IConsumeContext? Context { get; set; }
 
-    public HeaderCaptureHandler(Action<IDictionary<string, object>> callback) => _callback = callback;
+    public HeaderCaptureHandler(Action<IReadOnlyDictionary<string, object>> callback) => _callback = callback;
 
     public Task HandleAsync(TestMessage message)
     {

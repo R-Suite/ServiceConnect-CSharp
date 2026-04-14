@@ -19,6 +19,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly MessageAuditPublisher _auditPublisher;
     private readonly ILogger _logger;
 
+    // R-050: inbound header count and per-value size limits to prevent resource exhaustion.
+    private const int DefaultMaxHeaderCount = 64;
+    private const int DefaultMaxHeaderValueBytes = 8192;
+
     private readonly bool _errorsDisabled;
     private readonly ushort _prefetchCount;
     private readonly bool _disablePrefetch;
@@ -126,6 +130,31 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 return; // processed stays false → nacked by the finally block
             }
 
+            // R-050: reject messages with excessive header count or oversized header values before
+            // doing any work. processed stays false → nacked by the finally block.
+            var inboundHeaders = args.BasicProperties.Headers;
+            if (inboundHeaders != null && inboundHeaders.Count > DefaultMaxHeaderCount)
+            {
+                _logger.LogWarning(
+                    "Rejecting message: header count {Count} exceeds limit of {Max} on queue {Queue}",
+                    inboundHeaders.Count, DefaultMaxHeaderCount, _queueConfiguration.QueueName);
+                return;
+            }
+
+            if (inboundHeaders != null)
+            {
+                foreach (var kvp in inboundHeaders)
+                {
+                    if (kvp.Value is byte[] bytes && bytes.Length > DefaultMaxHeaderValueBytes)
+                    {
+                        _logger.LogWarning(
+                            "Rejecting message: header '{Key}' value size {Size} bytes exceeds limit of {Max} bytes on queue {Queue}",
+                            kvp.Key, bytes.Length, DefaultMaxHeaderValueBytes, _queueConfiguration.QueueName);
+                        return;
+                    }
+                }
+            }
+
             await ProcessMessageAsync(args).ConfigureAwait(false);
             processed = true;
         }
@@ -162,6 +191,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // headers (TimeReceived, DestinationMachine, DestinationAddress) so we
         // avoid rehashes during the copy — per-message hot path (P-09, P-018).
         var sourceHeaders = args.BasicProperties.Headers;
+
         var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3);
         if (sourceHeaders != null)
         {

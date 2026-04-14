@@ -269,4 +269,62 @@ public class RabbitMqConsumerHostTests
         Assert.True(handlerInvoked, "Consumer event handler must be called for messages within the limit.");
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    // ─── Inbound header count and value size limits (R-050) ─────────────────
+
+    [Fact]
+    public async Task EventAsync_ExcessiveHeaderCount_IsNacked_AndHandlerNotInvoked()
+    {
+        var (conn, channel) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        bool handlerInvoked = false;
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        await host.StartConsumingAsync(
+            (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
+            "q");
+
+        // Build a headers dict with more than DefaultMaxHeaderCount (64) entries.
+        var tooManyHeaders = new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" };
+        for (int i = 0; i < 65; i++)
+            tooManyHeaders[$"X-Excess-{i}"] = "v";
+
+        await DeliverMessageAsync(host, new byte[1], tooManyHeaders);
+
+        Assert.False(handlerInvoked, "Handler must not be invoked when header count exceeds limit.");
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EventAsync_OversizedHeaderValue_IsNacked_AndHandlerNotInvoked()
+    {
+        var (conn, channel) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        bool handlerInvoked = false;
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        await host.StartConsumingAsync(
+            (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
+            "q");
+
+        // Single header with a byte[] value exceeding DefaultMaxHeaderValueBytes (8192).
+        var bigValueHeaders = new Dictionary<string, object>
+        {
+            [HeaderKeys.TypeName] = "SomeType",
+            ["X-Big-Value"] = new byte[8193],
+        };
+
+        await DeliverMessageAsync(host, new byte[1], bigValueHeaders);
+
+        Assert.False(handlerInvoked, "Handler must not be invoked when a header value exceeds size limit.");
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

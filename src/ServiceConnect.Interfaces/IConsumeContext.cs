@@ -9,8 +9,9 @@ public interface IConsumeContext
     /// <summary>The bus instance on which the message arrived.</summary>
     IBus Bus { get; }
 
-    /// <summary>Raw headers as received from the transport (values may be byte[] or string).</summary>
-    IDictionary<string, object> Headers { get; }
+    /// <summary>Read-only view of headers as received from the transport (values may be byte[] or string).
+    /// Handlers must not mutate headers; the transport layer retains the mutable copy.</summary>
+    IReadOnlyDictionary<string, object> Headers { get; }
 
     /// <summary>Message id header, if present.</summary>
     string? MessageId { get; }

@@ -162,7 +162,7 @@ file class MhrStreamHandler : IStreamHandler<MhrFooMsg>
 file class MhrFakeConsumeContext : IConsumeContext
 {
     public IBus Bus => throw new NotImplementedException();
-    public IDictionary<string, object> Headers { get; set; } = new Dictionary<string, object>();
+    public IReadOnlyDictionary<string, object> Headers { get; set; } = new Dictionary<string, object>();
     public string? MessageId => null;
     public Guid CorrelationId => Guid.Empty;
     public CancellationToken CancellationToken { get; set; }
