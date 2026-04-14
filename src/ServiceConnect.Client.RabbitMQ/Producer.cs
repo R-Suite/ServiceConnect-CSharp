@@ -206,11 +206,24 @@ public sealed class Producer : IProducer
 
     public long MaximumMessageSize { get; }
 
+    // P-015: avoid StringBuilder allocation inside DateTime.ToString("O").
+    private static string FormatTimestamp(DateTime dt)
+    {
+        Span<char> buffer = stackalloc char[33]; // "O" format max length
+        dt.TryFormat(buffer, out int charsWritten, "O");
+        return new string(buffer[..charsWritten]);
+    }
+
     private BasicProperties CreateBasicProperties(Dictionary<string, object> messageHeaders)
     {
+        // P-014: foreach avoids the LINQ Select + enumerator allocation per message.
+        var headersCopy = new Dictionary<string, object?>(messageHeaders.Count);
+        foreach (var kvp in messageHeaders)
+            headersCopy[kvp.Key] = kvp.Value;
+
         var basicProperties = new BasicProperties
         {
-            Headers = new Dictionary<string, object?>(messageHeaders.Select(kvp => new KeyValuePair<string, object?>(kvp.Key, kvp.Value))),
+            Headers = headersCopy,
             Persistent = true
         };
 
@@ -259,7 +272,7 @@ public sealed class Producer : IProducer
             result[HeaderKeys.MessageType] = messageType;
 
         result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
-        result[HeaderKeys.TimeSent] = DateTime.UtcNow.ToString("O");
+        result[HeaderKeys.TimeSent] = FormatTimestamp(DateTime.UtcNow);
         if (_busConfiguration.IncludeMachineNameInHeaders)
             result[HeaderKeys.SourceMachine] = Environment.MachineName;
 

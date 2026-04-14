@@ -146,10 +146,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private async Task ProcessMessageAsync(BasicDeliverEventArgs args)
     {
         ConsumeEventResult result;
-        // Pre-size the dict to the incoming header count so we avoid rehashes
-        // during the copy — this is the per-message hot path (P-09).
+        // Pre-size the dict to the incoming header count plus 3 consumer-added
+        // headers (TimeReceived, DestinationMachine, DestinationAddress) so we
+        // avoid rehashes during the copy — per-message hot path (P-09, P-018).
         var sourceHeaders = args.BasicProperties.Headers;
-        var headers = new Dictionary<string, object>(sourceHeaders?.Count ?? 4);
+        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3);
         if (sourceHeaders != null)
         {
             foreach (var kvp in sourceHeaders)
@@ -163,12 +164,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
         try
         {
-            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeReceived, DateTime.UtcNow.ToString("O"));
+            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeReceived, FormatTimestamp(DateTime.UtcNow));
             if (_includeMachineNameInHeaders)
                 HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
             HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
 
-            var typeNameRaw = headers.ContainsKey(HeaderKeys.FullTypeName) ? headers[HeaderKeys.FullTypeName] : headers[HeaderKeys.TypeName];
+            // P-019: single TryGetValue lookup instead of ContainsKey + indexer.
+            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw))
+                typeNameRaw = headers[HeaderKeys.TypeName];
             string typeName = HeaderDecoder.Decode(typeNameRaw) ?? "";
 
             if (_consumerEventHandler == null)
@@ -181,7 +184,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 result = await _consumerEventHandler(args.Body, typeName, headers, _consumingCt).ConfigureAwait(false);
             }
 
-            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, DateTime.UtcNow.ToString("O"));
+            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, FormatTimestamp(DateTime.UtcNow));
         }
         catch (Exception ex)
         {
@@ -221,6 +224,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
 
         await CloseChannelAsync().ConfigureAwait(false);
+    }
+
+    // P-015: avoid StringBuilder allocation inside DateTime.ToString("O").
+    private static string FormatTimestamp(DateTime dt)
+    {
+        Span<char> buffer = stackalloc char[33]; // "O" format max length
+        dt.TryFormat(buffer, out int charsWritten, "O");
+        return new string(buffer[..charsWritten]);
     }
 
     private async Task CloseChannelAsync()
