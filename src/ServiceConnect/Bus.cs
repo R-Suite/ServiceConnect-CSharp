@@ -22,6 +22,7 @@ public sealed class Bus : IBus
     private readonly Services.Processors.AggregatorRegistry _aggregatorRegistry;
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
+    private readonly bool _hasOutgoingFilters;
     private readonly object _stateLock = new();
     private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private bool _consuming;
@@ -40,6 +41,7 @@ public sealed class Bus : IBus
         Services.Processors.MessageHandlerRegistry messageHandlerRegistry,
         Services.Processors.StreamHandlerRegistry streamHandlerRegistry,
         Services.Processors.AggregatorRegistry aggregatorRegistry,
+        IPipelineConfiguration pipelineConfig,
         IConsumer? consumer = null,
         IProducer? producer = null)
     {
@@ -55,6 +57,8 @@ public sealed class Bus : IBus
         _messageHandlerRegistry = messageHandlerRegistry ?? throw new ArgumentNullException(nameof(messageHandlerRegistry));
         _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
         _aggregatorRegistry = aggregatorRegistry ?? throw new ArgumentNullException(nameof(aggregatorRegistry));
+        if (pipelineConfig == null) throw new ArgumentNullException(nameof(pipelineConfig));
+        _hasOutgoingFilters = pipelineConfig.OutgoingFilters.Count > 0;
         _consumer = consumer;
         _producer = producer;
     }
@@ -66,12 +70,19 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         var messageBytes = _serializer.Serialize(message);
-        var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
+        Dictionary<string, string> headers;
 
-        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
-            return;
-
-        var headers = ExtractHeaders(envelope);
+        if (_hasOutgoingFilters)
+        {
+            var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
+            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+                return;
+            headers = ExtractHeaders(envelope);
+        }
+        else
+        {
+            headers = BuildHeadersDirect(typeof(T), options?.Headers);
+        }
 
         if (options?.RoutingKey is not null)
             headers[HeaderKeys.RoutingKey] = options.RoutingKey;
@@ -84,12 +95,19 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         var messageBytes = _serializer.Serialize(message);
-        var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
+        Dictionary<string, string> headers;
 
-        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
-            return;
-
-        var headers = ExtractHeaders(envelope);
+        if (_hasOutgoingFilters)
+        {
+            var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
+            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+                return;
+            headers = ExtractHeaders(envelope);
+        }
+        else
+        {
+            headers = BuildHeadersDirect(typeof(T), options?.Headers);
+        }
 
         if (options?.EndPoints is { Count: > 0 } endpoints)
         {
@@ -111,12 +129,19 @@ public sealed class Bus : IBus
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? new RequestOptions();
         var messageBytes = _serializer.Serialize(message);
-        var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
+        Dictionary<string, string> headers;
 
-        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
-            throw new InvalidOperationException("Outgoing filters blocked the request message.");
-
-        var headers = ExtractHeaders(envelope);
+        if (_hasOutgoingFilters)
+        {
+            var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
+            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+                throw new InvalidOperationException("Outgoing filters blocked the request message.");
+            headers = ExtractHeaders(envelope);
+        }
+        else
+        {
+            headers = BuildHeadersDirect(typeof(T), requestOptions.Headers);
+        }
 
         return await _requestReplyManager.SendRequestAsync<T, TReply>(
             messageBytes,
@@ -133,12 +158,19 @@ public sealed class Bus : IBus
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? new RequestOptions();
         var messageBytes = _serializer.Serialize(message);
-        var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
+        Dictionary<string, string> headers;
 
-        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
-            throw new InvalidOperationException("Outgoing filters blocked the request message.");
-
-        var headers = ExtractHeaders(envelope);
+        if (_hasOutgoingFilters)
+        {
+            var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
+            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+                throw new InvalidOperationException("Outgoing filters blocked the request message.");
+            headers = ExtractHeaders(envelope);
+        }
+        else
+        {
+            headers = BuildHeadersDirect(typeof(T), requestOptions.Headers);
+        }
 
         return await _requestReplyManager.SendRequestMultiAsync<T, TReply>(
             messageBytes,
@@ -170,12 +202,19 @@ public sealed class Bus : IBus
 
         var firstDestination = destinations[0];
         var messageBytes = _serializer.Serialize(message);
-        var envelope = CreateEnvelope(typeof(T), messageBytes);
+        Dictionary<string, string> headers;
 
-        if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
-            return;
-
-        var headers = ExtractHeaders(envelope);
+        if (_hasOutgoingFilters)
+        {
+            var envelope = CreateEnvelope(typeof(T), messageBytes);
+            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+                return;
+            headers = ExtractHeaders(envelope);
+        }
+        else
+        {
+            headers = BuildHeadersDirect(typeof(T), null);
+        }
 
         if (destinations.Count > 1)
         {
@@ -331,6 +370,30 @@ public sealed class Bus : IBus
                 _ => kvp.Value.ToString() ?? string.Empty
             };
         }
+        return headers;
+    }
+
+    /// <summary>
+    /// Fast-path header builder used when no outgoing filters are registered (P-009).
+    /// Produces the same <see cref="Dictionary{TKey,TValue}"/> that
+    /// <see cref="CreateEnvelope"/> + <see cref="ExtractHeaders"/> would return,
+    /// without allocating the intermediate <see cref="Envelope"/> or its
+    /// <c>Dictionary&lt;string, object&gt;</c> headers map.
+    /// </summary>
+    private static Dictionary<string, string> BuildHeadersDirect(Type messageType, Dictionary<string, string>? additionalHeaders)
+    {
+        var capacity = 1 + (additionalHeaders?.Count ?? 0);
+        var headers = new Dictionary<string, string>(capacity)
+        {
+            [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name
+        };
+
+        if (additionalHeaders is not null)
+        {
+            foreach (var kvp in additionalHeaders)
+                headers[kvp.Key] = kvp.Value;
+        }
+
         return headers;
     }
 }

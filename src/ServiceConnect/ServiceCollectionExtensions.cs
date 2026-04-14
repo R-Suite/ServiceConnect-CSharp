@@ -160,6 +160,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>(),
             sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>(),
             sp.GetRequiredService<Services.Processors.AggregatorRegistry>(),
+            sp.GetRequiredService<IPipelineConfiguration>(),
             sp.GetService<IConsumer>(),
             sp.GetService<IProducer>()));
 
