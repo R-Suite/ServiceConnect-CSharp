@@ -127,6 +127,13 @@ public sealed class Consumer : IConsumer
             catch (ObjectDisposedException) { }
         }
 
+        // Close and dispose the setup channel before nulling (R-012).
+        if (_model is { IsOpen: true })
+        {
+            try { await _model.CloseAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Error closing consumer setup channel"); }
+        }
+        _model?.Dispose();
         _model = null;
         if (_connection != null)
             await _connection.DisposeAsync().ConfigureAwait(false);

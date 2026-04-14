@@ -97,6 +97,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
     private async Task EventAsync(object consumer, BasicDeliverEventArgs args)
     {
+        // Capture _model before any await so that a concurrent DisposeAsync cannot
+        // null it out from under us in the finally block (R-020).
+        var model = _model;
         bool processed = false;
         try
         {
@@ -122,10 +125,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         {
             try
             {
-                if (processed)
-                    await _model!.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
+                if (model == null)
+                {
+                    _logger.LogWarning("Channel was null during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
+                }
+                else if (processed)
+                    await model.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
                 else
-                    await _model!.BasicNackAsync(args.DeliveryTag, false, true).ConfigureAwait(false);
+                    await model.BasicNackAsync(args.DeliveryTag, false, true).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
