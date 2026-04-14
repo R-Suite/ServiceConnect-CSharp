@@ -7,6 +7,7 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
     private readonly ConcurrentDictionary<object, CacheItem> _cache = new();
     private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new();
     private readonly ConcurrentDictionary<object, Timer> _timers = new();
+    private int _disposed;
 
     #region Implementation of ICacheProvider
 
@@ -139,11 +140,11 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
     public void Update<TKey, TValue>(TKey key, TValue value)
     {
         if (key is null) return;
-
-        if (_cache.TryGetValue(key!, out var existing))
+        while (_cache.TryGetValue(key!, out var existing))
         {
-            // Replace value in-place, keeping Priority and RelativeExpiry intact.
-            _cache[key!] = new CacheItem(value!, existing.Priority, existing.RelativeExpiry);
+            var replacement = new CacheItem(value!, existing.Priority, existing.RelativeExpiry);
+            if (_cache.TryUpdate(key!, replacement, existing))
+                break;
         }
     }
 
@@ -153,10 +154,8 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
 
     public void Dispose()
     {
-        foreach (var kvp in _timers)
-        {
-            kvp.Value.Dispose();
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        foreach (var kvp in _timers) kvp.Value.Dispose();
         _timers.Clear();
     }
 
@@ -184,7 +183,7 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
         var timer = new Timer(_ => TryPurgeItem(key!), null, delay, Timeout.InfiniteTimeSpan);
 
         // Swap in the new timer and dispose any previous one (re-observation after sliding check).
-        var old = _timers.AddOrUpdate(key!, timer, (_, existing) =>
+        _timers.AddOrUpdate(key!, timer, (_, existing) =>
         {
             existing.Dispose();
             return timer;
