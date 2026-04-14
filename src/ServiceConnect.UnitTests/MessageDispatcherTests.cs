@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
@@ -103,7 +104,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_mockReplyManager.Object),
-            new HandlerProcessor(handlerRegistry, serviceProvider, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()))
+            new HandlerProcessor(handlerRegistry, serviceProvider, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()), new BusConfiguration(), new QueueConfiguration())
         };
 
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
@@ -332,7 +333,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_mockReplyManager.Object),
-            new HandlerProcessor(BuildHandlerRegistry(), sp, new Lazy<IBus>(() => new Mock<IBus>().Object))
+            new HandlerProcessor(BuildHandlerRegistry(), sp, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration())
         };
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,

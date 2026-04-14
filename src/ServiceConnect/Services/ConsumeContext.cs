@@ -1,9 +1,10 @@
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
-public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers) : IConsumeContext
+public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers, IQueueConfiguration queueConfig, IBusConfiguration busConfig) : IConsumeContext
 {
     public IBus Bus { get; } = bus;
     public IDictionary<string, object> Headers { get; } = headers;
@@ -49,6 +50,13 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
         if (string.IsNullOrEmpty(sourceAddress))
             throw new InvalidOperationException("Cannot reply: incoming message has no SourceAddress header.");
 
+        if (busConfig.ValidateReplyDestinations && !IsKnownQueue(sourceAddress, queueConfig))
+        {
+            throw new InvalidOperationException(
+                $"Cannot reply: SourceAddress '{sourceAddress}' is not a recognized queue. " +
+                "This may indicate a spoofed message. Configure queue mappings or use RequestReplyManager for safe replies.");
+        }
+
         var requestMessageId = Headers.TryGetValue(HeaderKeys.RequestMessageId, out var rmi) ? HeaderDecoder.Decode(rmi) : null;
 
         var replyHeaders = headers ?? [];
@@ -57,5 +65,28 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
 
         var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
         await Bus.SendAsync(message, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static bool IsKnownQueue(string address, IQueueConfiguration queueConfig)
+    {
+        // Check own queues
+        if (string.Equals(address, queueConfig.QueueName, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(address, queueConfig.ErrorQueueName, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (string.Equals(address, queueConfig.AuditQueueName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Check all queue mapping values
+        foreach (var kvp in queueConfig.QueueMappings)
+        {
+            foreach (var queue in kvp.Value)
+            {
+                if (string.Equals(address, queue, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+
+        return false;
     }
 }

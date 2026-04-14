@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Services.Processors;
 
@@ -9,7 +10,9 @@ internal sealed class ProcessManagerProcessor(
     ProcessManagerHandlerRegistry registry,
     IServiceProvider serviceProvider,
     Lazy<IBus> bus,
-    ILogger<ProcessManagerProcessor> logger) : IMessageProcessor
+    ILogger<ProcessManagerProcessor> logger,
+    IBusConfiguration busConfig,
+    IQueueConfiguration queueConfig) : IMessageProcessor
 {
     // Cached mapper per handler interface type. ConfigureMapper compiles expression lambdas
     // that are identical for a given handler type, so we only pay the cost once (P-005/R-034).
@@ -68,7 +71,7 @@ internal sealed class ProcessManagerProcessor(
 
         descriptor.SetHandlerContext(
             handler,
-            new ConsumeContext(bus.Value, headers) { CancellationToken = cancellationToken });
+            new ConsumeContext(bus.Value, headers, queueConfig, busConfig) { CancellationToken = cancellationToken });
 
         try
         {

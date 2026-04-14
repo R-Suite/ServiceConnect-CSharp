@@ -11,6 +11,10 @@ public sealed class BusConfiguration : IBusConfiguration
     public Action<Exception>? ExceptionHandler { get; set; }
     /// <inheritdoc />
     public bool IncludeMachineNameInHeaders { get; set; }
+    /// <inheritdoc />
+    public bool ValidateReplyDestinations { get; set; } = true;
+    /// <inheritdoc />
+    public bool EnableRoutingSlipProcessing { get; set; } = true;
     public ITransportConfiguration Transport { get; } = new TransportConfiguration();
     public IQueueConfiguration Queues { get; } = new QueueConfiguration();
     public IPersistenceConfiguration Persistence { get; } = new PersistenceConfiguration();

@@ -2,7 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using Xunit;
@@ -11,6 +13,14 @@ namespace ServiceConnect.UnitTests.Processors;
 
 public class HandlerProcessorTests
 {
+    private static readonly IBusConfiguration DefaultBusConfig = new BusConfiguration();
+    private static readonly IQueueConfiguration DefaultQueueConfig = new QueueConfiguration
+    {
+        QueueName = "test-queue",
+        ErrorQueueName = "errors",
+        AuditQueueName = "audit"
+    };
+
     [Fact]
     public async Task ProcessAsync_WithRegisteredHandler_InvokesHandler()
     {
@@ -21,7 +31,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -40,7 +50,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => mockBus.Object));
+        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -56,7 +66,7 @@ public class HandlerProcessorTests
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => new Mock<IBus>().Object));
+        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => new Mock<IBus>().Object), DefaultBusConfig, DefaultQueueConfig);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -75,7 +85,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -88,7 +98,7 @@ public class HandlerProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_WithRoutingSlip_ForwardsToNextDestination()
+    public async Task ProcessAsync_WithRoutingSlip_ForwardsToKnownDestination()
     {
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
@@ -99,7 +109,12 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
+        // Register the routing slip destinations as known queues
+        var queueConfig = new QueueConfiguration { QueueName = "test-queue" };
+        queueConfig.AddQueueMapping(typeof(TestHpMsg), "Step2");
+        queueConfig.AddQueueMapping(typeof(TestHpMsg), "Step3");
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "Step2,Step3" };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -111,7 +126,7 @@ public class HandlerProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_WithRoutingSlipBytes_ForwardsToNextDestination()
+    public async Task ProcessAsync_WithRoutingSlipBytes_ForwardsToKnownDestination()
     {
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
@@ -122,7 +137,11 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
+        // Register the routing slip destination as a known queue
+        var queueConfig = new QueueConfiguration { QueueName = "test-queue" };
+        queueConfig.AddQueueMapping(typeof(TestHpMsg), "NextQueue");
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = System.Text.Encoding.UTF8.GetBytes("NextQueue") };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -142,13 +161,57 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object));
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig);
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
         await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
 
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RoutingSlipToUnknownQueue_Throws()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "unknown-evil-queue" };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope));
+        Assert.Contains("not a recognized queue", ex.Message);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RoutingSlipDisabled_SkipsProcessing()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var busConfig = new BusConfiguration { EnableRoutingSlipProcessing = false };
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), busConfig, DefaultQueueConfig);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        // This would normally throw because "SomeQueue" isn't known, but routing slip is disabled
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "SomeQueue" };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+        Assert.True(handler.Invoked);
         mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()), Times.Never);
     }
 

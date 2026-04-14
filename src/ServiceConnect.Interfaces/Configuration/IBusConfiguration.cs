@@ -14,6 +14,21 @@ public interface IBusConfiguration
     /// disclosure in shared-broker deployments, so this defaults off (S-04).
     /// </summary>
     bool IncludeMachineNameInHeaders { get; set; }
+    /// <summary>
+    /// When <c>true</c> (default), <see cref="IConsumeContext.ReplyAsync{TReply}"/> validates
+    /// that the <c>SourceAddress</c> header points to a queue known from
+    /// <see cref="IQueueConfiguration.QueueMappings"/>, <see cref="IQueueConfiguration.QueueName"/>,
+    /// <see cref="IQueueConfiguration.ErrorQueueName"/>, or <see cref="IQueueConfiguration.AuditQueueName"/>.
+    /// Set to <c>false</c> to allow replies to arbitrary queue names (R-023).
+    /// </summary>
+    bool ValidateReplyDestinations { get; set; }
+    /// <summary>
+    /// When <c>true</c> (default), the handler processor will forward messages along
+    /// routing-slip destinations found in the <c>RoutingSlip</c> header. When <c>false</c>,
+    /// routing-slip headers are silently ignored. Destinations are also validated against
+    /// known queues when enabled (R-024).
+    /// </summary>
+    bool EnableRoutingSlipProcessing { get; set; }
     ITransportConfiguration Transport { get; }
     IQueueConfiguration Queues { get; }
     IPersistenceConfiguration Persistence { get; }

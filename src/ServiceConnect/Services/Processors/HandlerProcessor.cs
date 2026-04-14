@@ -2,13 +2,16 @@ using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Services.Processors;
 
 internal sealed class HandlerProcessor(
     MessageHandlerRegistry registry,
     IServiceProvider serviceProvider,
-    Lazy<IBus> bus) : IMessageProcessor
+    Lazy<IBus> bus,
+    IBusConfiguration busConfig,
+    IQueueConfiguration queueConfig) : IMessageProcessor
 {
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -40,7 +43,7 @@ internal sealed class HandlerProcessor(
             return ProcessResult.NotHandled;
 
         var resolvedBus = bus.Value;
-        var context = new ConsumeContext(resolvedBus, headers) { CancellationToken = cancellationToken };
+        var context = new ConsumeContext(resolvedBus, headers, queueConfig, busConfig) { CancellationToken = cancellationToken };
 
         foreach (var (handler, descriptor) in invocations)
         {
@@ -48,7 +51,7 @@ internal sealed class HandlerProcessor(
             await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
         }
 
-        await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, cancellationToken).ConfigureAwait(false);
+        await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
 
         return ProcessResult.Handled;
     }
@@ -85,8 +88,14 @@ internal sealed class HandlerProcessor(
             callExpr, busParam, msgParam, destParam, ctParam).Compile();
     }
 
-    private static async Task ForwardRoutingSlipAsync(object message, Type messageType, IDictionary<string, object> headers, IBus bus, CancellationToken cancellationToken)
+    private static async Task ForwardRoutingSlipAsync(
+        object message, Type messageType, IDictionary<string, object> headers,
+        IBus bus, IBusConfiguration busConfig, IQueueConfiguration queueConfig,
+        CancellationToken cancellationToken)
     {
+        if (!busConfig.EnableRoutingSlipProcessing)
+            return;
+
         if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
             return;
 
@@ -102,6 +111,10 @@ internal sealed class HandlerProcessor(
             if (!IsValidRoutingSlipDestination(trimmed))
                 throw new InvalidOperationException(
                     $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {MaxRoutingSlipDestinationLength} characters, and must not contain AMQP wildcards or control characters.");
+            if (!ConsumeContext.IsKnownQueue(trimmed, queueConfig))
+                throw new InvalidOperationException(
+                    $"Routing-slip destination '{trimmed}' is not a recognized queue. " +
+                    "Configure queue mappings to allow this destination.");
             destinations.Add(trimmed);
         }
 
