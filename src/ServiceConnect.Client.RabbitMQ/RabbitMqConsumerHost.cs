@@ -25,6 +25,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly IDictionary<string, object?> _queueArguments;
     private readonly int _gracefulShutdownTimeoutMs;
     private readonly bool _includeMachineNameInHeaders;
+    private readonly long _maxInboundMessageSize;
 
     private IChannel? _model;
     private ConsumerEventHandler? _consumerEventHandler;
@@ -66,6 +67,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _gracefulShutdownTimeoutMs = transportConfiguration.GracefulShutdownTimeoutMilliseconds > 0
             ? transportConfiguration.GracefulShutdownTimeoutMilliseconds
             : 5000;
+        _maxInboundMessageSize = settings.TryGetValue(RabbitMQSettingKeys.MessageSize, out var maxSizeVal)
+            ? Convert.ToInt64(maxSizeVal)
+            : 64 * 1024;
     }
 
     public async Task StartConsumingAsync(
@@ -112,6 +116,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 _logger.LogError("Error processing message, Message headers must contain type name.");
                 processed = true; // no retry possible for malformed messages, ack to discard
                 return;
+            }
+
+            if (args.Body.Length > _maxInboundMessageSize)
+            {
+                _logger.LogWarning(
+                    "Rejecting oversized message: {Size} bytes exceeds limit of {Max} bytes on queue {Queue}",
+                    args.Body.Length, _maxInboundMessageSize, _queueConfiguration.QueueName);
+                return; // processed stays false → nacked by the finally block
             }
 
             await ProcessMessageAsync(args).ConfigureAwait(false);

@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using RabbitMQ.Client;
@@ -29,6 +30,8 @@ public class RabbitMqConsumerHostTests
             It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0u);
         channel.Setup(c => c.CloseAsync(It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        channel.Setup(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+        channel.Setup(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
 
         var conn = new Mock<IServiceConnectConnection>();
         conn.Setup(c => c.CreateChannelAsync()).ReturnsAsync(channel.Object);
@@ -168,5 +171,102 @@ public class RabbitMqConsumerHostTests
 
         var thrown = await Record.ExceptionAsync(() => host.DisposeAsync().AsTask());
         Assert.Null(thrown);
+    }
+
+    // ─── Inbound message-size enforcement (R-022) ───────────────────────────
+
+    private static Mock<ITransportConfiguration> MakeTransportCfgWithMaxSize(long maxSize)
+    {
+        var cfg = new Mock<ITransportConfiguration>();
+        cfg.SetupGet(c => c.MaxRetries).Returns(3);
+        cfg.SetupGet(c => c.PrefetchCount).Returns((ushort)10);
+        var settings = new Dictionary<string, object>
+        {
+            [RabbitMQSettingKeys.MessageSize] = maxSize,
+        };
+        cfg.SetupGet(c => c.ClientSettings).Returns(settings);
+        return cfg;
+    }
+
+    /// <summary>
+    /// Delivers a synthetic message via the consumer's HandleBasicDeliverAsync.
+    /// Returns true if the consumer event handler was invoked.
+    /// </summary>
+    private static async Task<bool> DeliverMessageAsync(
+        RabbitMqConsumerHost host,
+        byte[] body,
+        Dictionary<string, object>? headers = null)
+    {
+        // Retrieve the private _consumer field via reflection.
+        var consumerField = typeof(RabbitMqConsumerHost)
+            .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var consumer = consumerField?.GetValue(host) as RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
+        if (consumer == null) throw new InvalidOperationException("_consumer field not found or host not started.");
+
+        var props = new RabbitMQ.Client.BasicProperties();
+        if (headers != null)
+            foreach (var kvp in headers)
+                (props.Headers ??= new Dictionary<string, object?>())[kvp.Key] = kvp.Value;
+
+        await consumer.HandleBasicDeliverAsync(
+            consumerTag: "tag",
+            deliveryTag: 1,
+            redelivered: false,
+            exchange: "",
+            routingKey: "q",
+            properties: props,
+            body: body,
+            cancellationToken: default);
+
+        return true;
+    }
+
+    [Fact]
+    public async Task EventAsync_OversizedMessage_IsNacked_AndHandlerNotInvoked()
+    {
+        const long maxSize = 10L;
+        var (conn, channel) = MockConnection();
+        var tcfg = MakeTransportCfgWithMaxSize(maxSize);
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        bool handlerInvoked = false;
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        await host.StartConsumingAsync(
+            (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
+            "q");
+
+        var oversized = new byte[maxSize + 1];
+        var msgHeaders = new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" };
+        await DeliverMessageAsync(host, oversized, msgHeaders);
+
+        Assert.False(handlerInvoked, "Consumer event handler must not be called for oversized messages.");
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EventAsync_ExactLimitMessage_IsProcessed()
+    {
+        const long maxSize = 10L;
+        var (conn, channel) = MockConnection();
+        var tcfg = MakeTransportCfgWithMaxSize(maxSize);
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        bool handlerInvoked = false;
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        await host.StartConsumingAsync(
+            (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
+            "q");
+
+        var exactSize = new byte[maxSize];
+        var msgHeaders = new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" };
+        await DeliverMessageAsync(host, exactSize, msgHeaders);
+
+        Assert.True(handlerInvoked, "Consumer event handler must be called for messages within the limit.");
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

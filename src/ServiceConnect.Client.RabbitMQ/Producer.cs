@@ -114,6 +114,9 @@ public sealed class Producer : IProducer
     public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (message.Length > MaximumMessageSize)
+            throw new InvalidOperationException(
+                $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -134,6 +137,9 @@ public sealed class Producer : IProducer
     public async Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (message.Length > MaximumMessageSize)
+            throw new InvalidOperationException(
+                $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -158,6 +164,9 @@ public sealed class Producer : IProducer
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
             throw new ArgumentException($"Cannot send message of type {type} to empty endpoint");
+        if (message.Length > MaximumMessageSize)
+            throw new InvalidOperationException(
+                $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
 
         await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -173,6 +182,9 @@ public sealed class Producer : IProducer
     public async Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (packet.Length > MaximumMessageSize)
+            throw new InvalidOperationException(
+                $"Message size {packet.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         await EnsureConnectedAsync().ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
