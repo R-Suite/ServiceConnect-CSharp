@@ -5,24 +5,42 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Services;
 
-public sealed class MessageDispatcher(
-    IMessageSerializer serializer,
-    IFilterPipeline filterPipeline,
-    IList<IMessageProcessor> processors,
-    ILogger<MessageDispatcher> logger,
-    IBusConfiguration config,
-    IPipelineConfiguration pipelineConfig,
-    IServiceProvider serviceProvider,
-    IMessageTypeRegistry typeRegistry) : IMessageDispatcher
+public sealed class MessageDispatcher : IMessageDispatcher
 {
-    private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-    private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
-    private readonly IList<IMessageProcessor> _processors = processors ?? throw new ArgumentNullException(nameof(processors));
-    private readonly ILogger<MessageDispatcher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    private readonly IBusConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
-    private readonly IPipelineConfiguration _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
-    private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-    private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
+    private readonly IMessageSerializer _serializer;
+    private readonly IFilterPipeline _filterPipeline;
+    private readonly IList<IMessageProcessor> _processors;
+    private readonly ILogger<MessageDispatcher> _logger;
+    private readonly IBusConfiguration _config;
+    private readonly IPipelineConfiguration _pipelineConfig;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IMessageTypeRegistry _typeRegistry;
+
+    // Chain is built once (lazily) at first message dispatch and cached.
+    // IMessageProcessingMiddleware implementations MUST be singletons; scoped/transient
+    // registrations will be silently promoted to singleton lifetime here (M-3).
+    private readonly Lazy<MessageProcessingDelegate> _processingChain;
+
+    public MessageDispatcher(
+        IMessageSerializer serializer,
+        IFilterPipeline filterPipeline,
+        IList<IMessageProcessor> processors,
+        ILogger<MessageDispatcher> logger,
+        IBusConfiguration config,
+        IPipelineConfiguration pipelineConfig,
+        IServiceProvider serviceProvider,
+        IMessageTypeRegistry typeRegistry)
+    {
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
+        _processors = processors ?? throw new ArgumentNullException(nameof(processors));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _config = config ?? throw new ArgumentNullException(nameof(config));
+        _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
+        _processingChain = new Lazy<MessageProcessingDelegate>(BuildProcessingChain, isThreadSafe: true);
+    }
 
     public async Task<ConsumeEventResult> Dispatch(byte[] messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
@@ -65,37 +83,8 @@ public sealed class MessageDispatcher(
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
-            // 7. Run post-deserialization processors, wrapped in processing middleware
-            async Task<ConsumeEventResult> RunProcessors(byte[] mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
-            {
-                foreach (var proc in _processors)
-                {
-                    if (proc.RunBeforeDeserialization) continue;
-                    var result = await proc.ProcessAsync(mb, mt, m, h, e, ct);
-                    if (result == ProcessResult.Handled)
-                    {
-                        await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
-                        return new ConsumeEventResult { Success = true };
-                    }
-                }
-
-                _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
-                await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
-                return new ConsumeEventResult { Success = true };
-            }
-
-            var middlewareTypes = _pipelineConfig.MessageProcessingMiddleware;
-            if (middlewareTypes.Count == 0)
-                return await RunProcessors(messageBytes, type, message, headers, envelope, cancellationToken);
-
-            MessageProcessingDelegate chain = (mb, mt, m, h, e, ct) => RunProcessors(mb, mt, m, h, e, ct);
-            for (int i = middlewareTypes.Count - 1; i >= 0; i--)
-            {
-                var mw = (IMessageProcessingMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
-                var next = chain;
-                chain = (mb, mt, m, h, e, ct) => mw.Process(mb, mt, m, h, e, next, ct);
-            }
-            return await chain(messageBytes, type, message, headers, envelope, cancellationToken);
+            // 7. Run post-deserialization processors wrapped in the cached processing chain
+            return await _processingChain.Value(messageBytes, type, message, headers, envelope, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -110,5 +99,39 @@ public sealed class MessageDispatcher(
             }
             return new ConsumeEventResult { Success = false, Exception = ex };
         }
+    }
+
+    private async Task<ConsumeEventResult> RunProcessors(byte[] mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
+    {
+        foreach (var proc in _processors)
+        {
+            if (proc.RunBeforeDeserialization) continue;
+            var result = await proc.ProcessAsync(mb, mt, m, h, e, ct);
+            if (result == ProcessResult.Handled)
+            {
+                await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
+                return new ConsumeEventResult { Success = true };
+            }
+        }
+
+        _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
+        await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
+        return new ConsumeEventResult { Success = true };
+    }
+
+    private MessageProcessingDelegate BuildProcessingChain()
+    {
+        var middlewareTypes = _pipelineConfig.MessageProcessingMiddleware;
+        if (middlewareTypes.Count == 0)
+            return RunProcessors;
+
+        MessageProcessingDelegate chain = RunProcessors;
+        for (int i = middlewareTypes.Count - 1; i >= 0; i--)
+        {
+            var mw = (IMessageProcessingMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
+            var next = chain;
+            chain = (mb, mt, m, h, e, ct) => mw.Process(mb, mt, m, h, e, next, ct);
+        }
+        return chain;
     }
 }
