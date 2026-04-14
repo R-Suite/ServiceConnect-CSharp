@@ -67,8 +67,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         return Task.CompletedTask;
     }
 
-    internal void RemoveAll(string name)
+    public Task RemoveAllAsync(string name, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
@@ -76,6 +77,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
                 _provider.Remove(name);
             }
         }
+        return Task.CompletedTask;
     }
 
     public Task<int> CountAsync(string name, CancellationToken cancellationToken = default)

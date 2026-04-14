@@ -49,6 +49,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 
             await _collection.InsertOneAsync(new AggregatorDocument
             {
+                Id = Guid.NewGuid(),
                 Name = name,
                 DataBson = dataBson,
                 // Store FullName rather than AssemblyQualifiedName so an assembly-version
@@ -104,6 +105,19 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to remove aggregator data for '{name}' with correlationId '{correlationId}'.", ex);
+        }
+    }
+
+    public async Task RemoveAllAsync(string name, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
+            await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException($"Failed to remove all aggregator data for '{name}'.", ex);
         }
     }
 

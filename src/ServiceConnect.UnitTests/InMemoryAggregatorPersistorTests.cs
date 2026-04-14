@@ -147,26 +147,36 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task RemoveAll_ClearsAllItemsForKey()
+        public async Task RemoveAllAsync_ClearsAllItemsForKey()
         {
-            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
             await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
 
-            persistor.RemoveAll("mykey");
+            await persistor.RemoveAllAsync("mykey", CancellationToken.None);
 
             Assert.Empty(await persistor.GetDataAsync("mykey", CancellationToken.None));
             Assert.Equal(0, await persistor.CountAsync("mykey", CancellationToken.None));
         }
 
         [Fact]
-        public void RemoveAll_WhenKeyDoesNotExist_DoesNotThrow()
+        public async Task RemoveAllAsync_WhenKeyDoesNotExist_DoesNotThrow()
         {
-            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
 
-            var ex = Record.Exception(() => persistor.RemoveAll("nonexistent-key"));
+            var ex = await Record.ExceptionAsync(() => persistor.RemoveAllAsync("nonexistent-key", CancellationToken.None));
 
             Assert.Null(ex);
+        }
+
+        [Fact]
+        public async Task RemoveAllAsync_PreCancelledToken_ThrowsOCE()
+        {
+            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => persistor.RemoveAllAsync("test", cts.Token));
         }
 
         [Fact]
