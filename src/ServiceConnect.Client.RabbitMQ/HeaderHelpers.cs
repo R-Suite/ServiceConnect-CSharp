@@ -10,8 +10,14 @@ internal static class HeaderHelpers
         else headers[key] = value;
     }
 
+    // P-029: foreach into pre-sized dictionary avoids the LINQ ToDictionary allocation overhead.
     public static Dictionary<string, object?> ToNullableHeaders(IDictionary<string, object> headers)
-        => headers.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value);
+    {
+        var result = new Dictionary<string, object?>(headers.Count, StringComparer.Ordinal);
+        foreach (var kvp in headers)
+            result[kvp.Key] = kvp.Value;
+        return result;
+    }
 
     // Keep the error-queue header bounded in both breadth and depth so that arbitrary
     // inner-exception chains (including ones that might reveal connection strings or

@@ -8,6 +8,8 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     private const long MaxTotalStreamSize = 100 * 1024 * 1024;
     private readonly ConcurrentDictionary<long, byte[]> _packets = new();
     private long _totalBytesWritten;
+    // P-027: track received packet count with an atomic counter so IsComplete() is O(1).
+    private int _receivedCount;
 
     public MessageBusReadStream(string sequenceId)
     {
@@ -40,6 +42,8 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
             Interlocked.Add(ref _totalBytesWritten, -data.Length);
             throw new InvalidOperationException($"Duplicate packet number {packetNumber} received for stream {SequenceId}.");
         }
+        // P-027: increment after a successful add so IsComplete() can compare counts.
+        Interlocked.Increment(ref _receivedCount);
     }
 
     public byte[] Read()
@@ -47,7 +51,9 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         if (!IsComplete())
             throw new InvalidOperationException("Stream is not yet complete.");
 
-        using var ms = new MemoryStream();
+        // P-028: pre-size MemoryStream to avoid internal buffer doubling.
+        var totalBytes = Interlocked.Read(ref _totalBytesWritten);
+        using var ms = new MemoryStream(totalBytes > 0 ? (int)totalBytes : 0);
         for (long i = 0; i <= LastPacketNumber; i++)
         {
             if (_packets.TryGetValue(i, out var packet))
@@ -58,11 +64,7 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
 
     public bool IsComplete()
     {
-        if (LastPacketNumber < 0) return false;
-        for (long i = 0; i <= LastPacketNumber; i++)
-        {
-            if (!_packets.ContainsKey(i)) return false;
-        }
-        return true;
+        // P-027: O(1) check — compare received packet count against expected count.
+        return LastPacketNumber >= 0 && _receivedCount == LastPacketNumber + 1;
     }
 }

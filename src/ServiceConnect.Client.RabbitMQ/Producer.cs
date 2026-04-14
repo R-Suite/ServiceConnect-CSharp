@@ -141,10 +141,12 @@ public sealed class Producer : IProducer
             if (!_queueConfiguration.TryGetQueueMapping(type, out IReadOnlyList<string>? endPoints))
                 throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
 
+            // P-030: build base headers once outside the loop; only DestinationAddress varies per endpoint.
+            var baseHeaders = GetHeaders(type, headers, string.Empty, "Send");
             foreach (string endPoint in endPoints)
             {
-                var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-                var basicProperties = CreateBasicProperties(messageHeaders);
+                baseHeaders[HeaderKeys.DestinationAddress] = endPoint;
+                var basicProperties = CreateBasicProperties(baseHeaders);
                 await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message, cancellationToken).ConfigureAwait(false);
             }
         }

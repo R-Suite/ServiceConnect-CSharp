@@ -29,12 +29,14 @@ internal sealed class MessageRetryHandler
         IChannel channel, string retryQueueName,
         BasicDeliverEventArgs args, Dictionary<string, object> headers, Exception? ex)
     {
+        // P-032: direct unbox avoids boxing + string round-trip via ToString() + int.TryParse().
         int retryCount = 0;
-        if (headers.TryGetValue(HeaderKeys.RetryCount, out var raw)
-            && int.TryParse(raw?.ToString(), out int parsed)
-            && parsed >= 0 && parsed <= _maxRetries + 1)
+        if (headers.TryGetValue(HeaderKeys.RetryCount, out var raw))
         {
-            retryCount = parsed;
+            int candidate = raw is int i ? i
+                : (raw is not null && int.TryParse(raw.ToString(), out var parsed) ? parsed : -1);
+            if (candidate >= 0 && candidate <= _maxRetries + 1)
+                retryCount = candidate;
         }
 
         if (retryCount < _maxRetries)

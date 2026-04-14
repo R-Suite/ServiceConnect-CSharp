@@ -22,6 +22,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
     /// <summary>Interval at which the sweeper runs to evict stale partial streams.</summary>
     private static readonly TimeSpan StreamCleanupInterval = TimeSpan.FromMinutes(1);
 
+    // P-011: cache completed Task<ProcessResult> instances to avoid per-call allocations.
+    private static readonly Task<ProcessResult> NotHandledTask = Task.FromResult(ProcessResult.NotHandled);
+    private static readonly Task<ProcessResult> HandledTask = Task.FromResult(ProcessResult.Handled);
+
     public StreamProcessor(
         IServiceProvider serviceProvider,
         ILogger<StreamProcessor> logger,
@@ -44,23 +48,23 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!headers.TryGetValue(HeaderKeys.MessageType, out var msgTypeRaw))
-            return Task.FromResult(ProcessResult.NotHandled);
+            return NotHandledTask;
 
         var msgType = HeaderDecoder.Decode(msgTypeRaw);
         if (msgType != HeaderKeys.ByteStream)
-            return Task.FromResult(ProcessResult.NotHandled);
+            return NotHandledTask;
 
         if (!headers.TryGetValue(HeaderKeys.SequenceId, out var seqIdRaw))
-            return Task.FromResult(ProcessResult.NotHandled);
+            return NotHandledTask;
         var sequenceId = HeaderDecoder.Decode(seqIdRaw)!;
 
         if (!headers.TryGetValue(HeaderKeys.PacketNumber, out var pnRaw))
-            return Task.FromResult(ProcessResult.NotHandled);
+            return NotHandledTask;
         var pnString = HeaderDecoder.Decode(pnRaw);
         if (!long.TryParse(pnString, out var packetNumber))
         {
             _logger.LogWarning("Stream packet has invalid PacketNumber header '{Value}'; discarding", pnString);
-            return Task.FromResult(ProcessResult.Handled); // Handled to prevent infinite requeue
+            return HandledTask; // Handled to prevent infinite requeue
         }
 
         var stream = _activeStreams.GetOrAdd(sequenceId, id => new MessageBusReadStream(id));
@@ -74,7 +78,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
             if (!long.TryParse(lpnString, out var lastPacketNumber))
             {
                 _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
-                return Task.FromResult(ProcessResult.Handled);
+                return HandledTask;
             }
             stream.SetLastPacketNumber(lastPacketNumber);
         }
@@ -87,27 +91,27 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))
             {
                 _logger.LogWarning("Completed stream {SequenceId} missing FullTypeName header", sequenceId);
-                return Task.FromResult(ProcessResult.Handled);
+                return HandledTask;
             }
 
             var fullTypeName = HeaderDecoder.Decode(ftnRaw);
             if (!_typeRegistry.TryResolve(fullTypeName!, out var resolvedType))
             {
                 _logger.LogWarning("Unregistered type '{TypeName}' for completed stream. Rejecting", fullTypeName);
-                return Task.FromResult(ProcessResult.Handled);
+                return HandledTask;
             }
 
             if (!_streamHandlerRegistry.TryGet(resolvedType, out var descriptor))
             {
                 _logger.LogWarning("No IStreamHandler registered for {MessageType}", resolvedType.FullName);
-                return Task.FromResult(ProcessResult.Handled);
+                return HandledTask;
             }
 
             var handler = _serviceProvider.GetService(descriptor.HandlerInterfaceType);
             if (handler == null)
             {
                 _logger.LogWarning("No IStreamHandler registered for {MessageType}", resolvedType.FullName);
-                return Task.FromResult(ProcessResult.Handled);
+                return HandledTask;
             }
 
             descriptor.SetStream(handler, stream);
@@ -119,7 +123,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
             descriptor.InvokeExecute(handler, originalMessage!);
         }
 
-        return Task.FromResult(ProcessResult.Handled);
+        return HandledTask;
     }
 
     private void EvictStaleStreams()
