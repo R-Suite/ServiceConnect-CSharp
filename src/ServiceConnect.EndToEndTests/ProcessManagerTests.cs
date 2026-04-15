@@ -34,8 +34,7 @@ public class ProcessManagerTests
             new()
             {
                 HandlerType = typeof(CounterProcessHandler),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

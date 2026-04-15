@@ -34,8 +34,7 @@ public class RoutingSlipForwardingTests
             new()
             {
                 HandlerType = typeof(Step1Handler),
-                MessageType = typeof(StepMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(StepMessage)
             }
         };
 
@@ -73,8 +72,7 @@ public class RoutingSlipForwardingTests
             new()
             {
                 HandlerType = typeof(Step2Handler),
-                MessageType = typeof(StepMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(StepMessage)
             }
         };
 

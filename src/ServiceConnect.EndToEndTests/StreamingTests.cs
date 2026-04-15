@@ -44,8 +44,7 @@ public class StreamingTests
             new()
             {
                 HandlerType = typeof(TestStreamHandler),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

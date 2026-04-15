@@ -93,8 +93,7 @@ public class PriorityQueueTests
             new HandlerReference
             {
                 HandlerType = typeof(CallbackHandler<PriorityMessage>),
-                MessageType = typeof(PriorityMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(PriorityMessage)
             }
         };
 

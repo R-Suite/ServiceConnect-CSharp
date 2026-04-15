@@ -8,7 +8,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal sealed class AggregatorRegistry
+internal sealed class AggregatorRegistry : IHandlerRegistry
 {
     // Built once at construction; FrozenDictionary for read-heavy lookup (A-12).
     private readonly FrozenDictionary<Type, AggregatorDescriptor> _descriptors;
@@ -99,30 +99,31 @@ internal sealed class AggregatorRegistry
 
     private static Func<IList<object>, IList> CompileBuildTypedList(Type messageType)
     {
-        // Build: (IList<object> raw) => { var list = new List<TMsg>(); foreach (var m in raw) list.Add((TMsg)m); return list; }
+        // Build: (IList<object> raw) => { var list = new List<TMsg>(); for (var i = 0; i < raw.Count; i++) list.Add((TMsg)raw[i]); return list; }
         var listType = typeof(List<>).MakeGenericType(messageType);
 
         var rawParam = Expression.Parameter(typeof(IList<object>), "raw");
         var listVar = Expression.Variable(listType, "list");
-        var enumeratorVar = Expression.Variable(typeof(IEnumerator<object>), "enumerator");
+        var indexVar = Expression.Variable(typeof(int), "index");
 
         var listCtor = listType.GetConstructor(Type.EmptyTypes)!;
         var addMethod = listType.GetMethod("Add")!;
-        var getEnumeratorMethod = typeof(IEnumerable<object>).GetMethod("GetEnumerator")!;
-        var moveNextMethod = typeof(System.Collections.IEnumerator).GetMethod("MoveNext")!;
-        var currentProp = typeof(IEnumerator<object>).GetProperty("Current")!;
+        var countProp = typeof(ICollection<object>).GetProperty(nameof(ICollection<object>.Count))!;
+        var indexerProp = typeof(IList<object>).GetProperty("Item")!;
 
         var breakLabel = Expression.Label("break");
 
         var block = Expression.Block(
             typeof(IList),
-            new[] { listVar, enumeratorVar },
+            new[] { listVar, indexVar },
             Expression.Assign(listVar, Expression.New(listCtor)),
-            Expression.Assign(enumeratorVar, Expression.Call(rawParam, getEnumeratorMethod)),
+            Expression.Assign(indexVar, Expression.Constant(0)),
             Expression.Loop(
                 Expression.IfThenElse(
-                    Expression.Call(enumeratorVar, moveNextMethod),
-                    Expression.Call(listVar, addMethod, Expression.Convert(Expression.Property(enumeratorVar, currentProp), messageType)),
+                    Expression.LessThan(indexVar, Expression.Property(rawParam, countProp)),
+                    Expression.Block(
+                        Expression.Call(listVar, addMethod, Expression.Convert(Expression.Property(rawParam, indexerProp, indexVar), messageType)),
+                        Expression.PostIncrementAssign(indexVar)),
                     Expression.Break(breakLabel)),
                 breakLabel),
             Expression.Convert(listVar, typeof(IList)));

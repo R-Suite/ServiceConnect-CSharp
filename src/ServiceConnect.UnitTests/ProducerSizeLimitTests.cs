@@ -21,6 +21,8 @@ public class ProducerSizeLimitTests
         var settings = new Dictionary<string, object>
         {
             [RabbitMQSettingKeys.MessageSize] = maxSize,
+            [RabbitMQSettingKeys.RetryCount] = (ushort)0,
+            [RabbitMQSettingKeys.RetrySeconds] = (ushort)0,
         };
         transport.SetupGet(t => t.ClientSettings).Returns(settings);
 

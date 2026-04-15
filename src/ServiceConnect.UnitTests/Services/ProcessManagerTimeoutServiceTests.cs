@@ -1,9 +1,10 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
+using System.Reflection;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Services;
@@ -12,23 +13,18 @@ public class ProcessManagerTimeoutServiceTests
 {
     private readonly Mock<IBusConfiguration> _mockConfig = new();
     private readonly Mock<ITimeoutStore> _mockFinder = new();
+    private readonly Mock<IBus> _mockBus = new();
     private readonly ILogger<ProcessManagerTimeoutService> _logger =
         new Mock<ILogger<ProcessManagerTimeoutService>>().Object;
 
-    private ProcessManagerTimeoutService CreateSut(bool registerFinder = true)
-    {
-        var services = new ServiceCollection();
-        if (registerFinder)
-            services.AddSingleton(_mockFinder.Object);
-        var sp = services.BuildServiceProvider();
-        return new ProcessManagerTimeoutService(_mockConfig.Object, sp, _logger);
-    }
+    private ProcessManagerTimeoutService CreateSut(ITimeoutStore? finder = null) =>
+        new(_mockConfig.Object, new Lazy<IBus>(() => _mockBus.Object), finder, _logger);
 
     [Fact]
     public async Task StartAsync_TimeoutsDisabled_DoesNotPoll()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(false);
-        var sut = CreateSut();
+        var sut = CreateSut(_mockFinder.Object);
 
         await sut.StartAsync(CancellationToken.None);
         await sut.StopAsync(CancellationToken.None);
@@ -40,7 +36,7 @@ public class ProcessManagerTimeoutServiceTests
     public async Task StartAsync_NoFinderRegistered_DoesNotThrow()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
-        var sut = CreateSut(registerFinder: false);
+        var sut = CreateSut();
 
         var exception = await Record.ExceptionAsync(async () =>
         {
@@ -67,20 +63,49 @@ public class ProcessManagerTimeoutServiceTests
                     Id = timeoutId,
                     ProcessManagerId = Guid.NewGuid(),
                     Destination = "test-queue",
-                    Time = DateTime.UtcNow.AddMinutes(-1),
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
                     Headers = new Dictionary<string, object>(),
                     Locked = false
                 }
             },
-            NextQueryTime = DateTime.UtcNow.AddSeconds(30)
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.Is<SendOptions>(options => options.EndPoint == "test-queue"),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
-        var sut = CreateSut(registerFinder: true);
+        var sut = CreateSut(_mockFinder.Object);
 
         await sut.PollOnceAsync();
 
+        _mockBus.Verify(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.Is<SendOptions>(options => options.EndPoint == "test-queue"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
         _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task StopAsync_DisposesAndClearsCancellationSource()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [], NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30) });
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await sut.StartAsync(CancellationToken.None);
+        await sut.StopAsync(CancellationToken.None);
+
+        var ctsField = typeof(ProcessManagerTimeoutService)
+            .GetField("_cts", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(ctsField);
+        Assert.Null(ctsField!.GetValue(sut));
     }
 }

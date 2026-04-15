@@ -20,7 +20,7 @@ public interface IConsumeContext
     Guid CorrelationId { get; }
 
     /// <summary>Cancellation token tied to the consumer loop; fires when consumption stops.</summary>
-    CancellationToken CancellationToken { get; set; }
+    CancellationToken CancellationToken { get; }
 
     /// <summary>
     /// Sends <paramref name="message"/> back to the requester as a reply, setting the

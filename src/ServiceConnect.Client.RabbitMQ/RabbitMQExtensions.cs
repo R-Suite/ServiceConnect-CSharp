@@ -15,7 +15,7 @@ public static class RabbitMQExtensions
             builder.ConfigureTransport(configure);
         }
 
-        builder.AdditionalRegistrations.Add(services =>
+        builder.AddRegistration(services =>
         {
             services.TryAddSingleton<IProducer, Producer>();
             services.TryAddSingleton<IConsumer, Consumer>();

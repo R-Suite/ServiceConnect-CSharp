@@ -71,7 +71,7 @@ public class FilterChainTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new() { HandlerType = typeof(CallbackHandler<TestMessage>), MessageType = typeof(TestMessage), RoutingKeys = new List<string>() }
+            new() { HandlerType = typeof(CallbackHandler<TestMessage>), MessageType = typeof(TestMessage) }
         };
 
         var services = new ServiceCollection();
@@ -142,7 +142,7 @@ public class FilterChainTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new() { HandlerType = typeof(CallbackHandler<TestMessage>), MessageType = typeof(TestMessage), RoutingKeys = new List<string>() }
+            new() { HandlerType = typeof(CallbackHandler<TestMessage>), MessageType = typeof(TestMessage) }
         };
 
         var services = new ServiceCollection();

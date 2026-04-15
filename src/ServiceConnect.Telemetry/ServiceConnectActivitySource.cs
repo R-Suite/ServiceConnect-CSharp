@@ -8,6 +8,7 @@ namespace ServiceConnect.Telemetry;
 public static class ServiceConnectActivitySource
 {
     public static ServiceConnectInstrumentationOptions Options { get; internal set; } = new();
+    public static IMessagingSystemAttributes MessagingSystemAttributes { get; internal set; } = new RabbitMqMessagingSystemAttributes();
 
     internal static readonly Version? Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
     internal static readonly string ActivitySourceName = (typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect") + ".Bus";
@@ -26,23 +27,17 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
     {
-        if (!_publishActivitySource.HasListeners())
-        {
-            return null;
-        }
+        Activity? activity = StartActivity(
+            _publishActivitySource,
+            PublishActivitySourceName,
+            ActivityKind.Producer,
+            Options.EnablePublishTelemetry,
+            "publish",
+            linkedContext);
 
-        Activity? activity = _publishActivitySource.StartActivity(PublishActivitySourceName, ActivityKind.Producer, linkedContext);
+        if (activity is null) return null;
 
-        if (activity is null)
-        {
-            return null;
-        }
-
-        activity
-            .SetTag(MessagingAttributes.MessagingSystem, "rabbitmq")
-            .SetTag(MessagingAttributes.ProtocolName, "amqp")
-            .SetTag(MessagingAttributes.MessagingOperation, "publish")
-            .SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
+        activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
 
         if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
         {
@@ -62,17 +57,7 @@ public static class ServiceConnectActivitySource
             activity.SetTag(MessagingAttributes.MessageId, messageId);
         }
 
-        if (eventArgs.Message is not null)
-        {
-            try
-            {
-                Options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
-            }
-            catch (Exception ex)
-            {
-                activity.SetTag("enrichment.exception", ex.Message);
-            }
-        }
+        TryEnrich(activity, eventArgs.Message);
 
         return activity;
     }
@@ -85,25 +70,18 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Consume(ConsumeEventArgs eventArgs)
     {
-        if (!_consumeActivitySource.HasListeners())
-        {
-            return null;
-        }
-
         DistributedContextPropagator.Current.ExtractTraceIdAndState(eventArgs.Headers, ExtractTraceIdAndState, out string? traceId, out string? traceState);
         ActivityContext.TryParse(traceId, traceState, out ActivityContext parentContext);
 
-        Activity? activity = _consumeActivitySource.StartActivity(ConsumeActivitySourceName, ActivityKind.Consumer, parentContext);
+        Activity? activity = StartActivity(
+            _consumeActivitySource,
+            ConsumeActivitySourceName,
+            ActivityKind.Consumer,
+            Options.EnableConsumeTelemetry,
+            "receive",
+            parentContext);
 
-        if (activity is null)
-        {
-            return null;
-        }
-
-        activity
-            .SetTag(MessagingAttributes.MessagingSystem, "rabbitmq")
-            .SetTag(MessagingAttributes.ProtocolName, "amqp")
-            .SetTag(MessagingAttributes.MessagingOperation, "receive");
+        if (activity is null) return null;
 
         // Targeted header lookups — decode only the two headers actually used here
         // rather than allocating a full decode dictionary for all 15-20 headers (P-008).
@@ -131,14 +109,7 @@ public static class ServiceConnectActivitySource
         if (eventArgs.Message is not null)
         {
             activity.SetTag(MessagingAttributes.MessagingBodySize, eventArgs.Message.Length);
-            try
-            {
-                Options.EnrichWithMessageBytes?.Invoke(activity, eventArgs.Message);
-            }
-            catch (Exception ex)
-            {
-                activity.SetTag("enrichment.exception", ex.Message);
-            }
+            TryEnrich(activity, eventArgs.Message);
         }
 
         return activity;
@@ -150,22 +121,15 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
     {
-        if (!_sendActivitySource.HasListeners())
-        {
-            return null;
-        }
+        Activity? activity = StartActivity(
+            _sendActivitySource,
+            SendActivitySourceName,
+            ActivityKind.Producer,
+            Options.EnableSendTelemetry,
+            "publish",
+            linkedContext);
 
-        Activity? activity = _sendActivitySource.StartActivity(SendActivitySourceName, ActivityKind.Producer, linkedContext);
-
-        if (activity is null)
-        {
-            return null;
-        }
-
-        activity
-            .SetTag(MessagingAttributes.MessagingSystem, "rabbitmq")
-            .SetTag(MessagingAttributes.ProtocolName, "amqp")
-            .SetTag(MessagingAttributes.MessagingOperation, "publish");
+        if (activity is null) return null;
 
         activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? "anonymous" : eventArgs.EndPoint) + " publish";
 
@@ -184,15 +148,7 @@ public static class ServiceConnectActivitySource
         }
 
         activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
-
-        try
-        {
-            Options.EnrichWithMessage?.Invoke(activity, eventArgs.Message);
-        }
-        catch (Exception ex)
-        {
-            activity.SetTag("enrichment.exception", ex.Message);
-        }
+        TryEnrich(activity, eventArgs.Message);
 
         return activity;
     }
@@ -246,6 +202,59 @@ public static class ServiceConnectActivitySource
             default:
                 value = default;
                 return;
+        }
+    }
+
+    private static Activity? StartActivity(
+        ActivitySource activitySource,
+        string activityName,
+        ActivityKind kind,
+        bool enabled,
+        string operation,
+        ActivityContext context = default)
+    {
+        if (!enabled || !activitySource.HasListeners())
+            return null;
+
+        Activity? activity = activitySource.StartActivity(activityName, kind, context);
+        if (activity is null)
+            return null;
+
+        activity
+            .SetTag(MessagingAttributes.MessagingSystem, MessagingSystemAttributes.MessagingSystem)
+            .SetTag(MessagingAttributes.ProtocolName, MessagingSystemAttributes.ProtocolName)
+            .SetTag(MessagingAttributes.MessagingOperation, operation);
+
+        return activity;
+    }
+
+    private static void TryEnrich(Activity activity, Message? message)
+    {
+        if (message is null)
+            return;
+
+        try
+        {
+            Options.EnrichWithMessage?.Invoke(activity, message);
+        }
+        catch (Exception ex)
+        {
+            activity.SetTag("enrichment.exception", ex.Message);
+        }
+    }
+
+    private static void TryEnrich(Activity activity, byte[]? message)
+    {
+        if (message is null)
+            return;
+
+        try
+        {
+            Options.EnrichWithMessageBytes?.Invoke(activity, message);
+        }
+        catch (Exception ex)
+        {
+            activity.SetTag("enrichment.exception", ex.Message);
         }
     }
 }

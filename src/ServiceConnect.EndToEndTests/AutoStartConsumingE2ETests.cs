@@ -27,8 +27,7 @@ public class AutoStartConsumingE2ETests
             new HandlerReference
             {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

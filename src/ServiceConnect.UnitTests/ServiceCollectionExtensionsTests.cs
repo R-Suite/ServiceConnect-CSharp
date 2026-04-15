@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
+using System.Reflection;
 using ServiceConnect;
 using ServiceConnect.Interfaces;
 using Xunit;
@@ -70,4 +71,55 @@ public class ServiceCollectionExtensionsTests
         Assert.NotNull(provider.GetService<IRequestReplyManager>());
         Assert.NotNull(provider.GetService<ISendMessagePipeline>());
     }
+
+    [Fact]
+    public void ServiceCollectionExtensions_DefinesRegistrationHelpers()
+    {
+        string[] expectedHelpers =
+        [
+            "RegisterConfiguration",
+            "RegisterCoreServices",
+            "RegisterProcessors",
+            "RegisterHandlers",
+            "RegisterBus"
+        ];
+
+        foreach (var helper in expectedHelpers)
+        {
+            var method = typeof(ServiceCollectionExtensions).GetMethod(
+                helper,
+                BindingFlags.Static | BindingFlags.NonPublic);
+
+            Assert.NotNull(method);
+            Assert.Equal(typeof(void), method!.ReturnType);
+        }
+    }
+
+    [Fact]
+    public void AddServiceConnect_ThrowsWhenSendMiddlewareIsNotSingleton()
+    {
+        var services = CreateServices();
+        services.AddTransient<TestSendMiddleware>();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => b
+                .ConfigureQueues(q => q.QueueName = "test")
+                .ConfigureBus(c => c.ScanForMessageHandlers = false)
+                .AddSendMessageMiddleware<TestSendMiddleware>()));
+
+        Assert.Contains(nameof(TestSendMiddleware), exception.Message);
+        Assert.Contains("singleton", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+file sealed class TestSendMiddleware : ISendMessageMiddleware
+{
+    public Task Process(
+        Type messageType,
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        string? endPoint,
+        SendMessageDelegate next,
+        CancellationToken cancellationToken = default) =>
+        next(messageType, messageBytes, headers, endPoint, cancellationToken);
 }

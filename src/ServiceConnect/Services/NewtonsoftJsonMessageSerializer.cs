@@ -56,16 +56,37 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
         }
     }
 
+    public void Serialize<T>(T message, System.Buffers.IBufferWriter<byte> output) where T : Message
+    {
+        ArgumentNullException.ThrowIfNull(output);
+
+        var bytes = Serialize(message);
+        var span = output.GetSpan(bytes.Length);
+        bytes.CopyTo(span);
+        output.Advance(bytes.Length);
+    }
+
     public T Deserialize<T>(byte[] data) where T : Message
+    {
+        return (T)Deserialize(data, typeof(T));
+    }
+
+    public T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message
     {
         return (T)Deserialize(data, typeof(T));
     }
 
     public object Deserialize(byte[] data, Type type)
     {
+        return Deserialize(data.AsSpan(), type);
+    }
+
+    public object Deserialize(ReadOnlySpan<byte> data, Type type)
+    {
         try
         {
-            using var ms = new MemoryStream(data, writable: false);
+            var buffer = data.ToArray();
+            using var ms = new MemoryStream(buffer, writable: false);
             using var sr = new StreamReader(ms, Encoding.UTF8);
             using var jr = new JsonTextReader(sr);
             return _serializer.Deserialize(jr, type)

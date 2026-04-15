@@ -41,8 +41,7 @@ public class ProcessManagerExceptionTests
             new()
             {
                 HandlerType = typeof(ThrowingProcessHandler),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

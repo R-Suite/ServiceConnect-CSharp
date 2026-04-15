@@ -31,8 +31,7 @@ public class CustomHeaderTests
             new HandlerReference
             {
                 HandlerType = typeof(HeaderCaptureHandler),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 
@@ -106,8 +105,7 @@ public class CustomHeaderTests
             new HandlerReference
             {
                 HandlerType = typeof(HeaderEchoReplyHandler),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 

@@ -30,8 +30,7 @@ public class PolymorphicMessageTests
             new HandlerReference
             {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             },
             // HandlerReference for DerivedTestMessage is needed so the bus subscribes
             // to this message type's exchange in RabbitMQ. Handler resolution happens
@@ -39,8 +38,7 @@ public class PolymorphicMessageTests
             new HandlerReference
             {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
-                MessageType = typeof(DerivedTestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(DerivedTestMessage)
             }
         };
 

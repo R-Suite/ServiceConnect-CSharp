@@ -1,8 +1,8 @@
 namespace ServiceConnect.Interfaces.Options;
 
-public sealed class SendOptions
+public readonly record struct SendOptions
 {
-    public Dictionary<string, string>? Headers { get; set; }
-    public string? EndPoint { get; set; }
-    public IList<string>? EndPoints { get; set; }
+    public Dictionary<string, string>? Headers { get; init; }
+    public string? EndPoint { get; init; }
+    public IList<string>? EndPoints { get; init; }
 }

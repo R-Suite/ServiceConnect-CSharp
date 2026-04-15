@@ -33,8 +33,7 @@ public class PublishRequestAsyncTests
             new HandlerReference
             {
                 HandlerType = typeof(PubReqReplyHandler),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 

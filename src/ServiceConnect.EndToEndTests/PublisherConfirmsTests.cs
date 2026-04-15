@@ -30,8 +30,7 @@ public class PublisherConfirmsTests
             new()
             {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

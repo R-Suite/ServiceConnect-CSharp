@@ -33,8 +33,7 @@ public class ScatterGatherTests
             new HandlerReference
             {
                 HandlerType = typeof(ScatterReplyHandler),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 
@@ -68,8 +67,7 @@ public class ScatterGatherTests
             new HandlerReference
             {
                 HandlerType = typeof(ScatterReplyHandler),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 

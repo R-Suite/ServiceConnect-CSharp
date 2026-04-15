@@ -8,18 +8,30 @@ public static class InMemoryPersistenceExtensions
 {
     public static ServiceConnectBuilder UseInMemoryPersistence(this ServiceConnectBuilder builder)
     {
-        builder.AdditionalRegistrations.Add(services =>
+        builder.AddRegistration(services =>
         {
-            services.TryAddSingleton<ICacheProvider, CacheProvider>();
             services.TryAddSingleton<ProcessManagerPredicateCache>();
-            services.TryAddSingleton<IAggregatorPersistor>(_ =>
-                new InMemoryAggregatorPersistor("", "", ""));
+            services.TryAddSingleton<InMemoryPersistenceState>(sp =>
+                new InMemoryPersistenceState(sp.GetRequiredService<TimeProvider>()));
+            services.TryAddSingleton<ICacheProvider>(sp =>
+                sp.GetRequiredService<InMemoryPersistenceState>().Provider);
+            services.TryAddSingleton<IKeyValueStore>(sp =>
+                sp.GetRequiredService<InMemoryPersistenceState>().Provider);
+            services.TryAddSingleton<IAggregatorPersistor>(sp =>
+                new InMemoryAggregatorPersistor("", "", "", sp.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<InMemoryProcessManagerFinder>(sp =>
-                new InMemoryProcessManagerFinder(sp.GetRequiredService<ProcessManagerPredicateCache>()));
+                new InMemoryProcessManagerFinder(
+                    sp.GetRequiredService<ProcessManagerPredicateCache>(),
+                    sp.GetRequiredService<InMemoryPersistenceState>(),
+                    sp.GetRequiredService<TimeProvider>()));
+            services.TryAddSingleton<InMemoryTimeoutStore>(sp =>
+                new InMemoryTimeoutStore(
+                    sp.GetRequiredService<InMemoryPersistenceState>(),
+                    sp.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<IProcessManagerFinder>(sp =>
                 sp.GetRequiredService<InMemoryProcessManagerFinder>());
             services.TryAddSingleton<ITimeoutStore>(sp =>
-                sp.GetRequiredService<InMemoryProcessManagerFinder>());
+                sp.GetRequiredService<InMemoryTimeoutStore>());
         });
         return builder;
     }

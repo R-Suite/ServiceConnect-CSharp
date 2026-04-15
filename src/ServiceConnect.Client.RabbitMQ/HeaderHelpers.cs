@@ -1,9 +1,11 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
 internal static class HeaderHelpers
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void SetHeader<T>(IDictionary<string, object> headers, string key, T value)
     {
         if (value is null) _ = headers.Remove(key);

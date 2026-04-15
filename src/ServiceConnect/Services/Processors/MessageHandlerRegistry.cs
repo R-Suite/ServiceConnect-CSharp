@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
@@ -6,9 +7,10 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal sealed class MessageHandlerRegistry
+internal sealed class MessageHandlerRegistry : IHandlerRegistry
 {
-    private readonly ConcurrentDictionary<Type, MessageHandlerDescriptor?> _descriptors = new();
+    private readonly FrozenDictionary<Type, MessageHandlerDescriptor?> _knownDescriptors;
+    private readonly ConcurrentDictionary<Type, MessageHandlerDescriptor?> _lazyDescriptors = new();
     private readonly ILogger<MessageHandlerRegistry> _logger;
 
     internal MessageHandlerRegistry(
@@ -18,6 +20,7 @@ internal sealed class MessageHandlerRegistry
         ArgumentNullException.ThrowIfNull(handlerReferences);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
+        var builder = new Dictionary<Type, MessageHandlerDescriptor?>();
         foreach (var href in handlerReferences)
         {
             var messageHandlerInterface = FindMessageHandlerInterface(href.HandlerType, href.MessageType);
@@ -26,28 +29,32 @@ internal sealed class MessageHandlerRegistry
                 // Record the message type as seen (null = no IMessageHandler<T>) so
                 // the lazy-build path does not fabricate a descriptor for a type the
                 // application only handles via process-manager or stream handlers.
-                _descriptors.TryAdd(href.MessageType, null);
+                builder.TryAdd(href.MessageType, null);
                 continue;
             }
 
             // Duplicates are legitimate — multiple handler classes for one message type are allowed.
             // Only one descriptor per message type (it describes the interface, not the instances).
             // Overwrite a previous null (from a non-message-handler ref for the same type).
-            _descriptors[href.MessageType] = BuildDescriptor(href.MessageType, messageHandlerInterface);
+            builder[href.MessageType] = BuildDescriptor(href.MessageType, messageHandlerInterface);
 
             _logger.LogDebug(
                 "Registered message-handler descriptor: message={MessageType}, handler={HandlerType}",
                 href.MessageType.Name, href.HandlerType.Name);
         }
+
+        _knownDescriptors = builder.ToFrozenDictionary();
     }
 
     internal bool TryGetOrBuild(Type messageType, [NotNullWhen(true)] out MessageHandlerDescriptor? descriptor)
     {
-        if (_descriptors.TryGetValue(messageType, out descriptor))
+        if (_knownDescriptors.TryGetValue(messageType, out descriptor))
             return descriptor != null;
 
-        descriptor = TryBuild(messageType);
-        _descriptors[messageType] = descriptor;
+        if (_lazyDescriptors.TryGetValue(messageType, out descriptor))
+            return descriptor != null;
+
+        descriptor = _lazyDescriptors.GetOrAdd(messageType, TryBuild);
         return descriptor != null;
     }
 
@@ -62,10 +69,17 @@ internal sealed class MessageHandlerRegistry
 
     private static Type? FindMessageHandlerInterface(Type handlerType, Type messageType)
     {
-        return handlerType.GetInterfaces().FirstOrDefault(i =>
-            i.IsGenericType
-            && i.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
-            && i.GetGenericArguments()[0] == messageType);
+        foreach (var interfaceType in handlerType.GetInterfaces())
+        {
+            if (interfaceType.IsGenericType
+                && interfaceType.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
+                && interfaceType.GetGenericArguments()[0] == messageType)
+            {
+                return interfaceType;
+            }
+        }
+
+        return null;
     }
 
     private static MessageHandlerDescriptor BuildDescriptor(Type messageType, Type handlerInterfaceType)

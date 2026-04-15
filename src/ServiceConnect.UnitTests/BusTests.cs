@@ -114,6 +114,40 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public async Task DisposeAsync_CompletesWhenConsumerDisposeStalls()
+        {
+            var releaseDispose = new TaskCompletionSource();
+            var mockConsumer = new Mock<IConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+                .Returns(Task.CompletedTask);
+            mockConsumer
+                .Setup(x => x.DisposeAsync())
+                .Returns(new ValueTask(releaseDispose.Task));
+
+            var bus = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                _mockPipelineConfig.Object,
+                mockConsumer.Object,
+                null,
+                TimeSpan.FromMilliseconds(50));
+
+            await bus.StartConsumingAsync();
+
+            var disposeTask = bus.DisposeAsync().AsTask();
+            await Task.WhenAny(disposeTask, Task.Delay(500));
+
+            Assert.True(disposeTask.IsCompleted);
+        }
+
+        [Fact]
         public async Task PublishAsync_ShouldSerializeAndPublish()
         {
             // Arrange — no outgoing filters (fast path; filter pipeline is not called)

@@ -8,5 +8,5 @@ public sealed class MongoDbData<T> : IPersistenceData<T>, IVersioned where T : c
 {
     public Guid Id { get; set; }
     public int Version { get; set; }
-    public T Data { get; set; } = default!;
+    public required T Data { get; set; }
 }

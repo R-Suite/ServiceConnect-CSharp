@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
@@ -16,42 +17,46 @@ public static class ServiceCollectionExtensions
         var builder = new ServiceConnectBuilder();
         configure(builder);
 
-        // Configuration
+        RegisterConfiguration(services, builder);
+        RegisterCoreServices(services);
+        RegisterProcessors(services);
+
+        var handlerReferences = GetHandlerReferences(builder);
+        RegisterHandlers(services, handlerReferences);
+
+        foreach (var registration in builder.AdditionalRegistrations)
+        {
+            registration(services);
+        }
+
+        ValidateSendMessageMiddlewareLifetimes(services, builder.BusConfig.Pipeline.SendMessageMiddleware);
+        RegisterBus(services);
+
+        return services;
+    }
+
+    private static void RegisterConfiguration(IServiceCollection services, ServiceConnectBuilder builder)
+    {
         services.TryAddSingleton<IBusConfiguration>(builder.BusConfig);
         services.TryAddSingleton<ITransportConfiguration>(builder.BusConfig.Transport);
         services.TryAddSingleton<IQueueConfiguration>(builder.BusConfig.Queues);
         services.TryAddSingleton<IPersistenceConfiguration>(builder.BusConfig.Persistence);
         services.TryAddSingleton<IPipelineConfiguration>(builder.BusConfig.Pipeline);
 
-        // Core services
+        services.TryAddSingleton(TimeProvider.System);
+    }
+
+    private static void RegisterCoreServices(IServiceCollection services)
+    {
         services.TryAddSingleton<IMessageSerializer, NewtonsoftJsonMessageSerializer>();
         services.TryAddSingleton<IFilterPipeline, FilterPipeline>();
         services.TryAddSingleton<IRequestReplyManager, RequestReplyManager>();
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
+        services.TryAddSingleton<ConsumeContextPool>();
+    }
 
-        // Process manager descriptor registry (eagerly built, singleton)
-        // Factory required because the ctor is internal (same-assembly access only)
-        services.TryAddSingleton<Services.Processors.ProcessManagerHandlerRegistry>(sp => new Services.Processors.ProcessManagerHandlerRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.ProcessManagerHandlerRegistry>>()));
-
-        // Message-handler descriptor registry (eagerly built, singleton)
-        services.TryAddSingleton<Services.Processors.MessageHandlerRegistry>(sp => new Services.Processors.MessageHandlerRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.MessageHandlerRegistry>>()));
-
-        // Stream-handler descriptor registry (eagerly built, singleton)
-        services.TryAddSingleton<Services.Processors.StreamHandlerRegistry>(sp => new Services.Processors.StreamHandlerRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.StreamHandlerRegistry>>()));
-
-        // Aggregator descriptor registry (eagerly built, materializes each aggregator once to capture BatchSize/Timeout)
-        services.TryAddSingleton<Services.Processors.AggregatorRegistry>(sp => new Services.Processors.AggregatorRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
-            sp,
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.AggregatorRegistry>>()));
-
-        // Message processors (order matters: ReplyProcessor first, then HandlerProcessor last)
+    private static void RegisterProcessors(IServiceCollection services)
+    {
         services.TryAddSingleton<ReplyProcessor>();
         services.TryAddSingleton<StreamProcessor>();
         services.TryAddSingleton<ProcessManagerProcessor>();
@@ -65,69 +70,16 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<AggregatorProcessor>(),
             sp.GetRequiredService<HandlerProcessor>()
         ]);
-
-        // Message dispatcher and handler scanning
         services.TryAddSingleton<IMessageDispatcher, MessageDispatcher>();
+    }
 
-        IList<HandlerReference> handlerReferences;
-        if (builder.BusConfig.ScanForMessageHandlers)
-        {
-            // Prefer explicit assemblies from the builder; fall back to the loaded AppDomain
-            // only when no assemblies were supplied. Explicit registration avoids
-            // the static global dependency that breaks test isolation (A-11).
-            var assemblies = builder.ScanAssembliesList.Count > 0
-                ? builder.ScanAssembliesList.ToArray()
-                : AppDomain.CurrentDomain.GetAssemblies();
-            handlerReferences = HandlerScanner.ScanForHandlers(assemblies);
-        }
-        else
-        {
-            handlerReferences = [];
-        }
+    private static void RegisterHandlers(IServiceCollection services, IList<HandlerReference> handlerReferences)
+    {
+        RegisterHandlerRegistries(services);
 
         foreach (var handlerRef in handlerReferences)
         {
-            var handlerType = handlerRef.HandlerType;
-
-            // IMessageHandler<T>
-            var messageHandlerInterface = handlerType.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType
-                    && i.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
-                    && i.GetGenericArguments()[0] == handlerRef.MessageType);
-            if (messageHandlerInterface != null)
-            {
-                services.AddTransient(messageHandlerInterface, handlerType);
-                continue;
-            }
-
-            // IProcessHandler<TData, TMessage>
-            var processHandlerInterface = handlerType.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType
-                    && i.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
-                    && i.GetGenericArguments()[1] == handlerRef.MessageType);
-            if (processHandlerInterface != null)
-            {
-                services.AddTransient(processHandlerInterface, handlerType);
-                continue;
-            }
-
-            // IStreamHandler<T>
-            var streamHandlerInterface = handlerType.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType
-                    && i.GetGenericTypeDefinition() == typeof(IStreamHandler<>)
-                    && i.GetGenericArguments()[0] == handlerRef.MessageType);
-            if (streamHandlerInterface != null)
-            {
-                services.AddTransient(streamHandlerInterface, handlerType);
-                continue;
-            }
-
-            // Aggregator<T> subclass
-            if (handlerType.BaseType is { IsGenericType: true } baseType
-                && baseType.GetGenericTypeDefinition() == typeof(Aggregator<>))
-            {
-                services.AddTransient(baseType, handlerType);
-            }
+            RegisterHandlerType(services, handlerRef);
         }
 
         services.TryAddSingleton<IList<HandlerReference>>(handlerReferences);
@@ -139,27 +91,15 @@ public static class ServiceCollectionExtensions
                 registry.Register(handlerRef.MessageType);
             return registry;
         });
+    }
 
-        // Apply additional registrations from builder extensions (e.g., persistence providers)
-        foreach (var registration in builder.AdditionalRegistrations)
-        {
-            registration(services);
-        }
-
-        // Lazy<IBus> breaks the circular dependency: Bus → IMessageDispatcher → processors → IBus.
-        // Processors receive a Lazy<IBus> so the IBus singleton is only resolved after construction
-        // completes, avoiding a DI cycle while still caching the resolved instance.
+    private static void RegisterBus(IServiceCollection services)
+    {
+        services.TryAddSingleton<IRegistryInitializer, Services.RegistryInitializer>();
         services.TryAddSingleton(sp => new Lazy<IBus>(() => sp.GetRequiredService<IBus>()));
-
-        // Bus — uses a factory so that DI can resolve the internal ctor.
-        // Force-resolve the four handler registries so they are eagerly constructed
-        // (validates handler registrations at startup) without storing them in Bus.
         services.TryAddSingleton<IBus>(sp =>
         {
-            _ = sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>();
-            _ = sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>();
-            _ = sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>();
-            _ = sp.GetRequiredService<Services.Processors.AggregatorRegistry>();
+            sp.GetRequiredService<IRegistryInitializer>().Initialize();
 
             return new Bus(
                 sp.GetRequiredService<IMessageSerializer>(),
@@ -174,13 +114,111 @@ public static class ServiceCollectionExtensions
                 sp.GetService<IConsumer>(),
                 sp.GetService<IProducer>());
         });
+        services.AddSingleton<IHostedService, BusHostedService>();
+        services.AddSingleton<IHostedService>(sp =>
+            new ProcessManagerTimeoutService(
+                sp.GetRequiredService<IBusConfiguration>(),
+                sp.GetRequiredService<Lazy<IBus>>(),
+                sp.GetService<ITimeoutStore>(),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ProcessManagerTimeoutService>>()));
+    }
 
-        // Hosted service for auto-start consuming
-        services.AddHostedService<BusHostedService>();
+    private static void ValidateSendMessageMiddlewareLifetimes(IServiceCollection services, IEnumerable<Type> middlewareTypes)
+    {
+        foreach (var middlewareType in middlewareTypes)
+        {
+            var descriptors = services
+                .Where(descriptor => descriptor.ServiceType == middlewareType || descriptor.ImplementationType == middlewareType)
+                .ToArray();
 
-        // Hosted service for process manager timeout polling
-        services.AddHostedService<ProcessManagerTimeoutService>();
+            if (descriptors.Length == 0 || descriptors.Any(descriptor => descriptor.Lifetime != ServiceLifetime.Singleton))
+            {
+                throw new InvalidOperationException(
+                    $"Send message middleware '{middlewareType.FullName}' must be registered as a singleton.");
+            }
+        }
+    }
 
-        return services;
+    private static void RegisterHandlerRegistries(IServiceCollection services)
+    {
+        services.TryAddSingleton<Services.Processors.ProcessManagerHandlerRegistry>(sp => new Services.Processors.ProcessManagerHandlerRegistry(
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.ProcessManagerHandlerRegistry>>()));
+        services.AddSingleton<IHandlerRegistry>(sp =>
+            sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>());
+
+        // Message-handler descriptor registry (eagerly built, singleton)
+        services.TryAddSingleton<Services.Processors.MessageHandlerRegistry>(sp => new Services.Processors.MessageHandlerRegistry(
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.MessageHandlerRegistry>>()));
+        services.AddSingleton<IHandlerRegistry>(sp =>
+            sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>());
+
+        // Stream-handler descriptor registry (eagerly built, singleton)
+        services.TryAddSingleton<Services.Processors.StreamHandlerRegistry>(sp => new Services.Processors.StreamHandlerRegistry(
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.StreamHandlerRegistry>>()));
+        services.AddSingleton<IHandlerRegistry>(sp =>
+            sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>());
+
+        // Aggregator descriptor registry (eagerly built, materializes each aggregator once to capture BatchSize/Timeout)
+        services.TryAddSingleton<Services.Processors.AggregatorRegistry>(sp => new Services.Processors.AggregatorRegistry(
+            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp,
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.AggregatorRegistry>>()));
+        services.AddSingleton<IHandlerRegistry>(sp =>
+            sp.GetRequiredService<Services.Processors.AggregatorRegistry>());
+    }
+
+    private static IList<HandlerReference> GetHandlerReferences(ServiceConnectBuilder builder)
+    {
+        if (!builder.BusConfig.ScanForMessageHandlers)
+            return [];
+
+        var assemblies = builder.ScanAssembliesList.Count > 0
+            ? builder.ScanAssembliesList.ToArray()
+            : AppDomain.CurrentDomain.GetAssemblies();
+        return HandlerScanner.ScanForHandlers(assemblies);
+    }
+
+    private static void RegisterHandlerType(IServiceCollection services, HandlerReference handlerRef)
+    {
+        var handlerType = handlerRef.HandlerType;
+
+        var messageHandlerInterface = handlerType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType
+                && i.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
+                && i.GetGenericArguments()[0] == handlerRef.MessageType);
+        if (messageHandlerInterface != null)
+        {
+            services.AddTransient(messageHandlerInterface, handlerType);
+            return;
+        }
+
+        var processHandlerInterface = handlerType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType
+                && i.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
+                && i.GetGenericArguments()[1] == handlerRef.MessageType);
+        if (processHandlerInterface != null)
+        {
+            services.AddTransient(processHandlerInterface, handlerType);
+            return;
+        }
+
+        var streamHandlerInterface = handlerType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType
+                && i.GetGenericTypeDefinition() == typeof(IStreamHandler<>)
+                && i.GetGenericArguments()[0] == handlerRef.MessageType);
+        if (streamHandlerInterface != null)
+        {
+            services.AddTransient(streamHandlerInterface, handlerType);
+            return;
+        }
+
+        if (handlerType.BaseType is { IsGenericType: true } baseType
+            && baseType.GetGenericTypeDefinition() == typeof(Aggregator<>))
+        {
+            services.AddTransient(baseType, handlerType);
+        }
     }
 }

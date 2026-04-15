@@ -18,6 +18,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly MessageRetryHandler _retryHandler;
     private readonly MessageAuditPublisher _auditPublisher;
     private readonly ILogger _logger;
+    private readonly TimeProvider _timeProvider;
 
     // R-050: inbound header count and per-value size limits to prevent resource exhaustion.
     private const int DefaultMaxHeaderCount = 64;
@@ -34,7 +35,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private IChannel? _model;
     private ConsumerEventHandler? _consumerEventHandler;
     private AsyncEventingBasicConsumer? _consumer;
-    private CancellationToken _consumingCt;
     private bool _autoDelete;
     private string _queueName = "";
     private string _retryQueueName = "";
@@ -47,15 +47,19 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         IBusConfiguration busConfiguration,
         MessageRetryHandler retryHandler,
         MessageAuditPublisher auditPublisher,
-        ILogger logger)
+        ILogger logger,
+        TimeProvider? timeProvider = null)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         _queueConfiguration = queueConfiguration ?? throw new ArgumentNullException(nameof(queueConfiguration));
         _retryHandler = retryHandler ?? throw new ArgumentNullException(nameof(retryHandler));
         _auditPublisher = auditPublisher ?? throw new ArgumentNullException(nameof(auditPublisher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? TimeProvider.System;
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(busConfiguration);
+
+        // R-043: Extract configuration in constructor, make fields readonly
         _includeMachineNameInHeaders = busConfiguration.IncludeMachineNameInHeaders;
 
         var settings = transportConfiguration.ClientSettings;
@@ -81,7 +85,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         bool? exclusive = null, bool? autoDelete = null, CancellationToken cancellationToken = default)
     {
         _consumerEventHandler = messageReceived;
-        _consumingCt = cancellationToken;
         _queueName = queueName;
         _retryQueueName = queueName + RabbitMqQueueNaming.RetryQueueSuffix;
 
@@ -92,7 +95,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             await _model.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
 
         _consumer = new AsyncEventingBasicConsumer(_model);
-        _consumer.ReceivedAsync += EventAsync;
+        _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, cancellationToken).ConfigureAwait(false);
 
         var consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, consumerTag);
@@ -103,7 +106,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments).ConfigureAwait(false);
     }
 
-    private async Task EventAsync(object consumer, BasicDeliverEventArgs args)
+    // R-011: Pass cancellationToken as method parameter instead of storing it
+    private async Task EventAsync(object consumer, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
         // Capture _model before any await so that a concurrent DisposeAsync cannot
         // null it out from under us in the finally block (R-020).
@@ -155,7 +159,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 }
             }
 
-            await ProcessMessageAsync(args).ConfigureAwait(false);
+            await ProcessMessageAsync(args, cancellationToken).ConfigureAwait(false);
             processed = true;
         }
         catch (Exception ex)
@@ -184,7 +188,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
     }
 
-    private async Task ProcessMessageAsync(BasicDeliverEventArgs args)
+    private async Task ProcessMessageAsync(BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
         ConsumeEventResult result;
         // Pre-size the dict to the incoming header count plus 3 consumer-added
@@ -206,7 +210,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
         try
         {
-            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeReceived, FormatTimestamp(DateTime.UtcNow));
+            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeReceived, FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime));
             if (_includeMachineNameInHeaders)
                 HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
             HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
@@ -223,10 +227,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             }
             else
             {
-                result = await _consumerEventHandler(args.Body, typeName, headers, _consumingCt).ConfigureAwait(false);
+                result = await _consumerEventHandler(args.Body, typeName, headers, cancellationToken).ConfigureAwait(false);
             }
 
-            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, FormatTimestamp(DateTime.UtcNow));
+            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime));
         }
         catch (Exception ex)
         {

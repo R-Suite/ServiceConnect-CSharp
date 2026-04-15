@@ -15,7 +15,7 @@ public interface ICacheProvider
     /// <summary>
     /// Add a value to the cache with an absolute time, e.g. 01/01/2020.
     /// </summary>
-    void Add<TKey, TValue>(TKey key, TValue value, DateTime absoluteExpiry, CacheItemPriority priority = CacheItemPriority.Normal);
+    void Add<TKey, TValue>(TKey key, TValue value, DateTimeOffset absoluteExpiry, CacheItemPriority priority = CacheItemPriority.Normal);
 
     /// <summary>
     /// Gets a value from the cache for specified key.

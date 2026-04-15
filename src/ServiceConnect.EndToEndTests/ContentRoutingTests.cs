@@ -28,8 +28,8 @@ public class ContentRoutingTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new() { HandlerType = typeof(CallbackHandler<TestMessage>), MessageType = typeof(TestMessage), RoutingKeys = new List<string>() },
-            new() { HandlerType = typeof(CallbackHandler<StepMessage>), MessageType = typeof(StepMessage), RoutingKeys = new List<string>() }
+            new() { HandlerType = typeof(CallbackHandler<TestMessage>), MessageType = typeof(TestMessage) },
+            new() { HandlerType = typeof(CallbackHandler<StepMessage>), MessageType = typeof(StepMessage) }
         };
 
         var services = new ServiceCollection();

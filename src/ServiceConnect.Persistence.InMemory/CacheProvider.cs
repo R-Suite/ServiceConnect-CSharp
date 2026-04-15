@@ -2,12 +2,18 @@ using System.Collections.Concurrent;
 
 namespace ServiceConnect.Persistence.InMemory;
 
-public sealed class CacheProvider : ICacheProvider, IDisposable
+public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
 {
+    private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<object, CacheItem> _cache = new();
     private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new();
-    private readonly ConcurrentDictionary<object, Timer> _timers = new();
+    private readonly ConcurrentDictionary<object, ITimer> _timers = new();
     private int _disposed;
+
+    public CacheProvider(TimeProvider? timeProvider = null)
+    {
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
 
     #region Implementation of ICacheProvider
 
@@ -24,14 +30,12 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
     /// <summary>
     /// Add a value to the cache with an absolute time, e.g. 01/01/2020.
     /// </summary>
-    public void Add<TKey, TValue>(TKey key, TValue value, DateTime absoluteExpiry, CacheItemPriority priority = CacheItemPriority.Normal)
+    public void Add<TKey, TValue>(TKey key, TValue value, DateTimeOffset absoluteExpiry, CacheItemPriority priority = CacheItemPriority.Normal)
     {
-        if (absoluteExpiry < DateTime.UtcNow)
-        {
-            return;
-        }
+        if (absoluteExpiry < _timeProvider.GetUtcNow())
+            throw new ArgumentOutOfRangeException(nameof(absoluteExpiry), "Absolute expiry must be in the future.");
 
-        var diff = absoluteExpiry - DateTime.UtcNow;
+        var diff = absoluteExpiry - _timeProvider.GetUtcNow();
         Add(key, value, diff, priority, false);
     }
 
@@ -60,7 +64,7 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
             _slidingTime.TryRemove(key!, out _);
             DisposeTimer(key!);
 
-            KeyRemoved?.Invoke(key, new EventArgs());
+            KeyRemoved?.Invoke(key, EventArgs.Empty);
         }
     }
 
@@ -103,7 +107,7 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
     /// </summary>
     public int Count()
     {
-        return _cache.Keys.Count;
+        return _cache.Count;
     }
 
     /// <summary>
@@ -111,14 +115,16 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
     /// </summary>
     public int PurgeNormalPriorities()
     {
-        var keysToRemove = (from cacheItem in _cache where cacheItem.Value.Priority == CacheItemPriority.Normal select cacheItem.Key).ToList();
         int removed = 0;
-        foreach (var key in keysToRemove)
+        foreach (var cacheItem in _cache)
         {
-            if (_cache.TryRemove(key, out _))
+            if (cacheItem.Value.Priority != CacheItemPriority.Normal)
+                continue;
+
+            if (_cache.TryRemove(cacheItem.Key, out _))
             {
-                _slidingTime.TryRemove(key, out _);
-                DisposeTimer(key);
+                _slidingTime.TryRemove(cacheItem.Key, out _);
+                DisposeTimer(cacheItem.Key);
                 removed++;
             }
         }
@@ -169,7 +175,7 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
 
         if (isSliding)
         {
-            _slidingTime.TryAdd(key!, new SlidingDetails(timeSpan));
+            _slidingTime.TryAdd(key!, new SlidingDetails(timeSpan, _timeProvider));
         }
 
         StartObserving(key!, timeSpan);
@@ -180,7 +186,7 @@ public sealed class CacheProvider : ICacheProvider, IDisposable
         // Clamp to at least 1 ms to avoid a zero-delay timer firing before the caller returns.
         var delay = timeSpan.Ticks > 0 ? timeSpan : TimeSpan.FromMilliseconds(1);
 
-        var timer = new Timer(_ => TryPurgeItem(key!), null, delay, Timeout.InfiniteTimeSpan);
+        var timer = _timeProvider.CreateTimer(_ => TryPurgeItem(key!), null, delay, Timeout.InfiniteTimeSpan);
 
         // Swap in the new timer and dispose any previous one (re-observation after sliding check).
         _timers.AddOrUpdate(key!, timer, (_, existing) =>

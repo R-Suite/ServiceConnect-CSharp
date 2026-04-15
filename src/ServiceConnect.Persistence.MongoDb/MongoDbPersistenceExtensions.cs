@@ -14,7 +14,7 @@ public static class MongoDbPersistenceExtensions
         var options = new MongoDbPersistenceOptions();
         configure(options);
 
-        builder.AdditionalRegistrations.Add(services =>
+        builder.AddRegistration(services =>
         {
             services.TryAddSingleton(options);
             // Single IMongoClient singleton — shared across all persistence classes so
@@ -22,10 +22,11 @@ public static class MongoDbPersistenceExtensions
             services.TryAddSingleton<IMongoClient>(_ => MongoClientFactory.Create(options));
             services.TryAddSingleton<IAggregatorPersistor, MongoDbAggregatorPersistor>();
             services.TryAddSingleton<MongoDbProcessManagerFinder>();
+            services.TryAddSingleton<MongoDbTimeoutStore>();
             services.TryAddSingleton<IProcessManagerFinder>(sp =>
                 sp.GetRequiredService<MongoDbProcessManagerFinder>());
             services.TryAddSingleton<ITimeoutStore>(sp =>
-                sp.GetRequiredService<MongoDbProcessManagerFinder>());
+                sp.GetRequiredService<MongoDbTimeoutStore>());
         });
 
         return builder;

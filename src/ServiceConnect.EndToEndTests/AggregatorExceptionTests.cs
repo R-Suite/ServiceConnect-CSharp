@@ -35,8 +35,7 @@ public class AggregatorExceptionTests
             new()
             {
                 HandlerType = typeof(ThrowingAggregator),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

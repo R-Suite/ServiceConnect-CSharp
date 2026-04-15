@@ -8,7 +8,8 @@ namespace ServiceConnect;
 public sealed class ServiceConnectBuilder
 {
     internal BusConfiguration BusConfig { get; } = new();
-    public List<Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>> AdditionalRegistrations { get; } = [];
+    private readonly List<Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>> _additionalRegistrations = [];
+    public IReadOnlyList<Action<Microsoft.Extensions.DependencyInjection.IServiceCollection>> AdditionalRegistrations => _additionalRegistrations;
 
     /// <summary>
     /// Assemblies to scan for message handlers. Populated explicitly via
@@ -22,6 +23,13 @@ public sealed class ServiceConnectBuilder
     {
         ArgumentNullException.ThrowIfNull(assemblies);
         ScanAssembliesList.AddRange(assemblies);
+        return this;
+    }
+
+    public ServiceConnectBuilder AddRegistration(Action<Microsoft.Extensions.DependencyInjection.IServiceCollection> registration)
+    {
+        ArgumentNullException.ThrowIfNull(registration);
+        _additionalRegistrations.Add(registration);
         return this;
     }
 

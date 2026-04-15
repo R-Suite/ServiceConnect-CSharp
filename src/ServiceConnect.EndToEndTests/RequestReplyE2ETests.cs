@@ -32,8 +32,7 @@ public class RequestReplyE2ETests
             new HandlerReference
             {
                 HandlerType = typeof(ReplyHandler),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 

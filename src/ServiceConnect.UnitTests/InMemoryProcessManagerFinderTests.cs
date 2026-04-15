@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.InMemory;
+using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
 namespace ServiceConnect.UnitTests
@@ -135,7 +137,7 @@ namespace ServiceConnect.UnitTests
 
         // --- Timeout tests ---
 
-        private static TimeoutData MakeTimeoutData(Guid id, DateTime time) => new TimeoutData
+        private static TimeoutData MakeTimeoutData(Guid id, DateTimeOffset time) => new TimeoutData
         {
             Id = id,
             Time = time,
@@ -145,9 +147,9 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task InsertTimeout_StoresTimeoutData()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
             var id = Guid.NewGuid();
-            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddHours(-1)), CancellationToken.None);
+            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddHours(-1)), CancellationToken.None);
 
             var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
             Assert.Single(batch.DueTimeouts);
@@ -157,17 +159,17 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task InsertTimeout_ThrowsWhenDuplicateId()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
             var id = Guid.NewGuid();
-            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(5)), CancellationToken.None);
+            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddMinutes(5)), CancellationToken.None);
 
-            await Assert.ThrowsAsync<PersistenceException>(() => finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddMinutes(10)), CancellationToken.None));
+            await Assert.ThrowsAsync<PersistenceException>(() => finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddMinutes(10)), CancellationToken.None));
         }
 
         [Fact]
         public async Task GetTimeoutsBatch_WhenNoTimeouts_ReturnEmptyDueList()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
 
             var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
 
@@ -177,8 +179,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task GetTimeoutsBatch_FutureTimeout_NotInDueList()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddHours(1)), CancellationToken.None);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1)), CancellationToken.None);
 
             var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
 
@@ -188,8 +190,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task GetTimeoutsBatch_FutureTimeout_SetsNextQueryTime()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            var futureTime = DateTime.UtcNow.AddHours(1);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+            var futureTime = DateTimeOffset.UtcNow.AddHours(1);
             await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), futureTime), CancellationToken.None);
 
             var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
@@ -200,10 +202,10 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task GetTimeoutsBatch_NoFutureTimeouts_NextQueryTimeIsWithinOneMinute()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
 
             var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
-            var expectedMax = DateTime.UtcNow.AddMinutes(1).AddSeconds(1);
+            var expectedMax = DateTimeOffset.UtcNow.AddMinutes(1).AddSeconds(1);
 
             Assert.True(batch.NextQueryTime <= expectedMax);
         }
@@ -211,8 +213,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task GetTimeoutsBatch_PastTimeout_IsInDueList()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
-            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddSeconds(-1)), CancellationToken.None);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTimeOffset.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
             var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
 
@@ -222,9 +224,9 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task RemoveDispatchedTimeout_RemovesTimeoutFromBatch()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
             var id = Guid.NewGuid();
-            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTime.UtcNow.AddSeconds(-1)), CancellationToken.None);
+            await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
             await finder.RemoveDispatchedTimeoutAsync(id, CancellationToken.None);
 
@@ -235,11 +237,32 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task RemoveDispatchedTimeout_WhenIdDoesNotExist_DoesNotThrow()
         {
-            ITimeoutStore finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
 
             var ex = await Record.ExceptionAsync(() => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), CancellationToken.None));
 
             Assert.Null(ex);
+        }
+
+        [Fact]
+        public async Task GetTimeoutsBatch_UsesProvidedTimeProviderForScheduling()
+        {
+            var now = new DateTimeOffset(2026, 4, 14, 20, 0, 0, TimeSpan.Zero);
+            var timeProvider = new FakeTimeProvider(now);
+            ITimeoutStore finder = new InMemoryTimeoutStore(timeProvider: timeProvider);
+
+            var timeoutId = Guid.NewGuid();
+            var dueAt = now.AddMinutes(10);
+            await finder.InsertTimeoutAsync(MakeTimeoutData(timeoutId, dueAt), CancellationToken.None);
+
+            var futureBatch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
+            Assert.Equal(dueAt, futureBatch.NextQueryTime);
+            Assert.Empty(futureBatch.DueTimeouts);
+
+            timeProvider.Advance(TimeSpan.FromMinutes(10));
+
+            var dueBatch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
+            Assert.Contains(dueBatch.DueTimeouts, timeout => timeout.Id == timeoutId);
         }
 
         // --- Pre-cancelled token tests ---
@@ -291,18 +314,18 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task InsertTimeoutAsync_PreCancelledToken_ThrowsOCE()
         {
-            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTime.UtcNow.AddMinutes(5)), cts.Token));
+                () => finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTimeOffset.UtcNow.AddMinutes(5)), cts.Token));
         }
 
         [Fact]
         public async Task GetTimeoutsBatchAsync_PreCancelledToken_ThrowsOCE()
         {
-            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
@@ -313,12 +336,44 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task RemoveDispatchedTimeoutAsync_PreCancelledToken_ThrowsOCE()
         {
-            var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
                 () => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), cts.Token));
+        }
+
+        [Fact]
+        public async Task FindDataAsync_IgnoresFallbackEntriesWithoutIntegerVersion()
+        {
+            var cache = new ProcessManagerPredicateCache();
+            var state = new InMemoryPersistenceState();
+            var finder = new InMemoryProcessManagerFinder(cache, state);
+            var correlationId = Guid.NewGuid();
+            var mapper = new TestProcessManagerPropertyMapper();
+            mapper.ConfigureMapping<TestData, FakeMessage1>(data => data.CorrelationId, message => message.CorrelationId);
+
+            state.Provider.Add(correlationId.ToString(), new LegacyMemoryData
+            {
+                Data = new TestData { CorrelationId = correlationId },
+                Version = null
+            }, DateTimeOffset.UtcNow.AddMinutes(5));
+
+            var exception = await Record.ExceptionAsync(() => finder.FindDataAsync<TestData>(
+                mapper,
+                new FakeMessage1(correlationId),
+                CancellationToken.None));
+
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public void InMemoryPersistenceState_UsesReaderWriterLockSlim()
+        {
+            Assert.Equal(
+                typeof(System.Threading.ReaderWriterLockSlim),
+                typeof(InMemoryPersistenceState).GetProperty(nameof(InMemoryPersistenceState.SyncRoot))!.PropertyType);
         }
     }
 
@@ -365,5 +420,11 @@ namespace ServiceConnect.UnitTests
             var compiled = messageExpression.Compile();
             return obj => compiled((TMessage)obj);
         }
+    }
+
+    internal sealed class LegacyMemoryData
+    {
+        public required TestData Data { get; init; }
+        public object? Version { get; init; }
     }
 }

@@ -11,6 +11,7 @@ public sealed class Producer : IProducer
 {
     /// <summary>Default maximum message body size, in bytes (64 KiB).</summary>
     private const long DefaultMaxMessageSize = 64 * 1024;
+    private const int StampedHeaderCount = 11;
     /// <summary>Default publish-retry attempt count.</summary>
     private const ushort DefaultRetryCount = 60;
     /// <summary>Default delay between publish retries, in seconds.</summary>
@@ -33,6 +34,7 @@ public sealed class Producer : IProducer
     private readonly IQueueConfiguration _queueConfiguration;
     private readonly IBusConfiguration _busConfiguration;
     private readonly ILogger<Producer> _logger;
+    private readonly TimeProvider _timeProvider;
     private volatile IChannel? _model;
     private IConnection? _connection;
     private readonly SemaphoreSlim _publishLock = new(1, 1);
@@ -43,14 +45,15 @@ public sealed class Producer : IProducer
     private readonly bool _publisherAcks;
     private readonly SemaphoreSlim _connectionSemaphore = new(1, 1);
     private volatile bool _connected;
-    private volatile bool _disposed;
+    private int _disposedInt;
 
-    public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Producer> logger)
+    public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Producer> logger, TimeProvider? timeProvider = null)
     {
         _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
         _busConfiguration = busConfiguration ?? throw new ArgumentNullException(nameof(busConfiguration));
         _logger = logger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         var settings = transportConfiguration.ClientSettings;
         MaximumMessageSize = GetSetting(settings, RabbitMQSettingKeys.MessageSize, DefaultMaxMessageSize, Convert.ToInt64);
@@ -67,7 +70,7 @@ public sealed class Producer : IProducer
 
     private async Task EnsureConnectedAsync()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
         if (_connected) return;
 
         await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
@@ -196,6 +199,7 @@ public sealed class Producer : IProducer
         finally { _publishLock.Release(); }
     }
 
+    [Obsolete("Use DisposeAsync instead.")]
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -205,17 +209,15 @@ public sealed class Producer : IProducer
 
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
-        _disposed = true;
-        await DisposeAsyncCore().ConfigureAwait(false);
+        if (Interlocked.Exchange(ref _disposedInt, 1) != 0) return;
+        await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+        _publishLock.Dispose();
+        _connectionSemaphore.Dispose();
     }
 
     private async Task DisposeAsyncCore()
     {
-        await DisposeModelAsync().ConfigureAwait(false);
-        await DisposeConnectionInstanceAsync().ConfigureAwait(false);
-        _publishLock.Dispose();
-        _connectionSemaphore.Dispose();
+        await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
     }
 
     public long MaximumMessageSize { get; }
@@ -270,7 +272,7 @@ public sealed class Producer : IProducer
         // string-valued copy and then rewriting it (P-28). Pre-sized to the maximum
         // number of stamped keys + any caller-provided entries.
         var callerCount = headers?.Count ?? 0;
-        var result = new Dictionary<string, object>(callerCount + 11);
+        var result = new Dictionary<string, object>(callerCount + StampedHeaderCount);
 
         if (headers is not null)
         {
@@ -286,7 +288,7 @@ public sealed class Producer : IProducer
             result[HeaderKeys.MessageType] = messageType;
 
         result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
-        result[HeaderKeys.TimeSent] = FormatTimestamp(DateTime.UtcNow);
+        result[HeaderKeys.TimeSent] = FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
         if (_busConfiguration.IncludeMachineNameInHeaders)
             result[HeaderKeys.SourceMachine] = Environment.MachineName;
 
@@ -317,44 +319,41 @@ public sealed class Producer : IProducer
         }
     }
 
-    private async Task DisposeModelAsync()
+    private async Task DisposeModelAsync(IChannel? model)
     {
-        if (_model != null)
+        if (model != null)
         {
             try
             {
                 _logger.LogDebug("Disposing Model");
-                if (_model.IsOpen)
-                    await _model.CloseAsync();
-                _model.Dispose();
-                _model = null;
+                if (model.IsOpen)
+                    await model.CloseAsync();
+                model.Dispose();
             }
-            catch (ObjectDisposedException) { _model = null; }
+            catch (ObjectDisposedException) { }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Error disposing model");
-                _model = null;
             }
         }
     }
 
-    private async Task DisposeConnectionInstanceAsync()
+    private async Task DisposeConnectionInstanceAsync(IConnection? connection)
     {
-        if (_connection != null)
+        if (connection != null)
         {
             try
             {
                 _logger.LogDebug("Disposing connection");
-                if (_connection.IsOpen)
-                    await _connection.CloseAsync();
-                _connection.Dispose();
+                if (connection.IsOpen)
+                    await connection.CloseAsync();
+                connection.Dispose();
             }
             catch (ObjectDisposedException) { }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Error disposing connection");
             }
-            _connection = null;
         }
     }
 
@@ -363,39 +362,21 @@ public sealed class Producer : IProducer
         await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
         try
         {
-            try
-            {
-                if (_connection != null && _connection.IsOpen)
-                {
-                    await _connection.CloseAsync().ConfigureAwait(false);
-                    _connection.Dispose();
-                    _connection = null;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Exception trying to close connection");
-            }
-
-            try
-            {
-                if (_model != null && _model.IsOpen)
-                {
-                    await _model.CloseAsync().ConfigureAwait(false);
-                    _model.Dispose();
-                    _model = null;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Exception trying to close model");
-            }
-
-            _connected = false;
+            await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
         }
         finally
         {
             _connectionSemaphore.Release();
         }
+    }
+
+    private async Task TearDownChannelAndConnectionAsync()
+    {
+        var model = Interlocked.Exchange(ref _model, null);
+        var connection = Interlocked.Exchange(ref _connection, null);
+
+        await DisposeModelAsync(model).ConfigureAwait(false);
+        await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
+        _connected = false;
     }
 }

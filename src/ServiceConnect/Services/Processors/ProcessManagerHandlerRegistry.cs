@@ -7,7 +7,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal sealed class ProcessManagerHandlerRegistry
+internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
 {
     // Built once at construction, never written to afterwards. FrozenDictionary gives
     // ~20–40% faster lookups than Dictionary for the per-message hot path (A-12).
@@ -23,10 +23,17 @@ internal sealed class ProcessManagerHandlerRegistry
         var builder = new Dictionary<Type, ProcessManagerDescriptor>();
         foreach (var href in handlerReferences)
         {
-            var processHandlerInterface = href.HandlerType.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType
-                    && i.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
-                    && i.GetGenericArguments()[1] == href.MessageType);
+            Type? processHandlerInterface = null;
+            foreach (var interfaceType in href.HandlerType.GetInterfaces())
+            {
+                if (interfaceType.IsGenericType
+                    && interfaceType.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
+                    && interfaceType.GetGenericArguments()[1] == href.MessageType)
+                {
+                    processHandlerInterface = interfaceType;
+                    break;
+                }
+            }
 
             if (processHandlerInterface == null)
                 continue;

@@ -10,6 +10,6 @@ public sealed class TimeoutsBatch
     /// <summary>
     /// The next time to query peristance store for due timeouts
     /// </summary>
-    public DateTime NextQueryTime { get; set; }
+    public DateTimeOffset NextQueryTime { get; set; }
 }
 

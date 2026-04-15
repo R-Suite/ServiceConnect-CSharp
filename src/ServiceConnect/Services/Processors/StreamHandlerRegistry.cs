@@ -6,7 +6,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal sealed class StreamHandlerRegistry
+internal sealed class StreamHandlerRegistry : IHandlerRegistry
 {
     // Built once at construction; FrozenDictionary for read-heavy lookup (A-12).
     private readonly FrozenDictionary<Type, StreamHandlerDescriptor> _descriptors;
@@ -50,10 +50,17 @@ internal sealed class StreamHandlerRegistry
 
     private static Type? FindStreamHandlerInterface(Type handlerType, Type messageType)
     {
-        return handlerType.GetInterfaces().FirstOrDefault(i =>
-            i.IsGenericType
-            && i.GetGenericTypeDefinition() == typeof(IStreamHandler<>)
-            && i.GetGenericArguments()[0] == messageType);
+        foreach (var interfaceType in handlerType.GetInterfaces())
+        {
+            if (interfaceType.IsGenericType
+                && interfaceType.GetGenericTypeDefinition() == typeof(IStreamHandler<>)
+                && interfaceType.GetGenericArguments()[0] == messageType)
+            {
+                return interfaceType;
+            }
+        }
+
+        return null;
     }
 
     private static StreamHandlerDescriptor BuildDescriptor(Type messageType, Type handlerInterfaceType)

@@ -9,28 +9,30 @@ namespace ServiceConnect.Persistence.InMemory;
 /// Compiled predicates are cached by mapping shape so correlation lookups avoid both
 /// Expression.Compile and reflection on the hot path (A-05).
 /// </summary>
-public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeoutStore
+public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 {
     private readonly ProcessManagerPredicateCache _cache;
+    private readonly TimeProvider _timeProvider;
+    private readonly InMemoryPersistenceState _state;
 
     public InMemoryProcessManagerFinder(string connectionString, string databaseName)
-        : this(new ProcessManagerPredicateCache()) { }
+        : this(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System)) { }
 
-    internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache)
+    internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache, TimeProvider? timeProvider = null)
+        : this(cache, new InMemoryPersistenceState(timeProvider), timeProvider) { }
+
+    internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache, InMemoryPersistenceState state, TimeProvider? timeProvider = null)
     {
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _state = state ?? throw new ArgumentNullException(nameof(state));
     }
-
-#if NET9_0_OR_GREATER
-    private readonly Lock _memoryCacheLock = new();
-#else
-    private readonly object _memoryCacheLock = new();
-#endif
 
     private const int InitialVersion = 1;
     private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
-    private readonly CacheProvider _provider = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (Func<object, object?> Data, Func<object, object?> Version)>
+        ReflectionAccessors = new();
 
     public Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
@@ -70,18 +72,23 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
 
         var predicate = GetPredicate<T>(mapping.PropertiesHierarchy, msgPropValue.GetType());
 
-        lock (_memoryCacheLock)
+        _state.SyncRoot.EnterReadLock();
+        try
         {
             return Task.FromResult<IPersistenceData<T>?>(FindMatchingItem<T>(msgPropValue, predicate));
+        }
+        finally
+        {
+            _state.SyncRoot.ExitReadLock();
         }
     }
 
     private MemoryData<T>? FindMatchingItem<T>(object msgPropValue, Func<MemoryData<T>, object, bool> predicate)
         where T : class, IProcessManagerData
     {
-        foreach (var key in _provider.Keys())
+        foreach (var key in _state.Provider.Keys())
         {
-            var value = _provider.Get<string, object>(key.ToString()!);
+            var value = _state.Provider.Get<string, object>(key.ToString()!);
             if (value is MemoryData<T> typed)
             {
                 var candidate = new MemoryData<T> { Data = typed.Data, Version = typed.Version };
@@ -92,11 +99,19 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
                 // Support case where data was stored with a different generic parameter
                 // (e.g., concrete vs interface T).
                 var valueType = value.GetType();
-                var dataProp = valueType.GetProperty("Data");
-                var versionProp = valueType.GetProperty("Version");
-                if (dataProp?.GetValue(value) is T typedData && versionProp != null)
+                var accessors = ReflectionAccessors.GetOrAdd(valueType, static type =>
                 {
-                    var candidate = new MemoryData<T> { Data = typedData, Version = (int)versionProp.GetValue(value)! };
+                    var dataProp = type.GetProperty("Data");
+                    var versionProp = type.GetProperty("Version");
+
+                    return (
+                        dataProp == null ? _ => null : dataProp.GetValue,
+                        versionProp == null ? _ => null : versionProp.GetValue);
+                });
+
+                if (accessors.Data(value) is T typedData && accessors.Version(value) is int version)
+                {
+                    var candidate = new MemoryData<T> { Data = typedData, Version = version };
                     if (predicate(candidate, msgPropValue)) return candidate;
                 }
             }
@@ -137,13 +152,18 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
         var factory = _cache.MemoryDataFactories.GetOrAdd(data.GetType(), BuildMemoryDataFactory);
         var memoryData = factory(data);
 
-        lock (_memoryCacheLock)
+        _state.SyncRoot.EnterWriteLock();
+        try
         {
             string key = data.CorrelationId.ToString();
-            if (_provider.Contains(key))
+            if (_state.Provider.Contains(key))
                 throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
 
-            _provider.Add(key, memoryData, DateTime.UtcNow.Add(ExpiryDuration));
+            _state.Provider.Add(key, memoryData, _timeProvider.GetUtcNow().Add(ExpiryDuration));
+        }
+        finally
+        {
+            _state.SyncRoot.ExitWriteLock();
         }
 
         return Task.CompletedTask;
@@ -174,17 +194,18 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        lock (_memoryCacheLock)
+        _state.SyncRoot.EnterWriteLock();
+        try
         {
             string? error = null;
             var newData = (MemoryData<T>)data;
             string key = data.Data.CorrelationId.ToString();
 
-            if (_provider.Contains(key))
+            if (_state.Provider.Contains(key))
             {
                 // Read version via a typed IVersioned interface so the cast is
                 // compile-time-checked rather than the old dynamic dispatch (A-05).
-                var storedData = _provider.Get<string, object>(key);
+                var storedData = _state.Provider.Get<string, object>(key);
                 int currentVersion = storedData is IVersioned versioned
                     ? versioned.Version
                     : throw new PersistenceException(
@@ -198,7 +219,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
 
                 if (currentVersion == newData.Version)
                 {
-                    _provider.Update(key, updatedData);
+                    _state.Provider.Update(key, updatedData);
                 }
                 else
                 {
@@ -213,6 +234,10 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
             if (!string.IsNullOrEmpty(error))
                 throw new PersistenceException(error);
         }
+        finally
+        {
+            _state.SyncRoot.ExitWriteLock();
+        }
 
         return Task.CompletedTask;
     }
@@ -221,69 +246,15 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder, ITimeo
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        lock (_memoryCacheLock)
+        _state.SyncRoot.EnterWriteLock();
+        try
         {
             string key = data.Data.CorrelationId.ToString();
-            _provider.Remove(key);
+            _state.Provider.Remove(key);
         }
-
-        return Task.CompletedTask;
-    }
-
-    public Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        lock (_memoryCacheLock)
+        finally
         {
-            string key = timeoutData.Id.ToString();
-
-            if (_provider.Contains(key))
-                throw new PersistenceException($"TimeoutData with Id {key} already exists in the cache.");
-
-            _provider.Add(key, timeoutData, DateTime.UtcNow.Add(ExpiryDuration));
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var retval = new TimeoutsBatch { DueTimeouts = [] };
-        DateTime utcNow = DateTime.UtcNow;
-        var nextQueryTime = DateTime.MaxValue;
-
-        lock (_memoryCacheLock)
-        {
-            foreach (var key in _provider.Keys())
-            {
-                var value = _provider.Get<string, object>(key.ToString()!);
-                if (value is TimeoutData timeoutData)
-                {
-                    if (timeoutData.Time <= utcNow)
-                        retval.DueTimeouts.Add(timeoutData);
-                    else if (timeoutData.Time < nextQueryTime)
-                        nextQueryTime = timeoutData.Time;
-                }
-            }
-        }
-
-        if (nextQueryTime == DateTime.MaxValue)
-            nextQueryTime = utcNow.Add(DefaultNextQueryInterval);
-
-        retval.NextQueryTime = nextQueryTime;
-        return Task.FromResult(retval);
-    }
-
-    public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        lock (_memoryCacheLock)
-        {
-            _provider.Remove(id.ToString());
+            _state.SyncRoot.ExitWriteLock();
         }
 
         return Task.CompletedTask;

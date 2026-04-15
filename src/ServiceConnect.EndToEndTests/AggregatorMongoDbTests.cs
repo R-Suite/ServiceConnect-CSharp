@@ -32,8 +32,7 @@ public class AggregatorMongoDbTests
             new()
             {
                 HandlerType = typeof(MongoBatchAggregator),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

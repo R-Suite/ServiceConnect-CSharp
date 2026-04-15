@@ -37,8 +37,7 @@ public class ConsumeContextReplyTests
             new()
             {
                 HandlerType = typeof(ContextReplyHandler),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 
@@ -72,8 +71,7 @@ public class ConsumeContextReplyTests
             new()
             {
                 HandlerType = typeof(CallbackHandler<TestResponse>),
-                MessageType = typeof(TestResponse),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestResponse)
             }
         };
 

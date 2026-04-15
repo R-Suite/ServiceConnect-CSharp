@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Services;
 
 namespace ServiceConnect.Services.Processors;
 
@@ -12,7 +13,8 @@ internal sealed class ProcessManagerProcessor(
     Lazy<IBus> bus,
     ILogger<ProcessManagerProcessor> logger,
     IBusConfiguration busConfig,
-    IQueueConfiguration queueConfig) : IMessageProcessor
+    IQueueConfiguration queueConfig,
+    ConsumeContextPool? contextPool = null) : IMessageProcessor
 {
     // Cached mapper per handler interface type. ConfigureMapper compiles expression lambdas
     // that are identical for a given handler type, so we only pay the cost once (P-005/R-034).
@@ -69,18 +71,20 @@ internal sealed class ProcessManagerProcessor(
             data = descriptor.ExtractData(persistenceData!);
         }
 
-        descriptor.SetHandlerContext(
-            handler,
-            new ConsumeContext(bus.Value, headers, queueConfig, busConfig) { CancellationToken = cancellationToken });
-
+        var context = (contextPool ?? new ConsumeContextPool()).Rent(bus.Value, headers, queueConfig, busConfig, cancellationToken);
         try
         {
+            descriptor.SetHandlerContext(handler, context);
             await descriptor.InvokeHandleAsync(handler, (Message)message, data).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Process-manager handler threw for {MessageType}; persistence skipped", messageType.Name);
             throw;
+        }
+        finally
+        {
+            context.Release();
         }
 
         // Only persist if the handler succeeded — keeps business side-effects and persistence atomic.

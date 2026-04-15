@@ -33,8 +33,7 @@ public class ScatterGatherPartialTests
             new HandlerReference
             {
                 HandlerType = typeof(PartialScatterReplyHandler),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 
@@ -68,8 +67,7 @@ public class ScatterGatherPartialTests
             new HandlerReference
             {
                 HandlerType = typeof(CallbackHandler<TestRequest>),
-                MessageType = typeof(TestRequest),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestRequest)
             }
         };
 

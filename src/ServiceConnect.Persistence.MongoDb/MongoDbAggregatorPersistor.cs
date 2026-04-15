@@ -4,7 +4,6 @@ using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
-using ServiceConnect.Services;
 
 namespace ServiceConnect.Persistence.MongoDb;
 

@@ -23,7 +23,7 @@ public sealed class TimeoutData
     /// <summary>
     /// The time at which the timeout expires.
     /// </summary>
-    public DateTime Time { get; set; }
+    public DateTimeOffset Time { get; set; }
 
     /// <summary>
     /// Store the headers to preserve them across timeouts.

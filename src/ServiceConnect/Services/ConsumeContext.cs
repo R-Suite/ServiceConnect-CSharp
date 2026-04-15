@@ -5,7 +5,12 @@ using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
-public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers, IQueueConfiguration queueConfig, IBusConfiguration busConfig) : IConsumeContext
+public sealed class ConsumeContext(
+    IBus bus,
+    IDictionary<string, object> headers,
+    IQueueConfiguration queueConfig,
+    IBusConfiguration busConfig,
+    CancellationToken cancellationToken = default) : IConsumeContext
 {
     public IBus Bus { get; } = bus;
 
@@ -16,7 +21,7 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
     /// </summary>
     public IReadOnlyDictionary<string, object> Headers { get; } = new ReadOnlyDictionary<string, object>(
         headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers));
-    public CancellationToken CancellationToken { get; set; }
+    public CancellationToken CancellationToken { get; } = cancellationToken;
 
     // Cached backing fields — HeaderDecoder.Decode + Guid.TryParse are called only once
     // per ConsumeContext instance regardless of how many times the properties are read (P-031).
@@ -58,14 +63,15 @@ public sealed class ConsumeContext(IBus bus, IDictionary<string, object> headers
         if (string.IsNullOrEmpty(sourceAddress))
             throw new InvalidOperationException("Cannot reply: incoming message has no SourceAddress header.");
 
-        if (busConfig.ValidateReplyDestinations && !IsKnownQueue(sourceAddress, queueConfig))
+        var requestMessageId = Headers.TryGetValue(HeaderKeys.RequestMessageId, out var rmi) ? HeaderDecoder.Decode(rmi) : null;
+        var isRequestReply = !string.IsNullOrEmpty(requestMessageId);
+
+        if (busConfig.ValidateReplyDestinations && !isRequestReply && !IsKnownQueue(sourceAddress, queueConfig))
         {
             throw new InvalidOperationException(
                 $"Cannot reply: SourceAddress '{sourceAddress}' is not a recognized queue. " +
                 "This may indicate a spoofed message. Configure queue mappings or use RequestReplyManager for safe replies.");
         }
-
-        var requestMessageId = Headers.TryGetValue(HeaderKeys.RequestMessageId, out var rmi) ? HeaderDecoder.Decode(rmi) : null;
 
         var replyHeaders = headers ?? [];
         if (!string.IsNullOrEmpty(requestMessageId))

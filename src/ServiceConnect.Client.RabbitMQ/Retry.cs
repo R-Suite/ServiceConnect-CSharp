@@ -4,42 +4,43 @@ public static class Retry
 {
     // Non-generic overload delegates to the generic one to avoid duplicated retry
     // body logic (L-15). We produce a uniform return type by wrapping the void action.
-    public static Task DoAsync(Func<Task> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount)
+    public static Task DoAsync(Func<Task> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
-        return DoAsync<int>(async () => { await action().ConfigureAwait(false); return 0; }, exceptionAction, retryInterval, retryCount);
+        return DoAsync<int>(async () => { await action().ConfigureAwait(false); return 0; }, exceptionAction, retryInterval, retryCount, cancellationToken);
     }
 
-    public static async Task<T> DoAsync<T>(Func<Task<T>> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount)
+    public static async Task<T> DoAsync<T>(Func<Task<T>> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(exceptionAction);
-        List<Exception> exceptions = [];
+        List<Exception>? exceptions = null;
 
         for (int retry = 0; retry < retryCount; retry++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 return await action().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                exceptions.Add(ex);
+                (exceptions ??= []).Add(ex);
                 try
                 {
                     await exceptionAction(ex).ConfigureAwait(false);
                 }
                 catch (Exception callbackEx)
                 {
-                    exceptions.Add(callbackEx);
+                    (exceptions ??= []).Add(callbackEx);
                 }
 
                 var delay = CalculateDelay(retryInterval, retry);
-                await Task.Delay(delay).ConfigureAwait(false);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        throw new AggregateException(exceptions);
+        throw new AggregateException(exceptions ?? []);
     }
 
     private static readonly double MaxDelayMs = TimeSpan.FromMinutes(5).TotalMilliseconds;

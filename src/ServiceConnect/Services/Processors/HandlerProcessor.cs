@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Services;
 
 namespace ServiceConnect.Services.Processors;
 
@@ -11,7 +13,8 @@ internal sealed class HandlerProcessor(
     IServiceProvider serviceProvider,
     Lazy<IBus> bus,
     IBusConfiguration busConfig,
-    IQueueConfiguration queueConfig) : IMessageProcessor
+    IQueueConfiguration queueConfig,
+    ConsumeContextPool? contextPool = null) : IMessageProcessor
 {
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -43,15 +46,21 @@ internal sealed class HandlerProcessor(
             return ProcessResult.NotHandled;
 
         var resolvedBus = bus.Value;
-        var context = new ConsumeContext(resolvedBus, headers, queueConfig, busConfig) { CancellationToken = cancellationToken };
-
-        foreach (var (handler, descriptor) in invocations)
+        var context = (contextPool ?? new ConsumeContextPool()).Rent(resolvedBus, headers, queueConfig, busConfig, cancellationToken);
+        try
         {
-            descriptor.SetContext(handler, context);
-            await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
-        }
+            foreach (var (handler, descriptor) in invocations)
+            {
+                descriptor.SetContext(handler, context);
+                await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
+            }
 
-        await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
+            await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            context.Release();
+        }
 
         return ProcessResult.Handled;
     }
@@ -125,6 +134,7 @@ internal sealed class HandlerProcessor(
         await routeDelegate(bus, message, destinations, cancellationToken).ConfigureAwait(false);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsValidRoutingSlipDestination(string destination)
     {
         if (string.IsNullOrWhiteSpace(destination)) return false;

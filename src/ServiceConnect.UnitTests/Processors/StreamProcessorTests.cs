@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
+using System.Reflection;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Processors;
@@ -14,7 +16,16 @@ public class StreamProcessorTests
             new ServiceCollection().BuildServiceProvider(),
             NullLogger<StreamProcessor>.Instance,
             new MessageTypeRegistry(),
-            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance));
+            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance),
+            Mock.Of<IMessageSerializer>(),
+            TimeProvider.System);
+
+    [Fact]
+    public void Constructor_UsesSingleStateDictionaryAndInjectedSerializer()
+    {
+        Assert.NotNull(typeof(StreamProcessor).GetField("_serializer", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.Null(typeof(StreamProcessor).GetField("_streamTimestamps", BindingFlags.Instance | BindingFlags.NonPublic));
+    }
 
     [Fact]
     public async Task ProcessAsync_NonByteStream_ReturnsNotHandled()

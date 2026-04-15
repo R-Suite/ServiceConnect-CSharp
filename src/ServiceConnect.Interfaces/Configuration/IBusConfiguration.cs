@@ -30,8 +30,4 @@ public interface IBusConfiguration
     /// known queues when enabled (R-024).
     /// </summary>
     bool EnableRoutingSlipProcessing { get; set; }
-    ITransportConfiguration Transport { get; }
-    IQueueConfiguration Queues { get; }
-    IPersistenceConfiguration Persistence { get; }
-    IPipelineConfiguration Pipeline { get; }
 }

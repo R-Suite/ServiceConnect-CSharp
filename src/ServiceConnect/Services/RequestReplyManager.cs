@@ -5,15 +5,15 @@ using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
-public sealed class RequestReplyManager(IMessageSerializer serializer) : IRequestReplyManager
+public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline) : IRequestReplyManager
 {
-    private readonly ConcurrentDictionary<string, RequestState> _pendingRequests = new();
+    private readonly ConcurrentDictionary<Guid, RequestState> _pendingRequests = new();
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    private readonly ISendMessagePipeline _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
 
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
-        Func<Type, byte[], Dictionary<string, string>, string?, CancellationToken, Task> sendAction,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -22,20 +22,19 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         cancellationToken.ThrowIfCancellationRequested();
 
         var messageId = Guid.NewGuid();
-        var messageIdStr = messageId.ToString();
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pendingRequests[messageIdStr] = new RequestState(tcs, 1, typeof(TReply));
+        _pendingRequests[messageId] = new RequestState(tcs, 1, typeof(TReply));
 
-        headers[HeaderKeys.RequestMessageId] = messageIdStr;
+        headers[HeaderKeys.RequestMessageId] = messageId.ToString();
 
-        using var timeoutCts = new CancellationTokenSource(options.Timeout);
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCts.CancelAfter(options.Timeout);
 
         await using var reg = linkedCts.Token.Register(() =>
         {
             // Remove atomically before signalling so ProcessReply cannot add to the
             // entry after the timeout/cancel fires (closes TOCTOU race R-021).
-            _pendingRequests.TryRemove(messageIdStr, out _);
+            _pendingRequests.TryRemove(messageId, out _);
             if (cancellationToken.IsCancellationRequested)
                 tcs.TrySetCanceled(cancellationToken);
             else
@@ -45,23 +44,22 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         try
         {
             if (!string.IsNullOrEmpty(options.EndPoint))
-                await sendAction(typeof(TRequest), messageBytes, headers, options.EndPoint, cancellationToken).ConfigureAwait(false);
+                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, options.EndPoint, cancellationToken).ConfigureAwait(false);
             else
-                await sendAction(typeof(TRequest), messageBytes, headers, null, cancellationToken).ConfigureAwait(false);
+                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, null, cancellationToken).ConfigureAwait(false);
 
             var result = await tcs.Task.ConfigureAwait(false);
             return (TReply)result;
         }
         finally
         {
-            _pendingRequests.TryRemove(messageIdStr, out _);
+            _pendingRequests.TryRemove(messageId, out _);
         }
     }
 
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
-        Func<Type, byte[], Dictionary<string, string>, string?, CancellationToken, Task> sendAction,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -70,7 +68,6 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         cancellationToken.ThrowIfCancellationRequested();
 
         var messageId = Guid.NewGuid();
-        var messageIdStr = messageId.ToString();
         // List<T> with explicit lock outperforms ConcurrentBag for the request/reply
         // fan-in case because we need Count to be O(1) and we're appending on the
         // reply thread with no parallel readers until completion (P-18).
@@ -78,7 +75,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         int expectedCount = options.ExpectedReplyCount ?? options.EndPoints?.Count ?? -1;
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        _pendingRequests[messageIdStr] = new RequestState(tcs, expectedCount, typeof(TReply), reply =>
+        _pendingRequests[messageId] = new RequestState(tcs, expectedCount, typeof(TReply), reply =>
         {
             lock (responses)
             {
@@ -88,16 +85,16 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
             }
         });
 
-        headers[HeaderKeys.RequestMessageId] = messageIdStr;
+        headers[HeaderKeys.RequestMessageId] = messageId.ToString();
 
-        using var timeoutCts = new CancellationTokenSource(options.Timeout);
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCts.CancelAfter(options.Timeout);
 
         await using var reg = linkedCts.Token.Register(() =>
         {
             // Remove atomically before signalling so ProcessReply cannot append to the
             // response list after the timeout/cancel fires (closes TOCTOU race R-021).
-            _pendingRequests.TryRemove(messageIdStr, out _);
+            _pendingRequests.TryRemove(messageId, out _);
             if (cancellationToken.IsCancellationRequested)
                 tcs.TrySetCanceled(cancellationToken);
             else
@@ -109,11 +106,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
             if (options.EndPoints != null)
             {
                 foreach (string endPoint in options.EndPoints)
-                    await sendAction(typeof(TRequest), messageBytes, headers, endPoint, cancellationToken).ConfigureAwait(false);
+                    await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, endPoint, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                await sendAction(typeof(TRequest), messageBytes, headers, null, cancellationToken).ConfigureAwait(false);
+                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, null, cancellationToken).ConfigureAwait(false);
             }
 
             await tcs.Task.ConfigureAwait(false);
@@ -124,18 +121,17 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         }
         finally
         {
-            _pendingRequests.TryRemove(messageIdStr, out _);
+            _pendingRequests.TryRemove(messageId, out _);
         }
     }
 
     public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
     {
-        if (!_pendingRequests.TryGetValue(messageId, out var state))
+        if (!Guid.TryParse(messageId, out var requestId) || !_pendingRequests.TryGetValue(requestId, out var state))
             return;
 
         // Use the expected reply type stored at request time, not the wire-provided type.
         // This prevents deserialization into attacker-controlled types via crafted reply messages.
-        // .ToArray() at the serializer boundary (P-003); removed when P-040 adds span overloads.
         object reply = _serializer.Deserialize(messageBytes.ToArray(), state.ReplyType);
 
         if (state.OnReply != null)
@@ -145,7 +141,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer) : IReques
         else
         {
             state.Tcs.TrySetResult(reply);
-            _pendingRequests.TryRemove(messageId, out _);
+            _pendingRequests.TryRemove(requestId, out _);
         }
     }
 

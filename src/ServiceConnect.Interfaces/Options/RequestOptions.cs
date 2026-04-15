@@ -3,6 +3,7 @@ namespace ServiceConnect.Interfaces.Options;
 public sealed class RequestOptions
 {
     public const int DefaultTimeoutMs = 10_000;
+    public static RequestOptions Default { get; } = new();
 
     public Dictionary<string, string>? Headers { get; set; }
     public string? EndPoint { get; set; }

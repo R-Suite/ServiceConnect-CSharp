@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading;
+using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -12,7 +13,7 @@ namespace ServiceConnect.UnitTests
         public void Add_WithAbsoluteExpiry_ItemIsRetrievable()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
 
             var result = cache.Get<string, string>("key1");
 
@@ -31,12 +32,11 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Add_WithPastAbsoluteExpiry_ItemIsNotStored()
+        public void Add_WithPastAbsoluteExpiry_ThrowsArgumentOutOfRangeException()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(-1));
-
-            Assert.False(cache.Contains("key1"));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(-1)));
         }
 
         [Fact]
@@ -63,7 +63,7 @@ namespace ServiceConnect.UnitTests
         public void Remove_ExistingKey_ItemIsRemoved()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
 
             cache.Remove("key1");
 
@@ -94,7 +94,7 @@ namespace ServiceConnect.UnitTests
         public void Remove_FiresKeyRemovedEvent()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
             object? capturedSender = null;
             cache.KeyRemoved += (sender, _) => capturedSender = sender;
 
@@ -107,7 +107,7 @@ namespace ServiceConnect.UnitTests
         public void Contains_ExistingKey_ReturnsTrue()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
 
             Assert.True(cache.Contains("key1"));
         }
@@ -132,9 +132,9 @@ namespace ServiceConnect.UnitTests
         public void Count_AfterAddingItems_ReturnsCorrectCount()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
-            cache.Add("key2", "value2", DateTime.UtcNow.AddMinutes(5));
-            cache.Add("key3", "value3", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("key2", "value2", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("key3", "value3", DateTimeOffset.UtcNow.AddMinutes(5));
 
             Assert.Equal(3, cache.Count());
         }
@@ -143,8 +143,8 @@ namespace ServiceConnect.UnitTests
         public void Count_AfterRemovingItem_Decrements()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
-            cache.Add("key2", "value2", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("key2", "value2", DateTimeOffset.UtcNow.AddMinutes(5));
 
             cache.Remove("key1");
 
@@ -155,8 +155,8 @@ namespace ServiceConnect.UnitTests
         public void Clear_RemovesAllItems()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
-            cache.Add("key2", "value2", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("key2", "value2", DateTimeOffset.UtcNow.AddMinutes(5));
 
             cache.Clear();
 
@@ -167,8 +167,8 @@ namespace ServiceConnect.UnitTests
         public void Keys_ReturnsAllStoredKeys()
         {
             var cache = new CacheProvider();
-            cache.Add("key1", "value1", DateTime.UtcNow.AddMinutes(5));
-            cache.Add("key2", "value2", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("key2", "value2", DateTimeOffset.UtcNow.AddMinutes(5));
 
             var keys = cache.Keys().ToList();
 
@@ -181,8 +181,8 @@ namespace ServiceConnect.UnitTests
         public void KeysGeneric_ReturnsOnlyKeysOfSpecifiedType()
         {
             var cache = new CacheProvider();
-            cache.Add("stringKey", "value1", DateTime.UtcNow.AddMinutes(5));
-            cache.Add(42, "value2", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("stringKey", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add(42, "value2", DateTimeOffset.UtcNow.AddMinutes(5));
 
             var stringKeys = cache.Keys<string>().ToList();
 
@@ -194,9 +194,9 @@ namespace ServiceConnect.UnitTests
         public void PurgeNormalPriorities_RemovesNormalItems_ReturnsCount()
         {
             var cache = new CacheProvider();
-            cache.Add("normal1", "value1", DateTime.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
-            cache.Add("normal2", "value2", DateTime.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
-            cache.Add("high1", "value3", DateTime.UtcNow.AddMinutes(5), CacheItemPriority.High);
+            cache.Add("normal1", "value1", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
+            cache.Add("normal2", "value2", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
+            cache.Add("high1", "value3", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.High);
 
             int removed = cache.PurgeNormalPriorities();
 
@@ -221,8 +221,8 @@ namespace ServiceConnect.UnitTests
         {
             // ConcurrentDictionary.TryAdd does not overwrite existing keys
             var cache = new CacheProvider();
-            cache.Add("key1", "first", DateTime.UtcNow.AddMinutes(5));
-            cache.Add("key1", "second", DateTime.UtcNow.AddMinutes(5));
+            cache.Add("key1", "first", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("key1", "second", DateTimeOffset.UtcNow.AddMinutes(5));
 
             var result = cache.Get<string, string>("key1");
             Assert.Equal("first", result);
@@ -232,8 +232,8 @@ namespace ServiceConnect.UnitTests
         public void Add_DifferentValueTypes_RetrievableCorrectly()
         {
             var cache = new CacheProvider();
-            cache.Add("int-key", 42, DateTime.UtcNow.AddMinutes(5));
-            cache.Add("bool-key", true, DateTime.UtcNow.AddMinutes(5));
+            cache.Add("int-key", 42, DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("bool-key", true, DateTimeOffset.UtcNow.AddMinutes(5));
 
             Assert.Equal(42, cache.Get<string, int>("int-key"));
             Assert.True(cache.Get<string, bool>("bool-key"));
@@ -359,6 +359,40 @@ namespace ServiceConnect.UnitTests
             var ex = Record.Exception(() => cache.Remove("ghost"));
 
             Assert.Null(ex);
+        }
+
+        [Fact]
+        public void Add_WithAbsoluteExpiry_UsesProvidedTimeProviderClock()
+        {
+            var now = new DateTimeOffset(2026, 4, 14, 20, 0, 0, TimeSpan.Zero);
+            var timeProvider = new FakeTimeProvider(now);
+            var cache = new CacheProvider(timeProvider);
+
+            cache.Add("key1", "value1", now.AddMinutes(5));
+            Assert.True(cache.Contains("key1"));
+
+            timeProvider.Advance(TimeSpan.FromMinutes(5).Add(TimeSpan.FromMilliseconds(1)));
+
+            Assert.False(cache.Contains("key1"));
+        }
+
+        [Fact]
+        public void Add_WithSlidingExpiry_SlidesAgainstProvidedTimeProviderClock()
+        {
+            var now = new DateTimeOffset(2026, 4, 14, 20, 0, 0, TimeSpan.Zero);
+            var timeProvider = new FakeTimeProvider(now);
+            var cache = new CacheProvider(timeProvider);
+
+            cache.Add("key1", "value1", TimeSpan.FromMinutes(5));
+
+            timeProvider.Advance(TimeSpan.FromMinutes(4));
+            Assert.Equal("value1", cache.Get<string, string>("key1"));
+
+            timeProvider.Advance(TimeSpan.FromMinutes(4));
+            Assert.True(cache.Contains("key1"));
+
+            timeProvider.Advance(TimeSpan.FromMinutes(2));
+            Assert.False(cache.Contains("key1"));
         }
     }
 }

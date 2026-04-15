@@ -2,18 +2,21 @@ namespace ServiceConnect.Persistence.InMemory;
 
 public sealed class SlidingDetails
 {
+    private readonly TimeProvider _timeProvider;
+
     /// <summary>
     /// Initializes a new <see cref="SlidingDetails"/> with a sliding expiry window.
     /// </summary>
-    public SlidingDetails(TimeSpan relativeExpiry)
+    public SlidingDetails(TimeSpan relativeExpiry, TimeProvider? timeProvider = null)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         RelativeExpiry = relativeExpiry;
         Slide();
     }
 
     private TimeSpan RelativeExpiry { get; set; }
 
-    private DateTime ExpireAt { get; set; }
+    private DateTimeOffset ExpireAt { get; set; }
 
     /// <summary>
     /// Returns true if the sliding window has elapsed. When false, <paramref name="tryAfter"/>
@@ -21,8 +24,8 @@ public sealed class SlidingDetails
     /// </summary>
     public bool CanExpire(out TimeSpan tryAfter)
     {
-        tryAfter = ExpireAt - DateTime.UtcNow;
-        return 0 > tryAfter.Ticks;
+        tryAfter = ExpireAt - _timeProvider.GetUtcNow();
+        return tryAfter.Ticks <= 0;
     }
 
     /// <summary>
@@ -30,6 +33,6 @@ public sealed class SlidingDetails
     /// </summary>
     public void Slide()
     {
-        ExpireAt = DateTime.UtcNow.Add(RelativeExpiry);
+        ExpireAt = _timeProvider.GetUtcNow().Add(RelativeExpiry);
     }
 }

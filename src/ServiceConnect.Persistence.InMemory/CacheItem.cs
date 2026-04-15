@@ -1,9 +1,7 @@
 namespace ServiceConnect.Persistence.InMemory;
 
-public sealed class CacheItem
+internal sealed class CacheItem
 {
-    public CacheItem() { }
-
     /// <summary>
     /// Initializes a new <see cref="CacheItem"/> with a value, priority, and optional
     /// relative expiry duration. A null <paramref name="relativeExpiry"/> disables sliding expiry.
@@ -16,11 +14,11 @@ public sealed class CacheItem
     }
 
     /// <summary>Cached value.</summary>
-    public object? Value { get; set; }
+    public object? Value { get; init; }
 
     /// <summary>Priority controlling whether this item is subject to purge sweeps.</summary>
-    public CacheItemPriority Priority { get; set; }
+    public CacheItemPriority Priority { get; init; }
 
     /// <summary>Sliding expiry window; null for absolute expiry.</summary>
-    public TimeSpan? RelativeExpiry { get; set; }
+    public TimeSpan? RelativeExpiry { get; init; }
 }

@@ -32,8 +32,7 @@ public class AggregatorTests
             new()
             {
                 HandlerType = typeof(BatchAggregator),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 
@@ -102,8 +101,7 @@ public class AggregatorTests
             new()
             {
                 HandlerType = typeof(TimeoutAggregator),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

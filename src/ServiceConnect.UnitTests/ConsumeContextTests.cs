@@ -107,10 +107,10 @@ namespace ServiceConnect.UnitTests
             _mockBus.Verify(b => b.SendAsync(
                 reply,
                 It.Is<SendOptions?>(o =>
-                    o != null &&
-                    o.EndPoint == "my-queue" &&
-                    o.Headers != null &&
-                    o.Headers["ResponseMessageId"] == requestMessageId)),
+                    o.HasValue &&
+                    o.Value.EndPoint == "my-queue" &&
+                    o.Value.Headers != null &&
+                    o.Value.Headers["ResponseMessageId"] == requestMessageId)),
                 Times.Once);
         }
 
@@ -147,7 +147,7 @@ namespace ServiceConnect.UnitTests
 
             _mockBus.Verify(b => b.SendAsync(
                 reply,
-                It.Is<SendOptions?>(o => o != null && o.EndPoint == "unknown-but-allowed")),
+                It.Is<SendOptions?>(o => o.HasValue && o.Value.EndPoint == "unknown-but-allowed")),
                 Times.Once);
         }
 
@@ -170,7 +170,7 @@ namespace ServiceConnect.UnitTests
 
             _mockBus.Verify(b => b.SendAsync(
                 reply,
-                It.Is<SendOptions?>(o => o != null && o.EndPoint == "mapped-reply-queue")),
+                It.Is<SendOptions?>(o => o.HasValue && o.Value.EndPoint == "mapped-reply-queue")),
                 Times.Once);
         }
 
@@ -190,7 +190,7 @@ namespace ServiceConnect.UnitTests
 
             _mockBus.Verify(b => b.SendAsync(
                 reply,
-                It.Is<SendOptions?>(o => o != null && o.EndPoint == "errors")),
+                It.Is<SendOptions?>(o => o.HasValue && o.Value.EndPoint == "errors")),
                 Times.Once);
         }
 

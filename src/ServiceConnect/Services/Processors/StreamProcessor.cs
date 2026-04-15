@@ -11,9 +11,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
     private readonly ILogger<StreamProcessor> _logger;
     private readonly IMessageTypeRegistry _typeRegistry;
     private readonly StreamHandlerRegistry _streamHandlerRegistry;
-    private readonly ConcurrentDictionary<string, MessageBusReadStream> _activeStreams = new();
-    private readonly ConcurrentDictionary<string, DateTime> _streamTimestamps = new();
-    private readonly Timer _cleanupTimer;
+    private readonly IMessageSerializer _serializer;
+    private readonly TimeProvider _timeProvider;
+    private readonly ConcurrentDictionary<string, ActiveStreamState> _activeStreams = new();
+    private readonly ITimer _cleanupTimer;
     /// <summary>
     /// Maximum time a partial stream may sit without new packets before it is evicted.
     /// Tuned to balance memory held by stale streams against transient network stalls.
@@ -40,13 +41,17 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
         IServiceProvider serviceProvider,
         ILogger<StreamProcessor> logger,
         IMessageTypeRegistry typeRegistry,
-        StreamHandlerRegistry streamHandlerRegistry)
+        StreamHandlerRegistry streamHandlerRegistry,
+        IMessageSerializer serializer,
+        TimeProvider timeProvider)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
-        _cleanupTimer = new Timer(_ => EvictStaleStreams(), null, StreamCleanupInterval, StreamCleanupInterval);
+        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _cleanupTimer = _timeProvider.CreateTimer(_ => EvictStaleStreams(), null, StreamCleanupInterval, StreamCleanupInterval);
     }
 
     public bool RunBeforeDeserialization => true;
@@ -91,10 +96,9 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
             return HandledTask; // Handled to prevent infinite requeue
         }
 
-        var stream = _activeStreams.GetOrAdd(sequenceId, id => new MessageBusReadStream(id));
-
-        stream.Write(messageBytes.ToArray(), packetNumber);
-        _streamTimestamps[sequenceId] = DateTime.UtcNow;
+        var state = _activeStreams.GetOrAdd(sequenceId, id => new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow()));
+        state.Stream.Write(messageBytes.ToArray(), packetNumber);
+        state.LastSeenUtc = _timeProvider.GetUtcNow();
 
         if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
         {
@@ -110,13 +114,12 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
                 _logger.LogWarning("Stream {SequenceId} LastPacketNumber {Value} exceeds maximum {Max}; discarding", sequenceId, lastPacketNumber, MaxPacketNumber);
                 return HandledTask;
             }
-            stream.SetLastPacketNumber(lastPacketNumber);
+            state.Stream.SetLastPacketNumber(lastPacketNumber);
         }
 
-        if (stream.IsComplete())
+        if (state.Stream.IsComplete())
         {
-            _activeStreams.TryRemove(sequenceId, out _);
-            _streamTimestamps.TryRemove(sequenceId, out _);
+            _activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state));
 
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))
             {
@@ -144,13 +147,12 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
                 return HandledTask;
             }
 
-            descriptor.SetStream(handler, stream);
+            descriptor.SetStream(handler, state.Stream);
 
-            var serializer = _serviceProvider.GetRequiredService<IMessageSerializer>();
-            var assembledBytes = stream.Read();
-            var originalMessage = serializer.Deserialize(assembledBytes, resolvedType);
+            var assembledBytes = state.Stream.Read();
+            var originalMessage = _serializer.Deserialize(assembledBytes, resolvedType);
 
-            descriptor.InvokeExecute(handler, originalMessage!);
+            return InvokeHandlerAsync(descriptor, handler, originalMessage!, cancellationToken);
         }
 
         return HandledTask;
@@ -158,20 +160,45 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
 
     private void EvictStaleStreams()
     {
-        var cutoff = DateTime.UtcNow - StreamTimeout;
-        foreach (var kvp in _streamTimestamps)
+        var cutoff = _timeProvider.GetUtcNow() - StreamTimeout;
+        foreach (var kvp in _activeStreams)
         {
-            if (kvp.Value < cutoff)
+            if (kvp.Value.LastSeenUtc < cutoff)
             {
-                _activeStreams.TryRemove(kvp.Key, out _);
-                _streamTimestamps.TryRemove(kvp.Key, out _);
-                _logger.LogWarning("Evicted incomplete stream {SequenceId} after timeout", kvp.Key);
+                if (_activeStreams.TryRemove(kvp))
+                    _logger.LogWarning("Evicted incomplete stream {SequenceId} after timeout", kvp.Key);
             }
         }
+    }
+
+    private Task<ProcessResult> InvokeHandlerAsync(
+        StreamHandlerDescriptor descriptor,
+        object handler,
+        object originalMessage,
+        CancellationToken cancellationToken)
+    {
+        if (!cancellationToken.CanBeCanceled)
+        {
+            descriptor.InvokeExecute(handler, originalMessage);
+            return HandledTask;
+        }
+
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            descriptor.InvokeExecute(handler, originalMessage);
+            return ProcessResult.Handled;
+        }, cancellationToken);
     }
 
     public void Dispose()
     {
         _cleanupTimer.Dispose();
+    }
+
+    private sealed class ActiveStreamState(MessageBusReadStream stream, DateTimeOffset lastSeenUtc)
+    {
+        public MessageBusReadStream Stream { get; } = stream;
+        public DateTimeOffset LastSeenUtc { get; set; } = lastSeenUtc;
     }
 }

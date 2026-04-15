@@ -15,12 +15,12 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
 
     private async Task ConnectAsync()
     {
-        if (_connection != null) return;
+        if (Volatile.Read(ref _connection) != null) return;
 
         await _connectionLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (_connection == null)
+            if (Volatile.Read(ref _connection) == null)
                 await CreateConnectionCoreAsync().ConfigureAwait(false);
         }
         finally
@@ -48,7 +48,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
 
     public async Task<IChannel> CreateChannelAsync()
     {
-        if (_connection == null)
+        if (Volatile.Read(ref _connection) == null)
             await ConnectAsync().ConfigureAwait(false);
 
         return await _connection!.CreateChannelAsync().ConfigureAwait(false);

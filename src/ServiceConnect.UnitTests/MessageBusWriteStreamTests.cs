@@ -1,4 +1,5 @@
 using Moq;
+using System.Reflection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using Xunit;
@@ -73,6 +74,30 @@ public class MessageBusWriteStreamTests
     }
 
     [Fact]
+    public async Task WriteAsync_NullBuffer_ThrowsArgumentNullException()
+    {
+        await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => stream.WriteAsync(null!, 0, 0));
+    }
+
+    [Fact]
+    public async Task WriteAsync_InvalidOffset_ThrowsArgumentOutOfRangeException()
+    {
+        await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => stream.WriteAsync([1, 2], 3, 0));
+    }
+
+    [Fact]
+    public async Task WriteAsync_InvalidCount_ThrowsArgumentOutOfRangeException()
+    {
+        await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => stream.WriteAsync([1, 2], 1, 2));
+    }
+
+    [Fact]
     public async Task CloseAsync_SendsEmptyPayloadWithLastPacketNumberHeader()
     {
         var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
@@ -112,6 +137,16 @@ public class MessageBusWriteStreamTests
         Assert.Single(_sends);
         Assert.Empty(_sends[0].Payload);
         Assert.Contains(HeaderKeys.LastPacketNumber, _sends[0].Headers!.Keys);
+    }
+
+    [Fact]
+    public void CloseAsync_UsesInterlockedClosedFlag()
+    {
+        Assert.Null(typeof(MessageBusWriteStream).GetField("_closed", BindingFlags.Instance | BindingFlags.NonPublic));
+
+        var closedFlag = typeof(MessageBusWriteStream).GetField("_closedFlag", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(closedFlag);
+        Assert.Equal(typeof(int), closedFlag!.FieldType);
     }
 }
 

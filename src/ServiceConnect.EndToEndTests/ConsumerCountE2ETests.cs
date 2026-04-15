@@ -35,8 +35,7 @@ public class ConsumerCountE2ETests
             new()
             {
                 HandlerType = typeof(ConsumerCountHandler),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

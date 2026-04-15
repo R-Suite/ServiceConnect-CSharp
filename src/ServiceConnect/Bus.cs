@@ -19,6 +19,7 @@ public sealed class Bus : IBus
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
     private readonly bool _hasOutgoingFilters;
+    private readonly TimeSpan _disposeTimeout;
     private readonly object _stateLock = new();
     private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private bool _consuming;
@@ -35,7 +36,8 @@ public sealed class Bus : IBus
         IList<HandlerReference> handlerReferences,
         IPipelineConfiguration pipelineConfig,
         IConsumer? consumer = null,
-        IProducer? producer = null)
+        IProducer? producer = null,
+        TimeSpan? disposeTimeout = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -49,6 +51,7 @@ public sealed class Bus : IBus
         _hasOutgoingFilters = pipelineConfig.OutgoingFilters.Count > 0;
         _consumer = consumer;
         _producer = producer;
+        _disposeTimeout = disposeTimeout ?? TimeSpan.FromSeconds(30);
     }
 
     public bool IsConsuming => _consuming;
@@ -115,7 +118,7 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        var requestOptions = options ?? new RequestOptions();
+        var requestOptions = options ?? RequestOptions.Default;
         var messageBytes = _serializer.Serialize(message);
         Dictionary<string, string> headers;
 
@@ -134,7 +137,6 @@ public sealed class Bus : IBus
         return await _requestReplyManager.SendRequestAsync<T, TReply>(
             messageBytes,
             headers,
-            _sendPipeline.ExecuteSendMessagePipelineAsync,
             requestOptions,
             cancellationToken).ConfigureAwait(false);
     }
@@ -144,7 +146,7 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        var requestOptions = options ?? new RequestOptions();
+        var requestOptions = options ?? RequestOptions.Default;
         var messageBytes = _serializer.Serialize(message);
         Dictionary<string, string> headers;
 
@@ -163,7 +165,6 @@ public sealed class Bus : IBus
         return await _requestReplyManager.SendRequestMultiAsync<T, TReply>(
             messageBytes,
             headers,
-            _sendPipeline.ExecuteSendMessagePipelineAsync,
             requestOptions,
             cancellationToken).ConfigureAwait(false);
     }
@@ -206,7 +207,7 @@ public sealed class Bus : IBus
 
         if (destinations.Count > 1)
         {
-            headers[HeaderKeys.RoutingSlip] = string.Join(",", destinations.Skip(1));
+            headers[HeaderKeys.RoutingSlip] = BuildRoutingSlip(destinations);
         }
 
         await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination, cancellationToken).ConfigureAwait(false);
@@ -289,7 +290,16 @@ public sealed class Bus : IBus
                 }
             }
             if (localConsumer != null)
-                await localConsumer.DisposeAsync().ConfigureAwait(false);
+            {
+                try
+                {
+                    await localConsumer.DisposeAsync().AsTask().WaitAsync(_disposeTimeout, cancellationToken).ConfigureAwait(false);
+                }
+                catch (TimeoutException)
+                {
+                    _logger.LogWarning("Timed out waiting {Timeout} for consumer disposal.", _disposeTimeout);
+                }
+            }
         }
         finally
         {
@@ -354,6 +364,23 @@ public sealed class Bus : IBus
             };
         }
         return headers;
+    }
+
+    private static string BuildRoutingSlip(IList<string> destinations)
+    {
+        if (destinations.Count <= 1)
+            return string.Empty;
+
+        var builder = new System.Text.StringBuilder();
+        for (var index = 1; index < destinations.Count; index++)
+        {
+            if (index > 1)
+                builder.Append(',');
+
+            builder.Append(destinations[index]);
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>

@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -9,14 +8,16 @@ namespace ServiceConnect.Services;
 
 public sealed class ProcessManagerTimeoutService(
     IBusConfiguration config,
-    IServiceProvider serviceProvider,
+    Lazy<IBus> bus,
+    ITimeoutStore? finder,
     ILogger<ProcessManagerTimeoutService> logger) : IHostedService, IAsyncDisposable
 {
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(30);
 
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
-    private ITimeoutStore? _finder;
+    private readonly Lazy<IBus> _bus = bus ?? throw new ArgumentNullException(nameof(bus));
+    private readonly ITimeoutStore? _finder = finder;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -26,7 +27,6 @@ public sealed class ProcessManagerTimeoutService(
             return Task.CompletedTask;
         }
 
-        _finder = serviceProvider.GetService<ITimeoutStore>();
         if (_finder == null)
         {
             logger.LogWarning("EnableProcessManagerTimeouts is true but no ITimeoutStore registered.");
@@ -41,28 +41,30 @@ public sealed class ProcessManagerTimeoutService(
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_cts != null)
+        var cts = Interlocked.Exchange(ref _cts, null);
+        if (cts != null)
         {
-            _cts.Cancel();
+            cts.Cancel();
             if (_pollingTask != null)
             {
                 try { await _pollingTask; }
                 catch (OperationCanceledException) { }
             }
+
+            cts.Dispose();
         }
+
+        _pollingTask = null;
     }
 
     internal async Task PollOnceAsync(CancellationToken cancellationToken = default)
     {
-        _finder ??= serviceProvider.GetService<ITimeoutStore>();
         if (_finder == null) return;
 
         try
         {
             var batch = await _finder.GetTimeoutsBatchAsync(cancellationToken).ConfigureAwait(false);
             if (batch.DueTimeouts == null || batch.DueTimeouts.Count == 0) return;
-
-            var bus = serviceProvider.GetService<IBus>();
 
             foreach (var timeout in batch.DueTimeouts)
             {
@@ -71,10 +73,10 @@ public sealed class ProcessManagerTimeoutService(
                     logger.LogDebug("Dispatching timeout {TimeoutId} for PM {ProcessManagerId}",
                         timeout.Id, timeout.ProcessManagerId);
 
-                    if (bus != null && !string.IsNullOrEmpty(timeout.Destination))
+                    if (!string.IsNullOrEmpty(timeout.Destination))
                     {
                         var timeoutMessage = new TimeoutMessage(timeout.ProcessManagerId);
-                        await bus.SendAsync(timeoutMessage, new SendOptions
+                        await _bus.Value.SendAsync(timeoutMessage, new SendOptions
                         {
                             EndPoint = timeout.Destination
                         }).ConfigureAwait(false);

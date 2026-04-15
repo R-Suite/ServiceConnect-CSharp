@@ -17,12 +17,14 @@ internal sealed class MessageRetryHandler
     private readonly int _maxRetries;
     private readonly string _errorExchange;
     private readonly ILogger _logger;
+    private readonly TimeProvider _timeProvider;
 
-    public MessageRetryHandler(int maxRetries, string errorExchange, ILogger logger)
+    public MessageRetryHandler(int maxRetries, string errorExchange, ILogger logger, TimeProvider? timeProvider = null)
     {
         _maxRetries = maxRetries;
         _errorExchange = errorExchange ?? throw new ArgumentNullException(nameof(errorExchange));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task HandleFailureAsync(
@@ -55,7 +57,7 @@ internal sealed class MessageRetryHandler
             // are logged server-side below.
             HeaderHelpers.SetHeader(headers, HeaderKeys.Exception, JsonConvert.SerializeObject(new
             {
-                TimeStamp = DateTime.UtcNow,
+                TimeStamp = _timeProvider.GetUtcNow().UtcDateTime,
                 ExceptionType = ex.GetType().FullName,
                 Message = HeaderHelpers.GetErrorMessage(ex)
             }));

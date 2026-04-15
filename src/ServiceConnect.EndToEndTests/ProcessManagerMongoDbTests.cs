@@ -34,8 +34,7 @@ public class ProcessManagerMongoDbTests
             new()
             {
                 HandlerType = typeof(MongoCounterProcessHandler),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

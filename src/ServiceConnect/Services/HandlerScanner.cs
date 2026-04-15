@@ -32,8 +32,7 @@ public static class HandlerScanner
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
-                        MessageType = messageType,
-                        RoutingKeys = []
+                        MessageType = messageType
                     });
                 }
 
@@ -46,8 +45,7 @@ public static class HandlerScanner
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
-                        MessageType = messageType,
-                        RoutingKeys = []
+                        MessageType = messageType
                     });
                 }
 
@@ -60,8 +58,7 @@ public static class HandlerScanner
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
-                        MessageType = messageType,
-                        RoutingKeys = []
+                        MessageType = messageType
                     });
                 }
 
@@ -75,8 +72,7 @@ public static class HandlerScanner
                         handlerReferences.Add(new HandlerReference
                         {
                             HandlerType = type,
-                            MessageType = messageType,
-                            RoutingKeys = []
+                            MessageType = messageType
                         });
                     }
                 }

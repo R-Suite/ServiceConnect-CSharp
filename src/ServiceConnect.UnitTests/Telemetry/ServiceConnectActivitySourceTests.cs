@@ -34,6 +34,9 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         // Reset user-configurable enrichers in case a test set them.
         ServiceConnectActivitySource.Options.EnrichWithMessage = null;
         ServiceConnectActivitySource.Options.EnrichWithMessageBytes = null;
+        ServiceConnectActivitySource.Options.EnablePublishTelemetry = true;
+        ServiceConnectActivitySource.Options.EnableConsumeTelemetry = true;
+        ServiceConnectActivitySource.Options.EnableSendTelemetry = true;
         _listener.Dispose();
     }
 
@@ -92,6 +95,22 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         Assert.NotNull(activity);
         Assert.Equal("boom", activity!.GetTagItem("enrichment.exception"));
+    }
+
+    [Fact]
+    public void Publish_WhenTelemetryDisabled_ReturnsNull()
+    {
+        ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
+
+        var args = new PublishEventArgs
+        {
+            RoutingKey = "orders",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.Null(activity);
     }
 
     // ---------------- Consume ----------------
@@ -159,6 +178,21 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal(spanId, activity.ParentSpanId.ToString());
     }
 
+    [Fact]
+    public void Consume_WhenTelemetryDisabled_ReturnsNull()
+    {
+        ServiceConnectActivitySource.Options.EnableConsumeTelemetry = false;
+
+        var args = new ConsumeEventArgs
+        {
+            Headers = new Dictionary<string, object>()
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.Null(activity);
+    }
+
     // ---------------- Send ----------------
 
     [Fact]
@@ -191,6 +225,22 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.NotNull(activity);
         Assert.Equal("anonymous publish", activity!.DisplayName);
         Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+    }
+
+    [Fact]
+    public void Send_WhenTelemetryDisabled_ReturnsNull()
+    {
+        ServiceConnectActivitySource.Options.EnableSendTelemetry = false;
+
+        var args = new SendEventArgs
+        {
+            EndPoint = "svc.queue",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.Null(activity);
     }
 
     // ---------------- TryGetExistingContext ----------------

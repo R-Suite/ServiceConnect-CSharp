@@ -45,8 +45,7 @@ public class StreamOutOfOrderTests
             new()
             {
                 HandlerType = typeof(StreamCaptureHandler),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

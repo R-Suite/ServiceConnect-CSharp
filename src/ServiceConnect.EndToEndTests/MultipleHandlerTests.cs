@@ -32,14 +32,12 @@ public class MultipleHandlerTests
             new HandlerReference
             {
                 HandlerType = typeof(TaggedHandlerA),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             },
             new HandlerReference
             {
                 HandlerType = typeof(TaggedHandlerB),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 

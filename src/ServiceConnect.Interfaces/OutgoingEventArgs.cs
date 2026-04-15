@@ -7,7 +7,11 @@ public class OutgoingEventArgs
     public Dictionary<string, string> Headers
     {
         get => _headers;
-        set => _headers = value is not null ? value : [];
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            _headers = value;
+        }
     }
 
     private Dictionary<string, string> _headers = [];

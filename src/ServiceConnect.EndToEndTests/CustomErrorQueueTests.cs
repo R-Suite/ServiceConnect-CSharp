@@ -34,8 +34,7 @@ public class CustomErrorQueueTests
             new()
             {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
-                MessageType = typeof(TestMessage),
-                RoutingKeys = new List<string>()
+                MessageType = typeof(TestMessage)
             }
         };
 
