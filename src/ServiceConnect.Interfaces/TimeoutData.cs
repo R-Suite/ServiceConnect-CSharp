@@ -42,4 +42,10 @@ public sealed class TimeoutData
     /// locked by a concurrent consumer (H-1).
     /// </summary>
     public Guid LockedBy { get; set; }
+
+    /// <summary>
+    /// When set, indicates when the current dispatch lock lease expires and the
+    /// timeout may be reclaimed by another poller.
+    /// </summary>
+    public DateTimeOffset? LockExpiresAt { get; set; }
 }

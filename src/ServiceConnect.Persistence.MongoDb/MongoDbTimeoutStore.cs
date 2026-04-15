@@ -13,6 +13,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
     private const string TimeoutsCollectionName = "Timeouts";
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
 
     public MongoDbTimeoutStore(
         IMongoClient mongoClient,
@@ -62,11 +63,11 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             var utcNow = _timeProvider.GetUtcNow();
 
             var sessionId = Guid.NewGuid();
-            var dueUnlockedFilter = Builders<TimeoutData>.Filter.Eq(x => x.Locked, false) &
-                                    Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
+            var dueUnlockedFilter = BuildDueTimeoutFilter(utcNow);
             var lockUpdate = Builders<TimeoutData>.Update
                 .Set(x => x.Locked, true)
-                .Set(x => x.LockedBy, sessionId);
+                .Set(x => x.LockedBy, sessionId)
+                .Set(x => x.LockExpiresAt, utcNow.Add(LockLeaseDuration));
             var updateResult = await collection.UpdateManyAsync(dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             if (updateResult.IsAcknowledged && updateResult.ModifiedCount > 0)
@@ -123,6 +124,35 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         }
     }
 
+    public async Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
+                         Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
+            var update = Builders<TimeoutData>.Update
+                .Set(x => x.Locked, false)
+                .Set(x => x.LockedBy, Guid.Empty)
+                .Set(x => x.LockExpiresAt, null);
+            await collection.UpdateOneAsync(filter, update, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException($"Failed to release dispatched timeout with Id '{id}'.", ex);
+        }
+    }
+
+    internal static FilterDefinition<TimeoutData> BuildDueTimeoutFilter(DateTimeOffset utcNow)
+    {
+        var unlocked = Builders<TimeoutData>.Filter.Eq(x => x.Locked, false);
+        var expiredLease = Builders<TimeoutData>.Filter.Lte(x => x.LockExpiresAt, utcNow);
+        var due = Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
+        return due & (unlocked | expiredLease);
+    }
+
     private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection)
     {
         if (_timeoutIndexEnsured) return;
@@ -142,7 +172,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                     .Ascending(x => x.LockedBy)
                     .Ascending(x => x.Locked));
 
-            await collection.Indexes.CreateManyAsync([idIndexModel, lockedTimeIndexModel, lockedByIndexModel]).ConfigureAwait(false);
+            var lockExpiresAtIndexModel = new CreateIndexModel<TimeoutData>(
+                Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
+
+            await collection.Indexes.CreateManyAsync([idIndexModel, lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel]).ConfigureAwait(false);
             _timeoutIndexEnsured = true;
         }
         catch

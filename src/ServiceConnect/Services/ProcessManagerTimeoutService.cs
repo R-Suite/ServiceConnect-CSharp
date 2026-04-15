@@ -87,6 +87,15 @@ public sealed class ProcessManagerTimeoutService(
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Error dispatching timeout {TimeoutId}", timeout.Id);
+
+                    try
+                    {
+                        await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        logger.LogError(releaseEx, "Error releasing timeout {TimeoutId} after dispatch failure", timeout.Id);
+                    }
                 }
             }
         }

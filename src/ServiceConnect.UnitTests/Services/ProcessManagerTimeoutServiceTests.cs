@@ -91,6 +91,46 @@ public class ProcessManagerTimeoutServiceTests
     }
 
     [Fact]
+    public async Task PollOnce_SendFails_ReleasesTimeoutForRetry()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts = new List<TimeoutData>
+            {
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>(),
+                    Locked = true,
+                    LockedBy = Guid.NewGuid(),
+                    LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
+                }
+            },
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.Is<SendOptions>(options => options.EndPoint == "test-queue"),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await sut.PollOnceAsync();
+
+        _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Once);
+        _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task StopAsync_DisposesAndClearsCancellationSource()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);

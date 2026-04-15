@@ -93,4 +93,10 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 
         return Task.CompletedTask;
     }
+
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
 }
