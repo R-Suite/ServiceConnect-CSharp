@@ -194,12 +194,17 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             var lockExpiresAtIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
 
-            await collection.Indexes.CreateManyAsync([idIndexModel, lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel]).ConfigureAwait(false);
+            await collection.Indexes.CreateManyAsync(
+                [idIndexModel, lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel]
+            ).ConfigureAwait(false);
             _timeoutIndexEnsured = true;
         }
-        catch
+        catch (MongoCommandException ex) when (ex.Code is 85 or 86)
         {
-            throw;
+            // 85 IndexOptionsConflict / 86 IndexKeySpecsConflict — another process
+            // created the same index concurrently. Treat as success to avoid spurious
+            // first-insert failures in multi-process deployments.
+            _timeoutIndexEnsured = true;
         }
     }
 }
