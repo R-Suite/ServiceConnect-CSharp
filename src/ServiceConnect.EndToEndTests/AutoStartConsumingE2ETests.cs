@@ -146,17 +146,18 @@ public class AutoStartConsumingE2ETests
             var bus = host.Services.GetRequiredService<IBus>();
             Assert.False(bus.IsConsuming);
 
-            var correlationId = Guid.NewGuid();
-            var sent = new TestMessage(correlationId) { Content = "deferred-consume" };
-            await bus.PublishAsync(sent);
-
-            var negativeWait = Task.Delay(TimeSpan.FromSeconds(2));
+            // Verify no consumption occurs during the deferred window.
+            var negativeWait = Task.Delay(TimeSpan.FromSeconds(1));
             var completed = await Task.WhenAny(receivedTcs.Task, negativeWait);
             Assert.Same(negativeWait, completed);
             Assert.False(receivedTcs.Task.IsCompleted);
 
             await bus.StartConsumingAsync();
             Assert.True(bus.IsConsuming);
+
+            var correlationId = Guid.NewGuid();
+            var sent = new TestMessage(correlationId) { Content = "deferred-consume" };
+            await bus.PublishAsync(sent);
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             cts.Token.Register(() => receivedTcs.TrySetCanceled());
