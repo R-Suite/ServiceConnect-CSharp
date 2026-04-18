@@ -1580,7 +1580,7 @@ git commit -m "perf: minor cleanups in producer headers, telemetry, bus startup"
 
 ---
 
-## Final verification
+## Pre-E2E verification
 
 - [ ] **Step 1: Full solution build**
 
@@ -1592,25 +1592,35 @@ Expected: success, zero warnings introduced.
 Run: `dotnet test src/ServiceConnect.UnitTests`
 Expected: all tests pass.
 
-- [ ] **Step 3: E2E suite (Testcontainers)**
-
-Run: `sg docker -c 'dotnet test src/ServiceConnect.EndToEndTests'`
-Expected: all tests pass. Wall-clock runtime for the 7 converted tests should be materially shorter than before.
-
-- [ ] **Step 4: `gitnexus_detect_changes` pre-commit audit**
+- [ ] **Step 3: `gitnexus_detect_changes` pre-commit audit**
 
 Run via the GitNexus MCP tool: `gitnexus_detect_changes({scope: "all"})`.
 Expected: changed symbols are exactly those listed in the File Structure section. Investigate and report any unexpected impact.
 
-- [ ] **Step 5: Confirm no regressions in memory by spot-checking the dispatcher hot path**
+---
 
-Run (optional): `dotnet run --project src/ServiceConnect.EndToEndTests -- --filter ... ` with a basic send/receive loop; observe `GC.GetTotalAllocatedBytes()` before and after for a sample workload. If a benchmark project exists under the solution (check `/home/tim/source/ServiceConnect-CSharp/src`), prefer that.
+### Task 15: Full E2E test suite via `sg docker`
+
+**Files:** no modifications — this task is the acceptance gate for the branch.
+
+- [ ] **Step 1: Run the complete E2E suite**
+
+Run: `sg docker -c 'dotnet test src/ServiceConnect.EndToEndTests'`
+
+Expected:
+- All tests pass (including the 7 tests converted to `TestPolling`).
+- Wall-clock runtime for the suite should be materially shorter than the pre-change baseline because of the Task 11 polling changes.
+- No transient failures. If a test flakes on the first run, rerun once — if it flakes again, treat it as a regression to investigate, not an intermittent infrastructure issue.
+
+- [ ] **Step 2: Report outcomes**
+
+Summarise pass/fail counts and wall-clock runtime. If any test fails, capture its name and failure output verbatim for follow-up. Do NOT declare the branch ready until this task reports clean.
 
 ---
 
 ## Self-Review Notes
 
-- **Spec coverage:** Tasks 1–6 map to items 1–2 (copies on deserialize and stream paths). Task 7 → item 3. Task 8 → item 4. Task 9 → item 5. Task 10 → item 6. Task 11 → item 7. Task 12 → item 8. Task 13 → item 9. Task 14 → item 10. All 10 findings covered.
+- **Spec coverage:** Tasks 1–6 map to items 1–2 (copies on deserialize and stream paths). Task 7 → item 3. Task 8 → item 4. Task 9 → item 5. Task 10 → item 6. Task 11 → item 7. Task 12 → item 8. Task 13 → item 9. Task 14 → item 10. Task 15 → acceptance E2E gate. All 10 findings covered.
 - **Wire-format invariant:** No serializer swap. Newtonsoft remains the only `IMessageSerializer`. JSON bytes produced and consumed are byte-identical with the pre-change implementation.
 - **Handler-facing contract:** `IMessageBusReadStream.Read()` preserved for handler code that consumes raw bytes (verified at `StreamingTests.cs:136`, `StreamOutOfOrderTests.cs:140`). Only the dispatch path uses the new `ReadSequence()`.
 - **Concurrency:** `InMemoryTimeoutStore.GetTimeoutsBatchAsync` now uses the write lock instead of the read lock because the sorted index is mutated during the walk.
