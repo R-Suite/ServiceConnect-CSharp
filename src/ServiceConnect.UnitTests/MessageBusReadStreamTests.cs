@@ -97,6 +97,7 @@ public class MessageBusReadStreamTests
         stream.Write(new byte[] { 1, 2 }, 0);
         stream.Write(new byte[] { 3 }, 1);
         var seq = stream.ReadSequence();
+        Assert.False(seq.IsSingleSegment);
         Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, seq.ToArray());
     }
 }
