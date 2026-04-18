@@ -94,8 +94,7 @@ public class HandlerProcessorTests
 
         Assert.NotNull(handler.Context);
         Assert.Same(mockBus.Object, handler.Context.Bus);
-        // Headers is wrapped in a ReadOnlyDictionary (R-088), so reference identity differs;
-        // verify contents are equivalent instead.
+        // Dictionary<string,object> implements IReadOnlyDictionary, so compare contents not reference.
         Assert.Equal(headers, handler.Context.Headers);
     }
 

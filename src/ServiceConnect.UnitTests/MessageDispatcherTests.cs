@@ -189,7 +189,7 @@ public class MessageDispatcherTests
         // Assert
         Assert.True(result.Success);
         Assert.NotNull(capturedContext);
-        // Headers is wrapped in ReadOnlyDictionary (R-088); compare contents rather than reference.
+        // Dictionary<string,object> implements IReadOnlyDictionary, so compare contents not reference.
         Assert.Equal(headers, capturedContext.Headers);
     }
 

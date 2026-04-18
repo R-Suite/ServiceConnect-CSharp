@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Collections.ObjectModel;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Options;
@@ -8,8 +7,7 @@ namespace ServiceConnect.Services;
 
 internal sealed class ConsumeContextPool
 {
-    private static readonly IReadOnlyDictionary<string, object> EmptyHeaders =
-        new ReadOnlyDictionary<string, object>(new Dictionary<string, object>());
+    private static readonly Dictionary<string, object> EmptyHeaders = [];
     private readonly ConcurrentBag<PooledConsumeContext> _pool = new();
 
     public PooledConsumeContext Rent(
@@ -34,7 +32,7 @@ internal sealed class ConsumeContextPool
     internal sealed class PooledConsumeContext(ConsumeContextPool owner) : IConsumeContext
     {
         private readonly ConsumeContextPool _owner = owner;
-        private IReadOnlyDictionary<string, object> _headers = EmptyHeaders;
+        private Dictionary<string, object> _headers = EmptyHeaders;
         private IBus _bus = null!;
         private IQueueConfiguration _queueConfig = null!;
         private IBusConfiguration _busConfig = null!;
@@ -87,8 +85,7 @@ internal sealed class ConsumeContextPool
             _queueConfig = queueConfig;
             _busConfig = busConfig;
             CancellationToken = cancellationToken;
-            _headers = new ReadOnlyDictionary<string, object>(
-                headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers));
+            _headers = headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers);
             _messageId = null;
             _messageIdCached = false;
             _correlationId = null;

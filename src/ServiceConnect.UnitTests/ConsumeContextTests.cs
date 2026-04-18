@@ -52,7 +52,7 @@ namespace ServiceConnect.UnitTests
             var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
 
             Assert.Same(_mockBus.Object, context.Bus);
-            // Headers is wrapped in ReadOnlyDictionary (R-088); check contents rather than reference.
+            // Dictionary<string,object> implements IReadOnlyDictionary, so compare contents not reference.
             Assert.Equal(headers, context.Headers);
             Assert.Equal("msg-123", context.MessageId);
         }
