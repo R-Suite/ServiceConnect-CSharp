@@ -86,6 +86,55 @@ public class MongoDbTimeoutStoreTests
         return (store, collection);
     }
 
+    private static MongoDbTimeoutStore BuildStore(Mock<IMongoCollection<TimeoutData>> collection)
+    {
+        var database = new Mock<IMongoDatabase>();
+        database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null))
+            .Returns(collection.Object);
+
+        var client = new Mock<IMongoClient>();
+        client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
+
+        return new MongoDbTimeoutStore(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "test" },
+            NullLogger<MongoDbTimeoutStore>.Instance);
+    }
+
+    private static string RenderFilter(FilterDefinition<TimeoutData> filter)
+    {
+        return filter.Render(
+                BsonSerializer.LookupSerializer<TimeoutData>(),
+                BsonSerializer.SerializerRegistry)
+            .ToJson();
+    }
+
+    private static string RenderUpdate(UpdateDefinition<TimeoutData> update)
+    {
+        return update.Render(
+                BsonSerializer.LookupSerializer<TimeoutData>(),
+                BsonSerializer.SerializerRegistry)
+            .ToJson();
+    }
+
+    private static DeleteResult BuildDeleteResult(long deletedCount)
+    {
+        var result = new Mock<DeleteResult>();
+        result.SetupGet(r => r.IsAcknowledged).Returns(true);
+        result.SetupGet(r => r.DeletedCount).Returns(deletedCount);
+        return result.Object;
+    }
+
+    private static UpdateResult BuildUpdateResult(long matchedCount, long modifiedCount)
+    {
+        var result = new Mock<UpdateResult>();
+        result.SetupGet(r => r.IsAcknowledged).Returns(true);
+        result.SetupGet(r => r.MatchedCount).Returns(matchedCount);
+        result.SetupGet(r => r.ModifiedCount).Returns(modifiedCount);
+        result.SetupGet(r => r.UpsertedId).Returns((BsonValue)BsonNull.Value);
+        return result.Object;
+    }
+
     [Fact]
     public async Task InsertTimeout_IndexConflictCode85_IsTolerated_AndInsertProceeds()
     {
@@ -125,5 +174,142 @@ public class MongoDbTimeoutStoreTests
 
         await Assert.ThrowsAsync<PersistenceException>(() =>
             store.InsertTimeoutAsync(new TimeoutData { Id = Guid.NewGuid(), Time = DateTimeOffset.UtcNow }));
+    }
+
+    [Fact]
+    public async Task RemoveDispatchedTimeout_WithMatchingOwner_DeletesLockedTimeout()
+    {
+        var id = Guid.NewGuid();
+        var lockOwner = Guid.NewGuid();
+        FilterDefinition<TimeoutData>? capturedFilter = null;
+
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.DeleteOneAsync(It.IsAny<FilterDefinition<TimeoutData>>(), It.IsAny<CancellationToken>()))
+            .Callback<FilterDefinition<TimeoutData>, CancellationToken>((filter, _) => capturedFilter = filter)
+            .ReturnsAsync(BuildDeleteResult(1));
+
+        var store = BuildStore(collection);
+
+        await ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, lockOwner);
+
+        var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
+        Assert.Contains("\"_id\"", json);
+        Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"Locked\" : true", json);
+        Assert.Contains("\"LockedBy\"", json);
+        Assert.Contains(lockOwner.ToString(), json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReleaseDispatchedTimeout_WithMatchingOwner_ClearsLockFields()
+    {
+        var id = Guid.NewGuid();
+        var lockOwner = Guid.NewGuid();
+        FilterDefinition<TimeoutData>? capturedFilter = null;
+        UpdateDefinition<TimeoutData>? capturedUpdate = null;
+
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<FilterDefinition<TimeoutData>, UpdateDefinition<TimeoutData>, UpdateOptions?, CancellationToken>((filter, update, _, _) =>
+            {
+                capturedFilter = filter;
+                capturedUpdate = update;
+            })
+            .ReturnsAsync(BuildUpdateResult(1, 1));
+
+        var store = BuildStore(collection);
+
+        await ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, lockOwner);
+
+        var filterJson = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
+        Assert.Contains("\"_id\"", filterJson);
+        Assert.Contains(id.ToString(), filterJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"Locked\" : true", filterJson);
+        Assert.Contains("\"LockedBy\"", filterJson);
+        Assert.Contains(lockOwner.ToString(), filterJson, StringComparison.OrdinalIgnoreCase);
+
+        var updateJson = RenderUpdate(Assert.IsAssignableFrom<UpdateDefinition<TimeoutData>>(capturedUpdate));
+        Assert.Contains("\"Locked\" : false", updateJson);
+        Assert.Contains("\"LockedBy\"", updateJson);
+        Assert.Contains(Guid.Empty.ToString(), updateJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"LockExpiresAt\" : null", updateJson);
+    }
+
+    [Fact]
+    public async Task RemoveDispatchedTimeout_WithStaleOwner_IsBenignNoOp()
+    {
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.DeleteOneAsync(It.IsAny<FilterDefinition<TimeoutData>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildDeleteResult(0));
+
+        var store = BuildStore(collection);
+
+        var exception = await Record.ExceptionAsync(() =>
+            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(Guid.NewGuid(), Guid.NewGuid()));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task RemoveDispatchedTimeout_WithMatchingOwner_WhenMongoFails_IncludesLockOwnerInPersistenceException()
+    {
+        var id = Guid.NewGuid();
+        var lockOwner = Guid.NewGuid();
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.DeleteOneAsync(It.IsAny<FilterDefinition<TimeoutData>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(MakeMongoCommandException(91));
+
+        var store = BuildStore(collection);
+
+        var exception = await Assert.ThrowsAsync<PersistenceException>(() =>
+            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, lockOwner));
+
+        Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReleaseDispatchedTimeout_WithStaleOwner_IsBenignNoOp()
+    {
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BuildUpdateResult(0, 0));
+
+        var store = BuildStore(collection);
+
+        var exception = await Record.ExceptionAsync(() =>
+            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(Guid.NewGuid(), Guid.NewGuid()));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public async Task ReleaseDispatchedTimeout_WithMatchingOwner_WhenMongoFails_IncludesLockOwnerInPersistenceException()
+    {
+        var id = Guid.NewGuid();
+        var lockOwner = Guid.NewGuid();
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(MakeMongoCommandException(91));
+
+        var store = BuildStore(collection);
+
+        var exception = await Assert.ThrowsAsync<PersistenceException>(() =>
+            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, lockOwner));
+
+        Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

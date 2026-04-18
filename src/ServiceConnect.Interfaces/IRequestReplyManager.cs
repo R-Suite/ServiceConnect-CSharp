@@ -20,5 +20,14 @@ public interface IRequestReplyManager
         where TRequest : Message
         where TReply : Message;
 
+    Task PublishRequestAsync<TRequest, TReply>(
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        RequestOptions options,
+        Action<TReply> onReply,
+        CancellationToken cancellationToken = default)
+        where TRequest : Message
+        where TReply : Message;
+
     void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type);
 }

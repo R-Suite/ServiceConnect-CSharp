@@ -22,6 +22,113 @@ public class InMemoryTimeoutStoreTests
 
         var batch = await store.GetTimeoutsBatchAsync();
         Assert.Equal(2, batch.DueTimeouts.Count);
+        Assert.All(batch.DueTimeouts, timeout =>
+        {
+            Assert.True(timeout.Locked);
+            Assert.NotEqual(Guid.Empty, timeout.LockedBy);
+            Assert.NotNull(timeout.LockExpiresAt);
+        });
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatch_DueTimeoutIsClaimed_AndHiddenUntilReleased()
+    {
+        var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore(timeProvider: time);
+
+        var id = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
+
+        var first = await store.GetTimeoutsBatchAsync();
+        var claimed = Assert.Single(first.DueTimeouts);
+        Assert.Equal(id, claimed.Id);
+        Assert.True(claimed.Locked);
+        Assert.NotEqual(Guid.Empty, claimed.LockedBy);
+        Assert.Equal(now.AddMinutes(5), claimed.LockExpiresAt);
+
+        var second = await store.GetTimeoutsBatchAsync();
+        Assert.Empty(second.DueTimeouts);
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatch_ReturnedTimeoutMutation_DoesNotChangeStoredLeaseState()
+    {
+        var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore(timeProvider: time);
+
+        var id = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
+
+        var first = await store.GetTimeoutsBatchAsync();
+        var claimed = Assert.Single(first.DueTimeouts);
+
+        claimed.Locked = false;
+        claimed.LockedBy = Guid.Empty;
+        claimed.LockExpiresAt = null;
+
+        var second = await store.GetTimeoutsBatchAsync();
+        Assert.Empty(second.DueTimeouts);
+    }
+
+    [Fact]
+    public async Task TimeoutHeaders_MutableValues_AreIsolatedFromStoredTimeoutData()
+    {
+        var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore(timeProvider: time);
+
+        var id = Guid.NewGuid();
+        var headerValue = new byte[] { 1, 2, 3 };
+
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = id,
+            Time = now.AddMinutes(-1),
+            Headers = new Dictionary<string, object> { ["payload"] = headerValue },
+        });
+
+        headerValue[0] = 9;
+
+        var first = await store.GetTimeoutsBatchAsync();
+        var claimed = Assert.Single(first.DueTimeouts);
+        var claimedHeader = Assert.IsType<byte[]>(claimed.Headers["payload"]);
+        Assert.Equal(new byte[] { 1, 2, 3 }, claimedHeader);
+
+        claimedHeader[1] = 8;
+
+        await store.ReleaseDispatchedTimeoutAsync(id);
+
+        var second = await store.GetTimeoutsBatchAsync();
+        var reclaimed = Assert.Single(second.DueTimeouts);
+        var reclaimedHeader = Assert.IsType<byte[]>(reclaimed.Headers["payload"]);
+        Assert.Equal(new byte[] { 1, 2, 3 }, reclaimedHeader);
+    }
+
+    [Fact]
+    public async Task ReleaseDispatchedTimeout_ReleasedTimeoutIsReturnedAgainOnNextPoll()
+    {
+        var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore(timeProvider: time);
+
+        var id = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
+
+        var first = await store.GetTimeoutsBatchAsync();
+        var initiallyClaimed = Assert.Single(first.DueTimeouts);
+        var initialLockOwner = initiallyClaimed.LockedBy;
+
+        await store.ReleaseDispatchedTimeoutAsync(id);
+
+        var second = await store.GetTimeoutsBatchAsync();
+        var reclaimed = Assert.Single(second.DueTimeouts);
+        Assert.Equal(id, reclaimed.Id);
+        Assert.True(reclaimed.Locked);
+        Assert.NotEqual(Guid.Empty, reclaimed.LockedBy);
+        Assert.NotNull(reclaimed.LockExpiresAt);
+        Assert.NotEqual(initialLockOwner, reclaimed.LockedBy);
     }
 
     [Fact]
@@ -60,7 +167,7 @@ public class InMemoryTimeoutStoreTests
     }
 
     [Fact]
-    public async Task ReleaseDispatchedTimeout_ClearsLockFields_OnExistingEntry()
+    public async Task ReleaseDispatchedTimeout_ClearsLockFields_BeforeNextClaim()
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
@@ -81,9 +188,9 @@ public class InMemoryTimeoutStoreTests
         var batch = await store.GetTimeoutsBatchAsync();
         var fetched = Assert.Single(batch.DueTimeouts);
         Assert.Equal(id, fetched.Id);
-        Assert.False(fetched.Locked);
-        Assert.Equal(Guid.Empty, fetched.LockedBy);
-        Assert.Null(fetched.LockExpiresAt);
+        Assert.True(fetched.Locked);
+        Assert.NotEqual(Guid.Empty, fetched.LockedBy);
+        Assert.NotNull(fetched.LockExpiresAt);
     }
 
     [Fact]

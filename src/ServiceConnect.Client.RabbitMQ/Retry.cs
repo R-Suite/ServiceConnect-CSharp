@@ -23,6 +23,10 @@ public static class Retry
             {
                 return await action().ConfigureAwait(false);
             }
+            catch (OperationCanceledException ex) when (ex.CancellationToken == cancellationToken || cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 (exceptions ??= []).Add(ex);

@@ -46,6 +46,8 @@ public sealed class Producer : IProducer
     private readonly SemaphoreSlim _connectionSemaphore = new(1, 1);
     private volatile bool _connected;
     private int _disposedInt;
+    internal Func<CancellationToken, Task>? ReconnectForTests;
+    internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests;
 
     public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Producer> logger, TimeProvider? timeProvider = null)
     {
@@ -68,21 +70,26 @@ public sealed class Producer : IProducer
         return settings.TryGetValue(key, out var value) ? converter(value) : defaultValue;
     }
 
-    private async Task EnsureConnectedAsync()
+    private Task EnsureConnectedAsync()
+    {
+        return EnsureConnectedAsync(CancellationToken.None);
+    }
+
+    private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
         if (_connected) return;
 
-        await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
+        await _connectionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (_connected) return;
 
-            await Retry.DoAsync(CreateConnectionAsync, async ex =>
+            await Retry.DoAsync(() => CreateConnectionAsync(cancellationToken), async ex =>
             {
                 _logger.LogError(ex, "Error creating connection");
-                await DisposeConnectionAsync().ConfigureAwait(false);
-            }, TimeSpan.FromSeconds(_retryTimeInSeconds), _retryCount).ConfigureAwait(false);
+                await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+            }, TimeSpan.FromSeconds(_retryTimeInSeconds), _retryCount, cancellationToken).ConfigureAwait(false);
 
             _connected = true;
         }
@@ -92,26 +99,74 @@ public sealed class Producer : IProducer
         }
     }
 
-    private async Task CreateConnectionAsync()
+    private async Task CreateConnectionAsync(CancellationToken cancellationToken)
     {
         _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration, heartbeatInterval: null);
 
         // P-004: exchange declarations are per-connection — reset the cache on every (re)connect.
         _declaredExchanges.Clear();
 
-        _connection = await _connectionFactory.CreateConnectionAsync(_hosts, ProducerName).ConfigureAwait(false);
+        IConnection? connection = null;
+        IChannel? model = null;
 
-        if (_publisherAcks)
+        try
         {
-            var channelOptions = new CreateChannelOptions(
-                publisherConfirmationsEnabled: true,
-                publisherConfirmationTrackingEnabled: true);
-            _model = await _connection.CreateChannelAsync(channelOptions).ConfigureAwait(false);
+            if (CreateConnectionForTests != null)
+            {
+                connection = await CreateConnectionForTests(_connectionFactory, _hosts, ProducerName, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                connection = await _connectionFactory.CreateConnectionAsync(_hosts, ProducerName, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (_publisherAcks)
+            {
+                var channelOptions = new CreateChannelOptions(
+                    publisherConfirmationsEnabled: true,
+                    publisherConfirmationTrackingEnabled: true);
+                model = await connection.CreateChannelAsync(channelOptions, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                model = await connection.CreateChannelAsync(null, cancellationToken).ConfigureAwait(false);
+            }
+
+            _connection = connection;
+            _model = model;
         }
-        else
+        catch
         {
-            _model = await _connection.CreateChannelAsync().ConfigureAwait(false);
+            await DisposeModelAsync(model).ConfigureAwait(false);
+            await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
+            throw;
         }
+    }
+
+    private Task ExecuteWithConnectionRetryAsync(Func<Task> action, CancellationToken cancellationToken)
+    {
+        return Retry.DoAsync(
+            action,
+            ex => ReconnectAfterPublishFailureAsync(ex, cancellationToken),
+            TimeSpan.FromSeconds(_retryTimeInSeconds),
+            _retryCount,
+            cancellationToken);
+    }
+
+    private async Task ReconnectAfterPublishFailureAsync(Exception ex, CancellationToken cancellationToken)
+    {
+        _logger.LogError(ex, "Error publishing message");
+
+        await DisposeConnectionAsync().ConfigureAwait(false);
+        _declaredExchanges.Clear();
+
+        if (ReconnectForTests != null)
+        {
+            await ReconnectForTests(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
@@ -120,7 +175,7 @@ public sealed class Producer : IProducer
         if (message.Length > MaximumMessageSize)
             throw new InvalidOperationException(
                 $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
-        await EnsureConnectedAsync().ConfigureAwait(false);
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -130,9 +185,20 @@ public sealed class Producer : IProducer
             // P-017: compute the exchange name once per type and cache it.
             // P-004: only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
             string exchangeName = _exchangeNameCache.GetOrAdd(type.FullName!, static fn => fn.Replace(".", string.Empty));
-            if (!_declaredExchanges.ContainsKey(exchangeName))
-                await ConfigureExchangeAsync(exchangeName, ExchangeType.Fanout).ConfigureAwait(false);
-            await PublishWithRetryAsync(exchangeName, "", basicProperties, message, cancellationToken).ConfigureAwait(false);
+
+            await ExecuteWithConnectionRetryAsync(async () =>
+            {
+                if (!_declaredExchanges.ContainsKey(exchangeName))
+                    await ConfigureExchangeAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
+
+                await _model!.BasicPublishAsync(
+                    exchangeName,
+                    string.Empty,
+                    false,
+                    basicProperties,
+                    (ReadOnlyMemory<byte>)message,
+                    cancellationToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
     }
@@ -143,7 +209,7 @@ public sealed class Producer : IProducer
         if (message.Length > MaximumMessageSize)
             throw new InvalidOperationException(
                 $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
-        await EnsureConnectedAsync().ConfigureAwait(false);
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -156,7 +222,15 @@ public sealed class Producer : IProducer
             {
                 baseHeaders[HeaderKeys.DestinationAddress] = endPoint;
                 var basicProperties = CreateBasicProperties(baseHeaders);
-                await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message, cancellationToken).ConfigureAwait(false);
+                await ExecuteWithConnectionRetryAsync(
+                    () => _model!.BasicPublishAsync(
+                        string.Empty,
+                        endPoint,
+                        false,
+                        basicProperties,
+                        (ReadOnlyMemory<byte>)message,
+                        cancellationToken).AsTask(),
+                    cancellationToken).ConfigureAwait(false);
             }
         }
         finally { _publishLock.Release(); }
@@ -171,13 +245,21 @@ public sealed class Producer : IProducer
             throw new InvalidOperationException(
                 $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
 
-        await EnsureConnectedAsync().ConfigureAwait(false);
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
             var basicProperties = CreateBasicProperties(messageHeaders);
-            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, message, cancellationToken).ConfigureAwait(false);
+            await ExecuteWithConnectionRetryAsync(
+                () => _model!.BasicPublishAsync(
+                    string.Empty,
+                    endPoint,
+                    false,
+                    basicProperties,
+                    (ReadOnlyMemory<byte>)message,
+                    cancellationToken).AsTask(),
+                cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
     }
@@ -188,13 +270,21 @@ public sealed class Producer : IProducer
         if (packet.Length > MaximumMessageSize)
             throw new InvalidOperationException(
                 $"Message size {packet.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
-        await EnsureConnectedAsync().ConfigureAwait(false);
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, HeaderKeys.ByteStream);
             var basicProperties = CreateBasicProperties(messageHeaders);
-            await PublishWithRetryAsync(string.Empty, endPoint, basicProperties, packet, cancellationToken).ConfigureAwait(false);
+            await ExecuteWithConnectionRetryAsync(
+                () => _model!.BasicPublishAsync(
+                    string.Empty,
+                    endPoint,
+                    false,
+                    basicProperties,
+                    (ReadOnlyMemory<byte>)packet,
+                    cancellationToken).AsTask(),
+                cancellationToken).ConfigureAwait(false);
         }
         finally { _publishLock.Release(); }
     }
@@ -261,11 +351,6 @@ public sealed class Producer : IProducer
         return basicProperties;
     }
 
-    private async Task PublishWithRetryAsync(string exchange, string routingKey, BasicProperties basicProperties, byte[] message, CancellationToken cancellationToken = default)
-    {
-        await _model!.BasicPublishAsync(exchange, routingKey, mandatory: false, basicProperties, (ReadOnlyMemory<byte>)message, cancellationToken).ConfigureAwait(false);
-    }
-
     private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string>? headers, string queueName, string messageType)
     {
         // Build the final object-valued dictionary directly rather than populating a
@@ -299,18 +384,11 @@ public sealed class Producer : IProducer
         return result;
     }
 
-    private async Task ConfigureExchangeAsync(string exchangeName, string type)
+    private async Task ConfigureExchangeAsync(string exchangeName, string type, CancellationToken cancellationToken)
     {
-        try
-        {
-            await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null).ConfigureAwait(false);
-            // P-004: mark as declared so subsequent publishes skip the round-trip.
-            _declaredExchanges[exchangeName] = true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning("Error declaring exchange - {Message}", ex.Message);
-        }
+        await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null, false, false, cancellationToken).ConfigureAwait(false);
+        // P-004: mark as declared so subsequent publishes skip the round-trip.
+        _declaredExchanges[exchangeName] = true;
     }
 
     private async Task DisposeModelAsync(IChannel? model)

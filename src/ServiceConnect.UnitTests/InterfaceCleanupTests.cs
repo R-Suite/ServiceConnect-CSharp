@@ -36,9 +36,11 @@ public class InterfaceCleanupTests
     {
         var sendRequest = typeof(IRequestReplyManager).GetMethod(nameof(IRequestReplyManager.SendRequestAsync))!;
         var sendRequestMulti = typeof(IRequestReplyManager).GetMethod(nameof(IRequestReplyManager.SendRequestMultiAsync))!;
+        var publishRequest = typeof(IRequestReplyManager).GetMethod(nameof(IRequestReplyManager.PublishRequestAsync))!;
 
         Assert.DoesNotContain(sendRequest.GetParameters(), parameter => parameter.ParameterType.Name.Contains("Func"));
         Assert.DoesNotContain(sendRequestMulti.GetParameters(), parameter => parameter.ParameterType.Name.Contains("Func"));
+        Assert.DoesNotContain(publishRequest.GetParameters(), parameter => parameter.ParameterType.Name.Contains("Func"));
     }
 
     [Fact]

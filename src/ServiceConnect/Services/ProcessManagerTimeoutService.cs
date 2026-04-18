@@ -18,6 +18,7 @@ public sealed class ProcessManagerTimeoutService(
     private Task? _pollingTask;
     private readonly Lazy<IBus> _bus = bus ?? throw new ArgumentNullException(nameof(bus));
     private readonly ITimeoutStore? _finder = finder;
+    private readonly ILeaseAwareTimeoutStore? _leaseAwareFinder = finder as ILeaseAwareTimeoutStore;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -87,7 +88,10 @@ public sealed class ProcessManagerTimeoutService(
                         }).ConfigureAwait(false);
                     }
 
-                    await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
+                    if (_leaseAwareFinder != null && timeout.LockedBy != Guid.Empty)
+                        await _leaseAwareFinder.RemoveDispatchedTimeoutAsync(timeout.Id, timeout.LockedBy, cancellationToken).ConfigureAwait(false);
+                    else
+                        await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -95,7 +99,10 @@ public sealed class ProcessManagerTimeoutService(
 
                     try
                     {
-                        await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
+                        if (_leaseAwareFinder != null && timeout.LockedBy != Guid.Empty)
+                            await _leaseAwareFinder.ReleaseDispatchedTimeoutAsync(timeout.Id, timeout.LockedBy, cancellationToken).ConfigureAwait(false);
+                        else
+                            await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
                     }
                     catch (Exception releaseEx) when (releaseEx is not OperationCanceledException)
                     {

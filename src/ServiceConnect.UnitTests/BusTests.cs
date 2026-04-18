@@ -342,6 +342,123 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public async Task PublishRequestAsync_DelegatesToRequestReplyManagerPublishMethod()
+        {
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            var messageBytes = new byte[] { 1, 2, 3 };
+            var options = new RequestOptions
+            {
+                Headers = new Dictionary<string, string>
+                {
+                    ["CustomHeader"] = "CustomValue"
+                }
+            };
+
+            _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+            _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                    messageBytes,
+                    It.Is<Dictionary<string, string>>(h => h.ContainsKey("CustomHeader") && h["CustomHeader"] == "CustomValue"),
+                    options,
+                    It.IsAny<Action<FakeMessage1>>(),
+                    CancellationToken.None))
+                .Returns(Task.CompletedTask);
+
+            await _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options);
+
+            _mockRequestReplyManager.Verify(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                    messageBytes,
+                    It.Is<Dictionary<string, string>>(h => h.ContainsKey("CustomHeader") && h["CustomHeader"] == "CustomValue"),
+                    options,
+                    It.IsAny<Action<FakeMessage1>>(),
+                    CancellationToken.None),
+                Times.Once);
+            _mockRequestReplyManager.Verify(x => x.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
+                    It.IsAny<byte[]>(),
+                    It.IsAny<Dictionary<string, string>>(),
+                    It.IsAny<RequestOptions>(),
+                    It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
+        public async Task PublishRequestAsync_WithEndPoint_ThrowsArgumentException()
+        {
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            var options = new RequestOptions { EndPoint = "MyEndPoint" };
+
+            var ex = await Assert.ThrowsAsync<ArgumentException>(
+                () => _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options));
+
+            Assert.Equal("options", ex.ParamName);
+        }
+
+        [Fact]
+        public async Task PublishRequestAsync_WithEmptyEndPoint_DelegatesToRequestReplyManagerPublishMethod()
+        {
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            var messageBytes = new byte[] { 1, 2, 3 };
+            var options = new RequestOptions { EndPoint = string.Empty };
+
+            _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+            _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                    messageBytes,
+                    It.IsAny<Dictionary<string, string>>(),
+                    options,
+                    It.IsAny<Action<FakeMessage1>>(),
+                    CancellationToken.None))
+                .Returns(Task.CompletedTask);
+
+            await _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options);
+
+            _mockRequestReplyManager.Verify(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                    messageBytes,
+                    It.IsAny<Dictionary<string, string>>(),
+                    options,
+                    It.IsAny<Action<FakeMessage1>>(),
+                    CancellationToken.None),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task PublishRequestAsync_WithEndPoints_ThrowsArgumentException()
+        {
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            var options = new RequestOptions { EndPoints = new List<string> { "EP1", "EP2" } };
+
+            var ex = await Assert.ThrowsAsync<ArgumentException>(
+                () => _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options));
+
+            Assert.Equal("options", ex.ParamName);
+        }
+
+        [Fact]
+        public async Task PublishRequestAsync_WhenFilterBlocksMessage_ThrowsInvalidOperationException()
+        {
+            _mockFilterPipeline
+                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(true);
+
+            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
+
+            var busWithFilters = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                pipelineConfigWithFilter.Object);
+
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => busWithFilters.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }));
+        }
+
+        [Fact]
         public async Task RouteAsync_ShouldSendToFirstDestination_WithRoutingSlipForRemaining()
         {
             // Arrange

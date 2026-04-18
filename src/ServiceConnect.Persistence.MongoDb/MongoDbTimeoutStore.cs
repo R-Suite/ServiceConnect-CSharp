@@ -12,7 +12,7 @@ internal sealed class NextTimeoutProjection
     public DateTimeOffset Time { get; set; }
 }
 
-public sealed class MongoDbTimeoutStore : ITimeoutStore
+public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
 {
     private readonly IMongoDatabase _mongoDatabase;
     private readonly TimeProvider _timeProvider;
@@ -161,6 +161,47 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to release dispatched timeout with Id '{id}'.", ex);
+        }
+    }
+
+    public async Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+
+            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
+                         Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
+                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, lockOwner);
+            await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException($"Failed to remove dispatched timeout with Id '{id}' and lock owner '{lockOwner}'.", ex);
+        }
+    }
+
+    public async Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
+                         Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
+                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, lockOwner);
+            var update = Builders<TimeoutData>.Update
+                .Set(x => x.Locked, false)
+                .Set(x => x.LockedBy, Guid.Empty)
+                .Set(x => x.LockExpiresAt, null);
+            await collection.UpdateOneAsync(filter, update, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException($"Failed to release dispatched timeout with Id '{id}' and lock owner '{lockOwner}'.", ex);
         }
     }
 

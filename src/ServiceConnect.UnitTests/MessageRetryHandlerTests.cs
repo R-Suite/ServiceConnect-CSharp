@@ -72,6 +72,59 @@ public class MessageRetryHandlerTests
     }
 
     [Fact]
+    public async Task HandleTerminalFailureAsync_PublishesToErrorExchange_WithoutIncrementingRetryCount()
+    {
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var args = MakeArgs();
+        var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 2 };
+
+        await handler.HandleTerminalFailureAsync(
+            channel.Object,
+            args,
+            headers,
+            new InvalidOperationException("invalid inbound message"));
+
+        Assert.Equal(2, (int)headers[HeaderKeys.RetryCount]);
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleTerminalFailureAsync_IncludesSanitizedExceptionPayload()
+    {
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var args = MakeArgs();
+        var headers = new Dictionary<string, object>();
+
+        await handler.HandleTerminalFailureAsync(
+            channel.Object,
+            args,
+            headers,
+            new InvalidOperationException("invalid inbound message"));
+
+        var payload = JObject.Parse((string)headers[HeaderKeys.Exception]);
+        Assert.Equal(typeof(InvalidOperationException).FullName, (string?)payload["ExceptionType"]);
+        Assert.Contains("invalid inbound message", (string?)payload["Message"] ?? "");
+        Assert.Null(payload["StackTrace"]);
+    }
+
+    [Fact]
     public async Task HandleFailureAsync_AtMaxRetries_IncludesExceptionTypeAndMessage_ButNoStackTrace()
     {
         var channel = new Mock<IChannel>();

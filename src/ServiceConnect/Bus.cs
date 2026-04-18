@@ -177,12 +177,34 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        var replies = await SendRequestMultiAsync<TRequest, TReply>(message, options, cancellationToken).ConfigureAwait(false);
+        var requestOptions = options ?? RequestOptions.Default;
 
-        foreach (var reply in replies)
+        if (!string.IsNullOrEmpty(requestOptions.EndPoint) || requestOptions.EndPoints is { Count: > 0 })
         {
-            onReply(reply);
+            throw new ArgumentException("PublishRequestAsync does not support EndPoint or EndPoints. Use SendRequestAsync or SendRequestMultiAsync instead.", nameof(options));
         }
+
+        var messageBytes = _serializer.Serialize(message);
+        Dictionary<string, string> headers;
+
+        if (_hasOutgoingFilters)
+        {
+            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, requestOptions.Headers);
+            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+                throw new InvalidOperationException("Outgoing filters blocked the request message.");
+            headers = ExtractHeaders(envelope);
+        }
+        else
+        {
+            headers = BuildHeadersDirect(typeof(TRequest), requestOptions.Headers);
+        }
+
+        await _requestReplyManager.PublishRequestAsync<TRequest, TReply>(
+            messageBytes,
+            headers,
+            requestOptions,
+            onReply,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message

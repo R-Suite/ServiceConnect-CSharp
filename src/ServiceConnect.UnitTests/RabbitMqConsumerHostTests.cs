@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
@@ -17,12 +18,20 @@ public class RabbitMqConsumerHostTests
         channel.Setup(c => c.IsOpen).Returns(true);
         channel.Setup(c => c.BasicQosAsync(It.IsAny<uint>(), It.IsAny<ushort>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
         channel.Setup(c => c.BasicConsumeAsync(
             It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string>(),
             It.IsAny<bool>(), It.IsAny<bool>(),
             It.IsAny<IDictionary<string, object?>?>(),
             It.IsAny<IAsyncBasicConsumer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("tag");
+        channel.Setup(c => c.BasicCancelAsync(
+            It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
         channel.Setup(c => c.QueueBindAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<IDictionary<string, object?>>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -40,9 +49,19 @@ public class RabbitMqConsumerHostTests
 
     private static Mock<ITransportConfiguration> MakeTransportCfg(ushort prefetch = 10, bool autoDelete = false, bool disablePrefetch = false)
     {
+        return MakeTransportCfg(prefetch, autoDelete, disablePrefetch, null);
+    }
+
+    private static Mock<ITransportConfiguration> MakeTransportCfg(
+        ushort prefetch,
+        bool autoDelete,
+        bool disablePrefetch,
+        int? gracefulShutdownTimeoutMs)
+    {
         var cfg = new Mock<ITransportConfiguration>();
         cfg.SetupGet(c => c.MaxRetries).Returns(3);
         cfg.SetupGet(c => c.PrefetchCount).Returns(prefetch);
+        cfg.SetupProperty(c => c.GracefulShutdownTimeoutMilliseconds, gracefulShutdownTimeoutMs ?? 5000);
         var settings = new Dictionary<string, object>();
         if (autoDelete) settings[RabbitMQSettingKeys.AutoDelete] = true;
         if (disablePrefetch) settings[RabbitMQSettingKeys.DisablePrefetch] = true;
@@ -173,6 +192,606 @@ public class RabbitMqConsumerHostTests
         Assert.Null(thrown);
     }
 
+    [Fact]
+    public async Task DisposeAsync_WithoutInFlightWork_CompletesImmediately()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 50).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        var disposeTask = host.DisposeAsync().AsTask();
+        await Task.Yield();
+
+        Assert.True(disposeTask.IsCompleted);
+        await disposeTask;
+
+        channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_CancelsConsumerBeforeClosingChannel()
+    {
+        var (conn, channel) = MockConnection();
+        var sequence = new MockSequence();
+        channel.InSequence(sequence)
+            .Setup(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        channel.InSequence(sequence)
+            .Setup(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance);
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        await host.DisposeAsync();
+
+        channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WaitsForInFlightMessageToCompleteWithinGraceWindow()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        channel.Setup(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                cancelObserved.SetResult();
+                await Task.CompletedTask;
+            });
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 500).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            async (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                await allowHandlerToFinish.Task;
+                return new ConsumeEventResult { Success = true };
+            },
+            "q");
+
+        var deliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+        await handlerStarted.Task;
+
+        var disposeTask = host.DisposeAsync().AsTask();
+        await cancelObserved.Task;
+
+        Assert.False(disposeTask.IsCompleted);
+        timeProvider.Advance(TimeSpan.FromMilliseconds(499));
+        await Task.Yield();
+
+        Assert.False(disposeTask.IsCompleted);
+        allowHandlerToFinish.SetResult();
+        timeProvider.Advance(TimeSpan.FromMilliseconds(50));
+
+        await disposeTask;
+        await deliveryTask;
+
+        channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ClosesChannelWhenGraceWindowExpires()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        channel.Setup(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                cancelObserved.SetResult();
+                await Task.CompletedTask;
+            });
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 50).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            async (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                await allowHandlerToFinish.Task;
+                return new ConsumeEventResult { Success = true };
+            },
+            "q");
+
+        var deliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+        await handlerStarted.Task;
+
+        var disposeTask = host.DisposeAsync().AsTask();
+        await cancelObserved.Task;
+
+        Assert.False(disposeTask.IsCompleted);
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(49));
+        await Task.Yield();
+
+        Assert.False(disposeTask.IsCompleted);
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(1));
+        await Task.Yield();
+
+        Assert.True(disposeTask.IsCompleted);
+        channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
+
+        allowHandlerToFinish.SetResult();
+        await deliveryTask;
+    }
+
+    [Fact]
+    public async Task DisposeAsync_CancelsConsumerBeforeWaitingForInFlightHandler()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelObserved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        channel.Setup(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                cancelObserved.SetResult();
+                await Task.CompletedTask;
+            });
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 500).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            async (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                await allowHandlerToFinish.Task;
+                return new ConsumeEventResult { Success = true };
+            },
+            "q");
+
+        var deliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+        await handlerStarted.Task;
+
+        var disposeTask = host.DisposeAsync().AsTask();
+        await cancelObserved.Task;
+
+        Assert.False(disposeTask.IsCompleted);
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(500));
+        await disposeTask;
+
+        allowHandlerToFinish.SetResult();
+        timeProvider.Advance(TimeSpan.FromMilliseconds(50));
+        await deliveryTask;
+
+        channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WhenGraceWindowExpires_LateFailure_DoesNotRetryOrAck()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        channel.Setup(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                closeStarted.SetResult();
+                await closeGate.Task;
+            });
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 100).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            async (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                await allowHandlerToFinish.Task;
+                return new ConsumeEventResult
+                {
+                    Success = false,
+                    Exception = new InvalidOperationException("boom")
+                };
+            },
+            "q");
+
+        var deliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+        await handlerStarted.Task;
+
+        var disposeTask = host.DisposeAsync().AsTask();
+        timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+        await closeStarted.Task;
+
+        allowHandlerToFinish.SetResult();
+        await deliveryTask;
+
+        channel.Verify(c => c.BasicPublishAsync(
+            string.Empty, "q.Retries", false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        closeGate.SetResult();
+        await disposeTask;
+    }
+
+    [Fact]
+    public async Task DisposeAsync_AfterCancel_LateDispatch_DoesNotStartHandler_AndLeavesMessageUnackedForRedelivery()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCancel = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        channel.Setup(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                await releaseCancel.Task;
+            });
+        channel.Setup(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                closeStarted.SetResult();
+                await closeGate.Task;
+            });
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 50).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                return Task.FromResult(new ConsumeEventResult { Success = true });
+            },
+            "q");
+
+        var disposeTask = host.DisposeAsync().AsTask();
+        releaseCancel.SetResult();
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(50));
+        await closeStarted.Task;
+
+        var lateDeliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+
+        var completed = await Task.WhenAny(handlerStarted.Task, lateDeliveryTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.NotSame(handlerStarted.Task, completed);
+
+        await lateDeliveryTask;
+
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        closeGate.SetResult();
+        await disposeTask;
+    }
+
+    [Fact]
+    public async Task DisposeAsync_StalledBasicCancel_CompletesWithinGraceWindow()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var cancelGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        channel.Setup(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()))
+            .Returns(cancelGate.Task);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 50).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        var disposeTask = host.DisposeAsync().AsTask();
+
+        Assert.False(disposeTask.IsCompleted);
+        timeProvider.Advance(TimeSpan.FromMilliseconds(49));
+        await Task.Yield();
+        Assert.False(disposeTask.IsCompleted);
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(1));
+        await Task.Yield();
+        Assert.True(disposeTask.IsCompleted);
+
+        await disposeTask;
+
+        channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.Dispose(), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_StalledClose_CompletesWithinGraceWindow()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var closeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        channel.Setup(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()))
+            .Returns(closeGate.Task);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 50).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        var disposeTask = host.DisposeAsync().AsTask();
+
+        Assert.False(disposeTask.IsCompleted);
+        timeProvider.Advance(TimeSpan.FromMilliseconds(49));
+        await Task.Yield();
+        Assert.False(disposeTask.IsCompleted);
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(1));
+        await Task.Yield();
+        Assert.True(disposeTask.IsCompleted);
+
+        await disposeTask;
+
+        channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.Dispose(), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_HonorsRemainingGraceWindowBelowPollInterval()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 25).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            async (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                await allowHandlerToFinish.Task;
+                return new ConsumeEventResult { Success = true };
+            },
+            "q");
+
+        var deliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+        await handlerStarted.Task;
+
+        var disposeTask = host.DisposeAsync().AsTask();
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(24));
+        await Task.Yield();
+        Assert.False(disposeTask.IsCompleted);
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(1));
+        await Task.Yield();
+        Assert.True(disposeTask.IsCompleted);
+
+        allowHandlerToFinish.SetResult();
+        await deliveryTask;
+        channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WhenRetryPublishStalls_CancelsPublishAtShutdownDeadline_AndLeavesMessageUnacked()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishCanceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        channel.Setup(c => c.BasicPublishAsync(
+                string.Empty,
+                "q.Retries",
+                false,
+                It.IsAny<BasicProperties>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<string, string, bool, BasicProperties, ReadOnlyMemory<byte>, CancellationToken>((_, _, _, _, _, cancellationToken) =>
+            {
+                publishStarted.TrySetResult();
+                cancellationToken.Register(() => publishCanceled.TrySetResult());
+                return new ValueTask(Task.Delay(Timeout.Infinite, cancellationToken));
+            });
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 100).Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                return Task.FromResult(new ConsumeEventResult
+                {
+                    Success = false,
+                    Exception = new InvalidOperationException("boom")
+                });
+            },
+            "q");
+
+        var deliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+        await handlerStarted.Task;
+        await publishStarted.Task;
+
+        var disposeTask = host.DisposeAsync().AsTask();
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+
+        var canceled = await Task.WhenAny(publishCanceled.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.Same(publishCanceled.Task, canceled);
+
+        var completed = await Task.WhenAny(deliveryTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.Same(deliveryTask, completed);
+
+        await deliveryTask;
+        await disposeTask;
+
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WhenAuditPublishStalls_CancelsPublishAtShutdownDeadline_AndLeavesMessageUnacked()
+    {
+        var (conn, channel) = MockConnection();
+        var timeProvider = new FakeTimeProvider();
+        var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishCanceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var qcfg = MakeQueueCfg();
+        qcfg.SetupGet(c => c.AuditingEnabled).Returns(true);
+
+        channel.Setup(c => c.BasicPublishAsync(
+                "audit",
+                string.Empty,
+                false,
+                It.IsAny<BasicProperties>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<string, string, bool, BasicProperties, ReadOnlyMemory<byte>, CancellationToken>((_, _, _, _, _, cancellationToken) =>
+            {
+                publishStarted.TrySetResult();
+                cancellationToken.Register(() => publishCanceled.TrySetResult());
+                return new ValueTask(Task.Delay(Timeout.Infinite, cancellationToken));
+            });
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 100).Object,
+            qcfg.Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(qcfg.Object),
+            NullLogger.Instance,
+            timeProvider);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) =>
+            {
+                handlerStarted.SetResult();
+                return Task.FromResult(new ConsumeEventResult { Success = true });
+            },
+            "q");
+
+        var deliveryTask = DeliverMessageAsync(
+            host,
+            new byte[1],
+            new Dictionary<string, object>
+            {
+                [HeaderKeys.TypeName] = "SomeType",
+                [HeaderKeys.MessageType] = "SomeMessage"
+            });
+        await handlerStarted.Task;
+        await publishStarted.Task;
+
+        var disposeTask = host.DisposeAsync().AsTask();
+
+        timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+
+        var canceled = await Task.WhenAny(publishCanceled.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.Same(publishCanceled.Task, canceled);
+
+        var completed = await Task.WhenAny(deliveryTask, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.Same(deliveryTask, completed);
+
+        await deliveryTask;
+        await disposeTask;
+
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ─── Inbound message-size enforcement (R-022) ───────────────────────────
 
     private static Mock<ITransportConfiguration> MakeTransportCfgWithMaxSize(long maxSize)
@@ -242,8 +861,12 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, oversized, msgHeaders);
 
         Assert.False(handlerInvoked, "Consumer event handler must not be called for oversized messages.");
-        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
-        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -295,8 +918,12 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, new byte[1], tooManyHeaders);
 
         Assert.False(handlerInvoked, "Handler must not be invoked when header count exceeds limit.");
-        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
-        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -324,7 +951,70 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, new byte[1], bigValueHeaders);
 
         Assert.False(handlerInvoked, "Handler must not be invoked when a header value exceeds size limit.");
-        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EventAsync_MissingTypeHeaders_PublishesToErrorExchange_Acks_AndHandlerNotInvoked()
+    {
+        var (conn, channel) = MockConnection();
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance);
+
+        bool handlerInvoked = false;
+        await host.StartConsumingAsync(
+            (_, _, _, _) =>
+            {
+                handlerInvoked = true;
+                return Task.FromResult(new ConsumeEventResult { Success = true });
+            },
+            "q");
+
+        await DeliverMessageAsync(host, new byte[] { 1, 2, 3 }, headers: null);
+
+        Assert.False(handlerInvoked);
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EventAsync_InvalidMessage_WhenErrorPublishFails_IsNackedForRedelivery()
+    {
+        var (conn, channel) = MockConnection();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("broker unavailable"));
+
+        var qcfg = MakeQueueCfg();
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfgWithMaxSize(10).Object,
+            qcfg.Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(qcfg.Object),
+            NullLogger.Instance);
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+        await DeliverMessageAsync(host, new byte[11], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

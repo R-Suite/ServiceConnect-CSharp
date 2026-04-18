@@ -19,7 +19,11 @@ internal sealed class MessageAuditPublisher
         _queueConfiguration = queueConfiguration ?? throw new ArgumentNullException(nameof(queueConfiguration));
     }
 
-    public async Task PublishAuditIfEnabledAsync(IChannel channel, BasicDeliverEventArgs args, Dictionary<string, object> headers)
+    public async Task PublishAuditIfEnabledAsync(
+        IChannel channel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        CancellationToken cancellationToken = default)
     {
         if (!_queueConfiguration.AuditingEnabled)
             return;
@@ -32,6 +36,6 @@ internal sealed class MessageAuditPublisher
             return;
 
         var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
-        await channel.BasicPublishAsync(_queueConfiguration.AuditQueueName, string.Empty, mandatory: false, props, args.Body).ConfigureAwait(false);
+        await channel.BasicPublishAsync(_queueConfiguration.AuditQueueName, string.Empty, mandatory: false, props, args.Body, cancellationToken).ConfigureAwait(false);
     }
 }

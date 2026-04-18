@@ -28,10 +28,13 @@ internal sealed class MessageRetryHandler
     }
 
     public async Task HandleFailureAsync(
-        IChannel channel, string retryQueueName,
-        BasicDeliverEventArgs args, Dictionary<string, object> headers, Exception? ex)
+        IChannel channel,
+        string retryQueueName,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        Exception? ex,
+        CancellationToken cancellationToken = default)
     {
-        // P-032: direct unbox avoids boxing + string round-trip via ToString() + int.TryParse().
         int retryCount = 0;
         if (headers.TryGetValue(HeaderKeys.RetryCount, out var raw))
         {
@@ -45,30 +48,61 @@ internal sealed class MessageRetryHandler
         {
             retryCount++;
             HeaderHelpers.SetHeader(headers, HeaderKeys.RetryCount, retryCount);
-            var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
-            await channel.BasicPublishAsync(string.Empty, retryQueueName, mandatory: false, props, args.Body).ConfigureAwait(false);
+            var props = new BasicProperties(args.BasicProperties)
+            {
+                Headers = HeaderHelpers.ToNullableHeaders(headers)
+            };
+            await channel.BasicPublishAsync(string.Empty, retryQueueName, false, props, args.Body, cancellationToken).ConfigureAwait(false);
             return;
         }
 
+        await PublishErrorAsync(channel, args, headers, ex, logAsMaxRetries: true, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task HandleTerminalFailureAsync(
+        IChannel channel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        Exception ex,
+        CancellationToken cancellationToken = default)
+    {
+        return PublishErrorAsync(channel, args, headers, ex, logAsMaxRetries: false, cancellationToken);
+    }
+
+    private async Task PublishErrorAsync(
+        IChannel channel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        Exception? ex,
+        bool logAsMaxRetries,
+        CancellationToken cancellationToken)
+    {
         if (ex != null)
         {
-            // Only include type + message in headers. No stack traces or internal details
-            // that could leak sensitive information to error-queue consumers. Full diagnostics
-            // are logged server-side below.
             HeaderHelpers.SetHeader(headers, HeaderKeys.Exception, JsonConvert.SerializeObject(new
             {
                 TimeStamp = _timeProvider.GetUtcNow().UtcDateTime,
                 ExceptionType = ex.GetType().FullName,
                 Message = HeaderHelpers.GetErrorMessage(ex)
             }));
+        }
 
-            _logger.LogError(ex, "Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
+        if (logAsMaxRetries)
+        {
+            if (ex != null)
+                _logger.LogError(ex, "Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
+            else
+                _logger.LogError("Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
         }
         else
         {
-            _logger.LogError("Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
+            _logger.LogError(ex, "Rejecting permanently invalid inbound message with MessageId {MessageId}", args.BasicProperties.MessageId);
         }
-        var errorProps = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
-        await channel.BasicPublishAsync(_errorExchange, string.Empty, mandatory: false, errorProps, args.Body).ConfigureAwait(false);
+
+        var errorProps = new BasicProperties(args.BasicProperties)
+        {
+            Headers = HeaderHelpers.ToNullableHeaders(headers)
+        };
+        await channel.BasicPublishAsync(_errorExchange, string.Empty, false, errorProps, args.Body, cancellationToken).ConfigureAwait(false);
     }
 }

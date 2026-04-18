@@ -67,6 +67,57 @@ public class RetryTests
     }
 
     [Fact]
+    public async Task DoAsync_RethrowsMatchingOperationCanceledException_WithoutCallingExceptionAction()
+    {
+        using var cancellationSource = new CancellationTokenSource();
+        var cancellationToken = cancellationSource.Token;
+        var exceptionActionCalls = 0;
+
+        var ex = await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            Retry.DoAsync(
+                () => throw new OperationCanceledException("canceled", cancellationToken),
+                _ =>
+                {
+                    exceptionActionCalls++;
+                    return Task.CompletedTask;
+                },
+                FastInterval,
+                3,
+                cancellationToken));
+
+        Assert.Equal(cancellationToken, ex.CancellationToken);
+        Assert.Equal(0, exceptionActionCalls);
+    }
+
+    [Fact]
+    public async Task DoAsync_RethrowsOperationCanceledException_WhenCallerTokenIsCanceledEvenIfExceptionTokenDiffers()
+    {
+        using var cancellationSource = new CancellationTokenSource();
+        var cancellationToken = cancellationSource.Token;
+        var otherToken = new CancellationTokenSource().Token;
+        var exceptionActionCalls = 0;
+
+        var ex = await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            Retry.DoAsync(
+                () =>
+                {
+                    cancellationSource.Cancel();
+                    throw new OperationCanceledException("canceled", otherToken);
+                },
+                _ =>
+                {
+                    exceptionActionCalls++;
+                    return Task.CompletedTask;
+                },
+                FastInterval,
+                3,
+                cancellationToken));
+
+        Assert.Equal(otherToken, ex.CancellationToken);
+        Assert.Equal(0, exceptionActionCalls);
+    }
+
+    [Fact]
     public async Task DoAsyncGeneric_ReturnsValueOnSuccess()
     {
         var result = await Retry.DoAsync(() => Task.FromResult(42), _ => Task.CompletedTask, FastInterval, 3);

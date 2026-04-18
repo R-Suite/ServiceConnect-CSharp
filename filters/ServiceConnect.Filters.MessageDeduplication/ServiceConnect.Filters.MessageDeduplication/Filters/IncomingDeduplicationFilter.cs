@@ -25,7 +25,13 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             if (!envelope.Headers.TryGetValue("Redelivered", out var redeliveredRaw))
                 return true;
 
-            if (!bool.TryParse(HeaderDecoder.Decode(redeliveredRaw), out var redelivered) || !redelivered)
+            // RabbitMQ consumer code writes Redelivered as a raw bool, while other
+            // callers may still provide the legacy string/byte[] forms.
+            var redelivered = redeliveredRaw is bool boolValue
+                ? boolValue
+                : bool.TryParse(HeaderDecoder.Decode(redeliveredRaw), out var parsed) && parsed;
+
+            if (!redelivered)
                 return true;
 
             // Use TryParse to tolerate malformed MessageId headers rather than throwing

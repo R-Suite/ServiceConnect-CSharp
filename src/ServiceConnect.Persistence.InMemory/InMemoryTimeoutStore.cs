@@ -9,6 +9,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     private readonly InMemoryPersistenceState _state;
 
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
 
     public InMemoryTimeoutStore(string connectionString = "", string databaseName = "", TimeProvider? timeProvider = null)
         : this(new InMemoryPersistenceState(timeProvider), timeProvider) { }
@@ -23,14 +24,16 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        var storedTimeout = Clone(timeoutData);
+
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            if (_state.TimeoutsById.ContainsKey(timeoutData.Id))
-                throw new PersistenceException($"TimeoutData with Id {timeoutData.Id} already exists.");
+            if (_state.TimeoutsById.ContainsKey(storedTimeout.Id))
+                throw new PersistenceException($"TimeoutData with Id {storedTimeout.Id} already exists.");
 
-            var entry = new TimeoutEntry(timeoutData.Time, timeoutData.Id, timeoutData);
-            _state.TimeoutsById[timeoutData.Id] = entry;
+            var entry = new TimeoutEntry(storedTimeout.Time, storedTimeout.Id, storedTimeout);
+            _state.TimeoutsById[storedTimeout.Id] = entry;
             _state.TimeoutIndex.Add(entry);
         }
         finally
@@ -47,16 +50,23 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 
         var retval = new TimeoutsBatch { DueTimeouts = [] };
         DateTimeOffset utcNow = _timeProvider.GetUtcNow();
+        var sessionId = Guid.NewGuid();
         var nextQueryTime = DateTimeOffset.MaxValue;
 
-        _state.SyncRoot.EnterReadLock();
+        _state.SyncRoot.EnterWriteLock();
         try
         {
             foreach (var entry in _state.TimeoutIndex)
             {
                 if (entry.Time <= utcNow)
                 {
-                    retval.DueTimeouts.Add(entry.Data);
+                    if (!entry.Data.Locked || entry.Data.LockExpiresAt <= utcNow)
+                    {
+                        entry.Data.Locked = true;
+                        entry.Data.LockedBy = sessionId;
+                        entry.Data.LockExpiresAt = utcNow + LockLeaseDuration;
+                        retval.DueTimeouts.Add(Clone(entry.Data));
+                    }
                 }
                 else
                 {
@@ -67,7 +77,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         }
         finally
         {
-            _state.SyncRoot.ExitReadLock();
+            _state.SyncRoot.ExitWriteLock();
         }
 
         if (nextQueryTime == DateTimeOffset.MaxValue)
@@ -75,6 +85,30 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 
         retval.NextQueryTime = nextQueryTime;
         return Task.FromResult(retval);
+    }
+
+    private static TimeoutData Clone(TimeoutData timeoutData)
+    {
+        return new TimeoutData
+        {
+            Id = timeoutData.Id,
+            Destination = timeoutData.Destination,
+            ProcessManagerId = timeoutData.ProcessManagerId,
+            Time = timeoutData.Time,
+            Headers = timeoutData.Headers.ToDictionary(static pair => pair.Key, static pair => CloneHeaderValue(pair.Value)),
+            Locked = timeoutData.Locked,
+            LockedBy = timeoutData.LockedBy,
+            LockExpiresAt = timeoutData.LockExpiresAt,
+        };
+    }
+
+    private static object CloneHeaderValue(object value)
+    {
+        return value switch
+        {
+            byte[] bytes => (byte[])bytes.Clone(),
+            _ => value,
+        };
     }
 
     public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)

@@ -31,14 +31,19 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly int _gracefulShutdownTimeoutMs;
     private readonly bool _includeMachineNameInHeaders;
     private readonly long _maxInboundMessageSize;
+    private readonly Lock _callbackAdmissionGate = new();
 
     private IChannel? _model;
     private ConsumerEventHandler? _consumerEventHandler;
     private AsyncEventingBasicConsumer? _consumer;
+    private string? _consumerTag;
     private bool _autoDelete;
     private string _queueName = "";
     private string _retryQueueName = "";
     private int _messagesBeingProcessed;
+    private int _shutdownTimedOut;
+    private bool _shutdownStarted;
+    private CancellationTokenSource _shutdownPublishCts = new();
 
     public RabbitMqConsumerHost(
         IServiceConnectConnection connection,
@@ -96,9 +101,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
         _consumer = new AsyncEventingBasicConsumer(_model);
         _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, cancellationToken).ConfigureAwait(false);
+        Volatile.Write(ref _shutdownTimedOut, 0);
+        _shutdownPublishCts = new CancellationTokenSource();
 
-        var consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer).ConfigureAwait(false);
-        _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, consumerTag);
+        _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer).ConfigureAwait(false);
+        _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
     }
 
     public async Task ConsumeMessageTypeAsync(string messageTypeName)
@@ -113,35 +120,58 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // null it out from under us in the finally block (R-020).
         var model = _model;
         bool processed = false;
+        bool callbackAdmitted = false;
         try
         {
-            Interlocked.Increment(ref _messagesBeingProcessed);
+            lock (_callbackAdmissionGate)
+            {
+                if (_shutdownStarted)
+                    return;
+
+                _messagesBeingProcessed++;
+                callbackAdmitted = true;
+            }
 
             if (args.BasicProperties.Headers == null ||
                 (!args.BasicProperties.Headers.ContainsKey(HeaderKeys.TypeName) &&
                  !args.BasicProperties.Headers.ContainsKey(HeaderKeys.FullTypeName)))
             {
-                _logger.LogError("Error processing message, Message headers must contain type name.");
-                processed = true; // no retry possible for malformed messages, ack to discard
+                await _retryHandler.HandleTerminalFailureAsync(
+                    model!,
+                    args,
+                    CopyInboundHeaders(args),
+                    new InvalidOperationException("Message headers must contain type name."),
+                    GetShutdownPublishToken()).ConfigureAwait(false);
+                processed = true;
                 return;
             }
 
             if (args.Body.Length > _maxInboundMessageSize)
             {
-                _logger.LogWarning(
-                    "Rejecting oversized message: {Size} bytes exceeds limit of {Max} bytes on queue {Queue}",
-                    args.Body.Length, _maxInboundMessageSize, _queueConfiguration.QueueName);
-                return; // processed stays false → nacked by the finally block
+                await _retryHandler.HandleTerminalFailureAsync(
+                    model!,
+                    args,
+                    CopyInboundHeaders(args),
+                    new InvalidOperationException(
+                        $"Inbound message size {args.Body.Length} bytes exceeds configured limit {_maxInboundMessageSize} bytes."),
+                    GetShutdownPublishToken())
+                    .ConfigureAwait(false);
+                processed = true;
+                return;
             }
 
-            // R-050: reject messages with excessive header count or oversized header values before
-            // doing any work. processed stays false → nacked by the finally block.
             var inboundHeaders = args.BasicProperties.Headers;
             if (inboundHeaders != null && inboundHeaders.Count > DefaultMaxHeaderCount)
             {
-                _logger.LogWarning(
-                    "Rejecting message: header count {Count} exceeds limit of {Max} on queue {Queue}",
-                    inboundHeaders.Count, DefaultMaxHeaderCount, _queueConfiguration.QueueName);
+                await _retryHandler.HandleTerminalFailureAsync(
+                    model!,
+                    args,
+                    CopyInboundHeaders(args),
+                    new InvalidOperationException(
+                        $"Inbound header count {inboundHeaders.Count} exceeds configured limit {DefaultMaxHeaderCount}."),
+                    GetShutdownPublishToken())
+                    .ConfigureAwait(false);
+                processed = true;
                 return;
             }
 
@@ -151,16 +181,21 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 {
                     if (kvp.Value is byte[] bytes && bytes.Length > DefaultMaxHeaderValueBytes)
                     {
-                        _logger.LogWarning(
-                            "Rejecting message: header '{Key}' value size {Size} bytes exceeds limit of {Max} bytes on queue {Queue}",
-                            kvp.Key, bytes.Length, DefaultMaxHeaderValueBytes, _queueConfiguration.QueueName);
+                        await _retryHandler.HandleTerminalFailureAsync(
+                            model!,
+                            args,
+                            CopyInboundHeaders(args),
+                            new InvalidOperationException(
+                                $"Inbound header '{kvp.Key}' size {bytes.Length} bytes exceeds configured limit {DefaultMaxHeaderValueBytes} bytes."),
+                            GetShutdownPublishToken())
+                            .ConfigureAwait(false);
+                        processed = true;
                         return;
                     }
                 }
             }
 
-            await ProcessMessageAsync(args, cancellationToken).ConfigureAwait(false);
-            processed = true;
+            processed = await ProcessMessageAsync(model!, args, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -170,9 +205,16 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         {
             try
             {
-                if (model == null)
+                if (!callbackAdmitted)
+                {
+                }
+                else if (model == null)
                 {
                     _logger.LogWarning("Channel was null during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
+                }
+                else if (Volatile.Read(ref _shutdownTimedOut) != 0)
+                {
+                    _logger.LogDebug("Shutdown grace window expired before finishing message {DeliveryTag}; leaving unacked for broker redelivery", args.DeliveryTag);
                 }
                 else if (processed)
                     await model.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
@@ -183,12 +225,31 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             {
                 _logger.LogWarning(ex, "Error acking/nacking the message");
             }
-
-            Interlocked.Decrement(ref _messagesBeingProcessed);
+            finally
+            {
+                if (callbackAdmitted)
+                    Interlocked.Decrement(ref _messagesBeingProcessed);
+            }
         }
     }
 
-    private async Task ProcessMessageAsync(BasicDeliverEventArgs args, CancellationToken cancellationToken)
+    private static Dictionary<string, object> CopyInboundHeaders(BasicDeliverEventArgs args)
+    {
+        var sourceHeaders = args.BasicProperties.Headers;
+        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 0) + 1);
+        if (sourceHeaders != null)
+        {
+            foreach (var kvp in sourceHeaders)
+            {
+                if (kvp.Value is not null)
+                    headers[kvp.Key] = kvp.Value;
+            }
+        }
+
+        return headers;
+    }
+
+    private async Task<bool> ProcessMessageAsync(IChannel model, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
         ConsumeEventResult result;
         // Pre-size the dict to the incoming header count plus 3 consumer-added
@@ -239,20 +300,78 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
         if (!result.Success)
         {
-            await _retryHandler.HandleFailureAsync(_model!, _retryQueueName, args, headers, result.Exception).ConfigureAwait(false);
+            if (Volatile.Read(ref _shutdownTimedOut) != 0)
+                return false;
+
+            await _retryHandler.HandleFailureAsync(
+                model,
+                _retryQueueName,
+                args,
+                headers,
+                result.Exception,
+                GetShutdownPublishToken()).ConfigureAwait(false);
         }
         else if (!_errorsDisabled)
         {
-            await _auditPublisher.PublishAuditIfEnabledAsync(_model!, args, headers).ConfigureAwait(false);
+            if (Volatile.Read(ref _shutdownTimedOut) != 0)
+                return false;
+
+            await _auditPublisher.PublishAuditIfEnabledAsync(model, args, headers, GetShutdownPublishToken()).ConfigureAwait(false);
         }
+
+        return Volatile.Read(ref _shutdownTimedOut) == 0;
+    }
+
+    private CancellationToken GetShutdownPublishToken()
+    {
+        return _shutdownPublishCts.Token;
     }
 
     public async ValueTask DisposeAsync()
     {
-        var deadline = Environment.TickCount64 + _gracefulShutdownTimeoutMs;
-        while (Volatile.Read(ref _messagesBeingProcessed) > 0 && Environment.TickCount64 < deadline)
+        lock (_callbackAdmissionGate)
         {
-            await Task.Delay(50).ConfigureAwait(false);
+            if (_shutdownStarted)
+                return;
+
+            _shutdownStarted = true;
+        }
+
+        var deadline = _timeProvider.GetUtcNow().AddMilliseconds(_gracefulShutdownTimeoutMs);
+        var shutdownPublishCts = _shutdownPublishCts;
+        _ = CancelHelperPublishesAtDeadlineAsync(shutdownPublishCts, deadline);
+
+        if (_model != null && _consumerTag != null)
+        {
+            try
+            {
+                if (!await WaitForShutdownOperationAsync(
+                        _model.BasicCancelAsync(_consumerTag, false),
+                        deadline).ConfigureAwait(false))
+                {
+                    _logger.LogWarning("Timed out cancelling consumer during dispose");
+                }
+            }
+            catch (ObjectDisposedException) { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error cancelling consumer during dispose");
+            }
+        }
+
+        while (Volatile.Read(ref _messagesBeingProcessed) > 0)
+        {
+            var remaining = deadline - _timeProvider.GetUtcNow();
+            if (remaining <= TimeSpan.Zero)
+            {
+                Volatile.Write(ref _shutdownTimedOut, 1);
+                shutdownPublishCts.Cancel();
+                break;
+            }
+
+            await Task.Delay(
+                remaining < TimeSpan.FromMilliseconds(50) ? remaining : TimeSpan.FromMilliseconds(50),
+                _timeProvider).ConfigureAwait(false);
         }
 
         if (_autoDelete && _model != null)
@@ -260,7 +379,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             try
             {
                 _logger.LogDebug("Deleting retry queue");
-                await _model.QueueDeleteAsync(_retryQueueName, false, false, false).ConfigureAwait(false);
+                if (!await WaitForShutdownOperationAsync(
+                        _model.QueueDeleteAsync(_retryQueueName, false, false, false),
+                        deadline).ConfigureAwait(false))
+                {
+                    _logger.LogWarning("Timed out deleting retry queue during dispose");
+                }
             }
             catch (ObjectDisposedException) { }
             catch (Exception ex)
@@ -269,7 +393,47 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             }
         }
 
-        await CloseChannelAsync().ConfigureAwait(false);
+        await CloseChannelAsync(deadline).ConfigureAwait(false);
+        shutdownPublishCts.Cancel();
+        shutdownPublishCts.Dispose();
+    }
+
+    private async Task CancelHelperPublishesAtDeadlineAsync(CancellationTokenSource shutdownPublishCts, DateTimeOffset deadline)
+    {
+        var remaining = deadline - _timeProvider.GetUtcNow();
+        if (remaining <= TimeSpan.Zero)
+        {
+            shutdownPublishCts.Cancel();
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(remaining, _timeProvider, shutdownPublishCts.Token).ConfigureAwait(false);
+            shutdownPublishCts.Cancel();
+        }
+        catch (OperationCanceledException) when (shutdownPublishCts.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+    }
+
+    private async Task<bool> WaitForShutdownOperationAsync(Task operation, DateTimeOffset deadline)
+    {
+        var remaining = deadline - _timeProvider.GetUtcNow();
+        if (remaining <= TimeSpan.Zero)
+            return false;
+
+        var timeoutTask = Task.Delay(remaining, _timeProvider);
+        if (await Task.WhenAny(operation, timeoutTask).ConfigureAwait(false) != operation)
+            return false;
+
+        await operation.ConfigureAwait(false);
+        return true;
     }
 
     // P-015: avoid StringBuilder allocation inside DateTime.ToString("O").
@@ -280,12 +444,17 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         return new string(buffer[..charsWritten]);
     }
 
-    private async Task CloseChannelAsync()
+    private async Task CloseChannelAsync(DateTimeOffset deadline)
     {
         if (_model == null) return;
         try
         {
-            if (_model.IsOpen) await _model.CloseAsync(200, "Goodbye", false).ConfigureAwait(false);
+            if (_model.IsOpen)
+            {
+                if (!await WaitForShutdownOperationAsync(_model.CloseAsync(200, "Goodbye", false), deadline).ConfigureAwait(false))
+                    _logger.LogWarning("Timed out closing channel during dispose");
+            }
+
             _model.Dispose();
         }
         catch (ObjectDisposedException) { }
@@ -294,5 +463,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _logger.LogWarning(ex, "Error closing channel during dispose");
         }
         _model = null;
+        _consumerTag = null;
     }
 }
