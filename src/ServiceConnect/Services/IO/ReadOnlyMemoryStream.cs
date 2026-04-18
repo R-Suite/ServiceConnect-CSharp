@@ -16,7 +16,7 @@ internal sealed class ReadOnlyMemoryStream : Stream
     public override long Length => _buffer.Length;
     public override long Position
     {
-        get => _position;
+        get => throw new NotSupportedException();
         set => throw new NotSupportedException();
     }
 
