@@ -108,7 +108,7 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
     {
         try
         {
-            using var sr = new StreamReader(stream, Encoding.UTF8);
+            using var sr = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: false);
             using var jr = new JsonTextReader(sr);
             return _serializer.Deserialize(jr, type)
                 ?? throw new Interfaces.Exceptions.SerializationException(
