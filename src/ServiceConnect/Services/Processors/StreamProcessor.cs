@@ -149,8 +149,8 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
 
             descriptor.SetStream(handler, state.Stream);
 
-            var assembledBytes = state.Stream.Read();
-            var originalMessage = _serializer.Deserialize(assembledBytes, resolvedType);
+            var assembledSequence = state.Stream.ReadSequence();
+            var originalMessage = _serializer.Deserialize(in assembledSequence, resolvedType);
 
             return InvokeHandlerAsync(descriptor, handler, originalMessage!, cancellationToken);
         }
