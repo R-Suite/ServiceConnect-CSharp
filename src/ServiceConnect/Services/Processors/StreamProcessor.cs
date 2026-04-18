@@ -177,18 +177,9 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
         object originalMessage,
         CancellationToken cancellationToken)
     {
-        if (!cancellationToken.CanBeCanceled)
-        {
-            descriptor.InvokeExecute(handler, originalMessage);
-            return HandledTask;
-        }
-
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            descriptor.InvokeExecute(handler, originalMessage);
-            return ProcessResult.Handled;
-        }, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        descriptor.InvokeExecute(handler, originalMessage);
+        return HandledTask;
     }
 
     public void Dispose()
