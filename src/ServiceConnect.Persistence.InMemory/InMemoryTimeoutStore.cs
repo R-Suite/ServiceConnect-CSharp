@@ -101,6 +101,22 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        _state.SyncRoot.EnterWriteLock();
+        try
+        {
+            if (_state.TimeoutsById.TryGetValue(id, out var entry))
+            {
+                entry.Data.Locked = false;
+                entry.Data.LockedBy = Guid.Empty;
+                entry.Data.LockExpiresAt = null;
+            }
+        }
+        finally
+        {
+            _state.SyncRoot.ExitWriteLock();
+        }
+
         return Task.CompletedTask;
     }
 }
