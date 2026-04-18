@@ -62,9 +62,53 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         return ms.ToArray();
     }
 
+    public System.Buffers.ReadOnlySequence<byte> ReadSequence()
+    {
+        if (!IsComplete())
+            throw new InvalidOperationException("Stream is not yet complete.");
+
+        // Walk packets 0..LastPacketNumber in order, linking them into a ReadOnlySequenceSegment chain.
+        PacketSegment? first = null;
+        PacketSegment? last = null;
+        for (long i = 0; i <= LastPacketNumber; i++)
+        {
+            if (!_packets.TryGetValue(i, out var packet))
+                continue;
+            if (first is null)
+            {
+                first = new PacketSegment(packet);
+                last = first;
+            }
+            else
+            {
+                last = last!.Append(packet);
+            }
+        }
+
+        if (first is null)
+            return System.Buffers.ReadOnlySequence<byte>.Empty;
+
+        return new System.Buffers.ReadOnlySequence<byte>(first, 0, last!, last!.Memory.Length);
+    }
+
     public bool IsComplete()
     {
         // P-027: O(1) check — compare received packet count against expected count.
         return LastPacketNumber >= 0 && _receivedCount == LastPacketNumber + 1;
+    }
+
+    private sealed class PacketSegment : System.Buffers.ReadOnlySequenceSegment<byte>
+    {
+        public PacketSegment(ReadOnlyMemory<byte> memory)
+        {
+            Memory = memory;
+        }
+
+        public PacketSegment Append(ReadOnlyMemory<byte> memory)
+        {
+            var segment = new PacketSegment(memory) { RunningIndex = RunningIndex + Memory.Length };
+            Next = segment;
+            return segment;
+        }
     }
 }

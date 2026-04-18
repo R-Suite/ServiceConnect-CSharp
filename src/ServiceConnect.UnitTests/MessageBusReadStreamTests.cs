@@ -1,3 +1,4 @@
+using System.Buffers;
 using ServiceConnect.Services;
 using Xunit;
 
@@ -53,5 +54,49 @@ public class MessageBusReadStreamTests
         var stream = new MessageBusReadStream("seq");
         stream.Write(new byte[] { 1, 2 }, 0);
         Assert.Throws<InvalidOperationException>(() => stream.Write(new byte[] { 3, 4 }, 0));
+    }
+
+    [Fact]
+    public void ReadSequence_Throws_When_NotComplete()
+    {
+        var stream = new MessageBusReadStream("seq");
+        Assert.Throws<InvalidOperationException>(() => stream.ReadSequence());
+    }
+
+    [Fact]
+    public void ReadSequence_SinglePacket_ReturnsAllBytes()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(0);
+        stream.Write(new byte[] { 1, 2, 3 }, 0);
+        var seq = stream.ReadSequence();
+        Assert.Equal(3, seq.Length);
+        Assert.Equal(new byte[] { 1, 2, 3 }, seq.ToArray());
+    }
+
+    [Fact]
+    public void ReadSequence_MultiplePackets_LinksInOrder()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 3 }, 1);
+        stream.Write(new byte[] { 4, 5 }, 2);
+        var seq = stream.ReadSequence();
+        Assert.Equal(5, seq.Length);
+        Assert.False(seq.IsSingleSegment);
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, seq.ToArray());
+    }
+
+    [Fact]
+    public void ReadSequence_OutOfOrderWrites_ReassemblesInOrder()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 4, 5 }, 2);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 3 }, 1);
+        var seq = stream.ReadSequence();
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, seq.ToArray());
     }
 }

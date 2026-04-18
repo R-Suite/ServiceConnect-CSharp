@@ -8,4 +8,7 @@ public interface IMessageBusReadStream
     void SetLastPacketNumber(long lastPacketNumber);
     long LastPacketNumber { get; }
     string SequenceId { get; }
+
+    System.Buffers.ReadOnlySequence<byte> ReadSequence()
+        => new System.Buffers.ReadOnlySequence<byte>(Read());
 }
