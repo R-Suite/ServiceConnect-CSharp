@@ -89,7 +89,7 @@ public sealed class ProcessManagerTimeoutService(
 
                     await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     logger.LogError(ex, "Error dispatching timeout {TimeoutId}", timeout.Id);
 
@@ -97,14 +97,14 @@ public sealed class ProcessManagerTimeoutService(
                     {
                         await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
                     }
-                    catch (Exception releaseEx)
+                    catch (Exception releaseEx) when (releaseEx is not OperationCanceledException)
                     {
                         logger.LogError(releaseEx, "Error releasing timeout {TimeoutId} after dispatch failure", timeout.Id);
                     }
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Error polling for process manager timeouts");
         }

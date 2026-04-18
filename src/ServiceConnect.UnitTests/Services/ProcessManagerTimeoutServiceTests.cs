@@ -148,4 +148,78 @@ public class ProcessManagerTimeoutServiceTests
         Assert.NotNull(ctsField);
         Assert.Null(ctsField!.GetValue(sut));
     }
+
+    [Fact]
+    public async Task PollOnce_RemoveDispatchedThrowsOCE_Propagates()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts = new List<TimeoutData>
+            {
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>(),
+                }
+            },
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30),
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => sut.PollOnceAsync());
+
+        _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PollOnce_ReleaseDispatchedThrowsOCE_Propagates()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts = new List<TimeoutData>
+            {
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>(),
+                }
+            },
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30),
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
+        _mockFinder.Setup(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => sut.PollOnceAsync());
+    }
 }
