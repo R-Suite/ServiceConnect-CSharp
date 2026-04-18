@@ -35,9 +35,7 @@ public class ReadOnlyMemoryStreamTests
         var data = new byte[] { 1, 2 };
         using var stream = new ReadOnlyMemoryStream(data);
         var buffer = new byte[2];
-#pragma warning disable CA2022
-        stream.Read(buffer, 0, 2);
-#pragma warning restore CA2022
+        Assert.Equal(2, stream.Read(buffer, 0, 2));
         var read = stream.Read(buffer, 0, 2);
         Assert.Equal(0, read);
     }
