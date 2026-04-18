@@ -6,12 +6,6 @@ using ServiceConnect.Interfaces.Exceptions;
 
 namespace ServiceConnect.Persistence.MongoDb;
 
-internal sealed class TimeoutFacetResult
-{
-    public List<TimeoutData> Due { get; set; } = new();
-    public List<NextTimeoutProjection> Next { get; set; } = new();
-}
-
 internal sealed class NextTimeoutProjection
 {
     public Guid Id { get; set; }
