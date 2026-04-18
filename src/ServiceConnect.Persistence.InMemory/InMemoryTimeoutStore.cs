@@ -8,7 +8,6 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
 
-    private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
 
     public InMemoryTimeoutStore(string connectionString = "", string databaseName = "", TimeProvider? timeProvider = null)
@@ -27,13 +26,12 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            string key = timeoutData.Id.ToString();
+            if (_state.TimeoutsById.ContainsKey(timeoutData.Id))
+                throw new PersistenceException($"TimeoutData with Id {timeoutData.Id} already exists.");
 
-            if (_state.Provider.Contains(key))
-                throw new PersistenceException($"TimeoutData with Id {key} already exists in the cache.");
-
-            _state.Provider.Add(key, timeoutData, _timeProvider.GetUtcNow().Add(ExpiryDuration));
-            _state.TimeoutIndex.Add(new TimeoutEntry(timeoutData.Time, timeoutData.Id, timeoutData));
+            var entry = new TimeoutEntry(timeoutData.Time, timeoutData.Id, timeoutData);
+            _state.TimeoutsById[timeoutData.Id] = entry;
+            _state.TimeoutIndex.Add(entry);
         }
         finally
         {
@@ -86,12 +84,10 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            string key = id.ToString();
-            var data = _state.Provider.Get<string, object>(key) as TimeoutData;
-            _state.Provider.Remove(key);
-            if (data is not null)
+            if (_state.TimeoutsById.TryGetValue(id, out var entry))
             {
-                _state.TimeoutIndex.Remove(new TimeoutEntry(data.Time, data.Id, data));
+                _state.TimeoutsById.Remove(id);
+                _state.TimeoutIndex.Remove(entry);
             }
         }
         finally

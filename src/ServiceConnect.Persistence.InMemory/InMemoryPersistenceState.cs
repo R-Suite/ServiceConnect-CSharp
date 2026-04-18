@@ -10,4 +10,5 @@ internal sealed class InMemoryPersistenceState
     public CacheProvider Provider { get; }
     public ReaderWriterLockSlim SyncRoot { get; } = new();
     public SortedSet<TimeoutEntry> TimeoutIndex { get; } = new(TimeoutEntryComparer.Instance);
+    public Dictionary<Guid, TimeoutEntry> TimeoutsById { get; } = new();
 }
