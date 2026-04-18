@@ -1,9 +1,22 @@
+using System.Linq;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 
 namespace ServiceConnect.Persistence.MongoDb;
+
+internal sealed class TimeoutFacetResult
+{
+    public List<TimeoutData> Due { get; set; } = new();
+    public List<NextTimeoutProjection> Next { get; set; } = new();
+}
+
+internal sealed class NextTimeoutProjection
+{
+    public Guid Id { get; set; }
+    public DateTimeOffset Time { get; set; }
+}
 
 public sealed class MongoDbTimeoutStore : ITimeoutStore
 {
@@ -68,31 +81,43 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 .Set(x => x.Locked, true)
                 .Set(x => x.LockedBy, sessionId)
                 .Set(x => x.LockExpiresAt, utcNow.Add(LockLeaseDuration));
-            var updateResult = await collection.UpdateManyAsync(dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await collection.UpdateManyAsync(dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            if (updateResult.IsAcknowledged && updateResult.ModifiedCount > 0)
-            {
-                var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId) &
-                                  Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
-                var dueLocked = await collection.Find(ownedFilter).ToListAsync(cancellationToken).ConfigureAwait(false);
-                foreach (var doc in dueLocked)
-                    retval.DueTimeouts.Add(doc);
-            }
+            var duePipeline = new EmptyPipelineDefinition<TimeoutData>()
+                .Match(t => t.LockedBy == sessionId && t.Locked);
+
+            var nextPipeline = new EmptyPipelineDefinition<TimeoutData>()
+                .Match(t => t.Time > utcNow && !t.Locked)
+                .Sort(Builders<TimeoutData>.Sort.Ascending(t => t.Time))
+                .Limit(1)
+                .Project(t => new NextTimeoutProjection { Id = t.Id, Time = t.Time });
+
+            var facetPipeline = new EmptyPipelineDefinition<TimeoutData>()
+                .Facet(
+                    AggregateFacet.Create("Due", duePipeline),
+                    AggregateFacet.Create("Next", nextPipeline));
+
+            var facetResult = await collection.Aggregate(facetPipeline, cancellationToken: cancellationToken)
+                                              .FirstOrDefaultAsync(cancellationToken)
+                                              .ConfigureAwait(false);
 
             var nextQueryTime = DateTimeOffset.MaxValue;
-            var futureFilter = Builders<TimeoutData>.Filter.Gt(x => x.Time, utcNow) &
-                               Builders<TimeoutData>.Filter.Eq(x => x.Locked, false);
-            var futureSort = Builders<TimeoutData>.Sort.Ascending(x => x.Time);
-            var nextTimeProjection = Builders<TimeoutData>.Projection
-                .Include(x => x.Id)
-                .Include(x => x.Time);
-            var nextTimeout = await collection.Find(futureFilter)
-                .Sort(futureSort)
-                .Project<TimeoutData>(nextTimeProjection)
-                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+            if (facetResult is not null)
+            {
+                var dueFacet = facetResult.Facets.FirstOrDefault(f => f.Name == "Due");
+                if (dueFacet is AggregateFacetResult<TimeoutData> typedDue)
+                {
+                    foreach (var doc in typedDue.Output)
+                        retval.DueTimeouts.Add(doc);
+                }
 
-            if (nextTimeout is not null)
-                nextQueryTime = nextTimeout.Time;
+                var nextFacet = facetResult.Facets.FirstOrDefault(f => f.Name == "Next");
+                if (nextFacet is AggregateFacetResult<NextTimeoutProjection> typedNext
+                    && typedNext.Output.Count > 0)
+                {
+                    nextQueryTime = typedNext.Output[0].Time;
+                }
+            }
 
             if (nextQueryTime == DateTimeOffset.MaxValue)
                 nextQueryTime = utcNow.Add(DefaultNextQueryInterval);
