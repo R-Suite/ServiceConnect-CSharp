@@ -5,7 +5,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal sealed class StreamProcessor : IMessageProcessor, IDisposable
+internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<StreamProcessor> _logger;
@@ -182,9 +182,9 @@ internal sealed class StreamProcessor : IMessageProcessor, IDisposable
         return HandledTask;
     }
 
-    public void Dispose()
+    public ValueTask DisposeAsync()
     {
-        _cleanupTimer.Dispose();
+        return _cleanupTimer.DisposeAsync();
     }
 
     private sealed class ActiveStreamState(MessageBusReadStream stream, DateTimeOffset lastSeenUtc)

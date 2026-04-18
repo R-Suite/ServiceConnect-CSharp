@@ -182,4 +182,24 @@ public class StreamProcessorTests
         // Packet received but stream not yet complete (we only sent packet 0 of 100001 total).
         Assert.Equal(ProcessResult.Handled, result);
     }
+
+    [Fact]
+    public void StreamProcessor_Implements_IAsyncDisposable()
+    {
+        // R-002: Disposal must wait for in-flight EvictStaleStreams callbacks.
+        // ITimer.DisposeAsync awaits the callback; ITimer.Dispose does not.
+        Assert.True(typeof(IAsyncDisposable).IsAssignableFrom(typeof(StreamProcessor)),
+            "StreamProcessor must implement IAsyncDisposable so disposal waits for the cleanup-timer callback.");
+    }
+
+    [Fact]
+    public async Task DisposeAsync_CompletesWithoutThrowing()
+    {
+        var processor = BuildProcessor();
+        var ex = await Record.ExceptionAsync(async () =>
+        {
+            await ((IAsyncDisposable)processor).DisposeAsync();
+        });
+        Assert.Null(ex);
+    }
 }
