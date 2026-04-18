@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using Xunit;
@@ -107,12 +108,9 @@ public class MalformedMessageTests
             await using var pollConn = await pollFactory.CreateConnectionAsync();
             await using var pollChannel = await pollConn.CreateChannelAsync();
 
-            BasicGetResult? errorMsg = null;
-            for (int i = 0; i < 30 && errorMsg == null; i++)
-            {
-                errorMsg = await pollChannel.BasicGetAsync(errorQueueName, autoAck: true);
-                if (errorMsg == null) await Task.Delay(1000);
-            }
+            var errorMsg = await TestPolling.WaitForAsync(
+                async () => await pollChannel.BasicGetAsync(errorQueueName, autoAck: true),
+                timeout: TimeSpan.FromSeconds(30));
 
             Assert.NotNull(errorMsg);
         }

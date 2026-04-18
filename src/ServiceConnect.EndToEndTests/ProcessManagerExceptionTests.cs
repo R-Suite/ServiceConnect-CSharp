@@ -96,12 +96,9 @@ public class ProcessManagerExceptionTests
             await using var conn = await factory.CreateConnectionAsync();
             await using var channel = await conn.CreateChannelAsync();
 
-            BasicGetResult? errorMsg = null;
-            for (int i = 0; i < 30 && errorMsg == null; i++)
-            {
-                errorMsg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
-                if (errorMsg == null) await Task.Delay(1000);
-            }
+            var errorMsg = await TestPolling.WaitForAsync(
+                async () => await channel.BasicGetAsync(errorQueueName, autoAck: true),
+                timeout: TimeSpan.FromSeconds(30));
 
             // Assert
             Assert.NotNull(errorMsg);

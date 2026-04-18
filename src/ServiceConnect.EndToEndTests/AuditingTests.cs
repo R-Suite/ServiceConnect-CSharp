@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using Xunit;
@@ -82,8 +83,6 @@ public class AuditingTests
             Assert.Equal("audit-me", received.Content);
 
             // Assert: message also appears in audit queue
-            await Task.Delay(1000); // allow audit publish to complete
-
             var factory = new ConnectionFactory
             {
                 HostName = _fixture.RabbitMqHostname,
@@ -94,17 +93,13 @@ public class AuditingTests
             await using var conn = await factory.CreateConnectionAsync();
             await using var channel = await conn.CreateChannelAsync();
 
-            BasicGetResult? auditMsg = null;
-            for (int i = 0; i < 10 && auditMsg == null; i++)
-            {
-                auditMsg = await channel.BasicGetAsync(auditQueueName, autoAck: true);
-                if (auditMsg == null) await Task.Delay(500);
-            }
-
-            Assert.NotNull(auditMsg);
+            var audited = await TestPolling.WaitForAsync(
+                async () => await channel.BasicGetAsync(auditQueueName, autoAck: true),
+                TimeSpan.FromSeconds(10));
+            Assert.NotNull(audited);
 
             // Verify the audited message has the original headers
-            var headers = auditMsg.BasicProperties.Headers!;
+            var headers = audited.BasicProperties.Headers!;
             Assert.True(headers.ContainsKey("MessageId"));
         }
         finally

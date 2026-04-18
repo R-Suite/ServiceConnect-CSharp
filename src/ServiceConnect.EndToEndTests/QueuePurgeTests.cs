@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using Xunit;
@@ -100,7 +101,17 @@ public class QueuePurgeTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        await Task.Delay(1000); // wait for purge and consumer setup
+
+        await using var purgeConn = await factory.CreateConnectionAsync();
+        await using var purgeChannel = await purgeConn.CreateChannelAsync();
+        var purgeResult = await TestPolling.WaitUntilAsync(
+            async () =>
+            {
+                var get = await purgeChannel.BasicGetAsync(queueName, autoAck: true);
+                return get is null;
+            },
+            TimeSpan.FromSeconds(5));
+        Assert.True(purgeResult, "Queue did not become empty within timeout.");
 
         try
         {

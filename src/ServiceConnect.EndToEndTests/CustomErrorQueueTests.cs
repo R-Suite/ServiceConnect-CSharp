@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using Xunit;
@@ -90,12 +91,9 @@ public class CustomErrorQueueTests
             await using var conn = await factory.CreateConnectionAsync();
             await using var channel = await conn.CreateChannelAsync();
 
-            BasicGetResult? errorMsg = null;
-            for (int i = 0; i < 30 && errorMsg == null; i++)
-            {
-                errorMsg = await channel.BasicGetAsync(customErrorQueueName, autoAck: true);
-                if (errorMsg == null) await Task.Delay(1000);
-            }
+            var errorMsg = await TestPolling.WaitForAsync(
+                async () => await channel.BasicGetAsync(customErrorQueueName, autoAck: true),
+                timeout: TimeSpan.FromSeconds(30));
 
             Assert.NotNull(errorMsg);
 
