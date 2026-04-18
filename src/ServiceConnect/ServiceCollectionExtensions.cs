@@ -112,7 +112,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IList<HandlerReference>>(),
                 sp.GetRequiredService<IPipelineConfiguration>(),
                 sp.GetService<IConsumer>(),
-                sp.GetService<IProducer>());
+                sp.GetService<IProducer>(),
+                timeoutStore: sp.GetService<ITimeoutStore>());
         });
         services.AddSingleton<IHostedService, BusHostedService>();
         services.AddSingleton<IHostedService>(sp =>

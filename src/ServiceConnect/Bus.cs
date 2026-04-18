@@ -18,6 +18,7 @@ public sealed class Bus : IBus
     private readonly IList<HandlerReference> _handlerReferences;
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
+    private readonly ITimeoutStore? _timeoutStore;
     private readonly bool _hasOutgoingFilters;
     private readonly TimeSpan _disposeTimeout;
     private readonly object _stateLock = new();
@@ -37,7 +38,8 @@ public sealed class Bus : IBus
         IPipelineConfiguration pipelineConfig,
         IConsumer? consumer = null,
         IProducer? producer = null,
-        TimeSpan? disposeTimeout = null)
+        TimeSpan? disposeTimeout = null,
+        ITimeoutStore? timeoutStore = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -52,6 +54,7 @@ public sealed class Bus : IBus
         _consumer = consumer;
         _producer = producer;
         _disposeTimeout = disposeTimeout ?? TimeSpan.FromSeconds(30);
+        _timeoutStore = timeoutStore;
     }
 
     public bool IsConsuming => _consuming;
@@ -264,6 +267,26 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         await StopConsumingCoreAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task RequestTimeoutAsync(Guid correlationId, TimeSpan delay, CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_timeoutStore is null)
+            throw new InvalidOperationException("No ITimeoutStore is registered. Add persistence via UseInMemoryPersistence() or UseMongoDbPersistence() and set BusConfiguration.EnableProcessManagerTimeouts = true.");
+        if (delay <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(delay), "Timeout delay must be positive.");
+
+        var data = new TimeoutData
+        {
+            Id = Guid.NewGuid(),
+            Destination = _queueConfig.QueueName,
+            ProcessManagerId = correlationId,
+            Time = DateTimeOffset.UtcNow + delay
+        };
+
+        await _timeoutStore.InsertTimeoutAsync(data, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

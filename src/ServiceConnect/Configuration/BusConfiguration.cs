@@ -7,6 +7,7 @@ public sealed class BusConfiguration : IBusConfiguration
     public bool ScanForMessageHandlers { get; set; } = true;
     public bool AutoStartConsuming { get; set; } = true;
     public bool EnableProcessManagerTimeouts { get; set; }
+    public TimeSpan ProcessManagerTimeoutPollInterval { get; set; } = TimeSpan.FromSeconds(30);
     public int ConsumerCount { get; set; } = 1;
     public Action<Exception>? ExceptionHandler { get; set; }
     /// <inheritdoc />

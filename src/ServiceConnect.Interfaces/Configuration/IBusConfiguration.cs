@@ -5,6 +5,7 @@ public interface IBusConfiguration
     bool ScanForMessageHandlers { get; set; }
     bool AutoStartConsuming { get; set; }
     bool EnableProcessManagerTimeouts { get; set; }
+    TimeSpan ProcessManagerTimeoutPollInterval { get; set; }
     int ConsumerCount { get; set; }
     Action<Exception>? ExceptionHandler { get; set; }
     /// <summary>

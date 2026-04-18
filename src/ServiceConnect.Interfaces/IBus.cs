@@ -59,4 +59,13 @@ public interface IBus : IAsyncDisposable
     /// Gets whether the bus is currently consuming messages.
     /// </summary>
     bool IsConsuming { get; }
+
+    /// <summary>
+    /// Schedules a <see cref="TimeoutMessage"/> to be delivered to the current queue
+    /// after the specified delay. The message's <c>CorrelationId</c> will equal
+    /// <paramref name="correlationId"/>, which is the standard key for Process
+    /// Manager correlation.
+    /// </summary>
+    Task RequestTimeoutAsync(Guid correlationId, TimeSpan delay, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("This IBus implementation does not support scheduling timeouts.");
 }

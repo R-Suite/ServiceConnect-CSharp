@@ -33,8 +33,13 @@ public sealed class ProcessManagerTimeoutService(
             return Task.CompletedTask;
         }
 
+        var configured = config.ProcessManagerTimeoutPollInterval;
+        var interval = configured <= TimeSpan.Zero ? DefaultPollInterval : configured;
+        if (configured <= TimeSpan.Zero)
+            logger.LogWarning("ProcessManagerTimeoutPollInterval {Configured} is not positive; falling back to {Fallback}.", configured, DefaultPollInterval);
+
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _pollingTask = PollLoop(_cts.Token);
+        _pollingTask = PollLoop(interval, _cts.Token);
         logger.LogInformation("Process manager timeout polling started.");
         return Task.CompletedTask;
     }
@@ -105,9 +110,9 @@ public sealed class ProcessManagerTimeoutService(
         }
     }
 
-    private async Task PollLoop(CancellationToken cancellationToken)
+    private async Task PollLoop(TimeSpan interval, CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(DefaultPollInterval);
+        using var timer = new PeriodicTimer(interval);
         while (!cancellationToken.IsCancellationRequested)
         {
             try
