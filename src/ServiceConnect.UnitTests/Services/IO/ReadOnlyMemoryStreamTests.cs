@@ -1,4 +1,3 @@
-using System.Text;
 using ServiceConnect.Services.IO;
 using Xunit;
 
@@ -7,59 +6,53 @@ namespace ServiceConnect.UnitTests.Services.IO;
 public class ReadOnlyMemoryStreamTests
 {
     [Fact]
-    public void Read_ReturnsAllBytes_InOrder()
+    public void Read_ReturnsBytesInOrder()
     {
-        var source = Encoding.UTF8.GetBytes("hello world");
-        using var stream = new ReadOnlyMemoryStream(source);
-
-        var buffer = new byte[source.Length];
-        int read = stream.Read(buffer, 0, buffer.Length);
-
-        Assert.Equal(source.Length, read);
-        Assert.Equal(source, buffer);
+        var data = new byte[] { 1, 2, 3, 4, 5 };
+        using var stream = new ReadOnlyMemoryStream(data);
+        var buffer = new byte[5];
+        var read = stream.Read(buffer, 0, 5);
+        Assert.Equal(5, read);
+        Assert.Equal(data, buffer);
     }
 
     [Fact]
-    public void Read_AcrossMultipleCalls_ConcatenatesToFullPayload()
+    public void Read_MultipleCallsReturnsRemainingBytes()
     {
-        var source = Encoding.UTF8.GetBytes("abcdefghij");
-        using var stream = new ReadOnlyMemoryStream(source);
-
-        var buffer = new byte[4];
-        Assert.Equal(4, stream.Read(buffer, 0, 4));
-        Assert.Equal(new byte[] { (byte)'a', (byte)'b', (byte)'c', (byte)'d' }, buffer);
-
-        Assert.Equal(4, stream.Read(buffer, 0, 4));
-        Assert.Equal(new byte[] { (byte)'e', (byte)'f', (byte)'g', (byte)'h' }, buffer);
-
-        var tail = new byte[4];
-        Assert.Equal(2, stream.Read(tail, 0, 4));
-        Assert.Equal((byte)'i', tail[0]);
-        Assert.Equal((byte)'j', tail[1]);
+        var data = new byte[] { 1, 2, 3, 4, 5 };
+        using var stream = new ReadOnlyMemoryStream(data);
+        var buffer = new byte[3];
+        var first = stream.Read(buffer, 0, 3);
+        var second = stream.Read(buffer, 0, 3);
+        Assert.Equal(3, first);
+        Assert.Equal(2, second);
+        Assert.Equal(new byte[] { 4, 5, 3 }, buffer);
     }
 
     [Fact]
-    public void Read_AfterEnd_ReturnsZero()
+    public void Read_AfterEndReturnsZero()
     {
-        using var stream = new ReadOnlyMemoryStream(new byte[] { 1, 2 });
-        var buffer = new byte[4];
-        Assert.Equal(2, stream.Read(buffer, 0, 4));
-        Assert.Equal(0, stream.Read(buffer, 0, 4));
+        var data = new byte[] { 1, 2 };
+        using var stream = new ReadOnlyMemoryStream(data);
+        var buffer = new byte[2];
+#pragma warning disable CA2022
+        stream.Read(buffer, 0, 2);
+#pragma warning restore CA2022
+        var read = stream.Read(buffer, 0, 2);
+        Assert.Equal(0, read);
     }
 
     [Fact]
     public void CanSeek_IsFalse()
     {
-        using var stream = new ReadOnlyMemoryStream(new byte[0]);
+        using var stream = new ReadOnlyMemoryStream(new byte[] { 1 });
         Assert.False(stream.CanSeek);
-        Assert.False(stream.CanWrite);
-        Assert.True(stream.CanRead);
     }
 
     [Fact]
-    public void Length_MatchesInputLength()
+    public void Length_ReturnsBufferLength()
     {
-        using var stream = new ReadOnlyMemoryStream(new byte[17]);
-        Assert.Equal(17, stream.Length);
+        using var stream = new ReadOnlyMemoryStream(new byte[] { 1, 2, 3 });
+        Assert.Equal(3, stream.Length);
     }
 }

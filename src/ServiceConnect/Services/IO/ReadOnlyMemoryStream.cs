@@ -14,7 +14,6 @@ internal sealed class ReadOnlyMemoryStream : Stream
     public override bool CanSeek => false;
     public override bool CanWrite => false;
     public override long Length => _buffer.Length;
-
     public override long Position
     {
         get => _position;
@@ -23,23 +22,22 @@ internal sealed class ReadOnlyMemoryStream : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        ArgumentNullException.ThrowIfNull(buffer);
         int remaining = _buffer.Length - _position;
         if (remaining <= 0) return 0;
-        int toCopy = Math.Min(remaining, count);
-        _buffer.Span.Slice(_position, toCopy).CopyTo(buffer.AsSpan(offset, toCopy));
-        _position += toCopy;
-        return toCopy;
+        int toRead = Math.Min(count, remaining);
+        _buffer.Span.Slice(_position, toRead).CopyTo(buffer.AsSpan(offset, toRead));
+        _position += toRead;
+        return toRead;
     }
 
     public override int Read(Span<byte> buffer)
     {
         int remaining = _buffer.Length - _position;
         if (remaining <= 0) return 0;
-        int toCopy = Math.Min(remaining, buffer.Length);
-        _buffer.Span.Slice(_position, toCopy).CopyTo(buffer[..toCopy]);
-        _position += toCopy;
-        return toCopy;
+        int toRead = Math.Min(buffer.Length, remaining);
+        _buffer.Span.Slice(_position, toRead).CopyTo(buffer.Slice(0, toRead));
+        _position += toRead;
+        return toRead;
     }
 
     public override void Flush() { }
