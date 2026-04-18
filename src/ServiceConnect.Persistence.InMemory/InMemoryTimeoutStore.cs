@@ -33,6 +33,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 throw new PersistenceException($"TimeoutData with Id {key} already exists in the cache.");
 
             _state.Provider.Add(key, timeoutData, _timeProvider.GetUtcNow().Add(ExpiryDuration));
+            _state.TimeoutIndex.Add(new TimeoutEntry(timeoutData.Time, timeoutData.Id, timeoutData));
         }
         finally
         {
@@ -53,15 +54,16 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _state.SyncRoot.EnterReadLock();
         try
         {
-            foreach (var key in _state.Provider.Keys())
+            foreach (var entry in _state.TimeoutIndex)
             {
-                var value = _state.Provider.Get<string, object>(key.ToString()!);
-                if (value is TimeoutData timeoutData)
+                if (entry.Time <= utcNow)
                 {
-                    if (timeoutData.Time <= utcNow)
-                        retval.DueTimeouts.Add(timeoutData);
-                    else if (timeoutData.Time < nextQueryTime)
-                        nextQueryTime = timeoutData.Time;
+                    retval.DueTimeouts.Add(entry.Data);
+                }
+                else
+                {
+                    nextQueryTime = entry.Time;
+                    break;
                 }
             }
         }
@@ -84,7 +86,13 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            _state.Provider.Remove(id.ToString());
+            string key = id.ToString();
+            var data = _state.Provider.Get<string, object>(key) as TimeoutData;
+            _state.Provider.Remove(key);
+            if (data is not null)
+            {
+                _state.TimeoutIndex.Remove(new TimeoutEntry(data.Time, data.Id, data));
+            }
         }
         finally
         {
