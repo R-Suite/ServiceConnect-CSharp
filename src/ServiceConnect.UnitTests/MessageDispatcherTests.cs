@@ -140,7 +140,7 @@ public class MessageDispatcherTests
     {
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "TestUser" };
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
         FakeMessage1? receivedMessage = null;
         var handler = new TestDispatchHandler(onHandle: m => receivedMessage = m);
@@ -161,7 +161,7 @@ public class MessageDispatcherTests
         Assert.True(result.Success);
         Assert.NotNull(receivedMessage);
         Assert.Equal("TestUser", receivedMessage.Username);
-        _mockSerializer.Verify(s => s.Deserialize(messageBytes, typeof(FakeMessage1)), Times.Once);
+        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)), Times.Once);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public class MessageDispatcherTests
     {
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "ContextUser" };
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
         IConsumeContext? capturedContext = null;
         var handler = new TestDispatchHandler(onContextSet: ctx => capturedContext = ctx);
@@ -198,7 +198,7 @@ public class MessageDispatcherTests
     {
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "BlockedUser" };
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
         _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
 
         bool handlerCalled = false;
@@ -242,7 +242,7 @@ public class MessageDispatcherTests
         // Pre-deserialization processors receive typeof(Message) as a placeholder;
         // ReplyProcessor uses the expected reply type stored in RequestState, not this.
         _mockReplyManager.Verify(r => r.ProcessReply(replyId, It.IsAny<ReadOnlyMemory<byte>>(), typeof(Message)), Times.Once);
-        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<byte[]>(), It.IsAny<Type>()), Times.Never);
+        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
     }
 
     [Fact]
@@ -250,7 +250,7 @@ public class MessageDispatcherTests
     {
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "ErrorUser" };
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
         var thrownException = new InvalidOperationException("Handler failure");
         var handler = new TestDispatchHandler(throwOnHandle: thrownException);
@@ -277,7 +277,7 @@ public class MessageDispatcherTests
     {
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "NoHandler" };
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
         // No handlers registered — use empty service provider with HandlerProcessor
         var services = new ServiceCollection();
@@ -300,7 +300,7 @@ public class MessageDispatcherTests
     {
         // Arrange
         var message = new PolyDerivedMessage(Guid.NewGuid()) { Content = "base", Extra = "derived" };
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(PolyDerivedMessage))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(PolyDerivedMessage))).Returns(message);
 
         var handler = new PolyBaseHandler();
 

@@ -41,7 +41,7 @@ namespace ServiceConnect.UnitTests
             RequestReplyManager? manager = null;
             string? capturedMessageId = null;
 
-            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1)))
+            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
                 .Returns(reply);
 
             var options = new RequestOptions { Timeout = 5000 };
@@ -111,7 +111,7 @@ namespace ServiceConnect.UnitTests
             string? capturedEndpoint = null;
             string? capturedMessageId = null;
 
-            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1)))
+            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
                 .Returns(reply);
 
             var options = new RequestOptions { Timeout = 5000, EndPoint = "my-queue" };
@@ -158,7 +158,7 @@ namespace ServiceConnect.UnitTests
                 manager.ProcessReply(unknownId, new byte[] { 1, 2, 3 }, typeof(FakeMessage1)));
 
             Assert.Null(ex);
-            _mockSerializer.Verify(s => s.Deserialize(It.IsAny<byte[]>(), It.IsAny<Type>()), Times.Never);
+            _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
         }
 
         [Fact]
@@ -169,7 +169,7 @@ namespace ServiceConnect.UnitTests
             var reply2 = new FakeMessage1(Guid.NewGuid()) { Username = "User2" };
 
             var callCount = 0;
-            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1)))
+            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
                 .Returns(() => ++callCount == 1 ? reply1 : reply2);
 
             RequestReplyManager? manager = null;
@@ -268,7 +268,7 @@ namespace ServiceConnect.UnitTests
             // Arrange
             var lateReply = new FakeMessage1(Guid.NewGuid()) { Username = "LateUser" };
 
-            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1)))
+            _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
                 .Returns(lateReply);
 
             RequestReplyManager? manager = null;
@@ -308,7 +308,7 @@ namespace ServiceConnect.UnitTests
             // Also verify that a second call with the same id is a no-op (entry gone).
             // If the entry were still present, Deserialize would be called a second time.
             _mockSerializer.Verify(
-                s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1)),
+                s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)),
                 Times.Never);
         }
     }

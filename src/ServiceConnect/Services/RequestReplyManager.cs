@@ -132,7 +132,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         // Use the expected reply type stored at request time, not the wire-provided type.
         // This prevents deserialization into attacker-controlled types via crafted reply messages.
-        object reply = _serializer.Deserialize(messageBytes.ToArray(), state.ReplyType);
+        object reply = _serializer.Deserialize(messageBytes, state.ReplyType);
 
         if (state.OnReply != null)
         {

@@ -75,9 +75,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
                 return new ConsumeEventResult { Success = false };
             }
 
-            // 5. Deserialize the message — .ToArray() at the serializer boundary (P-003).
-            //    When P-040 adds span-based overloads, this allocation goes away.
-            var message = _serializer.Deserialize(messageBytes.ToArray(), type);
+            var message = _serializer.Deserialize(messageBytes, type);
 
             // 6. Run BeforeConsumingFilters
             bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);

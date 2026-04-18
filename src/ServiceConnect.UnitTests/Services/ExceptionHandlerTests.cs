@@ -77,7 +77,7 @@ public class ExceptionHandlerTests
             .ThrowsAsync(thrownException);
 
         var message = new FakeMessage1(Guid.NewGuid());
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
         var dispatcher = CreateDispatcher(new List<IMessageProcessor> { mockProcessor.Object });
         var headers = MakeHeaders();
@@ -109,7 +109,7 @@ public class ExceptionHandlerTests
             .ThrowsAsync(new InvalidOperationException("handler boom"));
 
         var message = new FakeMessage1(Guid.NewGuid());
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
         var dispatcher = CreateDispatcher(new List<IMessageProcessor> { mockProcessor.Object });
         var headers = MakeHeaders();
@@ -140,7 +140,7 @@ public class ExceptionHandlerTests
             .ThrowsAsync(new InvalidOperationException("original dispatch error"));
 
         var message = new FakeMessage1(Guid.NewGuid());
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(FakeMessage1))).Returns(message);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
         var dispatcher = CreateDispatcher(new List<IMessageProcessor> { mockProcessor.Object });
         var headers = MakeHeaders();

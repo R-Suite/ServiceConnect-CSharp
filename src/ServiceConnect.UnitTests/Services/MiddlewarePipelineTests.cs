@@ -200,7 +200,7 @@ public class ProcessingMiddlewarePipelineTests
             .Returns(() => { log.Add("processor"); return Task.FromResult(ProcessResult.Handled); });
 
         var testMsg = new TestMiddlewareMessage();
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(TestMiddlewareMessage))).Returns(testMsg);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(TestMiddlewareMessage))).Returns(testMsg);
 
         var registry = new MessageTypeRegistry();
         registry.Register(typeof(TestMiddlewareMessage));
@@ -240,7 +240,7 @@ public class ProcessingMiddlewarePipelineTests
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
 
         var testMsg = new TestMiddlewareMessage();
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<byte[]>(), typeof(TestMiddlewareMessage))).Returns(testMsg);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(TestMiddlewareMessage))).Returns(testMsg);
 
         var registry2 = new MessageTypeRegistry();
         registry2.Register(typeof(TestMiddlewareMessage));
