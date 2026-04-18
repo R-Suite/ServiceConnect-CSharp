@@ -166,25 +166,10 @@ public static class ServiceConnectActivitySource
             return false;
         }
 
-        bool hasHeaders = false;
-        foreach (string header in DistributedContextPropagator.Current.Fields)
-        {
-            if (headers.ContainsKey(header))
-            {
-                hasHeaders = true;
-                break;
-            }
-        }
-
-        if (hasHeaders)
-        {
-            DistributedContextPropagator.Current.ExtractTraceIdAndState(headers, ExtractTraceIdAndState,
-                out string? traceParent, out string? traceState);
-            return ActivityContext.TryParse(traceParent, traceState, out context);
-        }
-
-        context = default;
-        return false;
+        DistributedContextPropagator.Current.ExtractTraceIdAndState(
+            headers, ExtractTraceIdAndState,
+            out string? traceParent, out string? traceState);
+        return ActivityContext.TryParse(traceParent, traceState, out context);
     }
 
     private static void ExtractTraceIdAndState(object? eventArgs, string name, out string? value, out IEnumerable<string>? values)

@@ -280,24 +280,18 @@ public sealed class Producer : IProducer
                 result[kvp.Key] = kvp.Value;
         }
 
-        if (!result.ContainsKey(HeaderKeys.DestinationAddress))
-            result[HeaderKeys.DestinationAddress] = queueName;
-        if (!result.ContainsKey(HeaderKeys.MessageId))
-            result[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
-        if (!result.ContainsKey(HeaderKeys.MessageType))
-            result[HeaderKeys.MessageType] = messageType;
+        result.TryAdd(HeaderKeys.DestinationAddress, queueName);
+        result.TryAdd(HeaderKeys.MessageId, Guid.NewGuid().ToString());
+        result.TryAdd(HeaderKeys.MessageType, messageType);
 
         result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
         result[HeaderKeys.TimeSent] = FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
         if (_busConfiguration.IncludeMachineNameInHeaders)
             result[HeaderKeys.SourceMachine] = Environment.MachineName;
 
-        // P-016: cache FullName and AssemblyQualifiedName per Type — these never change.
         var (fullName, aqn) = _typeNameCache.GetOrAdd(type, static t => (t.FullName!, t.AssemblyQualifiedName!));
-        if (!result.ContainsKey(HeaderKeys.TypeName))
-            result[HeaderKeys.TypeName] = fullName;
-        if (!result.ContainsKey(HeaderKeys.FullTypeName))
-            result[HeaderKeys.FullTypeName] = aqn;
+        result.TryAdd(HeaderKeys.TypeName, fullName);
+        result.TryAdd(HeaderKeys.FullTypeName, aqn);
 
         result[HeaderKeys.ConsumerType] = "RabbitMQ";
         result[HeaderKeys.Language] = "C#";

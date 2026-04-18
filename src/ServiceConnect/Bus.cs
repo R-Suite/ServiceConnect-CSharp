@@ -239,12 +239,10 @@ public sealed class Bus : IBus
                 if (_consumer == null)
                     throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
 
-                messageTypeNames =
-                [
-                    .. _handlerReferences
-                        .Select(h => h.MessageType.FullName!.Replace(".", string.Empty))
-                        .Distinct()
-                ];
+                var typeNameSet = new HashSet<string>(_handlerReferences.Count);
+                foreach (var h in _handlerReferences)
+                    typeNameSet.Add(h.MessageType.FullName!.Replace(".", string.Empty));
+                messageTypeNames = [.. typeNameSet];
 
                 localConsumer = _consumer;
             }
