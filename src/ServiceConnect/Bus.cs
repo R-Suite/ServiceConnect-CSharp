@@ -392,6 +392,8 @@ public sealed class Bus : IBus
         if (destinations.Count <= 1)
             return string.Empty;
 
+        // destinations[0] is the immediate send target; the routing slip describes
+        // the *subsequent* hops, so the loop deliberately starts at index 1 (R-016).
         var builder = new System.Text.StringBuilder();
         for (var index = 1; index < destinations.Count; index++)
         {
