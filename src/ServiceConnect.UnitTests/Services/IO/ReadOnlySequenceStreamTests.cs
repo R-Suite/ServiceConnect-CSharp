@@ -22,11 +22,7 @@ public class ReadOnlySequenceStreamTests
         var seq = BuildMultiSegment([1, 2, 3], [4, 5, 6]);
         using var stream = new ReadOnlySequenceStream(seq);
         var buffer = new byte[6];
-        int total = 0;
-        int read;
-        while ((read = stream.Read(buffer, total, buffer.Length - total)) > 0)
-            total += read;
-        Assert.Equal(6, total);
+        Assert.Equal(6, stream.Read(buffer, 0, 6));
         Assert.Equal(new byte[] { 1, 2, 3, 4, 5, 6 }, buffer);
     }
 
@@ -46,6 +42,14 @@ public class ReadOnlySequenceStreamTests
         var seq = BuildMultiSegment([1, 2], [3, 4, 5]);
         using var stream = new ReadOnlySequenceStream(seq);
         Assert.Equal(5, stream.Length);
+    }
+
+    [Fact]
+    public void Read_EmptySequence_ReturnsZero()
+    {
+        using var stream = new ReadOnlySequenceStream(new ReadOnlySequence<byte>());
+        var buffer = new byte[4];
+        Assert.Equal(0, stream.Read(buffer, 0, 4));
     }
 
     private static ReadOnlySequence<byte> BuildMultiSegment(byte[] first, byte[] second)
