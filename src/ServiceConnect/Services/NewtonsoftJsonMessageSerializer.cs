@@ -78,16 +78,37 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
 
     public object Deserialize(byte[] data, Type type)
     {
-        return Deserialize(data.AsSpan(), type);
+        return Deserialize((ReadOnlyMemory<byte>)data.AsMemory(), type);
     }
 
     public object Deserialize(ReadOnlySpan<byte> data, Type type)
     {
+        using var ms = new MemoryStream(data.ToArray(), writable: false);
+        return DeserializeFromStream(ms, type);
+    }
+
+    public object Deserialize(ReadOnlyMemory<byte> data, Type type)
+    {
+        using var stream = new IO.ReadOnlyMemoryStream(data);
+        return DeserializeFromStream(stream, type);
+    }
+
+    public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
+    {
+        return (T)Deserialize(data, typeof(T));
+    }
+
+    public object Deserialize(in System.Buffers.ReadOnlySequence<byte> data, Type type)
+    {
+        using var stream = new IO.ReadOnlySequenceStream(data);
+        return DeserializeFromStream(stream, type);
+    }
+
+    private object DeserializeFromStream(Stream stream, Type type)
+    {
         try
         {
-            var buffer = data.ToArray();
-            using var ms = new MemoryStream(buffer, writable: false);
-            using var sr = new StreamReader(ms, Encoding.UTF8);
+            using var sr = new StreamReader(stream, Encoding.UTF8);
             using var jr = new JsonTextReader(sr);
             return _serializer.Deserialize(jr, type)
                 ?? throw new Interfaces.Exceptions.SerializationException(

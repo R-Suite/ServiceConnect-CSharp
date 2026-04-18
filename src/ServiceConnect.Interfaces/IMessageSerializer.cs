@@ -8,4 +8,7 @@ public interface IMessageSerializer
     T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message;
     object Deserialize(byte[] data, Type type);
     object Deserialize(ReadOnlySpan<byte> data, Type type);
+    object Deserialize(ReadOnlyMemory<byte> data, Type type);
+    T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message;
+    object Deserialize(in System.Buffers.ReadOnlySequence<byte> data, Type type);
 }
