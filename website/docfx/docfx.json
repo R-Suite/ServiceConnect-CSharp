@@ -18,6 +18,10 @@
       {
         "files": ["**/*.{md,yml}"],
         "src": "../_docfx_metadata"
+      },
+      {
+        "files": ["index.md"],
+        "src": "."
       }
     ],
     "globalMetadata": {
