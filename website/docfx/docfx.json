@@ -1,0 +1,34 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": ["src/ServiceConnect.sln"],
+          "src": "../.."
+        }
+      ],
+      "dest": "../../website/_docfx_metadata",
+      "filter": "filterConfig.yml",
+      "disableGitFeatures": false,
+      "outputFormat": "mref"
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": ["**/*.{md,yml}"],
+        "src": "../_docfx_metadata"
+      }
+    ],
+    "globalMetadata": {
+      "_appTitle": "ServiceConnect API Reference",
+      "_appName": "ServiceConnect",
+      "_enableSearch": false,
+      "_disableContribution": true,
+      "_disableNewTab": false
+    },
+    "dest": "../public/api",
+    "template": ["default", "modern"],
+    "postProcessors": ["ExtractSearchIndex"]
+  }
+}

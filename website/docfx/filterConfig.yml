@@ -1,0 +1,12 @@
+apiRules:
+  # Exclude all test projects.
+  - exclude:
+      uidRegex: ^ServiceConnect\.UnitTests
+      type: Namespace
+  - exclude:
+      uidRegex: ^ServiceConnect\.EndToEndTests
+      type: Namespace
+  # Exclude any type whose visibility is internal/private.
+  - exclude:
+      hasAttribute:
+        uid: System.Runtime.CompilerServices.CompilerGeneratedAttribute

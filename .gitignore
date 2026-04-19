@@ -188,6 +188,7 @@ CLAUDE.md
 website/dist/
 website/.astro/
 website/public/api/
+website/_docfx_metadata/
 
 # Brainstorming companion artifacts
 .superpowers/
