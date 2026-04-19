@@ -4,11 +4,15 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Stores known message CLR types by their full and assembly-qualified names for dispatch-time lookup.
+/// </summary>
 public sealed class MessageTypeRegistry : IMessageTypeRegistry
 {
     private readonly ConcurrentDictionary<string, Type> _registeredTypes = new();
     private FrozenDictionary<string, Type>? _types;
 
+    /// <inheritdoc />
     public bool TryResolve(string typeName, out Type type)
     {
         var types = Volatile.Read(ref _types);
@@ -22,6 +26,7 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
         return types.TryGetValue(typeName, out type!);
     }
 
+    /// <inheritdoc />
     public void Register(Type type)
     {
         if (type.AssemblyQualifiedName is not null)

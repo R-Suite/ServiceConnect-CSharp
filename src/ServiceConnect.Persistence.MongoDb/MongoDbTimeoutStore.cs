@@ -13,6 +13,9 @@ internal sealed class NextTimeoutProjection
     public DateTimeOffset Time { get; set; }
 }
 
+/// <summary>
+/// MongoDB implementation of timeout persistence and lock-aware timeout leasing.
+/// </summary>
 public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
 {
     private readonly IMongoClient _mongoClient;
@@ -24,6 +27,13 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Creates a timeout store backed by MongoDB.
+    /// </summary>
+    /// <param name="mongoClient">The MongoDB client.</param>
+    /// <param name="options">The persistence options used to select the database.</param>
+    /// <param name="logger">The logger dependency required by the public API.</param>
+    /// <param name="timeProvider">The time source used for lock and due-time calculations.</param>
     public MongoDbTimeoutStore(
         IMongoClient mongoClient,
         MongoDbPersistenceOptions options,
@@ -45,6 +55,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         }
     }
 
+    /// <inheritdoc />
     public async Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -62,6 +73,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         }
     }
 
+    /// <inheritdoc />
     public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -157,6 +169,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         }
     }
 
+    /// <inheritdoc />
     public async Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -176,6 +189,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         }
     }
 
+    /// <inheritdoc />
     public async Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -198,6 +212,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         }
     }
 
+    /// <inheritdoc />
     public async Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -218,6 +233,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         }
     }
 
+    /// <inheritdoc />
     public async Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

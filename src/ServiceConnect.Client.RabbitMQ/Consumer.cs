@@ -6,6 +6,9 @@ using System.Collections.Concurrent;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
+/// <summary>
+/// RabbitMQ-backed implementation of <see cref="IConsumer"/> for ServiceConnect.
+/// </summary>
 public sealed class Consumer : IConsumer
 {
     private IChannel? _model;
@@ -24,6 +27,14 @@ public sealed class Consumer : IConsumer
     private readonly Dictionary<string, object?> _utilityQueueArguments;
     private readonly RabbitMqTopologyProvisioner _topologyProvisioner;
 
+    /// <summary>
+    /// Initializes a new consumer instance using the supplied ServiceConnect configuration.
+    /// </summary>
+    /// <param name="transportConfiguration">Transport settings used to configure RabbitMQ connectivity and retry behavior.</param>
+    /// <param name="queueConfiguration">Queue settings used for queue names, auditing, and purge behavior.</param>
+    /// <param name="busConfiguration">Bus settings that control consumer concurrency.</param>
+    /// <param name="logger">The logger used for consumer lifecycle and provisioning messages.</param>
+    /// <param name="connection">An optional connection to reuse instead of creating a new one.</param>
     public Consumer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration,
         IBusConfiguration busConfiguration, ILogger<Consumer> logger, IServiceConnectConnection? connection = null)
     {
@@ -47,8 +58,18 @@ public sealed class Consumer : IConsumer
         _topologyProvisioner = new RabbitMqTopologyProvisioner(logger);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the consumer currently has an open RabbitMQ connection.
+    /// </summary>
     public bool IsConnected => _connection?.IsConnected() ?? false;
 
+    /// <summary>
+    /// Declares the required RabbitMQ topology and starts consuming messages for the configured queue.
+    /// </summary>
+    /// <param name="queueName">The queue to consume from.</param>
+    /// <param name="messageTypes">The message types whose exchanges should be bound for this consumer.</param>
+    /// <param name="eventHandler">The callback invoked when a message is delivered.</param>
+    /// <param name="cancellationToken">A token used to cancel startup or consumption initialization.</param>
     public async Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -140,6 +161,9 @@ public sealed class Consumer : IConsumer
         }
     }
 
+    /// <summary>
+    /// Stops active consumer hosts and releases RabbitMQ resources owned by this instance.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         foreach (RabbitMqConsumerHost consumer in _clients)

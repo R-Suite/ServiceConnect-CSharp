@@ -14,6 +14,13 @@ public static class MongoClientFactory
     // in tests) — aligning with the MongoClient singleton that holds a reference to it.
     private static readonly ConcurrentDictionary<string, X509Certificate2> _certCache = new();
 
+    /// <summary>
+    /// Creates a <see cref="MongoClient"/> using the configured connection and SSL options.
+    /// </summary>
+    /// <param name="options">The MongoDB persistence options to apply.</param>
+    /// <returns>A configured <see cref="MongoClient"/> instance.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The connection string is missing.</exception>
     public static MongoClient Create(MongoDbPersistenceOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);

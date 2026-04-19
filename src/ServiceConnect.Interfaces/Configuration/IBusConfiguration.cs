@@ -1,12 +1,38 @@
 namespace ServiceConnect.Interfaces.Configuration;
 
+/// <summary>
+/// Configures ServiceConnect bus runtime behavior.
+/// </summary>
 public interface IBusConfiguration
 {
+    /// <summary>
+    /// Gets or sets a value indicating whether handler discovery scans configured assemblies automatically.
+    /// </summary>
     bool ScanForMessageHandlers { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether message consumption starts automatically with the hosted service.
+    /// </summary>
     bool AutoStartConsuming { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether process-manager timeouts are polled and dispatched.
+    /// </summary>
     bool EnableProcessManagerTimeouts { get; set; }
+
+    /// <summary>
+    /// Gets or sets the interval between process-manager timeout polls.
+    /// </summary>
     TimeSpan ProcessManagerTimeoutPollInterval { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of consumer loops to run in parallel.
+    /// </summary>
     int ConsumerCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets an exception callback invoked for handler-processing failures.
+    /// </summary>
     Action<Exception>? ExceptionHandler { get; set; }
     /// <summary>
     /// When <c>true</c> (default <c>false</c>), <see cref="Environment.MachineName"/> is

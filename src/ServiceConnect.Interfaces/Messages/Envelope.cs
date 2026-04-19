@@ -1,5 +1,8 @@
 ﻿namespace ServiceConnect.Interfaces;
 
+/// <summary>
+/// Represents a transport envelope containing headers and a raw body payload.
+/// </summary>
 public sealed class Envelope
 {
     /// <summary>Headers accumulated by the pipeline. Mutable by filters but the dictionary reference is fixed.</summary>

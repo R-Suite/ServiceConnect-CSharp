@@ -11,5 +11,8 @@ public sealed record AggregatorSnapshot(
     IReadOnlyList<Guid> ResolvedIds,
     int UnresolvedCount) : IAggregatorSnapshot
 {
+    /// <summary>
+    /// Gets an empty snapshot with no resolved or unresolved records.
+    /// </summary>
     public static AggregatorSnapshot Empty { get; } = new([], [], 0);
 }

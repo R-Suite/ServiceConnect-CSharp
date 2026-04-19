@@ -2,6 +2,9 @@ using System.Collections.Concurrent;
 
 namespace ServiceConnect.Persistence.InMemory;
 
+/// <summary>
+/// Provides an in-memory cache with absolute and sliding expiration support.
+/// </summary>
 public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
 {
     private readonly TimeProvider _timeProvider;
@@ -10,6 +13,9 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     private readonly ConcurrentDictionary<object, ITimer> _timers = new();
     private int _disposed;
 
+    /// <summary>
+    /// Initializes a new <see cref="CacheProvider"/> using the supplied clock.
+    /// </summary>
     public CacheProvider(TimeProvider? timeProvider = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -17,6 +23,9 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
 
     #region Implementation of ICacheProvider
 
+    /// <summary>
+    /// Occurs after an entry is removed from the cache.
+    /// </summary>
     public event EventHandler? KeyRemoved;
 
     /// <summary>
@@ -158,6 +167,9 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
 
     #region IDisposable
 
+    /// <summary>
+    /// Releases timers owned by this cache instance.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;

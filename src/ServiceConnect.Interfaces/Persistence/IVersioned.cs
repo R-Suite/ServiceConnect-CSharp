@@ -7,5 +7,8 @@ namespace ServiceConnect.Interfaces;
 /// </summary>
 public interface IVersioned
 {
+    /// <summary>
+    /// Gets the persistence version used for optimistic concurrency control.
+    /// </summary>
     int Version { get; }
 }

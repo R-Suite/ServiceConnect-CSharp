@@ -2,6 +2,9 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Splits a large payload into stream packets and sends them through the configured producer.
+/// </summary>
 public sealed class MessageBusWriteStream : IMessageBusWriteStream
 {
     private readonly IProducer _producer;
@@ -17,6 +20,12 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     private int _inFlightWrites;
     private static readonly TimeSpan CloseDrainTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Creates a write stream that targets a single endpoint and message type.
+    /// </summary>
+    /// <param name="producer">The producer used to send stream packets.</param>
+    /// <param name="endpoint">The destination endpoint for the stream.</param>
+    /// <param name="messageType">The logical message type represented by the stream.</param>
     public MessageBusWriteStream(IProducer producer, string endpoint, Type messageType)
     {
         _producer = producer;
@@ -31,6 +40,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         };
     }
 
+    /// <inheritdoc />
     public async Task WriteAsync(byte[] buffer, int offset, int count)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -69,6 +79,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         }
     }
 
+    /// <inheritdoc />
     public async Task CloseAsync()
     {
         if (Interlocked.CompareExchange(ref _closedFlag, 1, 0) != 0) return;
@@ -108,6 +119,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         await _producer.SendBytesAsync(_endpoint, [], headers).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         await CloseAsync().ConfigureAwait(false);

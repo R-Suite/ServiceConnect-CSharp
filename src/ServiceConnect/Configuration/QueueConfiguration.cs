@@ -4,22 +4,33 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Configuration;
 
+/// <summary>
+/// Mutable implementation of <see cref="IQueueConfiguration"/> used to configure local queue names and routing maps.
+/// </summary>
 public sealed class QueueConfiguration : IQueueConfiguration
 {
+    /// <inheritdoc />
     public string QueueName { get; set; } = "";
+    /// <inheritdoc />
     public string ErrorQueueName { get; set; } = "errors";
+    /// <inheritdoc />
     public string AuditQueueName { get; set; } = "audit";
+    /// <inheritdoc />
     public bool AuditingEnabled { get; set; }
+    /// <inheritdoc />
     public bool DisableErrors { get; set; }
+    /// <inheritdoc />
     public bool PurgeQueueOnStartup { get; set; }
 
     // Keyed by message-type FullName. The list preserves registration order for callers,
     // while the set gives O(1) duplicate checks when adding mappings.
     private readonly ConcurrentDictionary<string, QueueMappingEntry> _queueMappings = new();
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, IReadOnlyList<string>> QueueMappings =>
         new QueueMappingsView(_queueMappings);
 
+    /// <inheritdoc />
     public void AddQueueMapping(Type messageType, string queue)
     {
         ArgumentNullException.ThrowIfNull(messageType);
@@ -33,6 +44,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
             (_, existing) => existing.Contains(queue) ? existing : existing.Add(queue));
     }
 
+    /// <inheritdoc />
     public void AddQueueMapping(Type messageType, IList<string> queues)
     {
         ArgumentNullException.ThrowIfNull(messageType);
@@ -52,6 +64,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
             });
     }
 
+    /// <inheritdoc />
     public bool TryGetQueueMapping(Type messageType, out IReadOnlyList<string> queues)
     {
         ArgumentNullException.ThrowIfNull(messageType);

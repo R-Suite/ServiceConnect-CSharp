@@ -7,6 +7,9 @@ using System.Reflection;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
+/// <summary>
+/// RabbitMQ-backed implementation of <see cref="IProducer"/> for publishing and sending messages.
+/// </summary>
 public sealed class Producer : IProducer
 {
     /// <summary>Default maximum message body size, in bytes (64 KiB).</summary>
@@ -49,6 +52,14 @@ public sealed class Producer : IProducer
     internal Func<CancellationToken, Task>? ReconnectForTests;
     internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests;
 
+    /// <summary>
+    /// Initializes a new producer instance using the supplied ServiceConnect configuration.
+    /// </summary>
+    /// <param name="transportConfiguration">Transport settings used to configure RabbitMQ connectivity and retries.</param>
+    /// <param name="queueConfiguration">Queue settings used when stamping message headers and resolving queue mappings.</param>
+    /// <param name="busConfiguration">Bus settings that control emitted message headers.</param>
+    /// <param name="logger">The logger used for producer lifecycle and retry logging.</param>
+    /// <param name="timeProvider">An optional time provider used when stamping outbound message headers.</param>
     public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Producer> logger, TimeProvider? timeProvider = null)
     {
         _transportConfiguration = transportConfiguration;
@@ -190,6 +201,13 @@ public sealed class Producer : IProducer
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Publishes a message to the exchange derived from the specified message type.
+    /// </summary>
+    /// <param name="type">The logical message type used to determine the publish exchange and stamped headers.</param>
+    /// <param name="message">The serialized message body.</param>
+    /// <param name="headers">Optional custom headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the publish operation.</param>
     public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -224,6 +242,13 @@ public sealed class Producer : IProducer
         finally { _publishLock.Release(); }
     }
 
+    /// <summary>
+    /// Sends a message to each endpoint mapped to the specified message type.
+    /// </summary>
+    /// <param name="type">The logical message type used to resolve destination queues.</param>
+    /// <param name="message">The serialized message body.</param>
+    /// <param name="headers">Optional custom headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the send operation.</param>
     public async Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -257,6 +282,14 @@ public sealed class Producer : IProducer
         finally { _publishLock.Release(); }
     }
 
+    /// <summary>
+    /// Sends a message directly to the specified endpoint.
+    /// </summary>
+    /// <param name="endPoint">The destination queue name.</param>
+    /// <param name="type">The logical message type used when stamping headers.</param>
+    /// <param name="message">The serialized message body.</param>
+    /// <param name="headers">Optional custom headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the send operation.</param>
     public async Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -285,6 +318,13 @@ public sealed class Producer : IProducer
         finally { _publishLock.Release(); }
     }
 
+    /// <summary>
+    /// Sends raw bytes directly to the specified endpoint.
+    /// </summary>
+    /// <param name="endPoint">The destination queue name.</param>
+    /// <param name="packet">The raw payload to send.</param>
+    /// <param name="headers">Optional custom headers to include with the packet.</param>
+    /// <param name="cancellationToken">A token used to cancel the send operation.</param>
     public async Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -310,6 +350,10 @@ public sealed class Producer : IProducer
         finally { _publishLock.Release(); }
     }
 
+    /// <summary>
+    /// Disconnects the producer and releases its RabbitMQ resources.
+    /// </summary>
+    /// <param name="cancellationToken">A token used to cancel the disconnect request before disposal begins.</param>
     [Obsolete("Use DisposeAsync instead.")]
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
@@ -318,6 +362,9 @@ public sealed class Producer : IProducer
         await DisposeAsync().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Releases the producer's RabbitMQ channel, connection, and synchronization primitives.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposedInt, 1) != 0) return;
@@ -364,6 +411,9 @@ public sealed class Producer : IProducer
         _connectionSemaphore.Dispose();
     }
 
+    /// <summary>
+    /// Gets the maximum allowed outbound message size, in bytes.
+    /// </summary>
     public long MaximumMessageSize { get; }
 
     // Avoid StringBuilder allocation inside DateTime.ToString("O").

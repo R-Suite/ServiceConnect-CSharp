@@ -3,8 +3,16 @@ using System.Text;
 
 namespace ServiceConnect.Interfaces;
 
+/// <summary>
+/// Converts transport header values into their string representation.
+/// </summary>
 public static class HeaderDecoder
 {
+    /// <summary>
+    /// Decodes a header value that is stored as either a UTF-8 byte array or a string.
+    /// </summary>
+    /// <param name="value">The raw header value.</param>
+    /// <returns>The decoded string, or <see langword="null"/> when the value is <see langword="null"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string? Decode(object? value)
     {

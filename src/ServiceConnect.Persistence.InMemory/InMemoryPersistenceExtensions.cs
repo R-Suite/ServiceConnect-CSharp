@@ -4,8 +4,14 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistence.InMemory;
 
+/// <summary>
+/// Adds the in-memory persistence services used by ServiceConnect.
+/// </summary>
 public static class InMemoryPersistenceExtensions
 {
+    /// <summary>
+    /// Registers the in-memory persistence implementation with the builder.
+    /// </summary>
     public static ServiceConnectBuilder UseInMemoryPersistence(this ServiceConnectBuilder builder)
     {
         builder.AddRegistration(services =>

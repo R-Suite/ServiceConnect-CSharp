@@ -5,6 +5,9 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Configuration;
 
+/// <summary>
+/// Mutable implementation of <see cref="ITransportConfiguration"/> for configuring broker connectivity and TLS.
+/// </summary>
 public sealed class TransportConfiguration : ITransportConfiguration
 {
     /// <summary>Default dead-letter retry delay, in milliseconds.</summary>
@@ -22,10 +25,13 @@ public sealed class TransportConfiguration : ITransportConfiguration
     public string? Username { get; set; }
     /// <remarks>WARNING: Default connects to localhost without authentication. Override in production.</remarks>
     public string? Password { get; set; }
+    /// <inheritdoc />
     public string? VirtualHost { get; set; }
     /// <summary>Dead-letter retry delay, in milliseconds. Must be non-negative.</summary>
     public int RetryDelay { get; set; } = DefaultRetryDelayMilliseconds;
+    /// <inheritdoc />
     public int MaxRetries { get; set; } = DefaultMaxRetries;
+    /// <inheritdoc />
     public ushort PrefetchCount { get; set; } = DefaultPrefetchCount;
     /// <summary>
     /// Time to wait for in-flight messages to drain during graceful shutdown, in milliseconds.
@@ -39,16 +45,20 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// and should only be used in development/testing environments.
     /// </summary>
     public SslPolicyErrors AcceptablePolicyErrors { get; set; } = SslPolicyErrors.None;
+    /// <inheritdoc />
     public string? ServerName { get; set; }
+    /// <inheritdoc />
     public string? CertPath { get; set; }
     /// <remarks>SECURITY: This value is held in memory as plain text. Avoid logging or serializing this configuration object.</remarks>
     public string? CertPassphrase { get; set; }
+    /// <inheritdoc />
     public X509CertificateCollection? Certs { get; set; }
     /// <summary>
     /// SSL/TLS protocol. Defaults to <see cref="SslProtocols.None"/>, which delegates
     /// protocol selection to the runtime so TLS 1.3 is used where available.
     /// </summary>
     public SslProtocols SslProtocol { get; set; } = SslProtocols.None;
+    /// <inheritdoc />
     public LocalCertificateSelectionCallback? CertificateSelectionCallback { get; set; }
     /// <summary>
     /// Gets or sets a custom certificate validation callback.
@@ -59,8 +69,10 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// <remarks>WARNING: Setting this to a callback that always returns true disables all certificate validation.</remarks>
     public RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
     private readonly Dictionary<string, object> _clientSettings = new();
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, object> ClientSettings => _clientSettings;
 
+    /// <inheritdoc />
     public void SetClientSetting(string key, object value)
     {
         ArgumentNullException.ThrowIfNull(key);

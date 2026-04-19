@@ -6,6 +6,9 @@ using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Hosted service that polls timeout storage and dispatches due process-manager timeout messages.
+/// </summary>
 public sealed class ProcessManagerTimeoutService(
     IBusConfiguration config,
     Lazy<IBus> bus,
@@ -25,6 +28,10 @@ public sealed class ProcessManagerTimeoutService(
     private readonly ILeaseAwareTimeoutStore? _leaseAwareFinder = finder as ILeaseAwareTimeoutStore;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
+    /// <summary>
+    /// Starts timeout polling when process-manager timeouts are enabled and a timeout store is registered.
+    /// </summary>
+    /// <param name="cancellationToken">A token used to cancel host startup.</param>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         if (!config.EnableProcessManagerTimeouts)
@@ -50,6 +57,10 @@ public sealed class ProcessManagerTimeoutService(
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Stops timeout polling and waits for the poll loop to finish.
+    /// </summary>
+    /// <param name="cancellationToken">A token used to cancel host shutdown.</param>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         var cts = Interlocked.Exchange(ref _cts, null);
@@ -149,6 +160,7 @@ public sealed class ProcessManagerTimeoutService(
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();

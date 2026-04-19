@@ -4,11 +4,18 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// JSON serializer implementation based on Newtonsoft.Json for ServiceConnect messages.
+/// </summary>
 public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
 {
     private readonly JsonSerializerSettings _settings;
     private readonly JsonSerializer _serializer;
 
+    /// <summary>
+    /// Creates a serializer using optionally customized Newtonsoft.Json settings.
+    /// </summary>
+    /// <param name="settings">Optional serializer settings to clone and apply.</param>
     public NewtonsoftJsonMessageSerializer(JsonSerializerSettings? settings = null)
     {
         // Clone settings before mutating to avoid side-effects on the caller's instance.
@@ -36,6 +43,7 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
         _serializer = JsonSerializer.Create(cloned);
     }
 
+    /// <inheritdoc />
     public byte[] Serialize<T>(T message) where T : Message
     {
         if (message is null)
@@ -59,6 +67,7 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
         }
     }
 
+    /// <inheritdoc />
     public void Serialize<T>(T message, System.Buffers.IBufferWriter<byte> output) where T : Message
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -69,38 +78,45 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
         output.Advance(bytes.Length);
     }
 
+    /// <inheritdoc />
     public T Deserialize<T>(byte[] data) where T : Message
     {
         return (T)Deserialize(data, typeof(T));
     }
 
+    /// <inheritdoc />
     public T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message
     {
         return (T)Deserialize(data, typeof(T));
     }
 
+    /// <inheritdoc />
     public object Deserialize(byte[] data, Type type)
     {
         return Deserialize((ReadOnlyMemory<byte>)data.AsMemory(), type);
     }
 
+    /// <inheritdoc />
     public object Deserialize(ReadOnlySpan<byte> data, Type type)
     {
         using var ms = new MemoryStream(data.ToArray(), writable: false);
         return DeserializeFromStream(ms, type);
     }
 
+    /// <inheritdoc />
     public object Deserialize(ReadOnlyMemory<byte> data, Type type)
     {
         using var stream = new IO.ReadOnlyMemoryStream(data);
         return DeserializeFromStream(stream, type);
     }
 
+    /// <inheritdoc />
     public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
     {
         return (T)Deserialize(data, typeof(T));
     }
 
+    /// <inheritdoc />
     public object Deserialize(in System.Buffers.ReadOnlySequence<byte> data, Type type)
     {
         using var stream = new IO.ReadOnlySequenceStream(data);

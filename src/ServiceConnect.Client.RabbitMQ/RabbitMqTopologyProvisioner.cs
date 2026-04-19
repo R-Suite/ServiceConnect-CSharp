@@ -4,14 +4,18 @@ using RabbitMQ.Client.Exceptions;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-/// <summary>
-/// Encapsulates RabbitMQ topology provisioning (exchanges, queues, bindings).
-/// Catches AMQP PRECONDITION_FAILED errors and re-throws them on initial setup.
-/// </summary>
+    /// <summary>
+    /// Encapsulates RabbitMQ topology provisioning (exchanges, queues, bindings).
+    /// Catches AMQP PRECONDITION_FAILED errors and re-throws them on initial setup.
+    /// </summary>
 public sealed class RabbitMqTopologyProvisioner
 {
     private readonly ILogger _logger;
 
+    /// <summary>
+    /// Initializes a new topology provisioner.
+    /// </summary>
+    /// <param name="logger">The logger used for topology provisioning warnings.</param>
     public RabbitMqTopologyProvisioner(ILogger logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));

@@ -5,6 +5,9 @@ namespace ServiceConnect.Persistence.InMemory;
 /// </summary>
 public interface ICacheProvider
 {
+    /// <summary>
+    /// Occurs after a cache key is removed.
+    /// </summary>
     event EventHandler KeyRemoved;
 
     /// <summary>

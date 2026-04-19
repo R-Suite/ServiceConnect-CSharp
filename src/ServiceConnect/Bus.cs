@@ -6,6 +6,10 @@ using ServiceConnect.Services;
 
 namespace ServiceConnect;
 
+/// <summary>
+/// Default <see cref="IBus"/> implementation that coordinates serialization, filtering,
+/// transport dispatch, request-reply tracking, and message consumption.
+/// </summary>
 public sealed class Bus : IBus
 {
     private readonly IMessageSerializer _serializer;
@@ -61,8 +65,10 @@ public sealed class Bus : IBus
         _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
     }
 
+    /// <inheritdoc />
     public bool IsConsuming => _consuming;
 
+    /// <inheritdoc />
     public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
@@ -88,6 +94,7 @@ public sealed class Bus : IBus
         await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(T), messageBytes, headers, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
@@ -120,6 +127,7 @@ public sealed class Bus : IBus
         }
     }
 
+    /// <inheritdoc />
     public async Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where T : Message where TReply : Message
     {
@@ -148,6 +156,7 @@ public sealed class Bus : IBus
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where T : Message where TReply : Message
     {
@@ -176,6 +185,7 @@ public sealed class Bus : IBus
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where TRequest : Message where TReply : Message
     {
@@ -211,6 +221,7 @@ public sealed class Bus : IBus
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
@@ -242,6 +253,7 @@ public sealed class Bus : IBus
         await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message
     {
         ThrowIfDisposed();
@@ -250,6 +262,7 @@ public sealed class Bus : IBus
         return new MessageBusWriteStream(_producer, endpoint, typeof(T));
     }
 
+    /// <inheritdoc />
     public async Task StartConsumingAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -294,12 +307,14 @@ public sealed class Bus : IBus
         }
     }
 
+    /// <inheritdoc />
     public async Task StopConsumingAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         await StopConsumingCoreAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task RequestTimeoutAsync(Guid correlationId, TimeSpan delay, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -364,6 +379,7 @@ public sealed class Bus : IBus
         }
     }
 
+    /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         lock (_stateLock)

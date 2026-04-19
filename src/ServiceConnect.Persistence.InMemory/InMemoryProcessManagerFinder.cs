@@ -16,6 +16,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
 
+    /// <summary>
+    /// Initializes a new <see cref="InMemoryProcessManagerFinder"/> instance.
+    /// </summary>
     public InMemoryProcessManagerFinder(string connectionString, string databaseName)
         : this(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System)) { }
 
@@ -38,6 +41,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     private static readonly MethodInfo MemberwiseCloneMethod = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("Could not locate object.MemberwiseClone.");
 
+    /// <summary>
+    /// Finds persisted process manager data that matches the supplied message mapping.
+    /// </summary>
     public Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -169,6 +175,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         return (Func<MemoryData<T>, object, bool>)compiled;
     }
 
+    /// <summary>
+    /// Inserts a new process manager record into the in-memory store.
+    /// </summary>
     public Task InsertDataAsync(IProcessManagerData data, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -215,6 +224,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         return lambda.Compile();
     }
 
+    /// <summary>
+    /// Updates an existing process manager record if its version matches.
+    /// </summary>
     public Task UpdateDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -267,6 +279,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Deletes the stored process manager record identified by the supplied data.
+    /// </summary>
     public Task DeleteDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();

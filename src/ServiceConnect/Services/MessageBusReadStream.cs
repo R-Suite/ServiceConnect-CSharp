@@ -3,6 +3,9 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Reassembles byte-stream packets for a single stream sequence into a readable payload.
+/// </summary>
 public sealed class MessageBusReadStream : IMessageBusReadStream
 {
     private const long MaxTotalStreamSize = 100 * 1024 * 1024;
@@ -11,18 +14,25 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     // Track received packet count with an atomic counter so IsComplete() is O(1).
     private int _receivedCount;
 
+    /// <summary>
+    /// Creates a read stream for the supplied sequence identifier.
+    /// </summary>
+    /// <param name="sequenceId">The identifier shared by all packets in the stream.</param>
     public MessageBusReadStream(string sequenceId)
     {
         SequenceId = sequenceId ?? throw new ArgumentNullException(nameof(sequenceId));
     }
 
+    /// <inheritdoc />
     public string SequenceId { get; }
     // -1 = unset. Writes are CAS-from-(-1) so a later (potentially duplicate) close
     // packet cannot shrink or alter an already-set LastPacketNumber; reads use
     // Volatile.Read so concurrent IsComplete checks never see a stale sentinel.
     private long _lastPacketNumber = -1;
+    /// <inheritdoc />
     public long LastPacketNumber => Volatile.Read(ref _lastPacketNumber);
 
+    /// <inheritdoc />
     public void SetLastPacketNumber(long lastPacketNumber)
     {
         if (lastPacketNumber < 0) throw new ArgumentOutOfRangeException(nameof(lastPacketNumber));
@@ -32,6 +42,7 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
                 $"LastPacketNumber already set to {previous}; refusing to overwrite with {lastPacketNumber} for stream {SequenceId}.");
     }
 
+    /// <inheritdoc />
     public void Write(byte[] data, long packetNumber)
     {
         // Atomically reserve capacity: if the reservation pushes us past the cap,
@@ -53,6 +64,7 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         Interlocked.Increment(ref _receivedCount);
     }
 
+    /// <inheritdoc />
     public byte[] Read()
     {
         if (!IsComplete())
@@ -69,6 +81,7 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         return ms.ToArray();
     }
 
+    /// <inheritdoc />
     public System.Buffers.ReadOnlySequence<byte> ReadSequence()
     {
         if (!IsComplete())
@@ -98,6 +111,7 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         return new System.Buffers.ReadOnlySequence<byte>(first, 0, last!, last!.Memory.Length);
     }
 
+    /// <inheritdoc />
     public bool IsComplete()
     {
         // O(1) check — compare received packet count against expected count.

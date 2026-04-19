@@ -2,12 +2,18 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistence.InMemory;
 
+/// <summary>
+/// Stores aggregator messages and snapshots in the process memory of the current application.
+/// </summary>
 public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
 {
     private readonly TimeProvider _timeProvider;
     private readonly CacheProvider _provider;
 
     // Parameters required by IAggregatorPersistor factory convention but unused in InMemory implementation
+    /// <summary>
+    /// Initializes a new <see cref="InMemoryAggregatorPersistor"/> instance.
+    /// </summary>
     public InMemoryAggregatorPersistor(string connectionString, string databaseName, string collectionName, TimeProvider? timeProvider = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -23,6 +29,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
 
     private sealed record Entry(Guid Id, object Data);
 
+    /// <summary>
+    /// Adds an aggregator message to the named in-memory stream.
+    /// </summary>
     public Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -34,6 +43,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Returns the stored messages for the named stream.
+    /// </summary>
     public Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -50,6 +62,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <summary>
+    /// Returns a snapshot of the stored messages for the named stream.
+    /// </summary>
     public Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -70,6 +85,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <summary>
+    /// Removes the first stored message whose correlation identifier matches the specified value.
+    /// </summary>
     public Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -91,6 +109,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Removes all stored messages for the named stream.
+    /// </summary>
     public Task RemoveAllAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -102,6 +123,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Removes all entries represented by the supplied snapshot.
+    /// </summary>
     public Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -122,6 +146,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Returns the number of stored messages for the named stream.
+    /// </summary>
     public Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

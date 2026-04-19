@@ -8,8 +8,17 @@ using ServiceConnect.Services.Processors;
 
 namespace ServiceConnect;
 
+/// <summary>
+/// Extension methods for registering ServiceConnect services with dependency injection.
+/// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers the core ServiceConnect services, handlers, and hosted services.
+    /// </summary>
+    /// <param name="services">The service collection to extend.</param>
+    /// <param name="configure">The callback used to configure the ServiceConnect builder.</param>
+    /// <returns>The same <paramref name="services"/> instance for chaining.</returns>
     public static IServiceCollection AddServiceConnect(
         this IServiceCollection services,
         Action<ServiceConnectBuilder> configure)

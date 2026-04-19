@@ -3,8 +3,16 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Discovers message, process, stream, and aggregator handlers from a set of assemblies.
+/// </summary>
 public static class HandlerScanner
 {
+    /// <summary>
+    /// Scans the supplied assemblies and returns handler registrations keyed by handled message type.
+    /// </summary>
+    /// <param name="assemblies">The assemblies to inspect.</param>
+    /// <returns>A list of discovered handler references.</returns>
     public static IList<HandlerReference> ScanForHandlers(IEnumerable<Assembly> assemblies)
     {
         var handlerReferences = new List<HandlerReference>();

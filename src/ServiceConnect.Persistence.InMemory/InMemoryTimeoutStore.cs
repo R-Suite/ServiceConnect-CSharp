@@ -3,6 +3,9 @@ using ServiceConnect.Interfaces.Exceptions;
 
 namespace ServiceConnect.Persistence.InMemory;
 
+/// <summary>
+/// Stores timeout messages in process memory for local execution.
+/// </summary>
 public sealed class InMemoryTimeoutStore : ITimeoutStore
 {
     private readonly TimeProvider _timeProvider;
@@ -11,6 +14,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// Initializes a new <see cref="InMemoryTimeoutStore"/> instance.
+    /// </summary>
     public InMemoryTimeoutStore(string connectionString = "", string databaseName = "", TimeProvider? timeProvider = null)
         : this(new InMemoryPersistenceState(timeProvider), timeProvider) { }
 
@@ -20,6 +26,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    /// <summary>
+    /// Adds a timeout to the in-memory store.
+    /// </summary>
     public Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -44,6 +53,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Returns due timeouts and the next time the store should be queried.
+    /// </summary>
     public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -111,6 +123,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         };
     }
 
+    /// <summary>
+    /// Permanently removes a timeout after it has been dispatched.
+    /// </summary>
     public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -132,6 +147,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Releases a previously locked timeout so it can be dispatched again.
+    /// </summary>
     public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

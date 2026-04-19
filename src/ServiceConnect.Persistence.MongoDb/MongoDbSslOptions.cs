@@ -2,9 +2,19 @@ using System.Security.Authentication;
 
 namespace ServiceConnect.Persistence.MongoDb;
 
+/// <summary>
+/// Configures SSL/TLS settings for MongoDB connections.
+/// </summary>
 public sealed class MongoDbSslOptions
 {
+    /// <summary>
+    /// Gets or sets the client certificate file path.
+    /// </summary>
     public string? CertPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the passphrase used to load the client certificate.
+    /// </summary>
     public string? CertPassphrase { get; set; }
     /// <summary>
     /// SSL/TLS protocol. Defaults to <see cref="SslProtocols.None"/>, which delegates
@@ -18,5 +28,8 @@ public sealed class MongoDbSslOptions
     /// </summary>
     /// <remarks>WARNING: When true, all MongoDB TLS certificate validation is disabled. Use only in development/testing.</remarks>
     public bool AllowInsecureTls { get; set; }
+    /// <summary>
+    /// Gets or sets a value indicating whether certificate revocation should be checked.
+    /// </summary>
     public bool CheckCertificateRevocation { get; set; } = true;
 }

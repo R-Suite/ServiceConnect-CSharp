@@ -6,6 +6,9 @@ using ServiceConnect.Services.Processors;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Deserializes incoming envelopes and routes them through filters, processors, and middleware.
+/// </summary>
 public sealed class MessageDispatcher : IMessageDispatcher
 {
     private readonly IMessageSerializer _serializer;
@@ -22,6 +25,17 @@ public sealed class MessageDispatcher : IMessageDispatcher
     // registrations will be silently promoted to singleton lifetime here.
     private readonly Lazy<MessageProcessingDelegate> _processingChain;
 
+    /// <summary>
+    /// Creates a dispatcher for incoming broker messages.
+    /// </summary>
+    /// <param name="serializer">The serializer used to materialize messages.</param>
+    /// <param name="filterPipeline">The filter pipeline applied before and after dispatch.</param>
+    /// <param name="processors">The ordered processors that can handle the message.</param>
+    /// <param name="logger">The logger used for dispatch diagnostics.</param>
+    /// <param name="config">The bus configuration used for exception handling and behavior flags.</param>
+    /// <param name="pipelineConfig">The pipeline configuration used to build middleware chains.</param>
+    /// <param name="serviceProvider">The service provider used to resolve middleware instances.</param>
+    /// <param name="typeRegistry">The registry used to map wire type names to CLR types.</param>
     public MessageDispatcher(
         IMessageSerializer serializer,
         IFilterPipeline filterPipeline,
@@ -43,6 +57,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         _processingChain = new Lazy<MessageProcessingDelegate>(BuildProcessingChain, isThreadSafe: true);
     }
 
+    /// <inheritdoc />
     public async Task<ConsumeEventResult> Dispatch(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
         Envelope? envelope = null;

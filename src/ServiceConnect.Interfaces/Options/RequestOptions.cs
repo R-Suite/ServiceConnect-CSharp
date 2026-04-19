@@ -1,13 +1,38 @@
 namespace ServiceConnect.Interfaces.Options;
 
+/// <summary>
+/// Optional settings for request/reply operations.
+/// </summary>
 public sealed class RequestOptions
 {
+    /// <summary>
+    /// The default request timeout, in milliseconds.
+    /// </summary>
     public const int DefaultTimeoutMs = 10_000;
+
+    /// <summary>
+    /// Gets the default request options instance.
+    /// </summary>
     public static RequestOptions Default { get; } = new();
 
+    /// <summary>
+    /// Gets or sets additional headers to attach to the request message.
+    /// </summary>
     public Dictionary<string, string>? Headers { get; set; }
+
+    /// <summary>
+    /// Gets or sets the single destination endpoint for the request.
+    /// </summary>
     public string? EndPoint { get; set; }
+
+    /// <summary>
+    /// Gets or sets the destination endpoints when broadcasting a multi-request.
+    /// </summary>
     public IList<string>? EndPoints { get; set; }
+
+    /// <summary>
+    /// Gets or sets the request timeout, in milliseconds.
+    /// </summary>
     public int Timeout { get; set; } = DefaultTimeoutMs;
 
     /// <summary>

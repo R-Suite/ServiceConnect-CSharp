@@ -8,6 +8,9 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistence.MongoDb;
 
+/// <summary>
+/// Extension methods for registering MongoDB-backed persistence components.
+/// </summary>
 public static class MongoDbPersistenceExtensions
 {
     // MongoDB.Driver 2.x defaults BsonDefaults.GuidRepresentationMode to V2, which ignores
@@ -46,6 +49,12 @@ public static class MongoDbPersistenceExtensions
         }
     }
 
+    /// <summary>
+    /// Registers MongoDB implementations for ServiceConnect persistence services.
+    /// </summary>
+    /// <param name="builder">The builder to configure.</param>
+    /// <param name="configure">Applies MongoDB persistence options.</param>
+    /// <returns>The same <see cref="ServiceConnectBuilder"/> instance.</returns>
     public static ServiceConnectBuilder UseMongoDbPersistence(
         this ServiceConnectBuilder builder,
         Action<MongoDbPersistenceOptions> configure)

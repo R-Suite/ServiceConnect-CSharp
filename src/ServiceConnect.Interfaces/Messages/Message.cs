@@ -10,5 +10,8 @@ namespace ServiceConnect.Interfaces;
 /// </remarks>
 public class Message(Guid correlationId)
 {
+    /// <summary>
+    /// Gets the correlation id used to relate this message to a broader conversation.
+    /// </summary>
     public Guid CorrelationId { get; private set; } = correlationId;
 }

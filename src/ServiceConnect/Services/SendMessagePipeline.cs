@@ -24,6 +24,12 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     private readonly Lazy<SendMessageDelegate> _sendChain;
     private volatile bool _disposed;
 
+    /// <summary>
+    /// Creates a send pipeline backed by a producer and optional outbound middleware.
+    /// </summary>
+    /// <param name="producer">The producer that performs the terminal send or publish operation.</param>
+    /// <param name="pipelineConfig">The pipeline configuration that supplies middleware types.</param>
+    /// <param name="serviceProvider">The service provider used to resolve middleware instances.</param>
     public SendMessagePipeline(IProducer producer, IPipelineConfiguration pipelineConfig, IServiceProvider serviceProvider)
     {
         _producer = producer ?? throw new ArgumentNullException(nameof(producer));
@@ -33,12 +39,14 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
         _sendChain = new Lazy<SendMessageDelegate>(BuildSendChain, isThreadSafe: true);
     }
 
+    /// <inheritdoc />
     public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _publishChain.Value(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
     }
 
+    /// <inheritdoc />
     public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -78,6 +86,7 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
         return chain;
     }
 
+    /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
         if (_disposed) return ValueTask.CompletedTask;

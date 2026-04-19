@@ -22,6 +22,13 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     // Avoid MakeGenericMethod + MethodInfo.Invoke on every insert call.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>>
         InsertDelegateCache = new();
+    /// <summary>
+    /// Creates a process-manager finder backed by MongoDB.
+    /// </summary>
+    /// <param name="mongoClient">The MongoDB client.</param>
+    /// <param name="options">The persistence options used to select the database.</param>
+    /// <param name="logger">The logger used for mapping failures.</param>
+    /// <param name="timeProvider">Reserved for future time-dependent behavior.</param>
     public MongoDbProcessManagerFinder(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbProcessManagerFinder> logger, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
@@ -37,6 +44,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
+    /// <inheritdoc />
     public async Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -106,6 +114,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
+    /// <inheritdoc />
     public async Task InsertDataAsync(IProcessManagerData data, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -169,6 +178,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         await collection.InsertOneAsync(mongoDbData, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
     public async Task UpdateDataAsync<T>(IPersistenceData<T> persistenceData, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -214,6 +224,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
+    /// <inheritdoc />
     public async Task DeleteDataAsync<T>(IPersistenceData<T> persistenceData, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();

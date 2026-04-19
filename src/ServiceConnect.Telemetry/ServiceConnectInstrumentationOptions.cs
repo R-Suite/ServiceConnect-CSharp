@@ -1,10 +1,10 @@
-﻿using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces;
 using System.Diagnostics;
 
 namespace ServiceConnect.Telemetry;
 
 /// <summary>
-/// Options for <see cref="ServiceConnectInstrumentation"/>.
+/// Options for <see cref="ServiceConnectActivitySource"/> telemetry generation.
 /// </summary>
 public sealed class ServiceConnectInstrumentationOptions
 {

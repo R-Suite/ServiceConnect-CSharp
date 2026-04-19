@@ -1,30 +1,36 @@
 ﻿namespace ServiceConnect.Interfaces;
 
 /// <summary>
-/// Define aggregated message handlers
+/// Defines an aggregator that batches related messages before handling them.
 /// </summary>
-/// <typeparam name="T"></typeparam>
+/// <typeparam name="T">The message type accepted by the aggregator.</typeparam>
 public abstract class Aggregator<T> where T : Message
 {
     /// <summary>
-    /// Timeout for aggregating messages.
-    /// When the timeout is reached, the current batch of messages is dispatched 
-    /// to the handler (regardless of the batch size).
+    /// Gets the maximum amount of time to wait before dispatching the current batch.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>
+    /// The maximum aggregation window. Returning <see langword="default"/> disables the timeout-based flush.
+    /// </returns>
     public virtual TimeSpan Timeout()
     {
         return default;
     }
 
     /// <summary>
-    /// Max batch size of aggregated messages
+    /// Gets the maximum number of messages to buffer before dispatching the batch.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>
+    /// The batch size limit. Returning <c>0</c> means no size-based flush is enforced.
+    /// </returns>
     public virtual int BatchSize()
     {
         return 0;
     }
 
+    /// <summary>
+    /// Processes a completed batch of aggregated messages.
+    /// </summary>
+    /// <param name="messages">The messages collected for the batch.</param>
     public abstract void Execute(IList<T> messages);
 }

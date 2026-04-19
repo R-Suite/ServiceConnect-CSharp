@@ -5,12 +5,23 @@ using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Default <see cref="IConsumeContext"/> implementation exposed to message handlers while a message is being processed.
+/// </summary>
 public sealed class ConsumeContext : IConsumeContext
 {
     private readonly IQueueConfiguration _queueConfig;
     private readonly IBusConfiguration _busConfig;
     private readonly IReplyStatusRequestReplyManager? _replyStatusRequestReplyManager;
 
+    /// <summary>
+    /// Creates a consume context for a handler invocation.
+    /// </summary>
+    /// <param name="bus">The bus instance that can be used for reply operations.</param>
+    /// <param name="headers">The decoded message headers.</param>
+    /// <param name="queueConfig">The configured queue settings.</param>
+    /// <param name="busConfig">The configured bus settings.</param>
+    /// <param name="cancellationToken">The cancellation token for the current consume operation.</param>
     public ConsumeContext(
         IBus bus,
         IDictionary<string, object> headers,
@@ -38,6 +49,7 @@ public sealed class ConsumeContext : IConsumeContext
         CancellationToken = cancellationToken;
     }
 
+    /// <inheritdoc />
     public IBus Bus { get; }
 
     /// <summary>
@@ -46,6 +58,7 @@ public sealed class ConsumeContext : IConsumeContext
     /// headers (TimeProcessed, DestinationAddress, etc.) via that reference.
     /// </summary>
     public IReadOnlyDictionary<string, object> Headers { get; }
+    /// <inheritdoc />
     public CancellationToken CancellationToken { get; }
 
     // Cached backing fields — HeaderDecoder.Decode + Guid.TryParse are called only once
@@ -54,6 +67,7 @@ public sealed class ConsumeContext : IConsumeContext
     private bool _messageIdCached;
     private Guid? _correlationId;
 
+    /// <inheritdoc />
     public string? MessageId
     {
         get
@@ -69,6 +83,7 @@ public sealed class ConsumeContext : IConsumeContext
         }
     }
 
+    /// <inheritdoc />
     public Guid CorrelationId
     {
         get
@@ -84,6 +99,7 @@ public sealed class ConsumeContext : IConsumeContext
         }
     }
 
+    /// <inheritdoc />
     public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
         where TReply : Message
     {

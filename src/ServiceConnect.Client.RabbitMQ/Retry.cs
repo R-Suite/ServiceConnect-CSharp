@@ -1,21 +1,51 @@
 namespace ServiceConnect.Client.RabbitMQ;
 
+/// <summary>
+/// Provides asynchronous retry helpers used by the RabbitMQ transport implementation.
+/// </summary>
 public static class Retry
 {
     // Non-generic overload delegates to the generic one to avoid duplicated retry
     // body logic. We produce a uniform return type by wrapping the void action.
+    /// <summary>
+    /// Executes an asynchronous action with retry behavior.
+    /// </summary>
+    /// <param name="action">The operation to execute.</param>
+    /// <param name="exceptionAction">A callback invoked after a failed attempt.</param>
+    /// <param name="retryInterval">The base interval used when calculating retry delays.</param>
+    /// <param name="retryCount">The number of retry attempts after the initial attempt.</param>
+    /// <param name="cancellationToken">A token used to cancel the retry loop.</param>
     public static Task DoAsync(Func<Task> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
         return DoAsync<int>(async () => { await action().ConfigureAwait(false); return 0; }, exceptionAction, retryInterval, retryCount, shouldRetry: null, cancellationToken);
     }
 
+    /// <summary>
+    /// Executes an asynchronous action with retry behavior and a custom retry filter.
+    /// </summary>
+    /// <param name="action">The operation to execute.</param>
+    /// <param name="exceptionAction">A callback invoked after a failed attempt.</param>
+    /// <param name="retryInterval">The base interval used when calculating retry delays.</param>
+    /// <param name="retryCount">The number of retry attempts after the initial attempt.</param>
+    /// <param name="shouldRetry">A predicate that determines whether a thrown exception should be retried.</param>
+    /// <param name="cancellationToken">A token used to cancel the retry loop.</param>
     public static Task DoAsync(Func<Task> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount, Func<Exception, bool>? shouldRetry, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
         return DoAsync<int>(async () => { await action().ConfigureAwait(false); return 0; }, exceptionAction, retryInterval, retryCount, shouldRetry, cancellationToken);
     }
 
+    /// <summary>
+    /// Executes an asynchronous operation that returns a value with retry behavior.
+    /// </summary>
+    /// <typeparam name="T">The result type produced by the operation.</typeparam>
+    /// <param name="action">The operation to execute.</param>
+    /// <param name="exceptionAction">A callback invoked after a failed attempt.</param>
+    /// <param name="retryInterval">The base interval used when calculating retry delays.</param>
+    /// <param name="retryCount">The number of retry attempts after the initial attempt.</param>
+    /// <param name="cancellationToken">A token used to cancel the retry loop.</param>
+    /// <returns>The value returned by a successful attempt.</returns>
     public static Task<T> DoAsync<T>(Func<Task<T>> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount, CancellationToken cancellationToken = default)
     {
         return DoAsync(action, exceptionAction, retryInterval, retryCount, shouldRetry: null, cancellationToken);
@@ -35,6 +65,14 @@ public static class Retry
     /// as non-retriable while keeping the normal reconnect-retry path for transport errors.
     /// </para>
     /// </summary>
+    /// <typeparam name="T">The result type produced by the operation.</typeparam>
+    /// <param name="action">The operation to execute.</param>
+    /// <param name="exceptionAction">A callback invoked after a failed attempt.</param>
+    /// <param name="retryInterval">The base interval used when calculating retry delays.</param>
+    /// <param name="retryCount">The number of retry attempts after the initial attempt.</param>
+    /// <param name="shouldRetry">A predicate that determines whether a thrown exception should be retried.</param>
+    /// <param name="cancellationToken">A token used to cancel the retry loop.</param>
+    /// <returns>The value returned by a successful attempt.</returns>
     public static async Task<T> DoAsync<T>(Func<Task<T>> action, Func<Exception, Task> exceptionAction, TimeSpan retryInterval, int retryCount, Func<Exception, bool>? shouldRetry, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);

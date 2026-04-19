@@ -18,11 +18,26 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     private readonly IMessageTypeRegistry _typeRegistry;
     private volatile bool _indexesEnsured;
 
+    /// <summary>
+    /// Creates a persistor that stores aggregator data in the default <c>Aggregator</c> collection.
+    /// </summary>
+    /// <param name="mongoClient">The MongoDB client.</param>
+    /// <param name="options">The persistence options used to select the database.</param>
+    /// <param name="logger">The logger used for unresolved message types.</param>
+    /// <param name="typeRegistry">The registry used to resolve stored message types.</param>
     public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
         : this(mongoClient, options, "Aggregator", logger, typeRegistry)
     {
     }
 
+    /// <summary>
+    /// Creates a persistor that stores aggregator data in the specified collection.
+    /// </summary>
+    /// <param name="mongoClient">The MongoDB client.</param>
+    /// <param name="options">The persistence options used to select the database.</param>
+    /// <param name="collectionName">The collection that stores aggregator records.</param>
+    /// <param name="logger">The logger used for unresolved message types.</param>
+    /// <param name="typeRegistry">The registry used to resolve stored message types.</param>
     public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
@@ -40,6 +55,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <inheritdoc />
     public async Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
     {
         try
@@ -66,6 +82,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <inheritdoc />
     public async Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetSnapshotAsync(name, cancellationToken).ConfigureAwait(false);
@@ -73,6 +90,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         return snapshot.ResolvedMessages.ToList();
     }
 
+    /// <inheritdoc />
     public async Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
     {
         try
@@ -106,6 +124,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <inheritdoc />
     public async Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default)
     {
         try
@@ -125,6 +144,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <inheritdoc />
     public async Task RemoveAllAsync(string name, CancellationToken cancellationToken = default)
     {
         try
@@ -139,6 +159,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <inheritdoc />
     public async Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -160,6 +181,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <inheritdoc />
     public async Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
     {
         try

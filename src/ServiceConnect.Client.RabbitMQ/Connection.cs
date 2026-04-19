@@ -4,6 +4,12 @@ using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
+/// <summary>
+/// Manages a RabbitMQ connection for ServiceConnect producers and consumers.
+/// </summary>
+/// <param name="transportSettings">The transport settings used to configure the connection factory.</param>
+/// <param name="queueName">The client-provided connection name used by RabbitMQ.</param>
+/// <param name="logger">The logger used for connection lifecycle events.</param>
 public sealed class Connection(ITransportConfiguration transportSettings, string queueName, ILogger logger) : IAsyncDisposable, IServiceConnectConnection
 {
     private IConnection? _connection;
@@ -41,11 +47,19 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
             transportSettings,
             _heartbeatEnabled ? _heartbeatTime : TimeSpan.Zero);
 
+    /// <summary>
+    /// Determines whether the underlying RabbitMQ connection is open.
+    /// </summary>
+    /// <returns><see langword="true"/> when the connection is open; otherwise, <see langword="false"/>.</returns>
     public bool IsConnected()
     {
         return _connection?.IsOpen ?? false;
     }
 
+    /// <summary>
+    /// Creates a RabbitMQ channel, establishing the connection first if needed.
+    /// </summary>
+    /// <returns>A newly created channel.</returns>
     public async Task<IChannel> CreateChannelAsync()
     {
         if (Volatile.Read(ref _connection) == null)
@@ -54,6 +68,9 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         return await _connection!.CreateChannelAsync().ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Closes and disposes the underlying RabbitMQ connection.
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         if (_connection == null) return;

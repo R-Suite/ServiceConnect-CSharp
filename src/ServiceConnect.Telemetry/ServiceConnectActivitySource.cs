@@ -1,20 +1,38 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Telemetry;
 
 // Telemetry uses the ServiceConnect.Interfaces event-args types.
 
+/// <summary>
+/// Creates publish, send, and consume activities for ServiceConnect message operations.
+/// </summary>
 public static class ServiceConnectActivitySource
 {
+    /// <summary>
+    /// Gets or sets the telemetry options that control enrichment and activity enablement.
+    /// </summary>
     public static ServiceConnectInstrumentationOptions Options { get; internal set; } = new();
+    /// <summary>
+    /// Gets or sets the messaging-system semantic-convention values applied to generated activities.
+    /// </summary>
     public static IMessagingSystemAttributes MessagingSystemAttributes { get; internal set; } = new RabbitMqMessagingSystemAttributes();
 
     internal static readonly Version? Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
     internal static readonly string ActivitySourceName = (typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect") + ".Bus";
 
+    /// <summary>
+    /// Gets the activity-source name used for publish spans.
+    /// </summary>
     public static readonly string PublishActivitySourceName = ActivitySourceName + ".Publish";
+    /// <summary>
+    /// Gets the activity-source name used for consume spans.
+    /// </summary>
     public static readonly string ConsumeActivitySourceName = ActivitySourceName + ".Consume";
+    /// <summary>
+    /// Gets the activity-source name used for send spans.
+    /// </summary>
     public static readonly string SendActivitySourceName = ActivitySourceName + ".Send";
 
     private static readonly ActivitySource _publishActivitySource = new(PublishActivitySourceName, Version?.ToString() ?? "0.0.0");

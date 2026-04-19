@@ -5,12 +5,16 @@ using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
+/// <summary>
+/// Tracks pending request-reply exchanges and correlates incoming replies with the originating request.
+/// </summary>
 public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline) : IRequestReplyManager, IReplyStatusRequestReplyManager
 {
     private readonly ConcurrentDictionary<Guid, RequestState> _pendingRequests = new();
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
     private readonly ISendMessagePipeline _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
 
+    /// <inheritdoc />
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
@@ -69,6 +73,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         }
     }
 
+    /// <inheritdoc />
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
@@ -152,6 +157,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         }
     }
 
+    /// <inheritdoc />
     public async Task PublishRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
         Dictionary<string, string> headers,
@@ -230,11 +236,24 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         }
     }
 
+    /// <summary>
+    /// Processes a reply for a previously tracked request and ignores unknown request identifiers.
+    /// </summary>
+    /// <param name="messageId">The request identifier copied into the reply message.</param>
+    /// <param name="messageBytes">The serialized reply payload.</param>
+    /// <param name="type">The wire-reported reply type.</param>
     public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
     {
         TryProcessReply(messageId, messageBytes, type);
     }
 
+    /// <summary>
+    /// Attempts to apply a reply message to a tracked request.
+    /// </summary>
+    /// <param name="messageId">The request identifier copied into the reply message.</param>
+    /// <param name="messageBytes">The serialized reply payload.</param>
+    /// <param name="type">The wire-reported reply type.</param>
+    /// <returns><see langword="true"/> when the reply matched a tracked request; otherwise <see langword="false"/>.</returns>
     public bool TryProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
     {
         if (!Guid.TryParse(messageId, out var requestId) || !_pendingRequests.TryGetValue(requestId, out var state))
@@ -299,6 +318,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         }
     }
 
+    /// <inheritdoc />
     public bool IsTrackedRequest(string messageId)
     {
         return Guid.TryParse(messageId, out var requestId) && _pendingRequests.ContainsKey(requestId);
