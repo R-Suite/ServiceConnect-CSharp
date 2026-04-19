@@ -4,23 +4,40 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
-	integrations: [
-		starlight({
-			title: 'My Docs',
-			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
-			sidebar: [
-				{
-					label: 'Guides',
-					items: [
-						// Each item here is one entry in the navigation menu.
-						{ label: 'Example Guide', slug: 'guides/example' },
-					],
-				},
-				{
-					label: 'Reference',
-					autogenerate: { directory: 'reference' },
-				},
-			],
-		}),
-	],
+  site: 'https://r-suite.github.io',
+  base: '/ServiceConnect-CSharp/',
+  integrations: [
+    starlight({
+      title: 'ServiceConnect',
+      description:
+        'Asynchronous messaging for .NET. Distributed systems, done cleanly.',
+      social: [
+        {
+          icon: 'github',
+          label: 'GitHub',
+          href: 'https://github.com/R-Suite/ServiceConnect-CSharp',
+        },
+      ],
+      sidebar: [
+        {
+          label: 'Learn',
+          items: [
+            { label: 'Getting Started', link: '/learn/getting-started/' },
+          ],
+        },
+        {
+          label: 'API Reference',
+          link: '/api/',
+        },
+        {
+          label: 'Samples',
+          autogenerate: { directory: 'samples' },
+        },
+        {
+          label: 'Releases',
+          link: '/releases/',
+        },
+      ],
+    }),
+  ],
 });
