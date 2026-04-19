@@ -1,0 +1,20 @@
+/* ServiceConnect brand palette — overrides Starlight's accent tokens.
+ * Values sourced from Tailwind's teal scale so light and dark modes stay in
+ * perceptual lockstep. See docs/superpowers/specs/2026-04-19-serviceconnect-docs-site-design.md. */
+
+:root {
+  --sl-color-accent-low: #ccfbf1;   /* teal-100 — tinted backgrounds */
+  --sl-color-accent: #0d9488;       /* teal-600 — primary CTA / links */
+  --sl-color-accent-high: #042f2e;  /* teal-950 — text on accent-low */
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #042f2e;   /* teal-950 — tinted dark backgrounds */
+  --sl-color-accent: #14b8a6;       /* teal-500 — primary in dark */
+  --sl-color-accent-high: #99f6e4;  /* teal-200 — text on accent-low */
+}
+
+/* Brand-specific homepage tweaks: tighten the splash hero spacing. */
+.hero {
+  padding-block: 3rem;
+}
