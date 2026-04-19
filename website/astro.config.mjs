@@ -16,6 +16,9 @@ export default defineConfig({
         replacesTitle: false,
       },
       customCss: ['./src/styles/brand.css'],
+      components: {
+        Footer: './src/overrides/Footer.astro',
+      },
       social: [
         {
           icon: 'github',
