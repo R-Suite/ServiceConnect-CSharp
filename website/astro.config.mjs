@@ -11,6 +11,11 @@ export default defineConfig({
       title: 'ServiceConnect',
       description:
         'Asynchronous messaging for .NET. Distributed systems, done cleanly.',
+      logo: {
+        src: './src/assets/logo-icon.svg',
+        replacesTitle: false,
+      },
+      customCss: ['./src/styles/brand.css'],
       social: [
         {
           icon: 'github',
