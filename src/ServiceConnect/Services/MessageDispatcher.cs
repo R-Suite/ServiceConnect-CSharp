@@ -19,7 +19,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
 
     // Chain is built once (lazily) at first message dispatch and cached.
     // IMessageProcessingMiddleware implementations MUST be singletons; scoped/transient
-    // registrations will be silently promoted to singleton lifetime here (M-3).
+    // registrations will be silently promoted to singleton lifetime here.
     private readonly Lazy<MessageProcessingDelegate> _processingChain;
 
     public MessageDispatcher(
@@ -45,6 +45,8 @@ public sealed class MessageDispatcher : IMessageDispatcher
 
     public async Task<ConsumeEventResult> Dispatch(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
+        Envelope? envelope = null;
+        var beforeFiltersRan = false;
         try
         {
             // 1. Extract FullTypeName header
@@ -54,7 +56,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
             var fullTypeName = HeaderDecoder.Decode(fullTypeNameRaw) ?? throw new InvalidOperationException("FullTypeName header is null.");
 
             // 2. Build envelope
-            var envelope = new Envelope { Headers = headers, Body = messageBytes };
+            envelope = new Envelope { Headers = headers, Body = messageBytes };
 
             ReplyProcessor? replyProcessor = null;
             var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
@@ -88,8 +90,10 @@ public sealed class MessageDispatcher : IMessageDispatcher
                 type = Type.GetType(fullTypeName, throwOnError: false) ?? typeof(Message);
             }
 
-            // 6. Run BeforeConsumingFilters
+            // 5. Run BeforeConsumingFilters. Once this returns, AfterConsumingFilters must run
+            // on every exit path — enforced by the finally below.
             bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+            beforeFiltersRan = true;
             if (blocked)
                 return new ConsumeEventResult { Success = true };
 
@@ -97,12 +101,8 @@ public sealed class MessageDispatcher : IMessageDispatcher
             {
                 var replyResult = await replyProcessor.ProcessAsync(messageBytes, type, null, headers, envelope, cancellationToken).ConfigureAwait(false);
                 if (replyResult == ProcessResult.Handled)
-                {
-                    await _filterPipeline.ExecuteAfterConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
                     return new ConsumeEventResult { Success = true };
-                }
 
-                await _filterPipeline.ExecuteAfterConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
                 return new ConsumeEventResult
                 {
                     Success = false,
@@ -115,7 +115,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
 
             var message = _serializer.Deserialize(messageBytes, type);
 
-            // 7. Run post-deserialization processors wrapped in the cached processing chain
+            // 6. Run post-deserialization processors wrapped in the cached processing chain
             return await _processingChain.Value(messageBytes, type, message, headers, envelope, cancellationToken);
         }
         catch (Exception ex)
@@ -131,6 +131,20 @@ public sealed class MessageDispatcher : IMessageDispatcher
             }
             return new ConsumeEventResult { Success = false, Exception = ex };
         }
+        finally
+        {
+            if (beforeFiltersRan && envelope != null)
+            {
+                try
+                {
+                    await _filterPipeline.ExecuteAfterConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception afterEx)
+                {
+                    _logger.LogWarning(afterEx, "AfterConsumingFilters threw while finalising dispatch of {MessageType}", messageType);
+                }
+            }
+        }
     }
 
     private async Task<ConsumeEventResult> RunProcessors(ReadOnlyMemory<byte> mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
@@ -140,14 +154,10 @@ public sealed class MessageDispatcher : IMessageDispatcher
             if (proc.RunBeforeDeserialization) continue;
             var result = await proc.ProcessAsync(mb, mt, m, h, e, ct);
             if (result == ProcessResult.Handled)
-            {
-                await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
                 return new ConsumeEventResult { Success = true };
-            }
         }
 
         _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
-        await _filterPipeline.ExecuteAfterConsumingFiltersAsync(e, ct).ConfigureAwait(false);
         return new ConsumeEventResult { Success = true };
     }
 

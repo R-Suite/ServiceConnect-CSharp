@@ -40,7 +40,7 @@ public class ProcessManagerProcessorTests
     {
         var registry = BuildRegistry();
         var provider = new ServiceCollection().BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), null,
             new Dictionary<string, object>(), new Envelope());
@@ -54,7 +54,7 @@ public class ProcessManagerProcessorTests
         var (services, _, _) = CreateBaseServices();
         var registry = BuildRegistry(); // empty
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
@@ -74,7 +74,7 @@ public class ProcessManagerProcessorTests
         });
         services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(new PmTestHandler());
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
@@ -92,7 +92,7 @@ public class ProcessManagerProcessorTests
             MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
         });
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
@@ -118,7 +118,7 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var correlationId = Guid.NewGuid();
         var msg = new PmTestMessage(correlationId) { Content = "test" };
@@ -155,7 +155,7 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync(persistence);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(existingData.CorrelationId) { Content = "update" };
 
@@ -175,7 +175,7 @@ public class ProcessManagerProcessorTests
         var (services, _, _) = CreateBaseServices();
         var registry = BuildRegistry();
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -202,7 +202,7 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "will-throw" };
 
@@ -233,7 +233,7 @@ public class ProcessManagerProcessorTests
             MessageType = typeof(PmMutableMessage), HandlerType = typeof(PmMutatingThrowingHandler)
         });
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             processor.ProcessAsync(new byte[] { 1 }, typeof(PmMutableMessage), new PmMutableMessage(existing.CorrelationId),
@@ -270,7 +270,7 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => bus), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, consumeContextAccessor: accessor);
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => bus), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), accessor);
 
         var correlationId = Guid.NewGuid();
         var headers = new Dictionary<string, object>

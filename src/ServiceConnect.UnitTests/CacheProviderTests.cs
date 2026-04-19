@@ -239,7 +239,7 @@ namespace ServiceConnect.UnitTests
             Assert.True(cache.Get<string, bool>("bool-key"));
         }
 
-        // ── Timer lifecycle & R-003 / P-047 tests ───────────────────────────
+        // Timer lifecycle tests.
 
         [Fact]
         public void Remove_DisposesTimer_NoLeakedTimerEntry()
@@ -275,7 +275,7 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void PurgeNormalPriorities_CleansSlidingTimeAndTimers()
         {
-            // R-003: purging normal-priority items must also remove their _slidingTime and timer
+            // Purging normal-priority items must also remove their _slidingTime and timer
             // entries so neither collection grows without bound.
             var cache = new CacheProvider();
             // Add with sliding expiry so SlidingDetails is created.
@@ -297,7 +297,7 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Update_ReplacesValue_TimerUnchanged()
         {
-            // P-047: Update must NOT recreate the expiry timer.
+            // Update must NOT recreate the expiry timer.
             var cache = new CacheProvider();
             cache.Add("key1", "original", TimeSpan.FromMinutes(5));
 
@@ -325,7 +325,9 @@ namespace ServiceConnect.UnitTests
         {
             // Confirm that Update keeps the existing timer by verifying the item
             // expires after the original short window (not reset to a new one).
-            var cache = new CacheProvider();
+            var now = new DateTimeOffset(2026, 4, 14, 20, 0, 0, TimeSpan.Zero);
+            var timeProvider = new FakeTimeProvider(now);
+            var cache = new CacheProvider(timeProvider);
             cache.Add("key1", "original", TimeSpan.FromMilliseconds(150));
 
             cache.Update("key1", "updated");
@@ -334,7 +336,7 @@ namespace ServiceConnect.UnitTests
             Assert.Equal("updated", cache.Get<string, string>("key1"));
 
             // After the original expiry window the item should be gone.
-            Thread.Sleep(400);
+            timeProvider.Advance(TimeSpan.FromMilliseconds(200));
             Assert.False(cache.Contains("key1"));
         }
 

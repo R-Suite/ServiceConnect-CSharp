@@ -25,6 +25,7 @@ public sealed class Bus : IBus
     private readonly object _stateLock = new();
     private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private bool _consuming;
+    private bool _stopped;
     private volatile bool _disposed;
 
     internal Bus(
@@ -264,6 +265,11 @@ public sealed class Bus : IBus
 
             lock (_stateLock)
             {
+                if (_stopped)
+                    throw new InvalidOperationException(
+                        "Bus has been stopped; dispose it and create a new Bus instance to resume consuming.");
+                if (_consuming)
+                    throw new InvalidOperationException("Already consuming.");
                 if (_consumer == null)
                     throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
 
@@ -335,6 +341,10 @@ public sealed class Bus : IBus
                     _consuming = false;
                     localConsumer = _consumer;
                 }
+                // Stop is terminal: the shared consumer is disposed and not recreated on
+                // restart, so a subsequent StartConsumingAsync would fail. Mark the bus
+                // stopped so that attempted restart throws a clear error instead.
+                _stopped = true;
             }
             if (localConsumer != null)
             {
@@ -363,7 +373,7 @@ public sealed class Bus : IBus
         }
 
         await StopConsumingCoreAsync().ConfigureAwait(false);
-        _sendPipeline.Dispose();
+        await _sendPipeline.DisposeAsync().ConfigureAwait(false);
         if (_producer != null)
             await _producer.DisposeAsync().ConfigureAwait(false);
         _lifecycleSemaphore.Dispose();
@@ -399,7 +409,7 @@ public sealed class Bus : IBus
     private static Dictionary<string, string> ExtractHeaders(Envelope envelope)
     {
         // Pre-size the destination to the known envelope header count so the
-        // dictionary is not rehashed as we fill it (P-03).
+        // dictionary is not rehashed as we fill it.
         var headers = new Dictionary<string, string>(envelope.Headers.Count);
         foreach (var kvp in envelope.Headers)
         {
@@ -419,7 +429,7 @@ public sealed class Bus : IBus
             return string.Empty;
 
         // destinations[0] is the immediate send target; the routing slip describes
-        // the *subsequent* hops, so the loop deliberately starts at index 1 (R-016).
+        // the *subsequent* hops, so the loop deliberately starts at index 1.
         var builder = new System.Text.StringBuilder();
         for (var index = 1; index < destinations.Count; index++)
         {
@@ -433,7 +443,7 @@ public sealed class Bus : IBus
     }
 
     /// <summary>
-    /// Fast-path header builder used when no outgoing filters are registered (P-009).
+    /// Fast-path header builder used when no outgoing filters are registered.
     /// Produces the same <see cref="Dictionary{TKey,TValue}"/> that
     /// <see cref="CreateEnvelope"/> + <see cref="ExtractHeaders"/> would return,
     /// without allocating the intermediate <see cref="Envelope"/> or its

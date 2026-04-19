@@ -11,7 +11,7 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
 
     public NewtonsoftJsonMessageSerializer(JsonSerializerSettings? settings = null)
     {
-        // Clone settings before mutating to avoid side-effects on the caller's instance (R-097)
+        // Clone settings before mutating to avoid side-effects on the caller's instance.
         var cloned = new JsonSerializerSettings
         {
             // Copy properties that callers commonly set
@@ -19,7 +19,10 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
             DefaultValueHandling  = settings?.DefaultValueHandling  ?? DefaultValueHandling.Include,
             ReferenceLoopHandling = settings?.ReferenceLoopHandling ?? ReferenceLoopHandling.Error,
             DateFormatHandling    = settings?.DateFormatHandling    ?? DateFormatHandling.IsoDateFormat,
-            DateTimeZoneHandling  = settings?.DateTimeZoneHandling  ?? DateTimeZoneHandling.Local,
+            // RoundtripKind preserves DateTimeKind (Utc/Local/Unspecified) across
+            // serialize → deserialize, so timestamps don't silently drift when a
+            // message crosses a timezone boundary. Local caused cross-host drift.
+            DateTimeZoneHandling  = settings?.DateTimeZoneHandling  ?? DateTimeZoneHandling.RoundtripKind,
             Formatting            = settings?.Formatting            ?? Formatting.None,
             ContractResolver      = settings?.ContractResolver,
             Converters            = settings?.Converters != null

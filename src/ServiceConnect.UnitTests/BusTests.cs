@@ -555,7 +555,7 @@ namespace ServiceConnect.UnitTests
                 _mockPipelineConfig.Object,
                 consumer);
 
-        // --- Lifecycle serialization tests (R-034) ---
+        // Lifecycle serialization tests.
 
         [Fact]
         public async Task StartConsumingAsync_ConcurrentWithStop_SerializesState()

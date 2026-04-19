@@ -97,26 +97,62 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Dispose_DoesNotDisposeProducer_ProducerLifetimeManagedByContainer()
+        public async Task DisposeAsync_DoesNotDisposeProducer_ProducerLifetimeManagedByContainer()
         {
             var pipeline = CreatePipeline();
 
-            pipeline.Dispose();
+            await pipeline.DisposeAsync();
 
-            // Producer lifetime is managed by the DI container, not by the pipeline
             _mockProducer.Verify(p => p.DisposeAsync(), Times.Never);
         }
 
         [Fact]
-        public void Dispose_CalledTwice_IsIdempotent()
+        public async Task DisposeAsync_CalledTwice_IsIdempotent()
         {
             var pipeline = CreatePipeline();
 
-            pipeline.Dispose();
-            pipeline.Dispose();
+            await pipeline.DisposeAsync();
+            await pipeline.DisposeAsync();
 
-            // No exception thrown — dispose is idempotent
             _mockProducer.Verify(p => p.DisposeAsync(), Times.Never);
         }
+
+        // Gap 5: outgoing-filter short-circuit via ISendMessageMiddleware
+        [Fact]
+        public async Task ExecuteSendMessagePipelineAsync_WhenMiddlewareShortCircuits_ProducerSendIsNeverCalled()
+        {
+            // A middleware that does NOT call next short-circuits the pipeline.
+            // IProducer.SendAsync / PublishAsync must never be invoked.
+            var services = new ServiceCollection();
+            services.AddTransient<BlockingSendMiddleware>();
+            var sp = services.BuildServiceProvider();
+
+            var mockConfig = new Mock<IPipelineConfiguration>();
+            mockConfig.Setup(c => c.SendMessageMiddleware)
+                .Returns(new List<Type> { typeof(BlockingSendMiddleware) });
+
+            var pipeline = new SendMessagePipeline(_mockProducer.Object, mockConfig.Object, sp);
+
+            await pipeline.ExecuteSendMessagePipelineAsync(typeof(string), new byte[] { 1, 2, 3 });
+
+            _mockProducer.Verify(
+                p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()),
+                Times.Never);
+            _mockProducer.Verify(
+                p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()),
+                Times.Never);
+            _mockProducer.Verify(
+                p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()),
+                Times.Never);
+        }
     }
+}
+
+file sealed class BlockingSendMiddleware : ISendMessageMiddleware
+{
+    // Intentionally does NOT call next — short-circuits the pipeline.
+    public Task Process(
+        Type typeObject, byte[] messageBytes, Dictionary<string, string> headers,
+        string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+        => Task.CompletedTask;
 }

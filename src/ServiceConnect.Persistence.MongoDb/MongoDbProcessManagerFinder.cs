@@ -19,7 +19,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
 
     // Cached compiled delegates for InsertDataTypedAsync<T>, keyed by concrete data type.
-    // Avoids MakeGenericMethod + MethodInfo.Invoke on every insert call (R-007, P-006).
+    // Avoid MakeGenericMethod + MethodInfo.Invoke on every insert call.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>>
         InsertDelegateCache = new();
     public MongoDbProcessManagerFinder(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbProcessManagerFinder> logger, TimeProvider? timeProvider = null)
@@ -115,7 +115,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
 
         // Look up or build the compiled delegate for this concrete type. MakeGenericMethod
         // is called only once per type; subsequent calls use the cached delegate directly,
-        // avoiding reflection overhead on the hot path (R-007, P-006).
+        // avoiding reflection overhead on the hot path.
         //
         // InsertDataTypedAsync<T> takes a T parameter, so we build a thin Expression wrapper
         // that accepts IProcessManagerData and down-casts to T before the real call — matching
@@ -193,9 +193,13 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             {
                 // Revert the version so the in-memory object stays consistent on failure
                 versionData.Version = currentVersion;
-                throw new PersistenceException(
+                throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {versionData.Data.CorrelationId} and Version {currentVersion} could not be updated.");
             }
+        }
+        catch (ConcurrencyException)
+        {
+            throw;
         }
         catch (PersistenceException)
         {
@@ -221,7 +225,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
             await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
 
-            // CorrelationId is unique per process manager type; DeleteOneAsync is sufficient (P-057).
+            // CorrelationId is unique per process manager type; DeleteOneAsync is sufficient.
             var filter = Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, persistenceData.Data.CorrelationId);
             await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
@@ -245,7 +249,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
         catch
         {
-            // Roll back the marker so a subsequent call retries index creation (C-06).
+            // Roll back the marker so a subsequent call retries index creation.
             _indexedCollections.TryRemove(collectionName, out _);
             throw;
         }

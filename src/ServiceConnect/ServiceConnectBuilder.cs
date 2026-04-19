@@ -15,7 +15,7 @@ public sealed class ServiceConnectBuilder
     /// Assemblies to scan for message handlers. Populated explicitly via
     /// <see cref="ScanAssemblies"/>; when empty and <see cref="IBusConfiguration.ScanForMessageHandlers"/>
     /// is true, falls back to <see cref="AppDomain.CurrentDomain"/> assemblies. Explicit
-    /// registration is preferred because it is deterministic and testable (A-11).
+    /// registration is preferred because it is deterministic and testable.
     /// </summary>
     internal List<Assembly> ScanAssembliesList { get; } = [];
 
@@ -40,7 +40,7 @@ public sealed class ServiceConnectBuilder
         return this;
     }
 
-    // Guard against silently-broken configuration at startup (G-07). Values that would
+    // Guard against silently-broken configuration at startup. Values that would
     // cause confusing runtime errors are rejected with a message pointing at the
     // misconfigured property.
     private static void ValidateTransport(ITransportConfiguration transport)

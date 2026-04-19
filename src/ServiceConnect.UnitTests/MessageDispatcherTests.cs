@@ -104,7 +104,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(handlerRegistry, serviceProvider, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()), new BusConfiguration(), new QueueConfiguration())
+            new HandlerProcessor(handlerRegistry, serviceProvider, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
         };
 
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
@@ -171,8 +171,15 @@ public class MessageDispatcherTests
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "ContextUser" };
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
-        IConsumeContext? capturedContext = null;
-        var handler = new TestDispatchHandler(onContextSet: ctx => capturedContext = ctx);
+        // Capture properties during handler invocation — IConsumeContext becomes invalid
+        // after the handler returns (pool token check). We can't dereference it post-dispatch.
+        bool contextWasSet = false;
+        IReadOnlyDictionary<string, object>? capturedHeaders = null;
+        var handler = new TestDispatchHandler(onContextSet: ctx =>
+        {
+            contextWasSet = ctx != null;
+            capturedHeaders = ctx?.Headers == null ? null : new Dictionary<string, object>(ctx.Headers);
+        });
 
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
@@ -188,9 +195,9 @@ public class MessageDispatcherTests
 
         // Assert
         Assert.True(result.Success);
-        Assert.NotNull(capturedContext);
-        // Dictionary<string,object> implements IReadOnlyDictionary, so compare contents not reference.
-        Assert.Equal(headers, capturedContext.Headers);
+        Assert.True(contextWasSet);
+        Assert.NotNull(capturedHeaders);
+        Assert.Equal(headers, capturedHeaders);
     }
 
     [Fact]
@@ -415,7 +422,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(BuildHandlerRegistry(), sp, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration())
+            new HandlerProcessor(BuildHandlerRegistry(), sp, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
         };
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,

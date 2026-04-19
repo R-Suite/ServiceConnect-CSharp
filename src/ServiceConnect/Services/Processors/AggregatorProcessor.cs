@@ -15,7 +15,7 @@ internal sealed class AggregatorProcessor(
     private readonly ConcurrentDictionary<string, Timer> _timers = new();
     // Per-aggregator flush lock. Holding this across the full flush body prevents
     // the timer-fired path and the batch-size path from double-flushing and
-    // racing on Get/Invoke/Remove (R-039 / C-01).
+    // racing on Get/Invoke/Remove.
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _flushLocks = new();
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly ConcurrentDictionary<int, Task> _activeFlushes = new();
@@ -45,7 +45,32 @@ internal sealed class AggregatorProcessor(
         if (descriptor.BatchSize > 0 && count >= descriptor.BatchSize)
         {
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-            await FlushAggregatorAsync(descriptor, linkedCts.Token).ConfigureAwait(false);
+
+            // Track the batch-path flush so DisposeAsync waits for it to complete. Without
+            // this, dispose can race ahead and dispose the flush lock while this thread
+            // is mid-flush, yielding ObjectDisposedException.
+            var id = Interlocked.Increment(ref _flushId);
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _activeFlushes.TryAdd(id, tcs.Task);
+            try
+            {
+                await FlushAggregatorAsync(descriptor, linkedCts.Token).ConfigureAwait(false);
+                tcs.TrySetResult();
+            }
+            catch (OperationCanceledException ex)
+            {
+                tcs.TrySetCanceled(ex.CancellationToken);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+                throw;
+            }
+            finally
+            {
+                _activeFlushes.TryRemove(id, out _);
+            }
         }
         else if (descriptor.Timeout > TimeSpan.Zero)
         {
@@ -59,7 +84,7 @@ internal sealed class AggregatorProcessor(
     {
         // Create a new timer on every update instead of reusing via Change().
         // Change() on a timer that FlushAggregatorAsync concurrently TryRemove+Dispose'd
-        // causes ObjectDisposedException (I-1). The new-timer-per-update pattern is safe
+        // causes ObjectDisposedException. The new-timer-per-update pattern is safe
         // because we dispose the previous timer after AddOrUpdate returns.
         Timer? previous = null;
         _timers.AddOrUpdate(
@@ -76,10 +101,10 @@ internal sealed class AggregatorProcessor(
     private void OnTimerFired(AggregatorDescriptor descriptor)
     {
         // Fire and forget from timer callback — log any errors.
-        // Use _disposeCts.Token so timer-fired flushes cancel on dispose (R-002).
+        // Use _disposeCts.Token so timer-fired flushes cancel on dispose.
         //
         // Register a TaskCompletionSource in _activeFlushes BEFORE starting the flush
-        // so that DisposeAsync's snapshot always includes it (I-2).
+        // so that DisposeAsync's snapshot always includes it.
         var id = Interlocked.Increment(ref _flushId);
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _activeFlushes.TryAdd(id, tcs.Task);
@@ -120,18 +145,37 @@ internal sealed class AggregatorProcessor(
 
             if (persistor == null) return;
 
-            var rawMessages = await persistor.GetDataAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
-            if (rawMessages.Count == 0) return;
+            // Use the snapshot API so we can (a) remove only the specific records we dispatched,
+            // leaving concurrently-inserted messages intact (closes the Get/RemoveAll race), and
+            // (b) leave unresolved-type records in place instead of silently wiping them.
+            var snapshot = await persistor.GetSnapshotAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
+            if (snapshot.ResolvedMessages.Count == 0)
+            {
+                if (snapshot.UnresolvedCount > 0)
+                    logger.LogWarning(
+                        "Aggregator {AggregatorName} has {UnresolvedCount} record(s) with unresolvable types; skipping dispatch until type is available",
+                        descriptor.AggregatorName, snapshot.UnresolvedCount);
+                return;
+            }
 
-            var typedList = descriptor.BuildTypedList(rawMessages);
+            // BuildTypedList expects IList<object>; wrap the read-only snapshot as a list copy.
+            // The snapshot itself stays immutable; the copy is the handler-facing payload.
+            var resolvedList = snapshot.ResolvedMessages as IList<object> ?? snapshot.ResolvedMessages.ToList();
+            var typedList = descriptor.BuildTypedList(resolvedList);
 
             var aggregator = serviceProvider.GetService(descriptor.AggregatorBaseType);
             if (aggregator == null) return;
 
             descriptor.InvokeExecute(aggregator, typedList);
 
-            // R-001: Atomic bulk remove instead of per-message loop to prevent double-processing.
-            await persistor.RemoveAllAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
+            // Remove only the records we dispatched. Concurrent inserts and unresolved-type
+            // records are preserved; there is still no per-message remove loop.
+            await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
+
+            if (snapshot.UnresolvedCount > 0)
+                logger.LogWarning(
+                    "Aggregator {AggregatorName} dispatched {Count} record(s); {UnresolvedCount} unresolved record(s) retained for a later flush",
+                    descriptor.AggregatorName, snapshot.ResolvedMessages.Count, snapshot.UnresolvedCount);
         }
         finally
         {

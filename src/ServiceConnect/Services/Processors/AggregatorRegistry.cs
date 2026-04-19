@@ -10,7 +10,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class AggregatorRegistry : IHandlerRegistry
 {
-    // Built once at construction; FrozenDictionary for read-heavy lookup (A-12).
+    // Built once at construction; FrozenDictionary for read-heavy lookup.
     private readonly FrozenDictionary<Type, AggregatorDescriptor> _descriptors;
 
     internal AggregatorRegistry(
@@ -81,7 +81,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         var batchSize = (int)aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.BatchSize))!.Invoke(aggregator, null)!;
         var timeout = (TimeSpan)aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.Timeout))!.Invoke(aggregator, null)!;
 
-        // Dual-zero means messages would aggregate forever with no flush trigger (E-08).
+        // Dual-zero means messages would aggregate forever with no flush trigger.
         if (batchSize <= 0 && timeout <= TimeSpan.Zero)
             throw new InvalidOperationException(
                 $"Aggregator '{aggregatorBaseType.FullName}' has BatchSize={batchSize} and Timeout={timeout}. " +

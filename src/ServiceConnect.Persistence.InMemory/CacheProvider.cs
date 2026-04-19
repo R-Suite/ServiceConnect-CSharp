@@ -85,7 +85,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
 
     /// <summary>
     /// Gets an enumerator for keys of a specific type. Streams the ConcurrentDictionary
-    /// snapshot so callers that bail early avoid the full filtered-materialization cost (P-76).
+    /// snapshot so callers that bail early avoid the full filtered-materialization cost.
     /// </summary>
     public IEnumerable<TKey> Keys<TKey>()
     {

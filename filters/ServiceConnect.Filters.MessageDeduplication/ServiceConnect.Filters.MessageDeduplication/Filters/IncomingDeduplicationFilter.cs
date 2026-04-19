@@ -35,7 +35,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
                 return true;
 
             // Use TryParse to tolerate malformed MessageId headers rather than throwing
-            // FormatException on arbitrary input (S-08). Missing or malformed id: let
+            // FormatException on arbitrary input. Missing or malformed id: let
             // the message through; deduplication cannot apply without a valid key.
             if (!envelope.Headers.TryGetValue("MessageId", out var messageIdRaw) ||
                 !Guid.TryParse(HeaderDecoder.Decode(messageIdRaw), out var messageId))

@@ -10,7 +10,7 @@ namespace ServiceConnect.Services.Processors;
 internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
 {
     // Built once at construction, never written to afterwards. FrozenDictionary gives
-    // ~20–40% faster lookups than Dictionary for the per-message hot path (A-12).
+    // ~20–40% faster lookups than Dictionary for the per-message hot path.
     private readonly FrozenDictionary<Type, ProcessManagerDescriptor> _descriptors;
 
     internal ProcessManagerHandlerRegistry(

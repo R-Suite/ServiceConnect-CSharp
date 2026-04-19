@@ -20,20 +20,16 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
 #endif
 
     private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
+
+    private sealed record Entry(Guid Id, object Data);
+
     public Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
-            if (_provider.Contains(name))
-            {
-                var cacheItem = _provider.Get<string, object>(name);
-                ((IList<object>)cacheItem).Add(data);
-            }
-            else
-            {
-                _provider.Add(name, new List<object> { data }, _timeProvider.GetUtcNow().Add(ExpiryDuration));
-            }
+            var list = GetOrCreateEntries(name);
+            list.Add(new Entry(Guid.NewGuid(), data));
         }
         return Task.CompletedTask;
     }
@@ -43,16 +39,34 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
-            if (_provider.Contains(name))
+            if (!_provider.Contains(name))
+                return Task.FromResult<IList<object>>([]);
+
+            var source = (List<Entry>)_provider.Get<string, object>(name);
+            var copy = new List<object>(source.Count);
+            foreach (var entry in source)
+                copy.Add(entry.Data);
+            return Task.FromResult<IList<object>>(copy);
+        }
+    }
+
+    public Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_memoryCacheLock)
+        {
+            if (!_provider.Contains(name))
+                return Task.FromResult<IAggregatorSnapshot>(AggregatorSnapshot.Empty);
+
+            var source = (List<Entry>)_provider.Get<string, object>(name);
+            var messages = new List<object>(source.Count);
+            var ids = new List<Guid>(source.Count);
+            foreach (var entry in source)
             {
-                // Pre-size the copy to the source list count to avoid resize, and
-                // allocate only a single new list (not two) per retrieval (P-36).
-                var source = (List<object>)_provider.Get<string, object>(name);
-                var copy = new List<object>(source.Count);
-                copy.AddRange(source);
-                return Task.FromResult<IList<object>>(copy);
+                messages.Add(entry.Data);
+                ids.Add(entry.Id);
             }
-            return Task.FromResult<IList<object>>([]);
+            return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, 0));
         }
     }
 
@@ -63,12 +77,12 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         {
             if (_provider.Contains(name))
             {
-                var cacheItem = (List<object>)_provider.Get<string, object>(name);
-                for (var index = 0; index < cacheItem.Count; index++)
+                var list = (List<Entry>)_provider.Get<string, object>(name);
+                for (var index = 0; index < list.Count; index++)
                 {
-                    if (cacheItem[index] is Message message && message.CorrelationId == correlationId)
+                    if (list[index].Data is Message message && message.CorrelationId == correlationId)
                     {
-                        cacheItem.RemoveAt(index);
+                        list.RemoveAt(index);
                         break;
                     }
                 }
@@ -83,9 +97,27 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
-            {
                 _provider.Remove(name);
-            }
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (snapshot.ResolvedIds.Count == 0) return Task.CompletedTask;
+
+        lock (_memoryCacheLock)
+        {
+            if (!_provider.Contains(name)) return Task.CompletedTask;
+
+            var list = (List<Entry>)_provider.Get<string, object>(name);
+            var idsToRemove = new HashSet<Guid>(snapshot.ResolvedIds);
+            list.RemoveAll(entry => idsToRemove.Contains(entry.Id));
+
+            if (list.Count == 0)
+                _provider.Remove(name);
         }
         return Task.CompletedTask;
     }
@@ -97,10 +129,20 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
         {
             if (_provider.Contains(name))
             {
-                var cacheItem = (List<object>)_provider.Get<string, object>(name);
-                return Task.FromResult(cacheItem.Count);
+                var list = (List<Entry>)_provider.Get<string, object>(name);
+                return Task.FromResult(list.Count);
             }
             return Task.FromResult(0);
         }
+    }
+
+    private List<Entry> GetOrCreateEntries(string name)
+    {
+        if (_provider.Contains(name))
+            return (List<Entry>)_provider.Get<string, object>(name);
+
+        var list = new List<Entry>();
+        _provider.Add(name, list, _timeProvider.GetUtcNow().Add(ExpiryDuration));
+        return list;
     }
 }

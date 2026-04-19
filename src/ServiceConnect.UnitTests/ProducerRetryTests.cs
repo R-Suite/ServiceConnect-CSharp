@@ -406,6 +406,53 @@ public class ProducerRetryTests
     }
 
     [Fact]
+    public async Task SendAsync_ByEndpoint_WhenCreateConnectionThrowsOnFirstAttempt_RecoversAndPublishes()
+    {
+        // Gap 3: CreateConnectionAsync throws on the first attempt, succeeds on the second.
+        // The producer must transparently recover via the built-in retry loop and the
+        // publish must eventually succeed — no exception surfaces to the caller.
+        var producer = CreateProducer();
+        var firstConnection = new Mock<IConnection>(MockBehavior.Strict);
+        var secondConnection = new Mock<IConnection>(MockBehavior.Strict);
+        var secondChannel = new Mock<IChannel>(MockBehavior.Strict);
+        var connectionAttempts = 0;
+
+        firstConnection.SetupGet(c => c.IsOpen).Returns(true);
+        firstConnection
+            .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("channel create failed on first attempt"));
+        firstConnection
+            .Setup(c => c.CloseAsync(It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        firstConnection.Setup(c => c.Dispose());
+
+        secondConnection
+            .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(secondChannel.Object);
+
+        secondChannel.Setup(c => c.BasicPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        producer.CreateConnectionForTests = (_, _, _, _) =>
+        {
+            connectionAttempts++;
+            return Task.FromResult(connectionAttempts == 1 ? firstConnection.Object : secondConnection.Object);
+        };
+
+        await producer.SendAsync("target-endpoint", typeof(object), new byte[] { 1, 2, 3 })
+            .WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(2, connectionAttempts);
+        secondChannel.Verify(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task SendAsync_ByEndpoint_WhenFirstPublishFails_ReconnectsAndRetriesSuccessfully()
     {
         var producer = CreateProducer();

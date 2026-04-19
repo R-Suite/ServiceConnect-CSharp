@@ -17,7 +17,7 @@ public sealed class ServiceConnectInstrumentationOptions
     /// <para>
     /// SECURITY WARNING: do not add raw payload fields as span tags without review —
     /// message bodies may contain PII, secrets, or regulated data that would then be
-    /// exported to your OTel collector / downstream observability backends (S-05).
+    /// exported to your OTel collector / downstream observability backends.
     /// </para>
     /// </remarks>
     public Action<Activity, Message>? EnrichWithMessage { get; set; }
@@ -31,7 +31,7 @@ public sealed class ServiceConnectInstrumentationOptions
     /// <para>
     /// SECURITY WARNING: do not attach raw bytes or decoded payload as span tags —
     /// the message body may contain PII, secrets, or regulated data that would then be
-    /// exported to your OTel collector / downstream observability backends (S-05).
+    /// exported to your OTel collector / downstream observability backends.
     /// </para>
     /// </remarks>
     public Action<Activity, byte[]>? EnrichWithMessageBytes { get; set; }

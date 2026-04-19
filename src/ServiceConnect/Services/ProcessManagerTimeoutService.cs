@@ -10,15 +10,20 @@ public sealed class ProcessManagerTimeoutService(
     IBusConfiguration config,
     Lazy<IBus> bus,
     ITimeoutStore? finder,
-    ILogger<ProcessManagerTimeoutService> logger) : IHostedService, IAsyncDisposable
+    ILogger<ProcessManagerTimeoutService> logger,
+    TimeProvider? timeProvider = null) : IHostedService, IAsyncDisposable
 {
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(30);
+    // Safety margin — if the remaining lease is less than this, skip dispatch and let the
+    // next poll reclaim the timeout rather than risk a duplicate send after the lease expires.
+    private static readonly TimeSpan LeaseSafetyMargin = TimeSpan.FromSeconds(2);
 
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
     private readonly Lazy<IBus> _bus = bus ?? throw new ArgumentNullException(nameof(bus));
     private readonly ITimeoutStore? _finder = finder;
     private readonly ILeaseAwareTimeoutStore? _leaseAwareFinder = finder as ILeaseAwareTimeoutStore;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -76,6 +81,18 @@ public sealed class ProcessManagerTimeoutService(
             {
                 try
                 {
+                    // Skip dispatch if the remaining lease is below the safety margin —
+                    // another poller is about to reclaim this row and a duplicate send
+                    // here would cause at-least-twice delivery.
+                    if (timeout.LockExpiresAt.HasValue &&
+                        timeout.LockExpiresAt.Value - _timeProvider.GetUtcNow() < LeaseSafetyMargin)
+                    {
+                        logger.LogDebug(
+                            "Skipping timeout {TimeoutId}; lease expires at {Expires} (margin {Margin})",
+                            timeout.Id, timeout.LockExpiresAt.Value, LeaseSafetyMargin);
+                        continue;
+                    }
+
                     logger.LogDebug("Dispatching timeout {TimeoutId} for PM {ProcessManagerId}",
                         timeout.Id, timeout.ProcessManagerId);
 
@@ -85,7 +102,7 @@ public sealed class ProcessManagerTimeoutService(
                         await _bus.Value.SendAsync(timeoutMessage, new SendOptions
                         {
                             EndPoint = timeout.Destination,
-                            Headers = TimeoutHeaderPersistence.BuildOutgoingHeaders(timeout.Headers)
+                            Headers = TimeoutHeaderPersistence.BuildOutgoingHeaders(timeout.Headers, logger)
                         }, cancellationToken).ConfigureAwait(false);
                     }
 

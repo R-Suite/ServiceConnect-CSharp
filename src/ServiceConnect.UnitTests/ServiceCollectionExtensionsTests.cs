@@ -91,8 +91,11 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddServiceConnect_AllowsOverriddenRequestReplyManager_WithoutInternalReplyStatusContract()
+    public void AddServiceConnect_OverriddenRequestReplyManager_DoesNotBreakInternalReplyStatusContract()
     {
+        // Replacing the public IRequestReplyManager must not null out the internal
+        // IReplyStatusRequestReplyManager — that contract resolves to the concrete
+        // RequestReplyManager singleton directly so dispatch never sees a null trust-query.
         var services = CreateServices();
 
         services.AddSingleton<IRequestReplyManager, OverrideRequestReplyManager>();
@@ -103,7 +106,7 @@ public class ServiceCollectionExtensionsTests
         var provider = services.BuildServiceProvider();
 
         Assert.IsType<OverrideRequestReplyManager>(provider.GetRequiredService<IRequestReplyManager>());
-        Assert.Null(provider.GetService<IReplyStatusRequestReplyManager>());
+        Assert.NotNull(provider.GetService<IReplyStatusRequestReplyManager>());
     }
 
     [Fact]

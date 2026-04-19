@@ -41,6 +41,7 @@ public class RetryTests
     [Fact]
     public async Task DoAsync_ThrowsAggregateException_WhenAllRetriesFail()
     {
+        // retryCount=3 -> total attempts = 4 (initial + 3 retries).
         var ex = await Assert.ThrowsAsync<AggregateException>(() =>
             Retry.DoAsync(
                 () => throw new InvalidOperationException("fail"),
@@ -48,7 +49,7 @@ public class RetryTests
                 FastInterval,
                 3));
 
-        Assert.Equal(3, ex.InnerExceptions.Count);
+        Assert.Equal(4, ex.InnerExceptions.Count);
     }
 
     [Fact]
@@ -56,6 +57,7 @@ public class RetryTests
     {
         var exceptionsCaught = new List<Exception>();
 
+        // retryCount=3 -> total attempts = 4 (initial + 3 retries).
         await Assert.ThrowsAsync<AggregateException>(() =>
             Retry.DoAsync(
                 () => throw new InvalidOperationException("fail"),
@@ -63,7 +65,7 @@ public class RetryTests
                 FastInterval,
                 3));
 
-        Assert.Equal(3, exceptionsCaught.Count);
+        Assert.Equal(4, exceptionsCaught.Count);
     }
 
     [Fact]
@@ -146,7 +148,7 @@ public class RetryTests
         Assert.Equal(2, attempts);
     }
 
-    // R-087: verify the backoff cap prevents double overflow for huge retry counts.
+    // Verify the backoff cap prevents double overflow for huge retry counts.
     // Math.Pow(2, N) for N > 1023 returns +Infinity which propagates through
     // TimeSpan.FromMilliseconds to throw OverflowException.  The cap at 52 means
     // the raw exponent never exceeds 2^52 (~4.5e15 ms), which the 5-minute ceiling

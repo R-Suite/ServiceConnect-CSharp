@@ -12,7 +12,7 @@ namespace ServiceConnect.UnitTests;
 
 public class RabbitMqConsumerHostTests
 {
-    private static (Mock<IServiceConnectConnection>, Mock<IChannel>) MockConnection()
+    private static Mock<IChannel> CreateMockChannel()
     {
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.IsOpen).Returns(true);
@@ -41,10 +41,25 @@ public class RabbitMqConsumerHostTests
         channel.Setup(c => c.CloseAsync(It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         channel.Setup(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
         channel.Setup(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
+        return channel;
+    }
 
+    // Returns the consumer channel (the one bound to the AsyncEventingBasicConsumer via
+    // BasicConsumeAsync). Tests assert on this mock for ack/nack + consumer lifecycle.
+    // The host also opens a second publish channel for retry/audit/error publishes;
+    // that mock is available from the returned tuple if a test needs to reason about it.
+    private static (Mock<IServiceConnectConnection> Connection, Mock<IChannel> ConsumerChannel, Mock<IChannel> PublishChannel) MockConnection()
+    {
+        var consumerChannel = CreateMockChannel();
+        var publishChannel = CreateMockChannel();
         var conn = new Mock<IServiceConnectConnection>();
-        conn.Setup(c => c.CreateChannelAsync()).ReturnsAsync(channel.Object);
-        return (conn, channel);
+        var callCount = 0;
+        conn.Setup(c => c.CreateChannelAsync()).Returns(() =>
+        {
+            var n = Interlocked.Increment(ref callCount);
+            return Task.FromResult(n == 1 ? consumerChannel.Object : publishChannel.Object);
+        });
+        return (conn, consumerChannel, publishChannel);
     }
 
     private static Mock<ITransportConfiguration> MakeTransportCfg(ushort prefetch = 10, bool autoDelete = false, bool disablePrefetch = false)
@@ -90,7 +105,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task StartConsumingAsync_SetsBasicQos_WhenPrefetchEnabled()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var tcfg = MakeTransportCfg(prefetch: 7);
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -106,7 +121,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task StartConsumingAsync_SkipsBasicQos_WhenPrefetchDisabled()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var tcfg = MakeTransportCfg(disablePrefetch: true);
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -124,7 +139,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task ConsumeMessageTypeAsync_BindsQueueToExchange()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -143,7 +158,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_DeletesRetryQueue_WhenAutoDelete()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var tcfg = MakeTransportCfg(autoDelete: true);
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -160,7 +175,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_SkipsRetryQueueDelete_WhenAutoDeleteFalse()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var tcfg = MakeTransportCfg(autoDelete: false);
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -177,7 +192,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_SwallowsObjectDisposedException_OnQueueDelete()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         channel.Setup(c => c.QueueDeleteAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ObjectDisposedException("channel"));
         var tcfg = MakeTransportCfg(autoDelete: true);
@@ -195,7 +210,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_WithoutInFlightWork_CompletesImmediately()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var host = new RabbitMqConsumerHost(
             conn.Object,
@@ -222,7 +237,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_CancelsConsumerBeforeClosingChannel()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var sequence = new MockSequence();
         channel.InSequence(sequence)
             .Setup(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()))
@@ -251,7 +266,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_WaitsForInFlightMessageToCompleteWithinGraceWindow()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -305,7 +320,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_ClosesChannelWhenGraceWindowExpires()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -362,7 +377,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_CancelsConsumerBeforeWaitingForInFlightHandler()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -414,7 +429,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_WhenGraceWindowExpires_LateFailure_DoesNotRetryOrAck()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -475,7 +490,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_AfterCancel_LateDispatch_DoesNotStartHandler_AndLeavesMessageUnackedForRedelivery()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var closeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -535,7 +550,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_StalledBasicCancel_CompletesWithinGraceWindow()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var cancelGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -574,7 +589,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_StalledClose_CompletesWithinGraceWindow()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var closeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -613,7 +628,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_HonorsRemainingGraceWindowBelowPollInterval()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowHandlerToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -658,13 +673,14 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_WhenRetryPublishStalls_CancelsPublishAtShutdownDeadline_AndLeavesMessageUnacked()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, publishChannel) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var publishCanceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        channel.Setup(c => c.BasicPublishAsync(
+        // Retry publishes ride the dedicated publish channel.
+        publishChannel.Setup(c => c.BasicPublishAsync(
                 string.Empty,
                 "q.Retries",
                 false,
@@ -724,7 +740,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task DisposeAsync_WhenAuditPublishStalls_CancelsPublishAtShutdownDeadline_AndLeavesMessageUnacked()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, publishChannel) = MockConnection();
         var timeProvider = new FakeTimeProvider();
         var handlerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -732,7 +748,8 @@ public class RabbitMqConsumerHostTests
         var qcfg = MakeQueueCfg();
         qcfg.SetupGet(c => c.AuditingEnabled).Returns(true);
 
-        channel.Setup(c => c.BasicPublishAsync(
+        // Audit publishes ride the dedicated publish channel.
+        publishChannel.Setup(c => c.BasicPublishAsync(
                 "audit",
                 string.Empty,
                 false,
@@ -792,7 +809,7 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ─── Inbound message-size enforcement (R-022) ───────────────────────────
+    // Inbound message-size enforcement.
 
     private static Mock<ITransportConfiguration> MakeTransportCfgWithMaxSize(long maxSize)
     {
@@ -844,7 +861,7 @@ public class RabbitMqConsumerHostTests
     public async Task EventAsync_OversizedMessage_IsNacked_AndHandlerNotInvoked()
     {
         const long maxSize = 10L;
-        var (conn, channel) = MockConnection();
+        var (conn, channel, publishChannel) = MockConnection();
         var tcfg = MakeTransportCfgWithMaxSize(maxSize);
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -861,7 +878,8 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, oversized, msgHeaders);
 
         Assert.False(handlerInvoked, "Consumer event handler must not be called for oversized messages.");
-        channel.Verify(c => c.BasicPublishAsync(
+        // Error-exchange publishes flow through the dedicated publish channel.
+        publishChannel.Verify(c => c.BasicPublishAsync(
             "err", string.Empty, false,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -873,7 +891,7 @@ public class RabbitMqConsumerHostTests
     public async Task EventAsync_ExactLimitMessage_IsProcessed()
     {
         const long maxSize = 10L;
-        var (conn, channel) = MockConnection();
+        var (conn, channel, _) = MockConnection();
         var tcfg = MakeTransportCfgWithMaxSize(maxSize);
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -893,12 +911,12 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ─── Inbound header count and value size limits (R-050) ─────────────────
+    // Inbound header count and value size limits.
 
     [Fact]
     public async Task EventAsync_ExcessiveHeaderCount_IsNacked_AndHandlerNotInvoked()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, publishChannel) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -918,7 +936,7 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, new byte[1], tooManyHeaders);
 
         Assert.False(handlerInvoked, "Handler must not be invoked when header count exceeds limit.");
-        channel.Verify(c => c.BasicPublishAsync(
+        publishChannel.Verify(c => c.BasicPublishAsync(
             "err", string.Empty, false,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -929,7 +947,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_OversizedHeaderValue_IsNacked_AndHandlerNotInvoked()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, publishChannel) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
@@ -951,7 +969,7 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, new byte[1], bigValueHeaders);
 
         Assert.False(handlerInvoked, "Handler must not be invoked when a header value exceeds size limit.");
-        channel.Verify(c => c.BasicPublishAsync(
+        publishChannel.Verify(c => c.BasicPublishAsync(
             "err", string.Empty, false,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -962,7 +980,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_MissingTypeHeaders_PublishesToErrorExchange_Acks_AndHandlerNotInvoked()
     {
-        var (conn, channel) = MockConnection();
+        var (conn, channel, publishChannel) = MockConnection();
         var host = new RabbitMqConsumerHost(
             conn.Object,
             MakeTransportCfg().Object,
@@ -984,7 +1002,7 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, new byte[] { 1, 2, 3 }, headers: null);
 
         Assert.False(handlerInvoked);
-        channel.Verify(c => c.BasicPublishAsync(
+        publishChannel.Verify(c => c.BasicPublishAsync(
             "err", string.Empty, false,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -994,8 +1012,10 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_InvalidMessage_WhenErrorPublishFails_IsNackedForRedelivery()
     {
-        var (conn, channel) = MockConnection();
-        channel.Setup(c => c.BasicPublishAsync(
+        var (conn, channel, publishChannel) = MockConnection();
+        // Error publish now rides the publish channel. Make the publish-channel
+        // publish fail — consumer-channel publish is still a no-op success stub.
+        publishChannel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()))

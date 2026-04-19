@@ -17,16 +17,16 @@ public sealed class Producer : IProducer
     /// <summary>Default delay between publish retries, in seconds.</summary>
     private const ushort DefaultRetryTimeInSeconds = 10;
 
-    // P-049: cache process/assembly name — computed once at startup, reused on every reconnect.
+    // Cache process/assembly name — computed once at startup, reused on every reconnect.
     private static readonly string ProducerName = Assembly.GetEntryAssembly()?.GetName().Name
         ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
-    // P-016: cache (FullName, AssemblyQualifiedName) per Type — these are constant for a given Type.
+    // Cache (FullName, AssemblyQualifiedName) per Type — these are constant for a given Type.
     private static readonly ConcurrentDictionary<Type, (string FullName, string AQN)> _typeNameCache = new();
 
-    // P-017: cache the computed exchange name (FullName with dots stripped) per FullName string.
+    // Cache the computed exchange name (FullName with dots stripped) per FullName string.
     private readonly ConcurrentDictionary<string, string> _exchangeNameCache = new();
-    // P-004: track which exchange names have already been declared on the current connection.
+    // Track which exchange names have already been declared on the current connection.
     //        Cleared on reconnect because exchange state is per-connection.
     private readonly ConcurrentDictionary<string, bool> _declaredExchanges = new();
 
@@ -103,7 +103,7 @@ public sealed class Producer : IProducer
     {
         _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration, heartbeatInterval: null);
 
-        // P-004: exchange declarations are per-connection — reset the cache on every (re)connect.
+        // Exchange declarations are per-connection — reset the cache on every (re)connect.
         _declaredExchanges.Clear();
 
         IConnection? connection = null;
@@ -143,14 +143,35 @@ public sealed class Producer : IProducer
         }
     }
 
-    private Task ExecuteWithConnectionRetryAsync(Func<Task> action, CancellationToken cancellationToken)
+    private async Task ExecuteWithConnectionRetryAsync(Func<Task> action, CancellationToken cancellationToken)
     {
-        return Retry.DoAsync(
-            action,
-            ex => ReconnectAfterPublishFailureAsync(ex, cancellationToken),
-            TimeSpan.FromSeconds(_retryTimeInSeconds),
-            _retryCount,
-            cancellationToken);
+        try
+        {
+            await Retry.DoAsync(
+                action,
+                ex => ReconnectAfterPublishFailureAsync(ex, cancellationToken),
+                TimeSpan.FromSeconds(_retryTimeInSeconds),
+                _retryCount,
+                IsRetriablePublishException,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (global::RabbitMQ.Client.Exceptions.PublishException pex)
+        {
+            _logger.LogWarning(pex, "Broker nacked publish: {Reason}", pex.Message);
+            throw;
+        }
+    }
+
+    // Broker-side nacks (PublishException) are usually poison messages — rejected by a
+    // policy (e.g. max-length, unroutable, access denied). Retrying them burns the entire
+    // retry budget against a condition that will not heal, and worse, triggers a reconnect
+    // loop that tears down the connection for a publish-layer error. Only transport-level
+    // failures should flow into the reconnect-retry path.
+    private static bool IsRetriablePublishException(Exception ex)
+    {
+        if (ex is global::RabbitMQ.Client.Exceptions.PublishException) return false;
+        if (ex is OperationCanceledException) return false;
+        return true;
     }
 
     private async Task ReconnectAfterPublishFailureAsync(Exception ex, CancellationToken cancellationToken)
@@ -182,8 +203,8 @@ public sealed class Producer : IProducer
             var messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
             var basicProperties = CreateBasicProperties(messageHeaders);
 
-            // P-017: compute the exchange name once per type and cache it.
-            // P-004: only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
+            // Compute the exchange name once per type and cache it.
+            // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
             string exchangeName = _exchangeNameCache.GetOrAdd(type.FullName!, static fn => fn.Replace(".", string.Empty));
 
             await ExecuteWithConnectionRetryAsync(async () =>
@@ -216,7 +237,7 @@ public sealed class Producer : IProducer
             if (!_queueConfiguration.TryGetQueueMapping(type, out IReadOnlyList<string>? endPoints))
                 throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
 
-            // P-030: build base headers once outside the loop; only DestinationAddress varies per endpoint.
+            // Build base headers once outside the loop; only DestinationAddress varies per endpoint.
             var baseHeaders = GetHeaders(type, headers, string.Empty, "Send");
             foreach (string endPoint in endPoints)
             {
@@ -300,19 +321,52 @@ public sealed class Producer : IProducer
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposedInt, 1) != 0) return;
-        await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+
+        // Wait for in-flight publishes and (re)connections to complete before tearing down
+        // the channel/connection. Without this, a publisher that held the lock during
+        // dispose would touch a disposed IChannel and throw ObjectDisposedException mid-publish.
+        //
+        // Use a bounded timeout so a stuck publish cannot block dispose indefinitely —
+        // after the timeout we proceed with tear-down and any remaining publisher will
+        // observe the disposed state via their normal exception path.
+        var disposeTimeout = TimeSpan.FromSeconds(30);
+        var publishLockAcquired = false;
+        var connectionLockAcquired = false;
+        try
+        {
+            publishLockAcquired = await _publishLock.WaitAsync(disposeTimeout).ConfigureAwait(false);
+            connectionLockAcquired = await _connectionSemaphore.WaitAsync(disposeTimeout).ConfigureAwait(false);
+
+            // If we couldn't acquire both locks, a publisher is still in-flight on the channel.
+            // Tearing down now would crash it with ObjectDisposedException. Skip tear-down and
+            // accept the resource leak — the GC will reclaim the channel/connection eventually.
+            // Leaving the semaphores undisposed is also deliberate: disposing one whose waiter
+            // hasn't returned yet would throw on that waiter's Release() call.
+            if (publishLockAcquired && connectionLockAcquired)
+            {
+                await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                _logger.LogError(
+                    "Producer dispose timed out waiting for locks (publish={PublishAcquired}, connection={ConnectionAcquired}); skipping teardown to avoid crashing in-flight publishers.",
+                    publishLockAcquired, connectionLockAcquired);
+                return;
+            }
+        }
+        finally
+        {
+            if (connectionLockAcquired) _connectionSemaphore.Release();
+            if (publishLockAcquired) _publishLock.Release();
+        }
+
         _publishLock.Dispose();
         _connectionSemaphore.Dispose();
     }
 
-    private async Task DisposeAsyncCore()
-    {
-        await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
-    }
-
     public long MaximumMessageSize { get; }
 
-    // P-015: avoid StringBuilder allocation inside DateTime.ToString("O").
+    // Avoid StringBuilder allocation inside DateTime.ToString("O").
     private static string FormatTimestamp(DateTime dt)
     {
         Span<char> buffer = stackalloc char[33]; // "O" format max length
@@ -322,7 +376,7 @@ public sealed class Producer : IProducer
 
     private BasicProperties CreateBasicProperties(Dictionary<string, object> messageHeaders)
     {
-        // P-014: foreach avoids the LINQ Select + enumerator allocation per message.
+        // foreach avoids the LINQ Select + enumerator allocation per message.
         var headersCopy = new Dictionary<string, object?>(messageHeaders.Count);
         foreach (var kvp in messageHeaders)
             headersCopy[kvp.Key] = kvp.Value;
@@ -354,7 +408,7 @@ public sealed class Producer : IProducer
     private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string>? headers, string queueName, string messageType)
     {
         // Build the final object-valued dictionary directly rather than populating a
-        // string-valued copy and then rewriting it (P-28). Pre-sized to the maximum
+        // string-valued copy and then rewriting it. Pre-sized to the maximum
         // number of stamped keys + any caller-provided entries.
         var callerCount = headers?.Count ?? 0;
         var result = new Dictionary<string, object>(callerCount + StampedHeaderCount);
@@ -387,7 +441,7 @@ public sealed class Producer : IProducer
     private async Task ConfigureExchangeAsync(string exchangeName, string type, CancellationToken cancellationToken)
     {
         await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null, false, false, cancellationToken).ConfigureAwait(false);
-        // P-004: mark as declared so subsequent publishes skip the round-trip.
+        // Mark as declared so subsequent publishes skip the round-trip.
         _declaredExchanges[exchangeName] = true;
     }
 

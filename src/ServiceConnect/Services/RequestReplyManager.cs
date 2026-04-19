@@ -83,7 +83,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         int? configuredEndPointCount = options.EndPoints is { Count: > 0 } ? options.EndPoints.Count : null;
         // List<T> with explicit lock outperforms ConcurrentBag for the request/reply
         // fan-in case because we need Count to be O(1) and we're appending on the
-        // reply thread with no parallel readers until completion (P-18).
+        // reply thread with no parallel readers until completion.
         var responses = new List<TReply>(Math.Max(0, options.ExpectedReplyCount ?? configuredEndPointCount ?? 0));
         int expectedCount = options.ExpectedReplyCount ?? configuredEndPointCount ?? -1;
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -181,11 +181,28 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             state.Close(() =>
             {
                 if (cancellationToken.IsCancellationRequested)
+                {
                     tcs.TrySetCanceled(cancellationToken);
-                else if (Volatile.Read(ref publishCompletedSuccessfully) == 0 && !state.HasAcceptedReplies)
+                    return;
+                }
+
+                if (Volatile.Read(ref publishCompletedSuccessfully) == 0 && !state.HasAcceptedReplies)
+                {
                     tcs.TrySetException(new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout)));
-                else
-                    tcs.TrySetResult(null!);
+                    return;
+                }
+
+                // If the caller asked for a specific number of replies but the timeout
+                // fired before we got them all, treat it as a timeout. Previously this
+                // path succeeded silently, masking under-delivery. A zero/negative
+                // expected count means "no explicit expectation" — keep success.
+                if (expectedCount > 0 && !state.HasReceivedAllExpectedReplies)
+                {
+                    tcs.TrySetException(new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout)));
+                    return;
+                }
+
+                tcs.TrySetResult(null!);
             });
         });
 
@@ -309,6 +326,22 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 lock (_stateLock)
                 {
                     return _hasAcceptedReplies;
+                }
+            }
+        }
+
+        /// <summary>
+        /// True when the caller specified a positive <see cref="ExpectedCount"/> and all
+        /// expected replies have been accepted. Used by PublishRequestAsync's timeout path
+        /// to distinguish "got enough" from "timed out with partial replies" (3.3).
+        /// </summary>
+        public bool HasReceivedAllExpectedReplies
+        {
+            get
+            {
+                lock (_stateLock)
+                {
+                    return ExpectedCount > 0 && _remainingReplies == 0;
                 }
             }
         }

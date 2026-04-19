@@ -55,7 +55,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 Name = name,
                 DataBson = dataBson,
                 // Store FullName rather than AssemblyQualifiedName so an assembly-version
-                // bump between store and read doesn't invalidate the lookup (A-20).
+                // bump between store and read doesn't invalidate the lookup.
                 DataTypeName = dataType.FullName!,
                 Version = 1
             }, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -68,25 +68,37 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 
     public async Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
     {
+        var snapshot = await GetSnapshotAsync(name, cancellationToken).ConfigureAwait(false);
+        // Preserve legacy signature: return only the resolved messages.
+        return snapshot.ResolvedMessages.ToList();
+    }
+
+    public async Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
+    {
         try
         {
+            await EnsureIndexesAsync().ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             var docs = await _collection.Find(filter).ToListAsync(cancellationToken).ConfigureAwait(false);
-            // Pre-size the result list to doc count so it doesn't resize as we append (P-59).
-            var result = new List<object>(docs.Count);
+
+            var messages = new List<object>(docs.Count);
+            var ids = new List<Guid>(docs.Count);
+            var unresolved = 0;
 
             foreach (var doc in docs)
             {
                 if (!_typeRegistry.TryResolve(doc.DataTypeName, out var type))
                 {
                     _logger.LogWarning("Cannot resolve type '{TypeName}' for aggregator data", doc.DataTypeName);
+                    unresolved++;
                     continue;
                 }
 
-                result.Add(BsonSerializer.Deserialize(doc.DataBson, type));
+                messages.Add(BsonSerializer.Deserialize(doc.DataBson, type));
+                ids.Add(doc.Id);
             }
 
-            return result;
+            return new AggregatorSnapshot(messages, ids, unresolved);
         }
         catch (MongoException ex)
         {
@@ -98,12 +110,13 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
+            await EnsureIndexesAsync().ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.And(
                 Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
                 Builders<AggregatorDocument>.Filter.Eq("DataBson.CorrelationId", new BsonBinaryData(correlationId, GuidRepresentation.Standard))
             );
             // Name + CorrelationId is effectively unique; DeleteOneAsync avoids a full
-            // collection scan after the first match (P-057).
+            // collection scan after the first match.
             await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
@@ -116,6 +129,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
+            await EnsureIndexesAsync().ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
         }
@@ -125,10 +139,32 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    public async Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot.ResolvedIds.Count == 0) return;
+
+        try
+        {
+            await EnsureIndexesAsync().ConfigureAwait(false);
+            // Delete only the specific documents captured in the snapshot, keyed by (Name, Id).
+            // Concurrent inserts and unresolved-type records have different ids and are preserved.
+            var filter = Builders<AggregatorDocument>.Filter.And(
+                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                Builders<AggregatorDocument>.Filter.In(x => x.Id, snapshot.ResolvedIds));
+            await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException($"Failed to remove snapshot aggregator data for '{name}'.", ex);
+        }
+    }
+
     public async Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
     {
         try
         {
+            await EnsureIndexesAsync().ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             var count = await _collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken).ConfigureAwait(false);
             return count > int.MaxValue ? int.MaxValue : (int)count;
@@ -142,7 +178,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// <summary>
     /// Ensures indexes on Name and the compound (Name, DataBson.CorrelationId) exist.
     /// Called lazily on first write; the flag is checked before every write to avoid
-    /// a round-trip on every call while still retrying after a failure (P-053).
+    /// a round-trip on every call while still retrying after a failure.
     /// </summary>
     private async Task EnsureIndexesAsync()
     {
@@ -154,7 +190,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             var nameIndex = new CreateIndexModel<AggregatorDocument>(
                 Builders<AggregatorDocument>.IndexKeys.Ascending(x => x.Name));
 
-            // Compound index on (Name, DataBson.CorrelationId) supports RemoveDataAsync (P-053)
+            // Compound index on (Name, DataBson.CorrelationId) supports RemoveDataAsync.
             var nameCorrelationIndex = new CreateIndexModel<AggregatorDocument>(
                 Builders<AggregatorDocument>.IndexKeys
                     .Ascending(x => x.Name)
@@ -165,7 +201,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
         catch
         {
-            // Leave the flag false so a subsequent call retries (C-06).
+            // Leave the flag false so a subsequent call retries.
             throw;
         }
     }

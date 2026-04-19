@@ -5,7 +5,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 
 /// <summary>
 /// Shared <see cref="ConnectionFactory"/> builder so <see cref="Connection"/> and
-/// <see cref="Producer"/> don't duplicate port/user/pass/SSL/vhost logic (A-03).
+/// <see cref="Producer"/> don't duplicate port/user/pass/SSL/vhost logic.
 /// </summary>
 internal static class ConnectionFactoryBuilder
 {
@@ -22,7 +22,8 @@ internal static class ConnectionFactoryBuilder
     {
         ArgumentNullException.ThrowIfNull(transport);
 
-        var port = transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal)
+        var explicitPortConfigured = transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal);
+        var port = explicitPortConfigured
             ? Convert.ToInt32(portVal)
             : AmqpTcpEndpoint.UseDefaultPort;
 
@@ -46,7 +47,10 @@ internal static class ConnectionFactoryBuilder
         if (transport.SslEnabled)
         {
             factory.Ssl = SslConfigurationBuilder.BuildSslOptions(transport);
-            factory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
+            // Only fall back to the default AMQPS port when the user didn't supply one.
+            // Respecting an explicit port lets TLS deployments on non-default ports connect.
+            if (!explicitPortConfigured)
+                factory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
         }
 
         if (!string.IsNullOrEmpty(transport.VirtualHost))

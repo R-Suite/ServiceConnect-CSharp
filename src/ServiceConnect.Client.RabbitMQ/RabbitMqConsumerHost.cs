@@ -20,7 +20,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
 
-    // R-050: inbound header count and per-value size limits to prevent resource exhaustion.
+    // Inbound header count and per-value size limits prevent resource exhaustion.
     private const int DefaultMaxHeaderCount = 64;
     private const int DefaultMaxHeaderValueBytes = 8192;
 
@@ -34,6 +34,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly object _callbackAdmissionGate = new();
 
     private IChannel? _model;
+    // RabbitMQ.Client requires per-channel serialization. The consumer channel is used for
+    // ack/nack only; all retry/audit/error publishes happen on a dedicated publish channel
+    // so helper publishes cannot interleave with the consumer's ack/nack stream.
+    private IChannel? _publishChannel;
     private ConsumerEventHandler? _consumerEventHandler;
     private AsyncEventingBasicConsumer? _consumer;
     private string? _consumerTag;
@@ -64,7 +68,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(transportConfiguration);
         ArgumentNullException.ThrowIfNull(busConfiguration);
 
-        // R-043: Extract configuration in constructor, make fields readonly
+        // Extract configuration in the constructor and make the fields readonly.
         _includeMachineNameInHeaders = busConfiguration.IncludeMachineNameInHeaders;
 
         var settings = transportConfiguration.ClientSettings;
@@ -96,6 +100,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         if (autoDelete.HasValue) _autoDelete = autoDelete.Value;
 
         _model = await _connection.CreateChannelAsync().ConfigureAwait(false);
+        // Dedicated publish channel for retry/audit/error; kept separate from the
+        // consumer channel because RabbitMQ.Client is not safe to use concurrently on
+        // a single channel.
+        _publishChannel = await _connection.CreateChannelAsync().ConfigureAwait(false);
         if (!_disablePrefetch)
             await _model.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
 
@@ -113,12 +121,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments).ConfigureAwait(false);
     }
 
-    // R-011: Pass cancellationToken as method parameter instead of storing it
+    // Pass cancellationToken as a method parameter instead of storing it.
     private async Task EventAsync(object consumer, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
-        // Capture _model before any await so that a concurrent DisposeAsync cannot
-        // null it out from under us in the finally block (R-020).
+        // Capture channels before any await so that a concurrent DisposeAsync cannot
+        // null them out from under us in the finally block.
         var model = _model;
+        var publishChannel = _publishChannel;
         bool processed = false;
         bool callbackAdmitted = false;
         try
@@ -137,7 +146,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                  !args.BasicProperties.Headers.ContainsKey(HeaderKeys.FullTypeName)))
             {
                 await _retryHandler.HandleTerminalFailureAsync(
-                    model!,
+                    publishChannel!,
                     args,
                     CopyInboundHeaders(args),
                     new InvalidOperationException("Message headers must contain type name."),
@@ -149,7 +158,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             if (args.Body.Length > _maxInboundMessageSize)
             {
                 await _retryHandler.HandleTerminalFailureAsync(
-                    model!,
+                    publishChannel!,
                     args,
                     CopyInboundHeaders(args),
                     new InvalidOperationException(
@@ -164,7 +173,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             if (inboundHeaders != null && inboundHeaders.Count > DefaultMaxHeaderCount)
             {
                 await _retryHandler.HandleTerminalFailureAsync(
-                    model!,
+                    publishChannel!,
                     args,
                     CopyInboundHeaders(args),
                     new InvalidOperationException(
@@ -182,7 +191,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                     if (kvp.Value is byte[] bytes && bytes.Length > DefaultMaxHeaderValueBytes)
                     {
                         await _retryHandler.HandleTerminalFailureAsync(
-                            model!,
+                            publishChannel!,
                             args,
                             CopyInboundHeaders(args),
                             new InvalidOperationException(
@@ -195,7 +204,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 }
             }
 
-            processed = await ProcessMessageAsync(model!, args, cancellationToken).ConfigureAwait(false);
+            processed = await ProcessMessageAsync(publishChannel!, args, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -205,21 +214,38 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         {
             try
             {
-                if (!callbackAdmitted)
+                if (callbackAdmitted)
                 {
+                    if (model == null)
+                    {
+                        _logger.LogWarning("Channel was null during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
+                    }
+                    else if (Volatile.Read(ref _shutdownTimedOut) != 0)
+                    {
+                        _logger.LogDebug("Shutdown grace window expired before finishing message {DeliveryTag}; leaving unacked for broker redelivery", args.DeliveryTag);
+                    }
+                    else if (processed)
+                        await model.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
+                    else
+                        await model.BasicNackAsync(args.DeliveryTag, false, true).ConfigureAwait(false);
                 }
-                else if (model == null)
-                {
-                    _logger.LogWarning("Channel was null during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
-                }
-                else if (Volatile.Read(ref _shutdownTimedOut) != 0)
-                {
-                    _logger.LogDebug("Shutdown grace window expired before finishing message {DeliveryTag}; leaving unacked for broker redelivery", args.DeliveryTag);
-                }
-                else if (processed)
-                    await model.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
+            }
+            catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException ex)
+            {
+                // Expected when the connection/channel is torn down concurrently with
+                // message processing (typical during shutdown). The broker will redeliver
+                // unacked messages after the connection drops, so this is not an error.
+                if (_shutdownStarted)
+                    _logger.LogDebug(ex, "Channel already closed while acking/nacking message {DeliveryTag} during shutdown", args.DeliveryTag);
                 else
-                    await model.BasicNackAsync(args.DeliveryTag, false, true).ConfigureAwait(false);
+                    _logger.LogWarning(ex, "Channel already closed while acking/nacking message {DeliveryTag}", args.DeliveryTag);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                if (_shutdownStarted)
+                    _logger.LogDebug(ex, "Channel disposed while acking/nacking message {DeliveryTag} during shutdown", args.DeliveryTag);
+                else
+                    _logger.LogWarning(ex, "Channel disposed while acking/nacking message {DeliveryTag}", args.DeliveryTag);
             }
             catch (Exception ex)
             {
@@ -249,12 +275,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         return headers;
     }
 
-    private async Task<bool> ProcessMessageAsync(IChannel model, BasicDeliverEventArgs args, CancellationToken cancellationToken)
+    private async Task<bool> ProcessMessageAsync(IChannel publishChannel, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
         ConsumeEventResult result;
         // Pre-size the dict to the incoming header count plus 3 consumer-added
         // headers (TimeReceived, DestinationMachine, DestinationAddress) so we
-        // avoid rehashes during the copy — per-message hot path (P-09, P-018).
+        // avoid rehashes during the copy on this per-message hot path.
         var sourceHeaders = args.BasicProperties.Headers;
 
         var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3);
@@ -276,7 +302,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
             HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
 
-            // P-019: single TryGetValue lookup instead of ContainsKey + indexer.
+            // Use a single TryGetValue lookup instead of ContainsKey + indexer.
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw))
                 typeNameRaw = headers[HeaderKeys.TypeName];
             string typeName = HeaderDecoder.Decode(typeNameRaw) ?? "";
@@ -304,7 +330,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 return false;
 
             await _retryHandler.HandleFailureAsync(
-                model,
+                publishChannel,
                 _retryQueueName,
                 args,
                 headers,
@@ -316,7 +342,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             if (Volatile.Read(ref _shutdownTimedOut) != 0)
                 return false;
 
-            await _auditPublisher.PublishAuditIfEnabledAsync(model, args, headers, GetShutdownPublishToken()).ConfigureAwait(false);
+            await _auditPublisher.PublishAuditIfEnabledAsync(publishChannel, args, headers, GetShutdownPublishToken()).ConfigureAwait(false);
         }
 
         return Volatile.Read(ref _shutdownTimedOut) == 0;
@@ -394,6 +420,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
 
         await CloseChannelAsync(deadline).ConfigureAwait(false);
+        await ClosePublishChannelAsync(deadline).ConfigureAwait(false);
         shutdownPublishCts.Cancel();
         shutdownPublishCts.Dispose();
     }
@@ -436,7 +463,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         return true;
     }
 
-    // P-015: avoid StringBuilder allocation inside DateTime.ToString("O").
+    // Avoid StringBuilder allocation inside DateTime.ToString("O").
     private static string FormatTimestamp(DateTime dt)
     {
         Span<char> buffer = stackalloc char[33]; // "O" format max length
@@ -464,5 +491,27 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
         _model = null;
         _consumerTag = null;
+    }
+
+    private async Task ClosePublishChannelAsync(DateTimeOffset deadline)
+    {
+        var publishChannel = _publishChannel;
+        if (publishChannel == null) return;
+        try
+        {
+            if (publishChannel.IsOpen)
+            {
+                if (!await WaitForShutdownOperationAsync(publishChannel.CloseAsync(200, "Goodbye", false), deadline).ConfigureAwait(false))
+                    _logger.LogWarning("Timed out closing publish channel during dispose");
+            }
+
+            publishChannel.Dispose();
+        }
+        catch (ObjectDisposedException) { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error closing publish channel during dispose");
+        }
+        _publishChannel = null;
     }
 }

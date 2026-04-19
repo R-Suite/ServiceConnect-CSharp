@@ -8,7 +8,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class StreamHandlerRegistry : IHandlerRegistry
 {
-    // Built once at construction; FrozenDictionary for read-heavy lookup (A-12).
+    // Built once at construction; FrozenDictionary for read-heavy lookup.
     private readonly FrozenDictionary<Type, StreamHandlerDescriptor> _descriptors;
 
     internal StreamHandlerRegistry(

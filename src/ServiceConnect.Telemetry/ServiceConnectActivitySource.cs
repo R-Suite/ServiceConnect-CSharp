@@ -3,7 +3,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Telemetry;
 
-// Telemetry uses the ServiceConnect.Interfaces event-args types (A-04).
+// Telemetry uses the ServiceConnect.Interfaces event-args types.
 
 public static class ServiceConnectActivitySource
 {
@@ -84,7 +84,7 @@ public static class ServiceConnectActivitySource
         if (activity is null) return null;
 
         // Targeted header lookups — decode only the two headers actually used here
-        // rather than allocating a full decode dictionary for all 15-20 headers (P-008).
+        // rather than allocating a full decode dictionary for all 15-20 headers.
         string? destinationAddress = eventArgs.Headers.TryGetValue(HeaderKeys.DestinationAddress, out var daVal)
             ? HeaderDecoder.Decode(daVal) : null;
         string? messageId = eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out var miVal)

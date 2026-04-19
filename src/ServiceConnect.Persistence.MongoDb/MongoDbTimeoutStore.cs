@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
+using MongoClientSessionHandle = MongoDB.Driver.IClientSessionHandle;
 
 namespace ServiceConnect.Persistence.MongoDb;
 
@@ -14,9 +15,10 @@ internal sealed class NextTimeoutProjection
 
 public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
 {
+    private readonly IMongoClient _mongoClient;
     private readonly IMongoDatabase _mongoDatabase;
     private readonly TimeProvider _timeProvider;
-    private volatile bool _timeoutIndexEnsured;
+    private int _timeoutIndexEnsuredFlag;
 
     private const string TimeoutsCollectionName = "Timeouts";
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
@@ -30,6 +32,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
         ArgumentNullException.ThrowIfNull(logger);
+        _mongoClient = mongoClient;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         try
@@ -63,11 +66,29 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        MongoClientSessionHandle? session = null;
         try
         {
             var retval = new TimeoutsBatch { DueTimeouts = [] };
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
             var utcNow = _timeProvider.GetUtcNow();
+
+            // Use a causally-consistent client session so the aggregate facet sees the rows
+            // we just claim-locked, even if a primary failover happens between the two calls.
+            // Without this, a failover could route the aggregate to a secondary that hasn't
+            // replicated the UpdateManyAsync yet, and we'd silently miss the rows we just locked.
+            try
+            {
+                session = await _mongoClient.StartSessionAsync(
+                    new ClientSessionOptions { CausalConsistency = true },
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (NotSupportedException)
+            {
+                // Standalone mongods / older servers don't support sessions; fall back to
+                // the unsessioned path — still better than failing the whole poll.
+            }
 
             var sessionId = Guid.NewGuid();
             var dueUnlockedFilter = BuildDueTimeoutFilter(utcNow);
@@ -75,7 +96,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
                 .Set(x => x.Locked, true)
                 .Set(x => x.LockedBy, sessionId)
                 .Set(x => x.LockExpiresAt, utcNow.Add(LockLeaseDuration));
-            await collection.UpdateManyAsync(dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (session is not null)
+                await collection.UpdateManyAsync(session, dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+            else
+                await collection.UpdateManyAsync(dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var duePipeline = new EmptyPipelineDefinition<TimeoutData>()
                 .Match(t => t.LockedBy == sessionId && t.Locked);
@@ -91,9 +115,13 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
                     AggregateFacet.Create("Due", duePipeline),
                     AggregateFacet.Create("Next", nextPipeline));
 
-            var facetResult = await collection.Aggregate(facetPipeline, cancellationToken: cancellationToken)
-                                              .FirstOrDefaultAsync(cancellationToken)
-                                              .ConfigureAwait(false);
+            var facetResult = session is not null
+                ? await collection.Aggregate(session, facetPipeline, cancellationToken: cancellationToken)
+                                   .FirstOrDefaultAsync(cancellationToken)
+                                   .ConfigureAwait(false)
+                : await collection.Aggregate(facetPipeline, cancellationToken: cancellationToken)
+                                   .FirstOrDefaultAsync(cancellationToken)
+                                   .ConfigureAwait(false);
 
             var nextQueryTime = DateTimeOffset.MaxValue;
             if (facetResult is not null)
@@ -123,6 +151,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         {
             throw new PersistenceException("Failed to get timeouts batch.", ex);
         }
+        finally
+        {
+            session?.Dispose();
+        }
     }
 
     public async Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
@@ -132,6 +164,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
 
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
                          Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
@@ -150,6 +183,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
                          Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
             var update = Builders<TimeoutData>.Update
@@ -171,6 +205,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
 
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
                          Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
@@ -190,6 +225,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
                          Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, lockOwner);
@@ -215,7 +251,11 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
 
     private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection)
     {
-        if (_timeoutIndexEnsured) return;
+        // Interlocked gate: only one thread performs index creation; the rest short-circuit
+        // once the flag flips to 1. A non-atomic bool could in principle allow two threads
+        // to race to CreateManyAsync and cause an IndexOptionsConflict, which we'd then
+        // swallow — the atomic flag removes that spurious work entirely.
+        if (Interlocked.CompareExchange(ref _timeoutIndexEnsuredFlag, 0, 0) == 1) return;
 
         try
         {
@@ -238,14 +278,14 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
             await collection.Indexes.CreateManyAsync(
                 [idIndexModel, lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel]
             ).ConfigureAwait(false);
-            _timeoutIndexEnsured = true;
+            Interlocked.Exchange(ref _timeoutIndexEnsuredFlag, 1);
         }
         catch (MongoCommandException ex) when (ex.Code is 85 or 86)
         {
             // 85 IndexOptionsConflict / 86 IndexKeySpecsConflict — another process
             // created the same index concurrently. Treat as success to avoid spurious
             // first-insert failures in multi-process deployments.
-            _timeoutIndexEnsured = true;
+            Interlocked.Exchange(ref _timeoutIndexEnsuredFlag, 1);
         }
     }
 }

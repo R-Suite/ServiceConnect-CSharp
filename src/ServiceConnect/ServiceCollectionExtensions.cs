@@ -52,10 +52,11 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IFilterPipeline, FilterPipeline>();
         services.TryAddSingleton<RequestReplyManager>();
         services.TryAddSingleton<IRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
-        services.TryAdd(new ServiceDescriptor(
-            typeof(IReplyStatusRequestReplyManager),
-            sp => (sp.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager)!,
-            ServiceLifetime.Singleton));
+        // Resolve the concrete RequestReplyManager directly rather than casting via
+        // IRequestReplyManager. A caller who replaces IRequestReplyManager with a
+        // non-IReplyStatusRequestReplyManager type previously got a silent null here;
+        // resolving the concrete singleton fails fast with a clear DI error instead.
+        services.TryAddSingleton<IReplyStatusRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
         services.TryAddSingleton<ConsumeContextPool>();
         services.TryAddSingleton<ConsumeContextAccessor>();
@@ -102,12 +103,16 @@ public static class ServiceCollectionExtensions
     private static void RegisterBus(IServiceCollection services)
     {
         services.TryAddSingleton<IRegistryInitializer, Services.RegistryInitializer>();
-        services.TryAddSingleton(sp => new Lazy<IBus>(() => sp.GetRequiredService<IBus>()));
+        services.TryAddSingleton<BusAccessor>();
+        // Resolve Lazy<IBus> through the accessor rather than capturing the root
+        // IServiceProvider — capturing the root SP inside the factory risks deadlock
+        // if any transitive dependency dereferences Value during Bus construction.
+        services.TryAddSingleton(sp => new Lazy<IBus>(() => sp.GetRequiredService<BusAccessor>().GetOrThrow()));
         services.TryAddSingleton<IBus>(sp =>
         {
             sp.GetRequiredService<IRegistryInitializer>().Initialize();
 
-            return new Bus(
+            var bus = new Bus(
                 sp.GetRequiredService<IMessageSerializer>(),
                 sp.GetRequiredService<IFilterPipeline>(),
                 sp.GetRequiredService<ISendMessagePipeline>(),
@@ -121,6 +126,8 @@ public static class ServiceCollectionExtensions
                 sp.GetService<IProducer>(),
                 timeoutStore: sp.GetService<ITimeoutStore>(),
                 consumeContextAccessor: sp.GetRequiredService<ConsumeContextAccessor>());
+            sp.GetRequiredService<BusAccessor>().Set(bus);
+            return bus;
         });
         services.AddSingleton<IHostedService, BusHostedService>();
         services.AddSingleton<IHostedService>(sp =>
@@ -192,6 +199,19 @@ public static class ServiceCollectionExtensions
     private static void RegisterHandlerType(IServiceCollection services, HandlerReference handlerRef)
     {
         var handlerType = handlerRef.HandlerType;
+
+        // Handlers must never be singletons — the Context property and pooled IConsumeContext
+        // are mutated per-message and would race across concurrent dispatch on a shared instance.
+        // Transient is the safe default; we reject any caller who pre-registered the handler
+        // as a singleton rather than silently co-existing two DI lifetimes.
+        foreach (var descriptor in services.Where(d => d.ImplementationType == handlerType).ToArray())
+        {
+            if (descriptor.Lifetime == ServiceLifetime.Singleton)
+                throw new InvalidOperationException(
+                    $"Message handler '{handlerType.FullName}' must not be registered as a singleton. "
+                    + "Handler instances hold per-message IConsumeContext state and must be transient or scoped. "
+                    + "Remove the singleton registration and let AddServiceConnect register the handler as transient.");
+        }
 
         var messageHandlerInterface = handlerType.GetInterfaces()
             .FirstOrDefault(i => i.IsGenericType

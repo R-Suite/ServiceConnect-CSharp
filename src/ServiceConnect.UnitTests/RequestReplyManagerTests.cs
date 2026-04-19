@@ -24,6 +24,17 @@ namespace ServiceConnect.UnitTests
             _mockSendPipeline = new Mock<ISendMessagePipeline>();
         }
 
+        /// <summary>
+        /// Polls <paramref name="condition"/> every 10 ms for up to <paramref name="maxWait"/>,
+        /// returning when the condition becomes true or the budget is exhausted.
+        /// </summary>
+        private static async Task WaitForCondition(Func<bool> condition, TimeSpan maxWait)
+        {
+            var deadline = DateTime.UtcNow + maxWait;
+            while (!condition() && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
+        }
+
         [Fact]
         public void IRequestReplyManager_ProcessReply_ReturnsVoid()
         {
@@ -66,9 +77,8 @@ namespace ServiceConnect.UnitTests
                 .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
                 {
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
                     });
                 })
@@ -137,9 +147,8 @@ namespace ServiceConnect.UnitTests
                 {
                     capturedEndpoint = endpoint;
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
                     });
                 })
@@ -227,11 +236,9 @@ namespace ServiceConnect.UnitTests
                 .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
                 {
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
-                        await Task.Delay(10);
                         manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
                     });
                 })
@@ -321,9 +328,8 @@ namespace ServiceConnect.UnitTests
                 {
                     capturedEndpoint = endpoint;
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
                     });
                 })
@@ -373,9 +379,8 @@ namespace ServiceConnect.UnitTests
                 {
                     capturedEndpoint = endpoint;
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
                     });
                 })
@@ -452,9 +457,8 @@ namespace ServiceConnect.UnitTests
                 .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
                 {
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
                     });
                 })
@@ -708,9 +712,8 @@ namespace ServiceConnect.UnitTests
                 .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
                 {
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         try
                         {
                             manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
@@ -760,9 +763,8 @@ namespace ServiceConnect.UnitTests
                 .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
                 {
                     capturedMessageId = hdrs!["RequestMessageId"];
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await Task.Delay(10);
                         try
                         {
                             manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
@@ -844,7 +846,8 @@ namespace ServiceConnect.UnitTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => publishTask);
             Assert.Same(deserializeException, ex);
 
-            await Task.Delay(100);
+            // Give the background Task.Run time to attempt a second reply, then assert it was suppressed.
+            await WaitForCondition(() => false, TimeSpan.FromMilliseconds(200));
 
             Assert.Equal(0, callbackCount);
             _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)), Times.Once);
@@ -916,7 +919,8 @@ namespace ServiceConnect.UnitTests
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => publishTask);
             Assert.Same(callbackException, ex);
 
-            await Task.Delay(100);
+            // Give the background Task.Run time to attempt a second reply, then assert it was suppressed.
+            await WaitForCondition(() => false, TimeSpan.FromMilliseconds(200));
 
             Assert.Equal(1, callbackCount);
             _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)), Times.Once);
@@ -1127,11 +1131,82 @@ namespace ServiceConnect.UnitTests
                     options, externalCts.Token));
         }
 
-        // --- R-021: atomic pending-request removal on timeout ---
+        // --- Gap 4: timeout-vs-cancel same-instant race ---
+
+        [Fact]
+        public async Task SendRequestAsync_TimeoutAndCancelFiredSimultaneously_ExactlyOneOutcomeAndHandleIsCleanedUp()
+        {
+            // Forces timeout and external cancellation to fire at the same instant.
+            // Uses TaskCompletionSource to block the send pipeline async (no thread-pool blocking),
+            // then releases it only after arming both signals. Asserts exactly one of the
+            // two deterministic outcomes (RequestTimeoutException or OperationCanceledException)
+            // and that the request handle is cleaned up so a subsequent ProcessReply is a no-op.
+
+            var sendEnteredTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseSendTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            string? capturedMessageId = null;
+
+            using var externalCts = new CancellationTokenSource();
+
+            // Use Returns with an async lambda so blocking happens asynchronously.
+            _mockSendPipeline
+                .Setup(p => p.ExecuteSendMessagePipelineAsync(
+                    typeof(FakeMessage1),
+                    It.IsAny<byte[]>(),
+                    It.IsAny<Dictionary<string, string>>(),
+                    null,
+                    It.IsAny<CancellationToken>()))
+                .Returns<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>(
+                    async (_, _, hdrs, _, _) =>
+                    {
+                        capturedMessageId = hdrs!["RequestMessageId"];
+                        sendEnteredTcs.TrySetResult();
+                        // Await the gate asynchronously — no thread-pool thread is blocked.
+                        await releaseSendTcs.Task.ConfigureAwait(false);
+                    });
+
+            _mockSerializer
+                .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+                .Returns(new FakeMessage1(Guid.NewGuid()));
+
+            // Very short timeout — will fire shortly after the send pipeline completes.
+            var options = new RequestOptions { Timeout = 1 };
+            var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+
+            var requestTask = manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                new byte[] { 1, 2, 3 }, new Dictionary<string, string>(), options,
+                externalCts.Token);
+
+            // Wait for the send pipeline to be entered.
+            await sendEnteredTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Arm both signals: cancel the external token, then release the pipeline
+            // so the 1ms timeout and the cancellation race to complete the TCS first.
+            externalCts.Cancel();
+            releaseSendTcs.TrySetResult();
+
+            var ex = await Record.ExceptionAsync(() => requestTask.WaitAsync(TimeSpan.FromSeconds(5)));
+
+            // Exactly one of the two deterministic outcomes is acceptable.
+            Assert.True(
+                ex is RequestTimeoutException || ex is OperationCanceledException,
+                $"Expected RequestTimeoutException or OperationCanceledException, got: {ex?.GetType().Name}: {ex?.Message}");
+
+            // The handle must be cleaned up: a subsequent reply for the same id must be a no-op.
+            Assert.NotNull(capturedMessageId);
+            var rrm = (IReplyStatusRequestReplyManager)manager;
+            var handledLate = rrm.TryProcessReply(capturedMessageId!, new byte[] { 0 }, typeof(FakeMessage1));
+            Assert.False(handledLate, "request handle was not cleaned up after timeout/cancel");
+            _mockSerializer.Verify(
+                s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)),
+                Times.Never);
+        }
+
+        // Atomic pending-request removal on timeout.
 
         /// <summary>
         /// Verifies that a ProcessReply call arriving after the timeout fires does NOT
-        /// appear in the result set.  Before the R-021 fix, the entry remained in
+        /// appear in the result set. Before the fix, the entry remained in
         /// _pendingRequests between TrySetResult and the finally-block TryRemove, so a
         /// concurrently-arriving reply could still append to the response list and end
         /// up in the snapshot returned to the caller.

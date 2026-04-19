@@ -10,6 +10,12 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     private readonly Dictionary<string, string> _baseHeaders;
     private long _packetNumber;
     private int _closedFlag;
+    // Track in-flight writes so CloseAsync can drain them before reading _packetNumber
+    // for the close packet. Without the drain, a writer that cleared the _closedFlag check
+    // but hadn't yet Interlocked.Increment-ed would publish *after* the close packet with
+    // a number past LastPacketNumber — the reader drops it.
+    private int _inFlightWrites;
+    private static readonly TimeSpan CloseDrainTimeout = TimeSpan.FromSeconds(30);
 
     public MessageBusWriteStream(IProducer producer, string endpoint, Type messageType)
     {
@@ -27,7 +33,6 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 
     public async Task WriteAsync(byte[] buffer, int offset, int count)
     {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _closedFlag) == 1, this);
         ArgumentNullException.ThrowIfNull(buffer);
 
         if ((uint)offset > (uint)buffer.Length)
@@ -35,30 +40,62 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         if ((uint)count > (uint)(buffer.Length - offset))
             throw new ArgumentOutOfRangeException(nameof(count));
 
-        var packet = new byte[count];
-        Array.Copy(buffer, offset, packet, 0, count);
+        // Reserve the in-flight slot BEFORE checking the close flag so that a concurrent
+        // CloseAsync observing _inFlightWrites == 0 cannot race past us. Rolled back below
+        // if the stream is already closed.
+        Interlocked.Increment(ref _inFlightWrites);
+        try
+        {
+            if (Volatile.Read(ref _closedFlag) == 1)
+                throw new ObjectDisposedException(nameof(MessageBusWriteStream));
 
-        var packetNum = Interlocked.Increment(ref _packetNumber) - 1;
+            var packet = new byte[count];
+            Array.Copy(buffer, offset, packet, 0, count);
 
-        // Pre-size the dict to avoid rehash during the copy (P-01). A separate dict
-        // per packet is required because the producer may mutate / enqueue the
-        // dictionary asynchronously, so reuse would race with concurrent writes.
-        var headers = new Dictionary<string, string>(_baseHeaders.Count + 1);
-        foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
-        headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
+            var packetNum = Interlocked.Increment(ref _packetNumber) - 1;
 
-        await _producer.SendBytesAsync(_endpoint, packet, headers).ConfigureAwait(false);
+            // Pre-size the dict to avoid rehash during the copy. A separate dict
+            // per packet is required because the producer may mutate / enqueue the
+            // dictionary asynchronously, so reuse would race with concurrent writes.
+            var headers = new Dictionary<string, string>(_baseHeaders.Count + 1);
+            foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
+            headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
+
+            await _producer.SendBytesAsync(_endpoint, packet, headers).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _inFlightWrites);
+        }
     }
 
     public async Task CloseAsync()
     {
         if (Interlocked.CompareExchange(ref _closedFlag, 1, 0) != 0) return;
 
+        // Drain in-flight writes before reading _packetNumber. Any WriteAsync that passed
+        // its closed-flag check must complete (either successfully or with an exception)
+        // before we assign the close packet number — otherwise its packet would ship with
+        // a number beyond LastPacketNumber and the reader would silently drop it.
+        var deadline = DateTime.UtcNow + CloseDrainTimeout;
+        var spin = new SpinWait();
+        while (Volatile.Read(ref _inFlightWrites) > 0)
+        {
+            if (spin.NextSpinWillYield && DateTime.UtcNow >= deadline)
+                throw new TimeoutException(
+                    $"Timed out waiting for {Volatile.Read(ref _inFlightWrites)} in-flight write(s) to drain before closing stream {_sequenceId}.");
+
+            if (spin.NextSpinWillYield)
+                await Task.Delay(10).ConfigureAwait(false);
+            else
+                spin.SpinOnce();
+        }
+
         // _packetNumber was post-incremented on each WriteAsync, so after N data
         // packets (indices 0..N-1) its value is N. The close packet reuses that value
         // as its own index, and LastPacketNumber equals the count. The reader's
         // IsComplete loop checks 0..LastPacketNumber inclusive so the empty close
-        // packet fills that final slot (L-5). Changing the close-packet payload in the
+        // packet fills that final slot. Changing the close-packet payload in the
         // future would break this invariant — see MessageBusReadStream.Read().
         var packetNum = Interlocked.Read(ref _packetNumber);
 

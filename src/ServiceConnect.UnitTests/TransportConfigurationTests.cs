@@ -101,7 +101,7 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void DefaultSslProtocolIsNone_DelegatesToRuntime()
         {
-            // S-02: default delegates to the runtime so TLS 1.3 is negotiated where available.
+            // Default delegates to the runtime so TLS 1.3 is negotiated where available.
             var config = new TransportConfiguration();
             Assert.Equal(SslProtocols.None, config.SslProtocol);
         }

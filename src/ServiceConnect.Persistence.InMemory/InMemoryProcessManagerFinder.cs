@@ -8,7 +8,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// InMemory implementation of IProcessManagerFinder for testing and rapid development.
 /// Compiled predicates are cached by mapping shape so correlation lookups avoid both
-/// Expression.Compile and reflection on the hot path (A-05).
+/// Expression.Compile and reflection on the hot path.
 /// </summary>
 public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 {
@@ -45,7 +45,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         ArgumentNullException.ThrowIfNull(message);
 
         // Single-pass scan: prefer an exact message-type match, fall back to the base
-        // Message wildcard. Previously two separate FirstOrDefault calls (P-046).
+        // Message wildcard. Previously this used two separate FirstOrDefault calls.
         var exactMessageType = message.GetType();
         ProcessManagerToMessageMap? mapping = null;
         ProcessManagerToMessageMap? fallback = null;
@@ -195,7 +195,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     }
 
     // One-time compiled factory per concrete data type. Replaces the previous
-    // GetType().GetMethods().First(...) + MakeGenericMethod + Invoke per call (A-05).
+    // GetType().GetMethods().First(...) + MakeGenericMethod + Invoke per call.
     private static Func<IProcessManagerData, object> BuildMemoryDataFactory(Type dataType)
     {
         var memoryDataType = typeof(MemoryData<>).MakeGenericType(dataType);
@@ -229,7 +229,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             if (_state.Provider.Contains(key))
             {
                 // Read version via a typed IVersioned interface so the cast is
-                // compile-time-checked rather than the old dynamic dispatch (A-05).
+                // compile-time-checked rather than the old dynamic dispatch.
                 var storedData = _state.Provider.Get<string, object>(key);
                 int currentVersion = storedData is IVersioned versioned
                     ? versioned.Version

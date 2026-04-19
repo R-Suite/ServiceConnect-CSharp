@@ -69,7 +69,7 @@ public class StreamProcessorTests
         Assert.Equal(ProcessResult.Handled, result);
     }
 
-    // R-085: non-GUID SequenceId must be rejected
+    // Non-GUID SequenceId must be rejected.
     [Fact]
     public async Task ProcessAsync_NonGuidSequenceId_ReturnsNotHandled()
     {
@@ -87,7 +87,7 @@ public class StreamProcessorTests
         Assert.Equal(ProcessResult.NotHandled, result);
     }
 
-    // R-085: valid GUID SequenceId is accepted
+    // Valid GUID SequenceId is accepted.
     [Fact]
     public async Task ProcessAsync_ValidGuidSequenceId_ReturnsHandled()
     {
@@ -105,7 +105,7 @@ public class StreamProcessorTests
         Assert.Equal(ProcessResult.Handled, result);
     }
 
-    // R-085: stream creation is rejected when MaxActiveStreams limit is reached
+    // Stream creation is rejected when MaxActiveStreams limit is reached.
     [Fact]
     public async Task ProcessAsync_WhenMaxActiveStreamsReached_RejectsNewStream()
     {
@@ -140,7 +140,7 @@ public class StreamProcessorTests
         Assert.Equal(ProcessResult.NotHandled, result);
     }
 
-    // R-086: LastPacketNumber exceeding limit is rejected
+    // LastPacketNumber exceeding the limit is rejected.
     [Fact]
     public async Task ProcessAsync_LastPacketNumberExceedsMax_ReturnsHandled_AndDiscards()
     {
@@ -162,7 +162,7 @@ public class StreamProcessorTests
         Assert.Equal(ProcessResult.Handled, result);
     }
 
-    // R-086: LastPacketNumber at exactly the limit (100_000) is accepted
+    // LastPacketNumber at exactly the limit (100_000) is accepted.
     [Fact]
     public async Task ProcessAsync_LastPacketNumberAtMax_IsAccepted()
     {
@@ -186,7 +186,7 @@ public class StreamProcessorTests
     [Fact]
     public void StreamProcessor_Implements_IAsyncDisposable()
     {
-        // R-002: Disposal must wait for in-flight EvictStaleStreams callbacks.
+        // Disposal must wait for in-flight EvictStaleStreams callbacks.
         // ITimer.DisposeAsync awaits the callback; ITimer.Dispose does not.
         Assert.True(typeof(IAsyncDisposable).IsAssignableFrom(typeof(StreamProcessor)),
             "StreamProcessor must implement IAsyncDisposable so disposal waits for the cleanup-timer callback.");

@@ -28,7 +28,7 @@ public sealed class TransportConfiguration : ITransportConfiguration
     public int MaxRetries { get; set; } = DefaultMaxRetries;
     public ushort PrefetchCount { get; set; } = DefaultPrefetchCount;
     /// <summary>
-    /// Time to wait for in-flight messages to drain during graceful shutdown, in milliseconds. (C-09)
+    /// Time to wait for in-flight messages to drain during graceful shutdown, in milliseconds.
     /// </summary>
     public int GracefulShutdownTimeoutMilliseconds { get; set; } = DefaultGracefulShutdownTimeoutMilliseconds;
     /// <remarks>Defaults to false. Consider logging a warning when disabled on non-localhost hosts.</remarks>
@@ -46,7 +46,7 @@ public sealed class TransportConfiguration : ITransportConfiguration
     public X509CertificateCollection? Certs { get; set; }
     /// <summary>
     /// SSL/TLS protocol. Defaults to <see cref="SslProtocols.None"/>, which delegates
-    /// protocol selection to the runtime so TLS 1.3 is used where available (S-02).
+    /// protocol selection to the runtime so TLS 1.3 is used where available.
     /// </summary>
     public SslProtocols SslProtocol { get; set; } = SslProtocols.None;
     public LocalCertificateSelectionCallback? CertificateSelectionCallback { get; set; }

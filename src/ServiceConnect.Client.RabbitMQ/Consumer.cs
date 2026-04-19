@@ -33,7 +33,7 @@ public sealed class Consumer : IConsumer
         _logger = logger;
         _connection = connection;
 
-        // R-043: Move configuration extraction to constructor, making fields readonly
+        // Move configuration extraction to the constructor, making fields readonly.
         var clientSettings = transportConfiguration.ClientSettings;
         _durable = !clientSettings.TryGetValue(RabbitMQSettingKeys.Durable, out var durableVal) || (bool)durableVal;
         _exclusive = clientSettings.TryGetValue(RabbitMQSettingKeys.Exclusive, out var exclusiveVal) && (bool)exclusiveVal;
@@ -43,7 +43,7 @@ public sealed class Consumer : IConsumer
         _utilityQueueArguments = clientSettings.TryGetValue(RabbitMQSettingKeys.UtilityQueueArguments, out var utilArgsVal) ? (Dictionary<string, object?>)utilArgsVal : [];
         _retryDelay = transportConfiguration.RetryDelay;
 
-        // R-010: Create topology provisioner
+        // Create the topology provisioner once.
         _topologyProvisioner = new RabbitMqTopologyProvisioner(logger);
     }
 
@@ -60,7 +60,7 @@ public sealed class Consumer : IConsumer
             setupChannel = await _connection.CreateChannelAsync();
             _model = setupChannel;
 
-            // R-032: Mark as initial setup for re-throwing on first topology setup
+            // Mark as initial setup for re-throwing on first topology setup.
             const bool isInitialSetup = true;
 
             // Configure exchanges
@@ -95,7 +95,7 @@ public sealed class Consumer : IConsumer
                     _retryQueueArguments, isInitialSetup, cancellationToken);
             }
 
-            // R-070: Use provisioner for utility queue setup
+            // Use the provisioner for utility queue setup.
             string errorExchangeName = _queueConfiguration.ErrorQueueName;
             await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, errorExchangeName, _utilityQueueArguments, isInitialSetup, cancellationToken);
 
@@ -108,7 +108,7 @@ public sealed class Consumer : IConsumer
         }
         finally
         {
-            // R-066: always close the setup channel once topology provisioning completes or fails.
+            // Always close the setup channel once topology provisioning completes or fails.
             if (setupChannel is { IsOpen: true })
                 await setupChannel.CloseAsync().ConfigureAwait(false);
             setupChannel?.Dispose();
@@ -148,7 +148,7 @@ public sealed class Consumer : IConsumer
             catch (ObjectDisposedException) { }
         }
 
-        // Close and dispose the setup channel before nulling (R-012).
+        // Close and dispose the setup channel before nulling it.
         if (_model is { IsOpen: true })
         {
             try { await _model.CloseAsync().ConfigureAwait(false); }

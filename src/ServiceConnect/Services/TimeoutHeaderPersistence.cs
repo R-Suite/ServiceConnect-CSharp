@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
@@ -52,7 +53,7 @@ internal static class TimeoutHeaderPersistence
         return persistedHeaders;
     }
 
-    public static Dictionary<string, string> BuildOutgoingHeaders(IDictionary<string, object> storedHeaders)
+    public static Dictionary<string, string> BuildOutgoingHeaders(IDictionary<string, object> storedHeaders, ILogger? logger = null)
     {
         var outgoingHeaders = new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -63,19 +64,39 @@ internal static class TimeoutHeaderPersistence
 
             var converted = ConvertOutgoingHeaderValue(header.Value);
             if (converted != null)
+            {
                 outgoingHeaders[header.Key] = converted;
+            }
+            else if (logger is not null && logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug(
+                    "Dropping timeout header {HeaderKey} with unsupported value type {ValueType}",
+                    header.Key,
+                    header.Value?.GetType().FullName ?? "<null>");
+            }
         }
 
         return outgoingHeaders;
     }
 
+    /// <summary>
+    /// Prefix applied to base64-encoded binary header values so receivers can recognise
+    /// them as round-trippable binary rather than arbitrary text. Outgoing headers are
+    /// <c>string</c>-typed, so without a marker a consumer cannot tell a text header
+    /// from a binary one.
+    /// </summary>
+    public const string BinaryHeaderPrefix = "base64:";
+
     private static string? ConvertOutgoingHeaderValue(object? value) => value switch
     {
         null => string.Empty,
         string stringValue => stringValue,
-        byte[] bytes => Encoding.UTF8.GetString(bytes),
-        bool boolValue => boolValue.ToString(),
-        char charValue => charValue.ToString(),
+        // Binary values: encode as base64 with a reserved marker prefix so the
+        // receiver can distinguish them from text and decode round-trip-safely.
+        // Prior behaviour (UTF-8 GetString) silently corrupted non-text bytes.
+        byte[] bytes => BinaryHeaderPrefix + Convert.ToBase64String(bytes),
+        bool boolValue => boolValue.ToString(CultureInfo.InvariantCulture),
+        char charValue => charValue.ToString(CultureInfo.InvariantCulture),
         byte byteValue => byteValue.ToString(CultureInfo.InvariantCulture),
         sbyte sbyteValue => sbyteValue.ToString(CultureInfo.InvariantCulture),
         short shortValue => shortValue.ToString(CultureInfo.InvariantCulture),
@@ -87,6 +108,10 @@ internal static class TimeoutHeaderPersistence
         float floatValue => floatValue.ToString(CultureInfo.InvariantCulture),
         double doubleValue => doubleValue.ToString(CultureInfo.InvariantCulture),
         decimal decimalValue => decimalValue.ToString(CultureInfo.InvariantCulture),
+        Guid guidValue => guidValue.ToString("D", CultureInfo.InvariantCulture),
+        DateTime dateTimeValue => dateTimeValue.ToString("O", CultureInfo.InvariantCulture),
+        DateTimeOffset dateTimeOffsetValue => dateTimeOffsetValue.ToString("O", CultureInfo.InvariantCulture),
+        TimeSpan timeSpanValue => timeSpanValue.ToString("c", CultureInfo.InvariantCulture),
         _ => null,
     };
 }

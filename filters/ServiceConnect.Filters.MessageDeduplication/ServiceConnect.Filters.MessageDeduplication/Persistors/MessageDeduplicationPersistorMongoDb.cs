@@ -49,7 +49,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
             var mongoDatabase = mongoClient.GetDatabase(settings.DatabaseNameMongoDb);
             _collection = mongoDatabase.GetCollection<ProcessedMessage>(settings.CollectionNameMongoDb);
 
-            // Ensure indexes synchronously at construction (C-08). A failure here
+            // Ensure indexes synchronously at construction. A failure here
             // must surface so the caller can react rather than silently proceed
             // without indexes.
             _collection.Indexes.CreateOne(

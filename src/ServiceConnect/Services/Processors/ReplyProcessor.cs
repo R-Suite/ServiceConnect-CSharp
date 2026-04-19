@@ -4,7 +4,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class ReplyProcessor(IReplyStatusRequestReplyManager? replyManager) : IMessageProcessor
 {
-    // Cache the two result tasks so enum-boxing allocation doesn't happen per message (P-44).
+    // Cache the two result tasks so enum-boxing allocation doesn't happen per message.
     private static readonly Task<ProcessResult> NotHandledTask = Task.FromResult(ProcessResult.NotHandled);
     private static readonly Task<ProcessResult> HandledTask = Task.FromResult(ProcessResult.Handled);
 

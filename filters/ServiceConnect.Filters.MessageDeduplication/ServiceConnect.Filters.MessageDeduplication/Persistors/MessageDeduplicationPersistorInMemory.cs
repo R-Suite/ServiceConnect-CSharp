@@ -8,7 +8,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Persistors
 {
     /// <summary>
     /// InMemory implementation of the persistor. Keeps processed message ids in a concurrent dictionary
-    /// keyed by the raw Guid (not its string form) to avoid per-call allocation of a 36-char string (P-70).
+    /// keyed by the raw Guid (not its string form) to avoid per-call allocation of a 36-char string.
     /// </summary>
     public class MessageDeduplicationPersistorInMemory : IMessageDeduplicationPersistor
     {

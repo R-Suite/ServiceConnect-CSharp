@@ -16,7 +16,7 @@ public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger
         }
 
         // Let exceptions propagate — the host should observe startup failures
-        // rather than silently report success when consuming never started (C-07).
+        // rather than silently report success when consuming never started.
         await bus.StartConsumingAsync(cancellationToken).ConfigureAwait(false);
         logger.LogInformation("Bus auto-started consuming.");
     }

@@ -7,7 +7,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// Singleton cache for compiled predicate delegates and MemoryData factories
 /// used by <see cref="InMemoryProcessManagerFinder"/>.
 /// Extracted from static fields to support proper DI lifetime management
-/// and test isolation (R-038).
+/// and test isolation.
 /// </summary>
 internal sealed class ProcessManagerPredicateCache
 {
@@ -54,7 +54,7 @@ internal sealed class ProcessManagerPredicateCache
             hash.Add(T);
             hash.Add(PropertyType);
             // XOR-combine per-entry hashes so the result is independent of the
-            // dictionary's (undefined) iteration order (M-2). Otherwise Equals
+            // dictionary's (undefined) iteration order. Otherwise Equals
             // could be true while GetHashCode disagreed, violating the contract.
             int entryHash = 0;
             foreach (var kvp in PropertiesHierarchy)

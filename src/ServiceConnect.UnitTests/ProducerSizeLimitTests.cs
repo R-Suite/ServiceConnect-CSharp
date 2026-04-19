@@ -8,7 +8,7 @@ namespace ServiceConnect.UnitTests;
 
 /// <summary>
 /// Verifies that Producer enforces MaximumMessageSize on all outbound publish/send methods
-/// before attempting any network I/O (R-022).
+/// before attempting any network I/O.
 /// </summary>
 public class ProducerSizeLimitTests
 {

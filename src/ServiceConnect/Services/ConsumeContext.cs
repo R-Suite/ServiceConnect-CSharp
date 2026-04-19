@@ -41,7 +41,7 @@ public sealed class ConsumeContext : IConsumeContext
     public IBus Bus { get; }
 
     /// <summary>
-    /// Read-only view exposed to user handlers (R-088). The transport layer retains the
+    /// Read-only view exposed to user handlers. The transport layer retains the
     /// mutable <see cref="IDictionary{TKey,TValue}"/> and continues to write pipeline
     /// headers (TimeProcessed, DestinationAddress, etc.) via that reference.
     /// </summary>
@@ -49,7 +49,7 @@ public sealed class ConsumeContext : IConsumeContext
     public CancellationToken CancellationToken { get; }
 
     // Cached backing fields — HeaderDecoder.Decode + Guid.TryParse are called only once
-    // per ConsumeContext instance regardless of how many times the properties are read (P-031).
+    // per ConsumeContext instance regardless of how many times the properties are read.
     private string? _messageId;
     private bool _messageIdCached;
     private Guid? _correlationId;

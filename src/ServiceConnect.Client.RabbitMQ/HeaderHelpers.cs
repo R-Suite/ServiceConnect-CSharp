@@ -12,7 +12,7 @@ internal static class HeaderHelpers
         else headers[key] = value;
     }
 
-    // P-029: foreach into pre-sized dictionary avoids the LINQ ToDictionary allocation overhead.
+    // foreach into a pre-sized dictionary avoids the LINQ ToDictionary allocation overhead.
     public static Dictionary<string, object?> ToNullableHeaders(IDictionary<string, object> headers)
     {
         var result = new Dictionary<string, object?>(headers.Count, StringComparer.Ordinal);
@@ -23,7 +23,7 @@ internal static class HeaderHelpers
 
     // Keep the error-queue header bounded in both breadth and depth so that arbitrary
     // inner-exception chains (including ones that might reveal connection strings or
-    // file paths) cannot bloat the message or leak beyond a controlled surface (S-07).
+    // file paths) cannot bloat the message or leak beyond a controlled surface.
     private const int MaxErrorMessageInnerDepth = 3;
     private const int MaxErrorMessageLength = 4096;
     private const string TruncationMarker = "...[truncated]";
@@ -41,7 +41,7 @@ internal static class HeaderHelpers
             depth++;
         }
         // Append a marker when the chain was deeper than we recorded so operators
-        // know to check logs for the full inner-exception stack (M-4).
+        // know to check logs for the full inner-exception stack.
         if (ie != null)
             sb.Append(TruncationMarker);
 

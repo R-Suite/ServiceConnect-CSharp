@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Services;
 
 namespace ServiceConnect.Services.Processors;
@@ -14,14 +15,25 @@ internal sealed class ProcessManagerProcessor(
     ILogger<ProcessManagerProcessor> logger,
     IBusConfiguration busConfig,
     IQueueConfiguration queueConfig,
-    IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null,
-    ConsumeContextPool? contextPool = null,
-    ConsumeContextAccessor? consumeContextAccessor = null) : IMessageProcessor
+    ConsumeContextPool contextPool,
+    ConsumeContextAccessor consumeContextAccessor,
+    IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null) : IMessageProcessor
 {
     // Cached mapper per handler interface type. ConfigureMapper compiles expression lambdas
-    // that are identical for a given handler type, so we only pay the cost once (P-005/R-034).
+    // that are identical for a given handler type, so we only pay the cost once.
     private static readonly ConcurrentDictionary<Type, IProcessManagerPropertyMapper> MapperCache = new();
-    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
+    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
+    private readonly ConsumeContextPool _contextPool = contextPool;
+
+    // Bounded optimistic-concurrency retry schedule for find→invoke→update. Keep it small
+    // because the handler side-effects are re-run on each attempt — if contention is high
+    // enough to burn the budget, the message should be requeued at the transport layer.
+    private static readonly TimeSpan[] ConcurrencyBackoff =
+    [
+        TimeSpan.FromMilliseconds(10),
+        TimeSpan.FromMilliseconds(50),
+        TimeSpan.FromMilliseconds(200)
+    ];
 
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -59,14 +71,47 @@ internal sealed class ProcessManagerProcessor(
             return m;
         });
 
-        var persistenceData = await descriptor.FindData(finder, mapper, (Message)message, cancellationToken).ConfigureAwait(false);
+        // Retry the find→invoke→update cycle on ConcurrencyException so two concurrent messages
+        // for the same saga converge instead of losing one to a lost-update. Side-effects inside
+        // the handler are re-run on each attempt — callers who can't tolerate that should
+        // externalise their side-effects or reduce saga concurrency at the transport layer.
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await RunPipelineOnceAsync(finder, descriptor, mapper, handler, (Message)message, messageType, headers, cancellationToken).ConfigureAwait(false);
+                return ProcessResult.Handled;
+            }
+            catch (ConcurrencyException) when (attempt < ConcurrencyBackoff.Length)
+            {
+                var delay = ConcurrencyBackoff[attempt];
+                var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, (int)Math.Max(1, delay.TotalMilliseconds / 2)));
+                logger.LogDebug(
+                    "ConcurrencyException on attempt {Attempt} for {MessageType}; retrying after {Delay}",
+                    attempt + 1, messageType.Name, delay + jitter);
+                await Task.Delay(delay + jitter, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task RunPipelineOnceAsync(
+        IProcessManagerFinder finder,
+        ProcessManagerDescriptor descriptor,
+        IProcessManagerPropertyMapper mapper,
+        object handler,
+        Message message,
+        Type messageType,
+        IDictionary<string, object> headers,
+        CancellationToken cancellationToken)
+    {
+        var persistenceData = await descriptor.FindData(finder, mapper, message, cancellationToken).ConfigureAwait(false);
 
         bool isNew = persistenceData == null;
         object data;
         if (isNew)
         {
             var newData = descriptor.CreateData();
-            descriptor.SetCorrelationId(newData, ((Message)message).CorrelationId);
+            descriptor.SetCorrelationId(newData, message.CorrelationId);
             data = newData;
         }
         else
@@ -78,7 +123,7 @@ internal sealed class ProcessManagerProcessor(
             ?? serviceProvider.GetService<IReplyStatusRequestReplyManager>()
             ?? serviceProvider.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
 
-        var context = (contextPool ?? new ConsumeContextPool()).Rent(
+        var context = _contextPool.Rent(
             bus.Value,
             headers,
             queueConfig,
@@ -90,7 +135,7 @@ internal sealed class ProcessManagerProcessor(
             using (_consumeContextAccessor.Push(context.Headers))
             {
                 descriptor.SetHandlerContext(handler, context);
-                await descriptor.InvokeHandleAsync(handler, (Message)message, data).ConfigureAwait(false);
+                await descriptor.InvokeHandleAsync(handler, message, data).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -103,7 +148,6 @@ internal sealed class ProcessManagerProcessor(
             context.Release();
         }
 
-        // Only persist if the handler succeeded — keeps business side-effects and persistence atomic.
         if (isNew)
         {
             await finder.InsertDataAsync((IProcessManagerData)data, cancellationToken).ConfigureAwait(false);
@@ -112,7 +156,5 @@ internal sealed class ProcessManagerProcessor(
         {
             await descriptor.UpdateData(finder, persistenceData!, cancellationToken).ConfigureAwait(false);
         }
-
-        return ProcessResult.Handled;
     }
 }

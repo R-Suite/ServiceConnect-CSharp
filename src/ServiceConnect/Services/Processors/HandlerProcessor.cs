@@ -14,11 +14,12 @@ internal sealed class HandlerProcessor(
     Lazy<IBus> bus,
     IBusConfiguration busConfig,
     IQueueConfiguration queueConfig,
-    IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null,
-    ConsumeContextPool? contextPool = null,
-    ConsumeContextAccessor? consumeContextAccessor = null) : IMessageProcessor
+    ConsumeContextPool contextPool,
+    ConsumeContextAccessor consumeContextAccessor,
+    IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null) : IMessageProcessor
 {
-    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
+    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
+    private readonly ConsumeContextPool _contextPool = contextPool;
 
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -30,7 +31,7 @@ internal sealed class HandlerProcessor(
 
         // Walk up the message hierarchy — stop at Message and object. All matching
         // handlers in the hierarchy are invoked. Defer list allocation until we
-        // actually find a handler (P-05); most no-op dispatches keep the list null.
+        // actually find a handler; most no-op dispatches keep the list null.
         List<(object Handler, MessageHandlerDescriptor Descriptor)>? invocations = null;
         var checkedType = messageType;
         while (checkedType != null && checkedType != typeof(Message) && checkedType != typeof(object))
@@ -53,7 +54,7 @@ internal sealed class HandlerProcessor(
         var trustQuery = replyStatusRequestReplyManager
             ?? serviceProvider.GetService<IReplyStatusRequestReplyManager>()
             ?? serviceProvider.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
-        var context = (contextPool ?? new ConsumeContextPool()).Rent(
+        var context = _contextPool.Rent(
             resolvedBus,
             headers,
             queueConfig,
@@ -88,7 +89,7 @@ internal sealed class HandlerProcessor(
     private const int MaxRoutingSlipDestinationLength = 128;
     private static readonly char[] ForbiddenRoutingSlipChars = ['*', '#', '\0', '\r', '\n', '\t', '"', '\''];
 
-    // Cache compiled delegates for IBus.RouteAsync<T> keyed by message type (P-010, R-035).
+    // Cache compiled delegates for IBus.RouteAsync<T> keyed by message type.
     // Building a delegate via Expression.Lambda avoids repeated MakeGenericMethod + Invoke
     // overhead on every routed message.
     private static readonly ConcurrentDictionary<Type, Func<IBus, object, IList<string>, CancellationToken, Task>>

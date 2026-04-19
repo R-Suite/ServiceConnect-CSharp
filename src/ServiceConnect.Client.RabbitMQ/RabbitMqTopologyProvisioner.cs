@@ -6,7 +6,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 
 /// <summary>
 /// Encapsulates RabbitMQ topology provisioning (exchanges, queues, bindings).
-/// R-032: Catches AMQP PRECONDITION_FAILED errors and re-throws them on initial setup.
+/// Catches AMQP PRECONDITION_FAILED errors and re-throws them on initial setup.
 /// </summary>
 public sealed class RabbitMqTopologyProvisioner
 {
@@ -19,8 +19,8 @@ public sealed class RabbitMqTopologyProvisioner
 
     /// <summary>
     /// Declares an exchange with standard durable/non-auto-delete settings.
-    /// R-010: Deduplicated exchange declaration.
-    /// R-032: Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Deduplicated exchange declaration.
+    /// Swallows OperationInterruptedException unless isInitialSetup is true.
     /// </summary>
     public async Task ConfigureDeclareExchangeAsync(
         IChannel channel,
@@ -47,7 +47,7 @@ public sealed class RabbitMqTopologyProvisioner
 
     /// <summary>
     /// Declares the main consumer queue.
-    /// R-032: Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Swallows OperationInterruptedException unless isInitialSetup is true.
     /// </summary>
     public async Task ConfigureDeclareQueueAsync(
         IChannel channel,
@@ -78,8 +78,8 @@ public sealed class RabbitMqTopologyProvisioner
 
     /// <summary>
     /// Declares a utility queue (error/audit), its exchange, and binding.
-    /// R-070: Deduplicated utility queue setup.
-    /// R-032: Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Deduplicated utility queue setup.
+    /// Swallows OperationInterruptedException unless isInitialSetup is true.
     /// </summary>
     public async Task ConfigureDeclareUtilityQueueAsync(
         IChannel channel,
@@ -130,7 +130,7 @@ public sealed class RabbitMqTopologyProvisioner
 
     /// <summary>
     /// Declares the retry topology: dead-letter exchange, queue binding, and retry queue.
-    /// R-032: Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Swallows OperationInterruptedException unless isInitialSetup is true.
     /// </summary>
     public async Task ConfigureRetryTopologyAsync(
         IChannel channel,

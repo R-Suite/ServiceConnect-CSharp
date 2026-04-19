@@ -88,6 +88,19 @@ public class MongoDbTimeoutStoreTests
 
     private static MongoDbTimeoutStore BuildStore(Mock<IMongoCollection<TimeoutData>> collection)
     {
+        // EnsureTimeoutIndexAsync runs on every read/write path, so every store under
+        // test needs a benign Indexes mock — otherwise the collection mock returns null and
+        // CreateManyAsync throws NullReferenceException unrelated to what the test is probing.
+        if (collection.Object.Indexes == null)
+        {
+            var indexes = new Mock<IMongoIndexManager<TimeoutData>>();
+            indexes.Setup(m => m.CreateManyAsync(
+                    It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<string> { "ok" });
+            collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
+        }
+
         var database = new Mock<IMongoDatabase>();
         database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null))
             .Returns(collection.Object);
