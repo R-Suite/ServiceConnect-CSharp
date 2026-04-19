@@ -6,7 +6,7 @@ apiRules:
   - exclude:
       uidRegex: ^ServiceConnect\.EndToEndTests
       type: Namespace
-  # Exclude any type whose visibility is internal/private.
+  # Exclude compiler-generated types (closures, async state machines, etc.).
   - exclude:
       hasAttribute:
         uid: System.Runtime.CompilerServices.CompilerGeneratedAttribute
