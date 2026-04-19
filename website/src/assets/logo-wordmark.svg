@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 60" fill="none" aria-hidden="true">
+  <g stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(8 14)">
+    <circle cx="8" cy="8" r="5"/>
+    <circle cx="24" cy="24" r="5"/>
+    <path d="M11.5 11.5 20.5 20.5"/>
+  </g>
+  <text x="52" y="40" fill="currentColor" font-family="Inter, system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="28" font-weight="700" letter-spacing="-0.02em">ServiceConnect</text>
+</svg>
