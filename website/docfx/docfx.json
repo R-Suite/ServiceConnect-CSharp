@@ -9,7 +9,7 @@
       ],
       "dest": "../../website/_docfx_metadata",
       "filter": "filterConfig.yml",
-      "disableGitFeatures": false,
+      "disableGitFeatures": true,
       "outputFormat": "mref"
     }
   ],

@@ -10,6 +10,7 @@ on:
       - '**/*.csproj'
       - '**/*.cs'
       - '.github/workflows/docs.yml'
+      - '.config/dotnet-tools.json'
   workflow_dispatch:
 
 permissions:
