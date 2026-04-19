@@ -1,9 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Persistence.InMemory;
+using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using Xunit;
 
@@ -212,6 +215,78 @@ public class ProcessManagerProcessorTests
         mockFinder.Verify(f => f.UpdateDataAsync(
             It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task ProcessAsync_WhenHandlerMutatesAndThrows_DoesNotLeakMutationIntoInMemoryStore()
+    {
+        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var existing = new PmMutableData { CorrelationId = Guid.NewGuid(), Counter = 5 };
+        await finder.InsertDataAsync(existing, CancellationToken.None);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IBus>(new Mock<IBus>().Object);
+        services.AddSingleton<IProcessManagerFinder>(finder);
+        services.AddSingleton<IProcessHandler<PmMutableData, PmMutableMessage>>(new PmMutatingThrowingHandler());
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmMutableMessage), HandlerType = typeof(PmMutatingThrowingHandler)
+        });
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            processor.ProcessAsync(new byte[] { 1 }, typeof(PmMutableMessage), new PmMutableMessage(existing.CorrelationId),
+                new Dictionary<string, object>(), new Envelope()));
+
+        var mapper = new TestProcessManagerPropertyMapper();
+        mapper.ConfigureMapping<PmMutableData, PmMutableMessage>(d => d.CorrelationId, m => m.CorrelationId);
+        var reloaded = await finder.FindDataAsync<PmMutableData>(mapper, new PmMutableMessage(existing.CorrelationId), CancellationToken.None);
+
+        Assert.NotNull(reloaded);
+        Assert.Equal(5, reloaded!.Data.Counter);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SetsAmbientConsumeHeadersDuringHandlerAndClearsThemAfterward()
+    {
+        var timeoutStore = new PmCapturingTimeoutStore();
+        var accessor = new ConsumeContextAccessor();
+        var bus = PmTestBusFactory.Create(DefaultQueueConfig, timeoutStore, accessor);
+
+        var services = new ServiceCollection();
+        var mockFinder = new Mock<IProcessManagerFinder>();
+        services.AddSingleton<IBus>(bus);
+        services.AddSingleton<IProcessManagerFinder>(mockFinder.Object);
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(new PmTimeoutRequestingHandler(bus));
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTimeoutRequestingHandler)
+        });
+
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
+                It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IPersistenceData<PmTestData>?)null);
+
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => bus), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, consumeContextAccessor: accessor);
+
+        var correlationId = Guid.NewGuid();
+        var headers = new Dictionary<string, object>
+        {
+            ["Custom"] = "value",
+            [HeaderKeys.MessageId] = "managed-message-id"
+        };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), new PmTestMessage(correlationId), headers, new Envelope { Headers = headers, Body = new byte[] { 1 } });
+        await bus.RequestTimeoutAsync(correlationId, TimeSpan.FromMinutes(2));
+
+        Assert.Equal(2, timeoutStore.Inserted.Count);
+        Assert.Equal("value", timeoutStore.Inserted[0].Headers["Custom"]);
+        Assert.False(timeoutStore.Inserted[0].Headers.ContainsKey(HeaderKeys.MessageId));
+        Assert.Empty(timeoutStore.Inserted[1].Headers);
+    }
 }
 
 file class PmTestMessage : Message
@@ -254,4 +329,96 @@ file class PmThrowingHandler : IProcessHandler<PmTestData, PmTestMessage>
 
     public Task HandleAsync(PmTestMessage message, PmTestData data)
         => throw new InvalidOperationException("handler failure");
+}
+
+file class PmMutableMessage : Message
+{
+    public PmMutableMessage(Guid correlationId) : base(correlationId) { }
+}
+
+file class PmMutableData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+    public int Counter { get; set; }
+}
+
+file class PmMutatingThrowingHandler : IProcessHandler<PmMutableData, PmMutableMessage>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
+        => mapper.ConfigureMapping<PmMutableData, PmMutableMessage>(d => d.CorrelationId, m => m.CorrelationId);
+
+    public Task HandleAsync(PmMutableMessage message, PmMutableData data)
+    {
+        data.Counter++;
+        throw new InvalidOperationException("handler failure");
+    }
+}
+
+file sealed class PmTimeoutRequestingHandler(IBus bus) : IProcessHandler<PmTestData, PmTestMessage>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
+
+    public Task HandleAsync(PmTestMessage message, PmTestData data)
+        => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));
+}
+
+file sealed class PmCapturingTimeoutStore : ITimeoutStore
+{
+    public List<TimeoutData> Inserted { get; } = [];
+
+    public Task InsertTimeoutAsync(TimeoutData data, CancellationToken cancellationToken = default)
+    {
+        Inserted.Add(new TimeoutData
+        {
+            Id = data.Id,
+            Destination = data.Destination,
+            ProcessManagerId = data.ProcessManagerId,
+            Time = data.Time,
+            Headers = new Dictionary<string, object>(data.Headers)
+        });
+        return Task.CompletedTask;
+    }
+
+    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+}
+
+file static class PmTestBusFactory
+{
+    public static Bus Create(IQueueConfiguration queueConfiguration, ITimeoutStore timeoutStore, ConsumeContextAccessor accessor)
+    {
+        var serializer = new Mock<IMessageSerializer>();
+        serializer.Setup(x => x.Serialize(It.IsAny<PmTestMessage>())).Returns([1]);
+
+        var filterPipeline = new Mock<IFilterPipeline>();
+        var sendPipeline = new Mock<ISendMessagePipeline>();
+        var requestReplyManager = new Mock<IRequestReplyManager>();
+        var logger = new Mock<ILogger<Bus>>();
+        var dispatcher = new Mock<IMessageDispatcher>();
+        var pipelineConfiguration = new Mock<IPipelineConfiguration>();
+        pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns(new List<Type>());
+
+        return new Bus(
+            serializer.Object,
+            filterPipeline.Object,
+            sendPipeline.Object,
+            requestReplyManager.Object,
+            logger.Object,
+            queueConfiguration,
+            dispatcher.Object,
+            new List<HandlerReference>(),
+            pipelineConfiguration.Object,
+            timeoutStore: timeoutStore,
+            consumeContextAccessor: accessor);
+    }
 }

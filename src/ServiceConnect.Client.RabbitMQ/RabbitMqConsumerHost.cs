@@ -31,7 +31,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly int _gracefulShutdownTimeoutMs;
     private readonly bool _includeMachineNameInHeaders;
     private readonly long _maxInboundMessageSize;
-    private readonly Lock _callbackAdmissionGate = new();
+    private readonly object _callbackAdmissionGate = new();
 
     private IChannel? _model;
     private ConsumerEventHandler? _consumerEventHandler;

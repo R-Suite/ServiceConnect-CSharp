@@ -25,6 +25,15 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void IRequestReplyManager_ProcessReply_ReturnsVoid()
+        {
+            var method = typeof(IRequestReplyManager).GetMethod(nameof(IRequestReplyManager.ProcessReply));
+
+            Assert.NotNull(method);
+            Assert.Equal(typeof(void), method!.ReturnType);
+        }
+
+        [Fact]
         public void Constructor_ThrowsWhenSerializerIsNull()
         {
             Assert.Throws<ArgumentNullException>(() => new RequestReplyManager(null!, _mockSendPipeline.Object));
@@ -181,17 +190,13 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ProcessReply_IgnoresUnknownMessageId()
+        public void ProcessReply_ReturnsFalse_WhenMessageIdIsUnknown()
         {
-            // Arrange
-            var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
-            var unknownId = Guid.NewGuid().ToString();
+            var manager = (IReplyStatusRequestReplyManager)new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
 
-            // Act & Assert — should not throw
-            var ex = Record.Exception(() =>
-                manager.ProcessReply(unknownId, new byte[] { 1, 2, 3 }, typeof(FakeMessage1)));
+            var handled = manager.TryProcessReply(Guid.NewGuid().ToString(), new byte[] { 1, 2, 3 }, typeof(FakeMessage1));
 
-            Assert.Null(ex);
+            Assert.False(handled);
             _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
         }
 

@@ -5,7 +5,7 @@ using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Services;
 
-public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline) : IRequestReplyManager
+public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline) : IRequestReplyManager, IReplyStatusRequestReplyManager
 {
     private readonly ConcurrentDictionary<Guid, RequestState> _pendingRequests = new();
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
@@ -215,15 +215,20 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
     public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
     {
+        TryProcessReply(messageId, messageBytes, type);
+    }
+
+    public bool TryProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
+    {
         if (!Guid.TryParse(messageId, out var requestId) || !_pendingRequests.TryGetValue(requestId, out var state))
-            return;
+            return false;
 
         lock (state.SyncRoot)
         {
             try
             {
                 if (!state.TryAcceptReply(out var completesRequest))
-                    return;
+                    return false;
 
                 // Use the expected reply type stored at request time, not the wire-provided type.
                 // This prevents deserialization into attacker-controlled types via crafted reply messages.
@@ -237,7 +242,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     state.Close();
                     _pendingRequests.TryRemove(requestId, out _);
                     state.Tcs.TrySetException(ex);
-                    return;
+                    return true;
                 }
 
                 if (state.OnReply != null)
@@ -251,7 +256,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                         state.Close();
                         _pendingRequests.TryRemove(requestId, out _);
                         state.Tcs.TrySetException(ex);
-                        return;
+                        return true;
                     }
 
                     if (completesRequest)
@@ -267,12 +272,19 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     state.Tcs.TrySetResult(reply);
                     _pendingRequests.TryRemove(requestId, out _);
                 }
+
+                return true;
             }
             finally
             {
                 state.EndReply();
             }
         }
+    }
+
+    public bool IsTrackedRequest(string messageId)
+    {
+        return Guid.TryParse(messageId, out var requestId) && _pendingRequests.ContainsKey(requestId);
     }
 
     private sealed class RequestState(TaskCompletionSource<object> tcs, int expectedCount, Type replyType, Action<object>? onReply = null)

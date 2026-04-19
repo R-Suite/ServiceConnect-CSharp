@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessageProcessor
+internal sealed class ReplyProcessor(IReplyStatusRequestReplyManager? replyManager) : IMessageProcessor
 {
     // Cache the two result tasks so enum-boxing allocation doesn't happen per message (P-44).
     private static readonly Task<ProcessResult> NotHandledTask = Task.FromResult(ProcessResult.NotHandled);
@@ -24,7 +24,12 @@ internal sealed class ReplyProcessor(IRequestReplyManager replyManager) : IMessa
         if (string.IsNullOrEmpty(responseMessageId))
             return NotHandledTask;
 
-        replyManager.ProcessReply(responseMessageId, messageBytes, messageType);
-        return HandledTask;
+        if (replyManager == null)
+            return NotHandledTask;
+
+        if (replyManager.TryProcessReply(responseMessageId, messageBytes, messageType))
+            return HandledTask;
+
+        return NotHandledTask;
     }
 }

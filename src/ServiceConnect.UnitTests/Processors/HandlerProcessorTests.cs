@@ -216,6 +216,36 @@ public class HandlerProcessorTests
         mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ProcessAsync_SetsAmbientConsumeHeadersDuringHandlerAndClearsThemAfterward()
+    {
+        var timeoutStore = new CapturingTimeoutStore();
+        var accessor = new ConsumeContextAccessor();
+        var bus = TestBusFactory.Create(DefaultQueueConfig, timeoutStore, accessor);
+        var handler = new TimeoutRequestingHandler(bus);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton<IBus>(bus);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => bus), DefaultBusConfig, DefaultQueueConfig, consumeContextAccessor: accessor);
+        var correlationId = Guid.NewGuid();
+        var headers = new Dictionary<string, object>
+        {
+            ["Custom"] = "value",
+            [HeaderKeys.MessageId] = "managed-message-id"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), new TestHpMsg(correlationId), headers, envelope);
+        await bus.RequestTimeoutAsync(correlationId, TimeSpan.FromMinutes(2));
+
+        Assert.Equal(2, timeoutStore.Inserted.Count);
+        Assert.Equal("value", timeoutStore.Inserted[0].Headers["Custom"]);
+        Assert.False(timeoutStore.Inserted[0].Headers.ContainsKey(HeaderKeys.MessageId));
+        Assert.Empty(timeoutStore.Inserted[1].Headers);
+    }
+
     private static MessageHandlerRegistry BuildRegistry(params Type[] messageTypes)
     {
         var refs = messageTypes
@@ -237,4 +267,69 @@ file class TestHpHandler : IMessageHandler<TestHpMsg>
     public bool Invoked { get; private set; }
     public IConsumeContext? Context { get; set; }
     public Task HandleAsync(TestHpMsg message) { Invoked = true; return Task.CompletedTask; }
+}
+
+file sealed class TimeoutRequestingHandler(IBus bus) : IMessageHandler<TestHpMsg>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public Task HandleAsync(TestHpMsg message)
+        => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));
+}
+
+file sealed class CapturingTimeoutStore : ITimeoutStore
+{
+    public List<TimeoutData> Inserted { get; } = [];
+
+    public Task InsertTimeoutAsync(TimeoutData data, CancellationToken cancellationToken = default)
+    {
+        Inserted.Add(new TimeoutData
+        {
+            Id = data.Id,
+            Destination = data.Destination,
+            ProcessManagerId = data.ProcessManagerId,
+            Time = data.Time,
+            Headers = new Dictionary<string, object>(data.Headers)
+        });
+        return Task.CompletedTask;
+    }
+
+    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+}
+
+file static class TestBusFactory
+{
+    public static Bus Create(IQueueConfiguration queueConfiguration, ITimeoutStore timeoutStore, ConsumeContextAccessor accessor)
+    {
+        var serializer = new Mock<IMessageSerializer>();
+        serializer.Setup(x => x.Serialize(It.IsAny<TestHpMsg>())).Returns([1]);
+
+        var filterPipeline = new Mock<IFilterPipeline>();
+        var sendPipeline = new Mock<ISendMessagePipeline>();
+        var requestReplyManager = new Mock<IRequestReplyManager>();
+        var logger = new Mock<ILogger<Bus>>();
+        var dispatcher = new Mock<IMessageDispatcher>();
+        var pipelineConfiguration = new Mock<IPipelineConfiguration>();
+        pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns(new List<Type>());
+
+        return new Bus(
+            serializer.Object,
+            filterPipeline.Object,
+            sendPipeline.Object,
+            requestReplyManager.Object,
+            logger.Object,
+            queueConfiguration,
+            dispatcher.Object,
+            new List<HandlerReference>(),
+            pipelineConfiguration.Object,
+            timeoutStore: timeoutStore,
+            consumeContextAccessor: accessor);
+    }
 }

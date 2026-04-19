@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Services.Processors;
 
 namespace ServiceConnect.Services;
 
@@ -55,32 +56,64 @@ public sealed class MessageDispatcher : IMessageDispatcher
             // 2. Build envelope
             var envelope = new Envelope { Headers = headers, Body = messageBytes };
 
-            // 3. Run pre-deserialization processors (ReplyProcessor, StreamProcessor).
-            //    These operate on headers only and don't need the resolved CLR type.
-            //    ReplyProcessor uses the expected type stored at request time, not the wire type.
-            //    This runs before the registry check so reply messages for unregistered
-            //    types (e.g., requester with ScanForMessageHandlers=false) are handled.
+            ReplyProcessor? replyProcessor = null;
+            var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
+
+            // 3. Run stream-style pre-deserialization processors before type resolution.
             foreach (var proc in _processors)
             {
+                if (proc is ReplyProcessor typedReplyProcessor)
+                {
+                    replyProcessor = typedReplyProcessor;
+                    continue;
+                }
+
                 if (!proc.RunBeforeDeserialization) continue;
                 var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope, cancellationToken);
                 if (preResult == ProcessResult.Handled)
                     return new ConsumeEventResult { Success = true };
             }
 
-            // 4. Resolve CLR Type from registry (strict: no Type.GetType fallback).
-            if (!_typeRegistry.TryResolve(fullTypeName, out var type))
+            // 4. Resolve CLR type for handler dispatch. Reply traffic only needs a best-effort
+            // wire type because RequestReplyManager owns the actual reply deserialization.
+            var typeResolvedFromRegistry = _typeRegistry.TryResolve(fullTypeName, out var type);
+            if (!typeResolvedFromRegistry)
             {
-                _logger.LogWarning("Unregistered message type '{TypeName}'. Rejecting", fullTypeName);
-                return new ConsumeEventResult { Success = false };
-            }
+                if (!hasResponseMessageId)
+                {
+                    _logger.LogWarning("Unregistered message type '{TypeName}'. Rejecting", fullTypeName);
+                    return new ConsumeEventResult { Success = false };
+                }
 
-            var message = _serializer.Deserialize(messageBytes, type);
+                type = Type.GetType(fullTypeName, throwOnError: false) ?? typeof(Message);
+            }
 
             // 6. Run BeforeConsumingFilters
             bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
             if (blocked)
                 return new ConsumeEventResult { Success = true };
+
+            if (replyProcessor != null && hasResponseMessageId)
+            {
+                var replyResult = await replyProcessor.ProcessAsync(messageBytes, type, null, headers, envelope, cancellationToken).ConfigureAwait(false);
+                if (replyResult == ProcessResult.Handled)
+                {
+                    await _filterPipeline.ExecuteAfterConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+                    return new ConsumeEventResult { Success = true };
+                }
+
+                await _filterPipeline.ExecuteAfterConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+                return new ConsumeEventResult
+                {
+                    Success = false,
+                    Exception = new InvalidOperationException("Reply message did not match a pending request.")
+                };
+            }
+
+            if (!typeResolvedFromRegistry)
+                return new ConsumeEventResult { Success = false };
+
+            var message = _serializer.Deserialize(messageBytes, type);
 
             // 7. Run post-deserialization processors wrapped in the cached processing chain
             return await _processingChain.Value(messageBytes, type, message, headers, envelope, cancellationToken);

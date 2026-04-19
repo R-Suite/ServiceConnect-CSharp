@@ -91,6 +91,175 @@ public class ProcessManagerTimeoutServiceTests
     }
 
     [Fact]
+    public async Task PollOnce_IncludesStoredHeaders_WhenDispatchingTimeout()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts = new List<TimeoutData>
+            {
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 3 }
+                }
+            },
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await sut.PollOnceAsync();
+
+        _mockBus.Verify(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.Is<SendOptions>(options =>
+                    options.Headers != null &&
+                    options.Headers[HeaderKeys.RetryCount] == "3"),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PollOnce_DoesNotForwardReservedTransportHeaders_WhenDispatchingTimeout()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var reservedHeaders = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = "spoofed-message-type",
+            [HeaderKeys.TypeName] = "spoofed-type-name",
+            [HeaderKeys.FullTypeName] = "spoofed-full-type-name",
+            [HeaderKeys.MessageId] = "spoofed-message-id",
+            [HeaderKeys.DestinationAddress] = "spoofed-destination",
+            [HeaderKeys.SourceAddress] = "spoofed-source",
+            [HeaderKeys.RequestMessageId] = "spoofed-request-message-id",
+            [HeaderKeys.ResponseMessageId] = "spoofed-response-message-id",
+            [HeaderKeys.RoutingKey] = "spoofed-routing-key",
+            [HeaderKeys.RoutingSlip] = "spoofed-routing-slip",
+            [HeaderKeys.Publish] = "spoofed-publish",
+            [HeaderKeys.SequenceId] = "spoofed-sequence-id",
+            [HeaderKeys.PacketNumber] = "spoofed-packet-number",
+            [HeaderKeys.LastPacketNumber] = "spoofed-last-packet-number",
+            [HeaderKeys.ByteStream] = "spoofed-byte-stream",
+            [HeaderKeys.TimeSent] = "spoofed-time-sent",
+            [HeaderKeys.TimeReceived] = "spoofed-time-received",
+            [HeaderKeys.TimeProcessed] = "spoofed-time-processed",
+            [HeaderKeys.SourceMachine] = "spoofed-source-machine",
+            [HeaderKeys.DestinationMachine] = "spoofed-destination-machine",
+            [HeaderKeys.Redelivered] = "spoofed-redelivered",
+            [HeaderKeys.ConsumerType] = "spoofed-consumer-type",
+            [HeaderKeys.Language] = "spoofed-language",
+            [HeaderKeys.Exception] = "spoofed-exception"
+        };
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts = new List<TimeoutData>
+            {
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>(reservedHeaders)
+                    {
+                        [HeaderKeys.RetryCount] = "3"
+                    }
+                }
+            },
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        SendOptions? dispatchedOptions = null;
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<TimeoutMessage, SendOptions?, CancellationToken>((_, options, _) => dispatchedOptions = options)
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await sut.PollOnceAsync();
+
+        _mockBus.Verify(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        var sendOptions = Assert.IsType<SendOptions>(dispatchedOptions);
+        var outgoingHeaders = Assert.IsAssignableFrom<IDictionary<string, string>>(sendOptions.Headers);
+        Assert.Equal("3", outgoingHeaders[HeaderKeys.RetryCount]);
+
+        foreach (var reservedHeader in reservedHeaders.Keys)
+            Assert.DoesNotContain(reservedHeader, outgoingHeaders.Keys);
+    }
+
+    [Fact]
+    public async Task PollOnce_IgnoresUnsupportedStoredHeaderValues_WhenDispatchingTimeout()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts = new List<TimeoutData>
+            {
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>
+                    {
+                        [HeaderKeys.RetryCount] = "3",
+                        ["Unsupported"] = new object()
+                    }
+                }
+            },
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await sut.PollOnceAsync();
+
+        _mockBus.Verify(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.Is<SendOptions>(options =>
+                    options.Headers != null &&
+                    options.Headers[HeaderKeys.RetryCount] == "3" &&
+                    !options.Headers.ContainsKey("Unsupported")),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task PollOnce_SendFails_ReleasesTimeoutForRetry()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
@@ -319,6 +488,49 @@ public class ProcessManagerTimeoutServiceTests
         await Assert.ThrowsAsync<OperationCanceledException>(() => sut.PollOnceAsync());
 
         _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PollOnce_WhenSendSucceeds_UsesNonCanceledTokenForRemove()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts = new List<TimeoutData>
+            {
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>()
+                }
+            },
+            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
+        };
+
+        using var cts = new CancellationTokenSource();
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => cts.Cancel())
+            .Returns(Task.CompletedTask);
+
+        CancellationToken removeToken = default;
+        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()))
+            .Callback<Guid, CancellationToken>((_, token) => removeToken = token)
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        await sut.PollOnceAsync(cts.Token);
+
+        Assert.False(removeToken.IsCancellationRequested);
     }
 
     [Fact]

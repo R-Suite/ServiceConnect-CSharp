@@ -4,6 +4,8 @@ using Moq;
 using System.Reflection;
 using ServiceConnect;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Services;
+using ServiceConnect.Services.Processors;
 using Xunit;
 
 namespace ServiceConnect.UnitTests;
@@ -73,6 +75,54 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddServiceConnect_MapsPublicAndInternalReplyManagerContracts_ToSameSingleton()
+    {
+        var services = CreateServices();
+
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
+
+        var provider = services.BuildServiceProvider();
+        var publicContract = provider.GetRequiredService<IRequestReplyManager>();
+        var internalContract = provider.GetRequiredService<IReplyStatusRequestReplyManager>();
+
+        Assert.Same(publicContract, internalContract);
+    }
+
+    [Fact]
+    public void AddServiceConnect_AllowsOverriddenRequestReplyManager_WithoutInternalReplyStatusContract()
+    {
+        var services = CreateServices();
+
+        services.AddSingleton<IRequestReplyManager, OverrideRequestReplyManager>();
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
+
+        var provider = services.BuildServiceProvider();
+
+        Assert.IsType<OverrideRequestReplyManager>(provider.GetRequiredService<IRequestReplyManager>());
+        Assert.Null(provider.GetService<IReplyStatusRequestReplyManager>());
+    }
+
+    [Fact]
+    public void AddServiceConnect_AllowsOverriddenRequestReplyManager_ToResolveDispatcherPath()
+    {
+        var services = CreateServices();
+
+        services.AddSingleton<IRequestReplyManager, OverrideRequestReplyManager>();
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
+
+        var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<ReplyProcessor>());
+        Assert.NotNull(provider.GetRequiredService<IMessageDispatcher>());
+    }
+
+    [Fact]
     public void ServiceCollectionExtensions_DefinesRegistrationHelpers()
     {
         string[] expectedHelpers =
@@ -122,4 +172,38 @@ file sealed class TestSendMiddleware : ISendMessageMiddleware
         SendMessageDelegate next,
         CancellationToken cancellationToken = default) =>
         next(messageType, messageBytes, headers, endPoint, cancellationToken);
+}
+
+file sealed class OverrideRequestReplyManager : IRequestReplyManager
+{
+    public Task<TReply> SendRequestAsync<TRequest, TReply>(
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        ServiceConnect.Interfaces.Options.RequestOptions options,
+        CancellationToken cancellationToken = default)
+        where TRequest : Message
+        where TReply : Message =>
+        throw new NotSupportedException();
+
+    public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        ServiceConnect.Interfaces.Options.RequestOptions options,
+        CancellationToken cancellationToken = default)
+        where TRequest : Message
+        where TReply : Message =>
+        throw new NotSupportedException();
+
+    public Task PublishRequestAsync<TRequest, TReply>(
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        ServiceConnect.Interfaces.Options.RequestOptions options,
+        Action<TReply> onReply,
+        CancellationToken cancellationToken = default)
+        where TRequest : Message
+        where TReply : Message =>
+        throw new NotSupportedException();
+
+    public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type) =>
+        throw new NotSupportedException();
 }

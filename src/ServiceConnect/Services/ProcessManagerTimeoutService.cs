@@ -84,14 +84,15 @@ public sealed class ProcessManagerTimeoutService(
                         var timeoutMessage = new TimeoutMessage(timeout.ProcessManagerId);
                         await _bus.Value.SendAsync(timeoutMessage, new SendOptions
                         {
-                            EndPoint = timeout.Destination
-                        }).ConfigureAwait(false);
+                            EndPoint = timeout.Destination,
+                            Headers = TimeoutHeaderPersistence.BuildOutgoingHeaders(timeout.Headers)
+                        }, cancellationToken).ConfigureAwait(false);
                     }
 
                     if (_leaseAwareFinder != null && timeout.LockedBy != Guid.Empty)
-                        await _leaseAwareFinder.RemoveDispatchedTimeoutAsync(timeout.Id, timeout.LockedBy, cancellationToken).ConfigureAwait(false);
+                        await _leaseAwareFinder.RemoveDispatchedTimeoutAsync(timeout.Id, timeout.LockedBy, CancellationToken.None).ConfigureAwait(false);
                     else
-                        await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
+                        await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

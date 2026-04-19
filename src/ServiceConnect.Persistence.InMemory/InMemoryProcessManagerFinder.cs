@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 
@@ -33,6 +34,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (Func<object, object?> Data, Func<object, object?> Version)>
         ReflectionAccessors = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, PropertyInfo[]> CloneableProperties = new();
+    private static readonly MethodInfo MemberwiseCloneMethod = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("Could not locate object.MemberwiseClone.");
 
     public Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
@@ -91,7 +95,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             var value = _state.Provider.Get<string, object>(key.ToString()!);
             if (value is MemoryData<T> typed)
             {
-                var candidate = new MemoryData<T> { Data = typed.Data, Version = typed.Version };
+                var candidate = new MemoryData<T> { Data = CloneData(typed.Data), Version = typed.Version };
                 if (predicate(candidate, msgPropValue)) return candidate;
             }
             else
@@ -108,15 +112,36 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                         dataProp == null ? _ => null : dataProp.GetValue,
                         versionProp == null ? _ => null : versionProp.GetValue);
                 });
-
+                
                 if (accessors.Data(value) is T typedData && accessors.Version(value) is int version)
                 {
-                    var candidate = new MemoryData<T> { Data = typedData, Version = version };
+                    var candidate = new MemoryData<T> { Data = CloneData(typedData), Version = version };
                     if (predicate(candidate, msgPropValue)) return candidate;
                 }
             }
         }
         return null;
+    }
+
+    private static T CloneData<T>(T data)
+        where T : class, IProcessManagerData
+    {
+        var runtimeType = data.GetType();
+        var clone = MemberwiseCloneMethod.Invoke(data, null)
+            ?? throw new PersistenceException($"Failed to clone process manager data of type '{runtimeType.FullName}'.");
+
+        var properties = CloneableProperties.GetOrAdd(runtimeType, static type =>
+            type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                .Where(property => property.CanRead && property.CanWrite)
+                .ToArray());
+
+        foreach (var property in properties)
+        {
+            var value = property.GetValue(data);
+            property.SetValue(clone, value is byte[] bytes ? (byte[])bytes.Clone() : value);
+        }
+
+        return (T)clone;
     }
 
     private Func<MemoryData<T>, object, bool> GetPredicate<T>(

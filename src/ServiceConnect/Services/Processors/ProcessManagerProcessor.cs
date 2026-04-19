@@ -14,11 +14,14 @@ internal sealed class ProcessManagerProcessor(
     ILogger<ProcessManagerProcessor> logger,
     IBusConfiguration busConfig,
     IQueueConfiguration queueConfig,
-    ConsumeContextPool? contextPool = null) : IMessageProcessor
+    IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null,
+    ConsumeContextPool? contextPool = null,
+    ConsumeContextAccessor? consumeContextAccessor = null) : IMessageProcessor
 {
     // Cached mapper per handler interface type. ConfigureMapper compiles expression lambdas
     // that are identical for a given handler type, so we only pay the cost once (P-005/R-034).
     private static readonly ConcurrentDictionary<Type, IProcessManagerPropertyMapper> MapperCache = new();
+    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
 
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -71,11 +74,24 @@ internal sealed class ProcessManagerProcessor(
             data = descriptor.ExtractData(persistenceData!);
         }
 
-        var context = (contextPool ?? new ConsumeContextPool()).Rent(bus.Value, headers, queueConfig, busConfig, cancellationToken);
+        var trustQuery = replyStatusRequestReplyManager
+            ?? serviceProvider.GetService<IReplyStatusRequestReplyManager>()
+            ?? serviceProvider.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
+
+        var context = (contextPool ?? new ConsumeContextPool()).Rent(
+            bus.Value,
+            headers,
+            queueConfig,
+            busConfig,
+            trustQuery,
+            cancellationToken);
         try
         {
-            descriptor.SetHandlerContext(handler, context);
-            await descriptor.InvokeHandleAsync(handler, (Message)message, data).ConfigureAwait(false);
+            using (_consumeContextAccessor.Push(context.Headers))
+            {
+                descriptor.SetHandlerContext(handler, context);
+                await descriptor.InvokeHandleAsync(handler, (Message)message, data).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {

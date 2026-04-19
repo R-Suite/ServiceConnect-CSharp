@@ -47,8 +47,8 @@ public class MessageDispatcherTests
 {
     private readonly Mock<IMessageSerializer> _mockSerializer;
     private readonly Mock<IFilterPipeline> _mockFilterPipeline;
-    private readonly Mock<IRequestReplyManager> _mockReplyManager;
     private readonly Mock<IBus> _mockBus;
+    private readonly IReplyStatusRequestReplyManager _replyManager;
 
     private static IDictionary<string, object> MakeHeaders(string? responseMessageId = null)
     {
@@ -65,8 +65,8 @@ public class MessageDispatcherTests
     {
         _mockSerializer = new Mock<IMessageSerializer>();
         _mockFilterPipeline = new Mock<IFilterPipeline>();
-        _mockReplyManager = new Mock<IRequestReplyManager>();
         _mockBus = new Mock<IBus>();
+        _replyManager = new TestDispatcherReplyManager();
 
         // Default: filters don't block
         _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
@@ -103,7 +103,7 @@ public class MessageDispatcherTests
             (typeof(PolyBaseMessage), typeof(PolyBaseHandler)));
         var processors = new List<IMessageProcessor>
         {
-            new ReplyProcessor(_mockReplyManager.Object),
+            new ReplyProcessor(_replyManager),
             new HandlerProcessor(handlerRegistry, serviceProvider, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()), new BusConfiguration(), new QueueConfiguration())
         };
 
@@ -239,9 +239,90 @@ public class MessageDispatcherTests
 
         // Assert
         Assert.True(result.Success);
-        // Pre-deserialization processors receive typeof(Message) as a placeholder;
-        // ReplyProcessor uses the expected reply type stored in RequestState, not this.
-        _mockReplyManager.Verify(r => r.ProcessReply(replyId, It.IsAny<ReadOnlyMemory<byte>>(), typeof(Message)), Times.Once);
+        var replyManager = Assert.IsType<TestDispatcherReplyManager>(_replyManager);
+        Assert.Equal(replyId, replyManager.LastMessageId);
+        Assert.Equal(typeof(FakeMessage1), replyManager.LastMessageType);
+        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
+        _mockFilterPipeline.Verify(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Dispatch_ResponseMessage_BlockedByBeforeConsumingFilter_DoesNotReachReplyManager()
+    {
+        var replyId = Guid.NewGuid().ToString();
+        var headers = MakeHeaders(responseMessageId: replyId);
+        _mockFilterPipeline
+            .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _mockSerializer
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+            .Returns(new FakeMessage1(Guid.NewGuid()));
+
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        Assert.True(result.Success);
+        Assert.Equal(0, Assert.IsType<TestDispatcherReplyManager>(_replyManager).CallCount);
+    }
+
+    [Fact]
+    public async Task Dispatch_ResponseMessage_WithUnknownReplyId_ReturnsFailure()
+    {
+        var replyId = Guid.NewGuid().ToString();
+        var headers = MakeHeaders(responseMessageId: replyId);
+        Assert.IsType<TestDispatcherReplyManager>(_replyManager).ShouldHandleReplies = false;
+        _mockSerializer
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+            .Returns(new FakeMessage1(Guid.NewGuid()));
+
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        Assert.False(result.Success);
+        _mockFilterPipeline.Verify(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Dispatch_ResponseMessage_WithUnregisteredReplyType_RoutesToReplyManager()
+    {
+        var replyId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes(typeof(UnregisteredReplyMessage).AssemblyQualifiedName!),
+            [HeaderKeys.ResponseMessageId] = Encoding.UTF8.GetBytes(replyId)
+        };
+
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, nameof(UnregisteredReplyMessage), headers);
+
+        Assert.True(result.Success);
+        var replyManager = Assert.IsType<TestDispatcherReplyManager>(_replyManager);
+        Assert.Equal(replyId, replyManager.LastMessageId);
+        Assert.Equal(typeof(UnregisteredReplyMessage), replyManager.LastMessageType);
+        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Dispatch_ResponseMessage_WithUnloadableReplyType_RoutesToReplyManager()
+    {
+        var replyId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes("Missing.Namespace.MissingReply, Missing.Assembly"),
+            [HeaderKeys.ResponseMessageId] = Encoding.UTF8.GetBytes(replyId)
+        };
+
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "MissingReply", headers);
+
+        Assert.True(result.Success);
+        var replyManager = Assert.IsType<TestDispatcherReplyManager>(_replyManager);
+        Assert.Equal(replyId, replyManager.LastMessageId);
+        Assert.Equal(typeof(Message), replyManager.LastMessageType);
         _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
     }
 
@@ -333,7 +414,7 @@ public class MessageDispatcherTests
         var sp = new ServiceCollection().BuildServiceProvider();
         var processors = new List<IMessageProcessor>
         {
-            new ReplyProcessor(_mockReplyManager.Object),
+            new ReplyProcessor(_replyManager),
             new HandlerProcessor(BuildHandlerRegistry(), sp, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration())
         };
         var dispatcher = new MessageDispatcher(
@@ -376,4 +457,27 @@ file class PolyBaseHandler : IMessageHandler<PolyBaseMessage>
     public bool Invoked { get; private set; }
     public IConsumeContext? Context { get; set; }
     public Task HandleAsync(PolyBaseMessage message) { Invoked = true; return Task.CompletedTask; }
+}
+
+file sealed class UnregisteredReplyMessage : Message
+{
+    public UnregisteredReplyMessage(Guid correlationId) : base(correlationId) { }
+}
+
+file sealed class TestDispatcherReplyManager : IReplyStatusRequestReplyManager
+{
+    public int CallCount { get; private set; }
+    public string? LastMessageId { get; private set; }
+    public Type? LastMessageType { get; private set; }
+    public bool ShouldHandleReplies { get; set; } = true;
+
+    public bool TryProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
+    {
+        CallCount++;
+        LastMessageId = messageId;
+        LastMessageType = type;
+        return ShouldHandleReplies;
+    }
+
+    public bool IsTrackedRequest(string messageId) => false;
 }

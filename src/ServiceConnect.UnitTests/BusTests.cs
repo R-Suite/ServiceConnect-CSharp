@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -7,6 +9,7 @@ using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Options;
+using ServiceConnect.Services;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -459,6 +462,38 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public async Task RequestTimeoutAsync_WithAmbientConsumeHeaders_PreservesCustomHeadersOnly()
+        {
+            TimeoutData? captured = null;
+            var timeoutStore = new Mock<ITimeoutStore>();
+            timeoutStore
+                .Setup(x => x.InsertTimeoutAsync(It.IsAny<TimeoutData>(), It.IsAny<CancellationToken>()))
+                .Callback<TimeoutData, CancellationToken>((data, _) => captured = data)
+                .Returns(Task.CompletedTask);
+
+            var incomingHeaders = new Dictionary<string, object>
+            {
+                ["Custom"] = "value",
+                [HeaderKeys.RetryCount] = 3,
+                [HeaderKeys.MessageId] = "managed-message-id",
+                [HeaderKeys.SourceAddress] = "reply-queue"
+            };
+
+            var accessor = CreateConsumeContextAccessorOrFail();
+            await using var bus = CreateBusWithTimeoutStoreAndAccessorOrFail(timeoutStore.Object, accessor);
+            using var scope = PushConsumeContextOrFail(accessor, incomingHeaders);
+
+            await bus.RequestTimeoutAsync(Guid.NewGuid(), TimeSpan.FromMinutes(1));
+
+            Assert.NotNull(captured);
+            Assert.Equal("test-queue", captured!.Destination);
+            Assert.Equal("value", captured.Headers["Custom"]);
+            Assert.Equal(3, captured.Headers[HeaderKeys.RetryCount]);
+            Assert.False(captured.Headers.ContainsKey(HeaderKeys.MessageId));
+            Assert.False(captured.Headers.ContainsKey(HeaderKeys.SourceAddress));
+        }
+
+        [Fact]
         public async Task RouteAsync_ShouldSendToFirstDestination_WithRoutingSlipForRemaining()
         {
             // Arrange
@@ -602,6 +637,59 @@ namespace ServiceConnect.UnitTests
             releaseStart.SetResult();
             await startTask;
             await stopTask;
+        }
+
+        private object CreateConsumeContextAccessorOrFail()
+        {
+            var accessorType = typeof(Bus).Assembly.GetType("ServiceConnect.Services.ConsumeContextAccessor");
+            Assert.NotNull(accessorType);
+
+            var accessor = Activator.CreateInstance(accessorType!);
+            Assert.NotNull(accessor);
+            return accessor!;
+        }
+
+        private static IDisposable PushConsumeContextOrFail(object accessor, IReadOnlyDictionary<string, object> headers)
+        {
+            var pushMethod = accessor.GetType()
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .SingleOrDefault(m => m.Name == "Push" && m.GetParameters().Length == 1);
+
+            Assert.NotNull(pushMethod);
+
+            var scope = pushMethod!.Invoke(accessor, [headers]);
+            Assert.IsAssignableFrom<IDisposable>(scope);
+            return (IDisposable)scope!;
+        }
+
+        private Bus CreateBusWithTimeoutStoreAndAccessorOrFail(ITimeoutStore timeoutStore, object accessor)
+        {
+            var constructor = typeof(Bus)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .SingleOrDefault(ctor => ctor.GetParameters().Any(p => p.ParameterType == accessor.GetType()));
+
+            Assert.NotNull(constructor);
+
+            var args = constructor!.GetParameters().Select(parameter => parameter.Name switch
+            {
+                "serializer" => _mockSerializer.Object,
+                "filterPipeline" => _mockFilterPipeline.Object,
+                "sendPipeline" => _mockSendPipeline.Object,
+                "requestReplyManager" => _mockRequestReplyManager.Object,
+                "logger" => _mockLogger.Object,
+                "queueConfig" => _mockQueueConfig.Object,
+                "dispatcher" => _mockDispatcher.Object,
+                "handlerReferences" => _handlerReferences,
+                "pipelineConfig" => _mockPipelineConfig.Object,
+                "consumer" => null,
+                "producer" => null,
+                "disposeTimeout" => null,
+                "timeoutStore" => timeoutStore,
+                "consumeContextAccessor" => accessor,
+                _ => throw new InvalidOperationException($"Unexpected Bus constructor parameter '{parameter.Name}'.")
+            }).ToArray();
+
+            return (Bus)constructor.Invoke(args);
         }
     }
 }

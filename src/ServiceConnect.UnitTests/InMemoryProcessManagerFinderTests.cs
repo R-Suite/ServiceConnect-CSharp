@@ -17,6 +17,26 @@ namespace ServiceConnect.UnitTests
         public string Name { get; set; } = "";
     }
 
+    public class NonJsonRoundTrippableTestData : IProcessManagerData
+    {
+        public Guid CorrelationId { get; set; }
+        public Type ValueType { get; set; } = typeof(object);
+    }
+
+    public class NoPublicParameterlessCtorTestData : IProcessManagerData
+    {
+        private NoPublicParameterlessCtorTestData() { }
+
+        public NoPublicParameterlessCtorTestData(Guid correlationId, string name)
+        {
+            CorrelationId = correlationId;
+            Name = name;
+        }
+
+        public Guid CorrelationId { get; set; }
+        public string Name { get; set; } = "";
+    }
+
     public class InMemoryProcessManagerFinderTests
     {
         readonly Guid _correlationId = Guid.NewGuid();
@@ -58,9 +78,9 @@ namespace ServiceConnect.UnitTests
             await Assert.ThrowsAsync<PersistenceException>(() => processManagerFinder.InsertDataAsync(dataWithDuplicateId, CancellationToken.None));
         }
 
-        [Fact]
-        public async Task ShouldUpdateData()
-        {
+    [Fact]
+    public async Task ShouldUpdateData()
+    {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerData dataUpdated = new TestData { CorrelationId = _correlationId, Name = "TestDataUpdated" };
@@ -72,13 +92,89 @@ namespace ServiceConnect.UnitTests
 
             // Assert
             var found = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
-            Assert.NotNull(found);
-            Assert.Equal("TestDataUpdated", ((TestData)found.Data).Name);
-        }
+        Assert.NotNull(found);
+        Assert.Equal("TestDataUpdated", ((TestData)found.Data).Name);
+    }
 
-        [Fact]
-        public async Task ShouldThrowWhenUpdatingDataThatDoesNotExist()
+    [Fact]
+    public async Task FindDataAsync_ReturnsDetachedCopy_AndDoesNotLeakMutationsWithoutUpdate()
+    {
+        // Arrange
+        IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "Original" };
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
+
+        // Act
+        var loaded = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        Assert.NotNull(loaded);
+        ((TestData)loaded.Data).Name = "Mutated";
+
+        var reloaded = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(reloaded);
+        Assert.Equal("Original", ((TestData)reloaded.Data).Name);
+    }
+
+    [Fact]
+    public async Task FindDataAsync_TypedRead_ReturnsDetachedCopy_AndDoesNotLeakMutationsWithoutUpdate()
+    {
+        // Arrange
+        var data = new TestData { CorrelationId = _correlationId, Name = "Original" };
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
+
+        // Act
+        var loaded = await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        Assert.NotNull(loaded);
+        loaded.Data.Name = "Mutated";
+
+        var reloaded = await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(reloaded);
+        Assert.Equal("Original", reloaded.Data.Name);
+    }
+
+    [Fact]
+    public async Task FindDataAsync_TypedRead_SupportsRuntimeTypesThatAreNotJsonRoundTrippable()
+    {
+        // Arrange
+        var data = new NonJsonRoundTrippableTestData
         {
+            CorrelationId = _correlationId,
+            ValueType = typeof(TestData)
+        };
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
+
+        // Act
+        var found = await processManagerFinder.FindDataAsync<NonJsonRoundTrippableTestData>(_mapper, new Message(_correlationId), CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(found);
+        Assert.Equal(typeof(TestData), found.Data.ValueType);
+    }
+
+    [Fact]
+    public async Task FindDataAsync_TypedRead_SupportsRuntimeTypesWithoutPublicParameterlessConstructor()
+    {
+        // Arrange
+        var data = new NoPublicParameterlessCtorTestData(_correlationId, "Original");
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
+
+        // Act
+        var found = await processManagerFinder.FindDataAsync<NoPublicParameterlessCtorTestData>(_mapper, new Message(_correlationId), CancellationToken.None);
+
+        // Assert
+        Assert.NotNull(found);
+        Assert.Equal("Original", found.Data.Name);
+    }
+
+    [Fact]
+    public async Task ShouldThrowWhenUpdatingDataThatDoesNotExist()
+    {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);

@@ -70,6 +70,69 @@ public class MongoDbProcessManagerFinderTests
         Assert.Equal(7, versionedData.Version);
     }
 
+    [Fact]
+    public async Task InsertDataAsync_ThrowsPersistenceException_WhenDuplicateCorrelationIdExists()
+    {
+        var finder = CreateFinder(out var database, out _);
+        var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
+        var data = new TestProcessManagerData();
+
+        var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
+            .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(finder)!;
+        indexedCollections.TryAdd(nameof(TestProcessManagerData), true);
+
+        database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
+                nameof(TestProcessManagerData),
+                It.IsAny<MongoCollectionSettings>()))
+            .Returns(collection.Object);
+
+        collection.Setup(c => c.InsertOneAsync(
+                It.IsAny<MongoDbData<TestProcessManagerData>>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TestMongoException("duplicate"));
+
+        await Assert.ThrowsAsync<PersistenceException>(() => finder.InsertDataAsync(data, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertDataAsync_CreatesUniqueCorrelationIdIndex()
+    {
+        var finder = CreateFinder(out var database, out _);
+        var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
+        var indexManager = new Mock<IMongoIndexManager<MongoDbData<TestProcessManagerData>>>();
+        var data = new TestProcessManagerData();
+        CreateIndexModel<MongoDbData<TestProcessManagerData>>? capturedIndexModel = null;
+
+        database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
+                nameof(TestProcessManagerData),
+                It.IsAny<MongoCollectionSettings>()))
+            .Returns(collection.Object);
+
+        collection.SetupGet(c => c.Indexes)
+            .Returns(indexManager.Object);
+
+        indexManager.Setup(m => m.CreateOneAsync(
+                It.IsAny<CreateIndexModel<MongoDbData<TestProcessManagerData>>>(),
+                It.IsAny<CreateOneIndexOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<CreateIndexModel<MongoDbData<TestProcessManagerData>>, CreateOneIndexOptions, CancellationToken>(
+                (model, _, _) => capturedIndexModel = model)
+            .ReturnsAsync("Data.CorrelationId_1");
+
+        collection.Setup(c => c.InsertOneAsync(
+                It.IsAny<MongoDbData<TestProcessManagerData>>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await finder.InsertDataAsync(data, CancellationToken.None);
+
+        Assert.NotNull(capturedIndexModel);
+        Assert.True(capturedIndexModel!.Options?.Unique);
+    }
+
     private static MongoDbProcessManagerFinder CreateFinder(
         out Mock<IMongoDatabase> database,
         out Mock<IMongoClient> client)

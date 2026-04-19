@@ -14,8 +14,12 @@ internal sealed class HandlerProcessor(
     Lazy<IBus> bus,
     IBusConfiguration busConfig,
     IQueueConfiguration queueConfig,
-    ConsumeContextPool? contextPool = null) : IMessageProcessor
+    IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null,
+    ConsumeContextPool? contextPool = null,
+    ConsumeContextAccessor? consumeContextAccessor = null) : IMessageProcessor
 {
+    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
+
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope,
@@ -46,16 +50,28 @@ internal sealed class HandlerProcessor(
             return ProcessResult.NotHandled;
 
         var resolvedBus = bus.Value;
-        var context = (contextPool ?? new ConsumeContextPool()).Rent(resolvedBus, headers, queueConfig, busConfig, cancellationToken);
+        var trustQuery = replyStatusRequestReplyManager
+            ?? serviceProvider.GetService<IReplyStatusRequestReplyManager>()
+            ?? serviceProvider.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
+        var context = (contextPool ?? new ConsumeContextPool()).Rent(
+            resolvedBus,
+            headers,
+            queueConfig,
+            busConfig,
+            trustQuery,
+            cancellationToken);
         try
         {
-            foreach (var (handler, descriptor) in invocations)
+            using (_consumeContextAccessor.Push(context.Headers))
             {
-                descriptor.SetContext(handler, context);
-                await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
-            }
+                foreach (var (handler, descriptor) in invocations)
+                {
+                    descriptor.SetContext(handler, context);
+                    await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
+                }
 
-            await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
+                await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
+            }
         }
         finally
         {

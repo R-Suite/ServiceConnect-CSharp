@@ -19,6 +19,7 @@ public sealed class Bus : IBus
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
     private readonly ITimeoutStore? _timeoutStore;
+    private readonly ConsumeContextAccessor _consumeContextAccessor;
     private readonly bool _hasOutgoingFilters;
     private readonly TimeSpan _disposeTimeout;
     private readonly object _stateLock = new();
@@ -39,7 +40,8 @@ public sealed class Bus : IBus
         IConsumer? consumer = null,
         IProducer? producer = null,
         TimeSpan? disposeTimeout = null,
-        ITimeoutStore? timeoutStore = null)
+        ITimeoutStore? timeoutStore = null,
+        ConsumeContextAccessor? consumeContextAccessor = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -55,6 +57,7 @@ public sealed class Bus : IBus
         _producer = producer;
         _disposeTimeout = disposeTimeout ?? TimeSpan.FromSeconds(30);
         _timeoutStore = timeoutStore;
+        _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
     }
 
     public bool IsConsuming => _consuming;
@@ -305,7 +308,8 @@ public sealed class Bus : IBus
             Id = Guid.NewGuid(),
             Destination = _queueConfig.QueueName,
             ProcessManagerId = correlationId,
-            Time = DateTimeOffset.UtcNow + delay
+            Time = DateTimeOffset.UtcNow + delay,
+            Headers = TimeoutHeaderPersistence.CaptureForStorage(_consumeContextAccessor.CurrentHeaders)
         };
 
         await _timeoutStore.InsertTimeoutAsync(data, cancellationToken).ConfigureAwait(false);

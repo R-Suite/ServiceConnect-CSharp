@@ -50,9 +50,15 @@ public static class ServiceCollectionExtensions
     {
         services.TryAddSingleton<IMessageSerializer, NewtonsoftJsonMessageSerializer>();
         services.TryAddSingleton<IFilterPipeline, FilterPipeline>();
-        services.TryAddSingleton<IRequestReplyManager, RequestReplyManager>();
+        services.TryAddSingleton<RequestReplyManager>();
+        services.TryAddSingleton<IRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
+        services.TryAdd(new ServiceDescriptor(
+            typeof(IReplyStatusRequestReplyManager),
+            sp => (sp.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager)!,
+            ServiceLifetime.Singleton));
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
         services.TryAddSingleton<ConsumeContextPool>();
+        services.TryAddSingleton<ConsumeContextAccessor>();
     }
 
     private static void RegisterProcessors(IServiceCollection services)
@@ -113,7 +119,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IPipelineConfiguration>(),
                 sp.GetService<IConsumer>(),
                 sp.GetService<IProducer>(),
-                timeoutStore: sp.GetService<ITimeoutStore>());
+                timeoutStore: sp.GetService<ITimeoutStore>(),
+                consumeContextAccessor: sp.GetRequiredService<ConsumeContextAccessor>());
         });
         services.AddSingleton<IHostedService, BusHostedService>();
         services.AddSingleton<IHostedService>(sp =>

@@ -15,12 +15,13 @@ internal sealed class ConsumeContextPool
         IDictionary<string, object> headers,
         IQueueConfiguration queueConfig,
         IBusConfiguration busConfig,
+        IReplyStatusRequestReplyManager? replyStatusRequestReplyManager,
         CancellationToken cancellationToken)
     {
         if (!_pool.TryTake(out var context))
             context = new PooledConsumeContext(this);
 
-        context.Initialize(bus, headers, queueConfig, busConfig, cancellationToken);
+        context.Initialize(bus, headers, queueConfig, busConfig, replyStatusRequestReplyManager, cancellationToken);
         return context;
     }
 
@@ -36,6 +37,7 @@ internal sealed class ConsumeContextPool
         private IBus _bus = null!;
         private IQueueConfiguration _queueConfig = null!;
         private IBusConfiguration _busConfig = null!;
+        private IReplyStatusRequestReplyManager? _replyStatusRequestReplyManager;
         private string? _messageId;
         private bool _messageIdCached;
         private Guid? _correlationId;
@@ -79,11 +81,13 @@ internal sealed class ConsumeContextPool
             IDictionary<string, object> headers,
             IQueueConfiguration queueConfig,
             IBusConfiguration busConfig,
+            IReplyStatusRequestReplyManager? replyStatusRequestReplyManager,
             CancellationToken cancellationToken)
         {
             _bus = bus;
             _queueConfig = queueConfig;
             _busConfig = busConfig;
+            _replyStatusRequestReplyManager = replyStatusRequestReplyManager;
             CancellationToken = cancellationToken;
             _headers = headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers);
             _messageId = null;
@@ -94,14 +98,19 @@ internal sealed class ConsumeContextPool
         public async Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
             where TReply : Message
         {
-            var sourceAddress = Headers.TryGetValue(HeaderKeys.SourceAddress, out var sa) ? HeaderDecoder.Decode(sa) : null;
+            var sourceAddress = ConsumeContext.GetDecodedHeader(Headers, HeaderKeys.SourceAddress);
             if (string.IsNullOrEmpty(sourceAddress))
                 throw new InvalidOperationException("Cannot reply: incoming message has no SourceAddress header.");
 
-            var requestMessageId = Headers.TryGetValue(HeaderKeys.RequestMessageId, out var rmi) ? HeaderDecoder.Decode(rmi) : null;
-            var isRequestReply = !string.IsNullOrEmpty(requestMessageId);
+            var requestMessageId = ConsumeContext.GetDecodedHeader(Headers, HeaderKeys.RequestMessageId);
+            var isTrustedRequestReply = ConsumeContext.IsTrustedRequestReplyEnvelope(
+                Headers,
+                _queueConfig,
+                _replyStatusRequestReplyManager,
+                requestMessageId,
+                sourceAddress);
 
-            if (_busConfig.ValidateReplyDestinations && !isRequestReply && !ConsumeContext.IsKnownQueue(sourceAddress, _queueConfig))
+            if (_busConfig.ValidateReplyDestinations && !isTrustedRequestReply && !ConsumeContext.IsKnownQueue(sourceAddress, _queueConfig))
             {
                 throw new InvalidOperationException(
                     $"Cannot reply: SourceAddress '{sourceAddress}' is not a recognized queue. " +

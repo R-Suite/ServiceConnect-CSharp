@@ -166,9 +166,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             Id = Guid.NewGuid()
         };
 
-        var filter = Builders<MongoDbData<T>>.Filter
-            .Eq(x => x.Data.CorrelationId, mongoDbData.Data.CorrelationId);
-        await collection.ReplaceOneAsync(filter, mongoDbData, new ReplaceOptions { IsUpsert = true }, cancellationToken).ConfigureAwait(false);
+        await collection.InsertOneAsync(mongoDbData, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     public async Task UpdateDataAsync<T>(IPersistenceData<T> persistenceData, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
@@ -240,7 +238,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         if (!_indexedCollections.TryAdd(collectionName, true)) return;
 
         var indexKeys = Builders<MongoDbData<T>>.IndexKeys.Ascending(x => x.Data.CorrelationId);
-        var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys);
+        var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys, new CreateIndexOptions { Unique = true });
         try
         {
             await collection.Indexes.CreateOneAsync(indexModel).ConfigureAwait(false);
