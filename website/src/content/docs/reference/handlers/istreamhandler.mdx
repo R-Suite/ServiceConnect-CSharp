@@ -1,0 +1,87 @@
+---
+title: IStreamHandler
+description: The contract for consuming a streaming message sent via IBus.CreateStream — the assembled byte payload is delivered once all chunks arrive.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IStreamHandler<TMessage>` is the contract for consuming a streaming message sent by a producer via [`IBus.CreateStream<T>()`](../../bus/ibus/#createstreamt). The dispatch pipeline reassembles the in-order byte packets into a single `IMessageBusReadStream`, populates the `Stream` property, then calls `Execute` exactly once the complete payload has arrived. Reach for this interface when the payload is too large or too streamy to carry in the body of a normal `Message`.
+
+See [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/) for the pattern tour.
+
+## Reference
+
+The interface is declared with a single type parameter constrained to `Message`:
+
+```csharp
+public interface IStreamHandler<TMessage> where TMessage : Message
+```
+
+### `Stream`
+
+```csharp
+IMessageBusReadStream Stream { get; set; }
+```
+
+Gets or sets the read stream over the reassembled payload bytes. The dispatch pipeline sets this property before `Execute` is invoked, so handlers read it directly without initialising anything themselves.
+
+**Remarks.** The stream is positioned at the start of the payload. Disposing the stream (or reading it to completion) is the handler's responsibility; the pipeline does not automatically release it for you.
+
+---
+
+### `Execute`
+
+```csharp
+void Execute(TMessage stream);
+```
+
+Invoked once the full stream has arrived and been reassembled. Inside this call, `Stream` is populated and readable.
+
+**Parameters**
+- `stream` — the control message carrying metadata about the streamed payload (file name, content type, anything else the producer attached).
+
+**Remarks.** `Execute` is synchronous on this interface — long-running I/O inside it blocks the consumer slot. Offload heavy work appropriately if the consumer concurrency budget is tight.
+
+## Usage
+
+### Writing an uploaded file to disk in chunks
+
+```csharp
+public sealed class FileUploadStreamHandler : IStreamHandler<FileUpload>
+{
+    private readonly IFileStorage _storage;
+
+    public FileUploadStreamHandler(IFileStorage storage) => _storage = storage;
+
+    public IMessageBusReadStream Stream { get; set; } = null!;
+
+    public void Execute(FileUpload message)
+    {
+        var destination = _storage.OpenWrite(message.FileName);
+        try
+        {
+            var buffer = new byte[64 * 1024];
+            int read;
+            while ((read = Stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                destination.Write(buffer, 0, read);
+            }
+        }
+        finally
+        {
+            destination.Dispose();
+            Stream.Dispose();
+        }
+    }
+}
+```
+
+Streaming handlers are ideal for large uploads — the file never materialises in memory as a single `byte[]`. Read from `Stream` in chunk-sized buffers and write through to durable storage, then dispose the stream so the broker resources can be released.
+
+## See also
+
+- [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/) — concept
+- [`IMessageHandler<T>`](../imessagehandler/) — related reference
+- [`IBus.CreateStream`](../../bus/ibus/#createstreamt) — producer API

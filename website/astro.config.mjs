@@ -87,7 +87,15 @@ export default defineConfig({
                 { label: 'Message options', link: '/reference/messages/options/' },
               ],
             },
-            { label: 'Handlers', items: [] },
+            {
+              label: 'Handlers',
+              items: [
+                { label: 'IMessageHandler<T>', link: '/reference/handlers/imessagehandler/' },
+                { label: 'IStreamHandler', link: '/reference/handlers/istreamhandler/' },
+                { label: 'IConsumeContext', link: '/reference/handlers/iconsumecontext/' },
+                { label: 'Event args', link: '/reference/handlers/event-args/' },
+              ],
+            },
             { label: 'Configuration', items: [] },
             { label: 'Process Managers', items: [] },
             { label: 'Filters & Middleware', items: [] },

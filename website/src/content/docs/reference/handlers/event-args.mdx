@@ -1,0 +1,199 @@
+---
+title: Consume and outgoing event args
+description: Event-argument DTOs raised by the bus for observers — telemetry, custom logging, diagnostics.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The bus raises a handful of event-argument DTOs that let observers inspect messages as they pass through the consume and outgoing pipelines. Telemetry, custom logging, and diagnostic middleware are the typical consumers. This page documents `ConsumeEventArgs`, `ConsumeEventResult`, `OutgoingEventArgs`, and the two concrete outgoing types (`PublishEventArgs`, `SendEventArgs`).
+
+See [Observability](/ServiceConnect-CSharp/learn/operations/observability/) for how these DTOs slot into a diagnostic pipeline.
+
+## Reference
+
+## `ConsumeEventArgs`
+
+Carries the raw message data received by the telemetry consume pipeline.
+
+### `Message`
+
+```csharp
+public byte[] Message { get; init; } = Array.Empty<byte>();
+```
+
+Gets the raw message body bytes as received from the transport, before any deserialisation.
+
+---
+
+### `Type`
+
+```csharp
+public string Type { get; init; } = string.Empty;
+```
+
+Gets the message type name taken from the transport headers. Useful when an observer needs to branch without paying to decode the body.
+
+---
+
+### `Headers`
+
+```csharp
+public IDictionary<string, object> Headers { get; init; }
+```
+
+Gets the transport headers associated with the consumed message. The getter lazily allocates an empty dictionary when none was supplied.
+
+**Remarks.** Header values are typed as `object` because transports expose strings, byte arrays, and numeric values through the same channel. Decode defensively when reading.
+
+---
+
+## `ConsumeEventResult`
+
+Represents the outcome of invoking a consumer callback.
+
+### `Success`
+
+```csharp
+public bool Success { get; set; }
+```
+
+Gets or sets whether the consumer callback completed successfully. A `false` value with a populated `Exception` is the failure shape.
+
+---
+
+### `Exception`
+
+```csharp
+public Exception? Exception { get; set; }
+```
+
+Gets or sets the exception raised by the consumer, if any. Null on success.
+
+---
+
+## `OutgoingEventArgs`
+
+Base event payload for outgoing publish and send telemetry.
+
+### `Message`
+
+```csharp
+public Message? Message { get; init; }
+```
+
+Gets the outgoing message instance, when the pipeline supplied it. May be null for telemetry raised from paths that operate on raw bytes.
+
+---
+
+### `Headers`
+
+```csharp
+public Dictionary<string, string> Headers { get; set; }
+```
+
+Gets or sets the outgoing transport headers. Unlike the consume side, outgoing headers are a plain `string`-valued dictionary — the setter rejects null with `ArgumentNullException`.
+
+---
+
+## `PublishEventArgs`
+
+`PublishEventArgs : OutgoingEventArgs` — outgoing telemetry payload for published messages.
+
+### `RoutingKey`
+
+```csharp
+public string RoutingKey { get; init; } = string.Empty;
+```
+
+Gets the routing key used when publishing the message. For broadcast publishes without a key override the value is empty.
+
+---
+
+## `SendEventArgs`
+
+`SendEventArgs : OutgoingEventArgs` — outgoing telemetry payload for point-to-point sends.
+
+### `EndPoint`
+
+```csharp
+public string EndPoint { get; init; } = string.Empty;
+```
+
+Gets the primary destination endpoint. For a single-target send this is the only endpoint; for a fan-out send it is the first in the list.
+
+---
+
+### `EndPoints`
+
+```csharp
+public IReadOnlyList<string> EndPoints { get; init; } = [];
+```
+
+Gets the complete set of destination endpoints when a send targets multiple queues. Empty when the send was directed at a single endpoint.
+
+## Usage
+
+### Recording a telemetry span per consumed message
+
+```csharp
+public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddleware
+{
+    private static readonly ActivitySource Source = new("ServiceConnect");
+
+    public async Task InvokeAsync(Envelope envelope, MiddlewareDelegate next)
+    {
+        // Shape the consume-event args for downstream collectors before we
+        // start the span — the same bag of data a telemetry exporter would
+        // emit on the bus's ConsumeEvent callback.
+        var consumeArgs = new ConsumeEventArgs
+        {
+            Message = envelope.Body.ToArray(),
+            Type = envelope.Headers.TryGetValue("MessageType", out var t)
+                ? t?.ToString() ?? string.Empty
+                : string.Empty,
+            Headers = new Dictionary<string, object>(envelope.Headers),
+        };
+
+        using var activity = Source.StartActivity(
+            $"consume {consumeArgs.Type}",
+            ActivityKind.Consumer);
+
+        activity?.SetTag("servicebus.message.type", consumeArgs.Type);
+        activity?.SetTag("servicebus.message.size", consumeArgs.Message.Length);
+
+        try
+        {
+            await next(envelope);
+            RecordResult(activity, new ConsumeEventResult { Success = true });
+        }
+        catch (Exception ex)
+        {
+            RecordResult(activity, new ConsumeEventResult
+            {
+                Success = false,
+                Exception = ex,
+            });
+            throw;
+        }
+    }
+
+    private static void RecordResult(Activity? activity, ConsumeEventResult result)
+    {
+        activity?.SetTag("servicebus.consume.success", result.Success);
+        if (!result.Success)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, result.Exception?.Message);
+        }
+    }
+}
+```
+
+A custom `IMessageProcessingMiddleware` is the natural host for observing the consume-side transition. The `ConsumeEventArgs` shape mirrors the data available to telemetry exporters, and `ConsumeEventResult` captures the success/failure fork so the span status records the real outcome. The outgoing side (`PublishEventArgs`, `SendEventArgs`) is observed analogously by implementing `ISendMessageMiddleware`.
+
+## See also
+
+- [Observability](/ServiceConnect-CSharp/learn/operations/observability/) — concept
+- [`IMessageProcessingMiddleware`](../../filters/imessageprocessingmiddleware/) — related reference
+- [`ISendMessageMiddleware`](../../filters/isendmessagemiddleware/) — related reference
