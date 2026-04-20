@@ -69,7 +69,25 @@ export default defineConfig({
         },
         {
           label: 'API Reference',
-          link: '/api/index.html',
+          items: [
+            { label: 'Overview', link: '/reference/' },
+            { label: 'Bus', items: [] },
+            { label: 'Messages', items: [] },
+            { label: 'Handlers', items: [] },
+            { label: 'Configuration', items: [] },
+            { label: 'Process Managers', items: [] },
+            { label: 'Filters & Middleware', items: [] },
+          ],
+        },
+        {
+          label: 'Extension Points',
+          items: [
+            { label: 'Overview', link: '/reference/extension-points/' },
+            { label: 'Persistence', items: [] },
+            { label: 'Serialization', items: [] },
+            { label: 'Transport', items: [] },
+            { label: 'Registry', items: [] },
+          ],
         },
         {
           label: 'Samples',

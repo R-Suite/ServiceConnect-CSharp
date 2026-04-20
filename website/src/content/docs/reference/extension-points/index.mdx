@@ -1,0 +1,10 @@
+---
+title: Extension Points
+description: Pluggable internals — only touch these when replacing a default implementation.
+---
+
+Extension points are the interfaces the framework calls *into*. You only need this section if you're replacing a default implementation — shipping a custom persistence store, serializer, or transport.
+
+Most consumers never open this section. If you're wiring the bus into a new database or message broker, start here; otherwise the [API Reference](/ServiceConnect-CSharp/reference/) has what you need.
+
+Link cards covering each extension-point group will land here in a follow-up.
