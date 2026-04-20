@@ -1,36 +1,38 @@
 ---
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
 <CardGrid>
   <LinkCard
     title="Pub/Sub"
-    href="/learn/messaging-patterns/pub-sub/"
+    href={`${base}/learn/messaging-patterns/pub-sub/`}
     description="Broadcast messages to every interested subscriber without caring who listens."
   />
   <LinkCard
     title="Process Manager"
-    href="/learn/messaging-patterns/process-manager/"
+    href={`${base}/learn/messaging-patterns/process-manager/`}
     description="Coordinate long-running multi-step workflows with first-class state and timeouts."
   />
   <LinkCard
     title="Routing Slip"
-    href="/learn/messaging-patterns/routing-slip/"
+    href={`${base}/learn/messaging-patterns/routing-slip/`}
     description="Attach an itinerary to a message so each step knows exactly where it goes next."
   />
   <LinkCard
     title="Scatter/Gather"
-    href="/learn/messaging-patterns/scatter-gather/"
+    href={`${base}/learn/messaging-patterns/scatter-gather/`}
     description="Fan out a request to many handlers and aggregate their replies into one response."
   />
   <LinkCard
     title="Aggregator"
-    href="/learn/messaging-patterns/aggregator/"
+    href={`${base}/learn/messaging-patterns/aggregator/`}
     description="Batch related messages by key and correlation window, then publish the collected result."
   />
   <LinkCard
-    title="Filters & Streaming"
-    href="/learn/messaging-patterns/filters-streaming/"
-    description="Layer compression, deduplication, and streaming payload support via pluggable filters."
+    title="Filters"
+    href={`${base}/learn/messaging-patterns/filters/`}
+    description="Stamp, compress, dedupe, or redact messages with a pluggable cross-cutting hook."
   />
 </CardGrid>
