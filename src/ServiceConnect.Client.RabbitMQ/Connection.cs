@@ -14,6 +14,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
 {
     private IConnection? _connection;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
+    private volatile bool _disposed;
 
     private readonly bool _heartbeatEnabled = !transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.HeartbeatEnabled, out var hbEnabled) || (bool)hbEnabled;
     private readonly TimeSpan _heartbeatTime = transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var hbTime) ? new TimeSpan(0, 0, (int)hbTime) : new TimeSpan(0, 0, 120);
@@ -26,6 +27,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         await _connectionLock.WaitAsync().ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (Volatile.Read(ref _connection) == null)
                 await CreateConnectionCoreAsync().ConfigureAwait(false);
         }
@@ -62,10 +64,17 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// <returns>A newly created channel.</returns>
     public async Task<IChannel> CreateChannelAsync()
     {
-        if (Volatile.Read(ref _connection) == null)
-            await ConnectAsync().ConfigureAwait(false);
+        ObjectDisposedException.ThrowIf(_disposed, this);
 
-        return await _connection!.CreateChannelAsync().ConfigureAwait(false);
+        var conn = Volatile.Read(ref _connection);
+        if (conn == null)
+        {
+            await ConnectAsync().ConfigureAwait(false);
+            conn = Volatile.Read(ref _connection)
+                ?? throw new InvalidOperationException("Connection was not initialized.");
+        }
+
+        return await conn.CreateChannelAsync().ConfigureAwait(false);
     }
 
     /// <summary>
@@ -73,20 +82,37 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (_connection == null) return;
+        if (_disposed) return;
 
-        var conn = _connection;
-        _connection = null;
+        IConnection? conn;
+        await _connectionLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (conn.IsOpen)
-                await conn.CloseAsync().ConfigureAwait(false);
-            conn.Dispose();
+            if (_disposed) return;
+            _disposed = true;
+            conn = _connection;
+            _connection = null;
         }
-        catch (Exception ex)
+        finally
         {
-            logger.LogDebug(ex, "Error closing connection during async dispose");
+            _connectionLock.Release();
         }
+
+        if (conn != null)
+        {
+            try
+            {
+                if (conn.IsOpen)
+                    await conn.CloseAsync().ConfigureAwait(false);
+                conn.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Error closing connection during async dispose");
+            }
+        }
+
+        _connectionLock.Dispose();
     }
 
 }
