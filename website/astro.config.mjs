@@ -73,7 +73,7 @@ export default defineConfig({
         },
         {
           label: 'Samples',
-          autogenerate: { directory: 'samples' },
+          link: '/samples/',
         },
         {
           label: 'Releases',

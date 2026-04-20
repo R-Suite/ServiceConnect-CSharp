@@ -1,0 +1,27 @@
+---
+title: Releases
+description: Where to find released versions, published packages, and the project changelog.
+---
+
+ServiceConnect is versioned per-package. Each package ships independently on NuGet; GitHub Releases mark the tagged commits those packages were built from. If you want to know "what changed between v5 and v6 of `ServiceConnect.Interfaces`", you're in the right place.
+
+## Where releases live
+
+- **GitHub Releases** — [github.com/R-Suite/ServiceConnect-CSharp/releases](https://github.com/R-Suite/ServiceConnect-CSharp/releases). Each entry lists the tag, the commit, and a summary of the changes in that cut.
+- **NuGet packages** — published under the `ServiceConnect.*` prefix. The core packages are:
+  - [`ServiceConnect`](https://www.nuget.org/packages/ServiceConnect) — the bus, hosted service, and dispatch machinery.
+  - [`ServiceConnect.Interfaces`](https://www.nuget.org/packages/ServiceConnect.Interfaces) — the public API surface (`IBus`, configuration, handlers).
+  - [`ServiceConnect.Client.RabbitMQ`](https://www.nuget.org/packages/ServiceConnect.Client.RabbitMQ) — the RabbitMQ transport.
+  - [`ServiceConnect.Persistence.MongoDb`](https://www.nuget.org/packages/ServiceConnect.Persistence.MongoDb) — MongoDB persistence for process managers and aggregators.
+  - [`ServiceConnect.Persistence.InMemory`](https://www.nuget.org/packages/ServiceConnect.Persistence.InMemory) — in-process persistence for tests and samples.
+  - [`ServiceConnect.Telemetry`](https://www.nuget.org/packages/ServiceConnect.Telemetry) — OpenTelemetry instrumentation hooks.
+
+## Picking a version
+
+Match the major versions of the packages you reference. `ServiceConnect` 6.x expects `ServiceConnect.Interfaces` 6.x; the transport and persistence packages follow the same major line. Mixing majors is unsupported and will surface as binding redirects or missing-method exceptions.
+
+For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
+
+## Source and tags
+
+Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.
