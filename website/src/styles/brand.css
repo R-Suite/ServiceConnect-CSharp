@@ -23,3 +23,9 @@
 :root {
   --sl-content-width: 60rem;
 }
+
+/* Header site title: force white against the dark header background.
+ * Starlight defaults to the accent color, which clashes with the teal logo. */
+.site-title {
+  color: #ffffff;
+}
