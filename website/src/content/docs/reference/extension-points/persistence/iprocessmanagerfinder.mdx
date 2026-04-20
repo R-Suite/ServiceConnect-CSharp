@@ -1,0 +1,300 @@
+---
+title: IProcessManagerFinder
+description: The contract for a custom saga persistence store — find, insert, update, and delete process-manager state by correlation rules supplied via the property mapper.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IProcessManagerFinder` is the storage interface the framework calls to resolve and persist process-manager (saga) state. For every inbound message that targets a saga, the dispatch pipeline calls `FindDataAsync<T>` to load the correlated state record, invokes the handler, then calls either `UpdateDataAsync<T>` or `DeleteDataAsync<T>` depending on whether the saga is still active. `InsertDataAsync` is called the first time a correlation id is seen and there is no existing record.
+
+ServiceConnect ships in-memory and MongoDB implementations. Substitute a custom implementation — Postgres, SQL Server, DynamoDB — by registering it through `IPersistenceConfiguration`.
+
+See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the conceptual model.
+
+## Reference
+
+### `FindDataAsync<T>`
+
+```csharp
+Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
+```
+
+Locates the persisted state record that correlates with `message` according to the rules in `mapper`.
+
+**Parameters**
+- `mapper` — the mapper that holds the registered `(data property, message property)` correlation expressions for this handler. Call `mapper.GetCorrelationId(message)` or inspect `mapper` to extract the correlation key.
+- `message` — the inbound message being dispatched; the correlation key is derived from it.
+- `cancellationToken` — cancels the database round-trip.
+
+**Returns.** An `IPersistenceData<T>` wrapper if a matching record exists; `null` if no record is found. Never throw for the not-found case — the dispatcher treats `null` as the trigger to call `InsertDataAsync` and create a fresh record.
+
+**Remarks.** The returned `IPersistenceData<T>` wrapper is passed back verbatim to `UpdateDataAsync<T>` or `DeleteDataAsync<T>`. Implementations can carry concurrency metadata (a `version` column value, an ETag, a row lock handle) on the concrete type that implements `IPersistenceData<T>` — the interface only exposes `Data`, so any extra fields are invisible to the framework but available to the implementation when the wrapper comes back.
+
+---
+
+### `InsertDataAsync`
+
+```csharp
+Task InsertDataAsync(IProcessManagerData data, CancellationToken cancellationToken = default);
+```
+
+Persists a freshly-constructed state record the first time a correlation id is seen.
+
+**Parameters**
+- `data` — the new state object; the implementation should derive the storage key from `data.CorrelationId`.
+- `cancellationToken` — cancels the insert.
+
+**Remarks.** Called exactly once per correlation id lifetime. After the first insert, all subsequent state changes go through `UpdateDataAsync<T>`.
+
+---
+
+### `UpdateDataAsync<T>`
+
+```csharp
+Task UpdateDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
+```
+
+Persists mutations to an existing state record.
+
+**Parameters**
+- `data` — the `IPersistenceData<T>` wrapper previously returned by `FindDataAsync<T>`. The implementation reads concurrency metadata from the wrapper's concrete type to guard against lost updates.
+- `cancellationToken` — cancels the update.
+
+**Remarks.** Implementations using optimistic concurrency should verify that the record's stored version matches the version captured at `FindDataAsync<T>` time. If the versions differ — another handler has written the record in the interim — throw a concurrency exception so the dispatch pipeline can retry.
+
+---
+
+### `DeleteDataAsync<T>`
+
+```csharp
+Task DeleteDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
+```
+
+Removes the persisted state record, ending the saga's lifetime.
+
+**Parameters**
+- `data` — the wrapper previously returned by `FindDataAsync<T>`. Delete by the storage id or correlation id embedded in the concrete type.
+- `cancellationToken` — cancels the delete.
+
+---
+
+## IPersistenceData&lt;T&gt;
+
+`IPersistenceData<T>` is the thin wrapper that `FindDataAsync<T>` returns and that `UpdateDataAsync<T>` / `DeleteDataAsync<T>` accept. The interface exposes only `Data`; the concrete type carries whatever concurrency metadata the implementation requires.
+
+```csharp
+public interface IPersistenceData<T> where T : class, IProcessManagerData
+{
+    T Data { get; set; }
+}
+```
+
+**`Data`** — gets or sets the process-manager state object. The handler mutates this in place; the framework writes it back by passing the same wrapper to `UpdateDataAsync<T>`.
+
+Implementations add fields such as `int Version`, `string ETag`, or `Guid RowId` on the concrete class. Because the framework only interacts with the interface, those extra fields survive the round-trip from `FindDataAsync<T>` through to `UpdateDataAsync<T>` without the framework touching them.
+
+---
+
+## Implementing
+
+### Concurrency contract
+
+Multiple handlers may call `FindDataAsync<T>` for the same correlation id concurrently — for example, when two messages arrive together for the same saga instance. Implementations must protect against lost updates using one of:
+
+- **Optimistic concurrency** — store a `version` integer or ETag. `FindDataAsync<T>` reads and captures it in the returned wrapper. `UpdateDataAsync<T>` issues `UPDATE … WHERE id = @id AND version = @version` and throws `ConcurrencyException` (or equivalent) if zero rows are affected. The dispatch pipeline retries on concurrency failure.
+- **Pessimistic locking** — `FindDataAsync<T>` acquires a row-level lock (`SELECT … FOR UPDATE`). The lock is held until the transaction completes in `UpdateDataAsync<T>` or `DeleteDataAsync<T>`. Requires that `FindDataAsync<T>` and the subsequent write run inside the same transaction scope.
+
+### Not-found contract
+
+`FindDataAsync<T>` must return `null` when no record exists — never throw a `KeyNotFoundException` or equivalent. The dispatcher distinguishes `null` (first message, call `InsertDataAsync`) from a non-null wrapper (existing saga, call `UpdateDataAsync<T>`).
+
+### Insert vs update
+
+`InsertDataAsync` is called only for the first message that starts a saga. All subsequent messages — including the message that completes the saga — go through `FindDataAsync<T>` followed by `UpdateDataAsync<T>` or `DeleteDataAsync<T>`. Implementations must not call `InsertDataAsync` from within `UpdateDataAsync<T>`.
+
+### Skeletal Postgres implementation sketch
+
+```csharp
+public sealed class PostgresProcessManagerFinder : IProcessManagerFinder
+{
+    private readonly string _connectionString;
+
+    public async Task<IPersistenceData<T>?> FindDataAsync<T>(
+        IProcessManagerPropertyMapper mapper,
+        Message message,
+        CancellationToken cancellationToken = default)
+        where T : class, IProcessManagerData
+    {
+        var correlationId = mapper.GetCorrelationId(message);
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var row = await conn.QuerySingleOrDefaultAsync<(Guid Id, string State, int Version)>(
+            "SELECT id, state::text, version FROM process_manager_state WHERE id = @id",
+            new { id = correlationId });
+
+        if (row == default) return null;
+
+        var data = JsonSerializer.Deserialize<T>(row.State)!;
+        return new PostgresPersistenceData<T>(data, row.Version);
+    }
+
+    public async Task UpdateDataAsync<T>(
+        IPersistenceData<T> data,
+        CancellationToken cancellationToken = default)
+        where T : class, IProcessManagerData
+    {
+        var wrapper = (PostgresPersistenceData<T>)data;
+        var state   = JsonSerializer.Serialize(data.Data);
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var rows = await conn.ExecuteAsync(
+            "UPDATE process_manager_state SET state = @state::jsonb, version = version + 1 WHERE id = @id AND version = @version",
+            new { id = data.Data.CorrelationId, state, version = wrapper.Version });
+
+        if (rows == 0)
+            throw new ConcurrencyException($"Optimistic concurrency failure for saga {data.Data.CorrelationId}.");
+    }
+
+    // ... InsertDataAsync, DeleteDataAsync omitted for brevity
+}
+```
+
+## Usage
+
+### Postgres-backed finder with optimistic concurrency
+
+The following example implements all four members against a `process_manager_state` table with a `version` column. Concurrent updates are detected via `UPDATE … WHERE id = @id AND version = @version`; zero rows affected signals a lost update and throws so the pipeline retries.
+
+```csharp
+// Schema (run once during migration):
+// CREATE TABLE process_manager_state (
+//     id         UUID    NOT NULL PRIMARY KEY,
+//     state      JSONB   NOT NULL,
+//     version    INTEGER NOT NULL DEFAULT 0,
+//     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+// );
+
+public sealed class PostgresPersistenceData<T> : IPersistenceData<T>
+    where T : class, IProcessManagerData
+{
+    public T    Data    { get; set; }
+    public int  Version { get; }
+
+    public PostgresPersistenceData(T data, int version)
+    {
+        Data    = data;
+        Version = version;
+    }
+}
+
+public sealed class PostgresProcessManagerFinder : IProcessManagerFinder
+{
+    private readonly string _connectionString;
+    private readonly JsonSerializerOptions _jsonOptions;
+
+    public PostgresProcessManagerFinder(string connectionString, JsonSerializerOptions jsonOptions)
+    {
+        _connectionString = connectionString;
+        _jsonOptions      = jsonOptions;
+    }
+
+    public async Task<IPersistenceData<T>?> FindDataAsync<T>(
+        IProcessManagerPropertyMapper mapper,
+        Message message,
+        CancellationToken cancellationToken = default)
+        where T : class, IProcessManagerData
+    {
+        var correlationId = mapper.GetCorrelationId(message);
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var row = await conn.QuerySingleOrDefaultAsync<(Guid Id, string State, int Version)>(
+            "SELECT id, state::text, version FROM process_manager_state WHERE id = @id",
+            new { id = correlationId });
+
+        if (row.Id == Guid.Empty)
+            return null;
+
+        var data = JsonSerializer.Deserialize<T>(row.State, _jsonOptions)!;
+        return new PostgresPersistenceData<T>(data, row.Version);
+    }
+
+    public async Task InsertDataAsync(
+        IProcessManagerData data,
+        CancellationToken cancellationToken = default)
+    {
+        var state = JsonSerializer.Serialize(data, data.GetType(), _jsonOptions);
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        await conn.ExecuteAsync(
+            @"INSERT INTO process_manager_state (id, state, version, updated_at)
+              VALUES (@id, @state::jsonb, 0, now())",
+            new { id = data.CorrelationId, state });
+    }
+
+    public async Task UpdateDataAsync<T>(
+        IPersistenceData<T> data,
+        CancellationToken cancellationToken = default)
+        where T : class, IProcessManagerData
+    {
+        var wrapper = (PostgresPersistenceData<T>)data;
+        var state   = JsonSerializer.Serialize(data.Data, _jsonOptions);
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var rows = await conn.ExecuteAsync(
+            @"UPDATE process_manager_state
+              SET state      = @state::jsonb,
+                  version    = version + 1,
+                  updated_at = now()
+              WHERE id = @id AND version = @version",
+            new { id = data.Data.CorrelationId, state, version = wrapper.Version });
+
+        if (rows == 0)
+            throw new ConcurrencyException(
+                $"Optimistic concurrency failure for saga {data.Data.CorrelationId}. " +
+                "The record was modified by another handler since it was loaded.");
+    }
+
+    public async Task DeleteDataAsync<T>(
+        IPersistenceData<T> data,
+        CancellationToken cancellationToken = default)
+        where T : class, IProcessManagerData
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        await conn.ExecuteAsync(
+            "DELETE FROM process_manager_state WHERE id = @id",
+            new { id = data.Data.CorrelationId });
+    }
+}
+```
+
+Register during bus startup:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
+    builder.ConfigurePersistence(p =>
+        p.SetProcessManagerFinder<PostgresProcessManagerFinder>());
+});
+```
+
+When the `PaymentProcessor` saga receives a `PaymentAuthorised` message, the dispatch pipeline calls `FindDataAsync<PaymentSagaData>` to load the correlating record, invokes the handler, and on a successful return calls `UpdateDataAsync<PaymentSagaData>` with the same wrapper. If another consumer processed a concurrent message and incremented `version` in the interim, `UpdateDataAsync<PaymentSagaData>` throws and the pipeline retries the whole handler invocation from `FindDataAsync<PaymentSagaData>` again.
+
+## See also
+
+- [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept
+- [`IProcessHandler`](../../process-managers/iprocesshandler/) — related reference
+- [`IProcessManagerData`](../../process-managers/iprocessmanagerdata/) — related reference
+- [`IPersistenceConfiguration`](../../configuration/ipersistenceconfiguration/) — related reference

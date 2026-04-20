@@ -128,7 +128,14 @@ export default defineConfig({
           label: 'Extension Points',
           items: [
             { label: 'Overview', link: '/reference/extension-points/' },
-            { label: 'Persistence', items: [] },
+            {
+              label: 'Persistence',
+              items: [
+                { label: 'IAggregatorPersistor', link: '/reference/extension-points/persistence/iaggregatorpersistor/' },
+                { label: 'IProcessManagerFinder', link: '/reference/extension-points/persistence/iprocessmanagerfinder/' },
+                { label: 'ILeaseAwareTimeoutStore', link: '/reference/extension-points/persistence/ileaseawaretimeoutstore/' },
+              ],
+            },
             { label: 'Serialization', items: [] },
             { label: 'Transport', items: [] },
             { label: 'Registry', items: [] },

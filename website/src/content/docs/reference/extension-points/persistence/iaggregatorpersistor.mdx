@@ -1,0 +1,396 @@
+---
+title: IAggregatorPersistor
+description: The contract for a custom aggregator buffer — insert, load, and remove buffered messages by logical aggregator name.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IAggregatorPersistor` is the storage contract that an `Aggregator<T>` uses to buffer incoming messages between deliveries. When a message arrives the framework calls `InsertDataAsync` to persist it; once the aggregation condition is met, it calls `GetSnapshotAsync` to obtain the resolved records, fires the aggregator callback, then removes the records via `RemoveSnapshotAsync`. The interface also exposes `CountAsync`, `GetDataAsync`, and bulk-removal methods for management and recovery paths.
+
+ServiceConnect ships in-memory and MongoDB implementations out of the box. Swap in a custom implementation — Postgres, Redis, DynamoDB — by registering it through `IPersistenceConfiguration`.
+
+See [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) for the conceptual model.
+
+## Reference
+
+### `InsertDataAsync`
+
+```csharp
+Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default);
+```
+
+Persists a single message payload for the named aggregator instance.
+
+**Parameters**
+- `data` — the deserialised message object to store; implementations should serialise it to bytes or JSON before writing.
+- `name` — the logical aggregator name (for example, the saga type name such as `"ShippingAggregator"`). Used as a partition key — all operations for one aggregator are scoped to this value.
+- `cancellationToken` — cancels the storage operation.
+
+**Remarks.** Each call corresponds to one message delivery. The store must be able to hold multiple records under the same `name`, distinguishable by a per-record identifier (typically the correlation id embedded in the message).
+
+---
+
+### `GetDataAsync`
+
+```csharp
+Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default);
+```
+
+Returns every buffered record for the named aggregator as a list of deserialised objects.
+
+**Parameters**
+- `name` — the logical aggregator name to load.
+- `cancellationToken` — cancels the load.
+
+**Returns.** All stored records; an empty list when none are present (never `null`).
+
+**Remarks.** This method is used by recovery paths and administrative tooling. For normal aggregation flow, `GetSnapshotAsync` is preferred because it separates resolved records from those that could not be deserialised.
+
+---
+
+### `GetSnapshotAsync`
+
+```csharp
+Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default);
+```
+
+Returns a snapshot of the buffered records, separating those that deserialised successfully from those that could not.
+
+**Parameters**
+- `name` — the logical aggregator name.
+- `cancellationToken` — cancels the load.
+
+**Returns.** An `IAggregatorSnapshot` describing the resolved and unresolved portions of the buffer. See [IAggregatorSnapshot](#iaggregatorsnapshot) below for the member details.
+
+**Remarks.** The snapshot is a *point-in-time view*, not a version token. After the aggregator fires, the same snapshot is passed to `RemoveSnapshotAsync` to remove exactly the records captured in it — any records that arrived after the snapshot was taken remain in the store.
+
+---
+
+### `RemoveDataAsync`
+
+```csharp
+Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default);
+```
+
+Removes a single buffered record by its correlation id.
+
+**Parameters**
+- `name` — the logical aggregator name.
+- `correlationId` — the correlation id of the record to remove.
+- `cancellationToken` — cancels the operation.
+
+**Remarks.** Used by compensating or administrative flows that need to evict one specific message from the buffer without triggering aggregation.
+
+---
+
+### `RemoveAllAsync`
+
+```csharp
+Task RemoveAllAsync(string name, CancellationToken cancellationToken = default);
+```
+
+Removes all buffered records for the named aggregator unconditionally.
+
+**Parameters**
+- `name` — the logical aggregator name.
+- `cancellationToken` — cancels the operation.
+
+**Remarks.** Use with care. This is a bulk delete — it removes every record regardless of whether they have been resolved. Useful during saga cancellation or partition reset scenarios.
+
+---
+
+### `RemoveSnapshotAsync`
+
+```csharp
+Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default);
+```
+
+Removes the records captured in a previously loaded snapshot.
+
+**Parameters**
+- `name` — the logical aggregator name.
+- `snapshot` — the snapshot returned by `GetSnapshotAsync`; implementations should delete the records whose ids are listed in `snapshot.ResolvedIds`.
+- `cancellationToken` — cancels the operation.
+
+**Remarks.** The contract here is important for correctness under at-least-once delivery. If `RemoveSnapshotAsync` fails after the aggregator has already fired, the framework retries the delivery; the surviving records are presented again on the next `GetSnapshotAsync` call and the aggregator fires a second time — duplicate delivery results. Implement this method atomically (for example, inside a transaction) wherever possible, and make the aggregator callback idempotent.
+
+---
+
+### `CountAsync`
+
+```csharp
+Task<int> CountAsync(string name, CancellationToken cancellationToken = default);
+```
+
+Returns the number of buffered records currently held for the named aggregator.
+
+**Parameters**
+- `name` — the logical aggregator name.
+- `cancellationToken` — cancels the operation.
+
+**Returns.** The count of persisted records; `0` when the buffer is empty.
+
+**Remarks.** Used by the framework to evaluate count-based aggregation conditions without loading every record.
+
+---
+
+## IAggregatorSnapshot
+
+`IAggregatorSnapshot` is the companion interface returned by `GetSnapshotAsync`. It separates the buffered records into those the store could deserialise (resolved) and those it could not (unresolved).
+
+### `ResolvedMessages`
+
+```csharp
+IReadOnlyList<object> ResolvedMessages { get; }
+```
+
+The deserialised message objects for all records that could be hydrated. The aggregator callback receives this list.
+
+---
+
+### `ResolvedIds`
+
+```csharp
+IReadOnlyList<Guid> ResolvedIds { get; }
+```
+
+The storage identifiers corresponding to `ResolvedMessages`, in the same order. `RemoveSnapshotAsync` uses these ids as the delete key set — implementations that store records by `(name, correlationId)` pairs should match on `correlationId`.
+
+---
+
+### `UnresolvedCount`
+
+```csharp
+int UnresolvedCount { get; }
+```
+
+The number of stored records that could not be deserialised to CLR objects. A positive value indicates schema drift or missing type registrations. The framework counts these towards the total when evaluating count-based conditions but cannot pass them to the aggregator callback.
+
+---
+
+## Implementing
+
+### Concurrency
+
+The framework may invoke `InsertDataAsync` and `CountAsync` concurrently from multiple consumer threads, potentially for the same `name` when an aggregator runs with multiple partitions. Implementations must be safe under concurrent access to the same name. A relational store should rely on database-level row locking; an in-memory store needs a `ConcurrentDictionary` or a per-name `SemaphoreSlim`.
+
+### Transactional expectations
+
+`RemoveSnapshotAsync` is the critical path for correctness. If the aggregator callback completes but `RemoveSnapshotAsync` fails — network timeout, deadlock, process crash — the records remain in the store. On the next `GetSnapshotAsync` the same records appear again, and the aggregator fires a second time. Design aggregator callbacks to be idempotent, and where the storage engine permits it, wrap the aggregator callback and `RemoveSnapshotAsync` in a single database transaction or outbox pattern.
+
+### Snapshot semantics
+
+A snapshot is a view, not a lock. Records written between `GetSnapshotAsync` and `RemoveSnapshotAsync` are not included in `ResolvedIds` and survive the delete. The implementation must therefore delete by id set rather than truncating the partition.
+
+### Skeletal implementation sketch
+
+```csharp
+public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
+{
+    private readonly string _connectionString;
+
+    public PostgresAggregatorPersistor(string connectionString)
+        => _connectionString = connectionString;
+
+    public async Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
+    {
+        var payload = JsonSerializer.Serialize(data);
+        var correlationId = ((Message)data).CorrelationId;
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync(
+            "INSERT INTO aggregator_messages (id, name, payload, created_at) VALUES (@id, @name, @payload::jsonb, now())",
+            new { id = correlationId, name, payload });
+    }
+
+    public async Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        if (snapshot.ResolvedIds.Count == 0) return;
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync(
+            "DELETE FROM aggregator_messages WHERE name = @name AND id = ANY(@ids)",
+            new { name, ids = snapshot.ResolvedIds.ToArray() });
+    }
+
+    // ... remaining members omitted for brevity
+}
+```
+
+## Usage
+
+### Postgres-backed aggregator buffer using Npgsql
+
+The following example implements `IAggregatorPersistor` against a Postgres table with an `UPSERT`-style insert and a set-based delete for snapshot removal.
+
+```csharp
+// Schema (run once during migration):
+// CREATE TABLE aggregator_messages (
+//     id         UUID        NOT NULL,
+//     name       TEXT        NOT NULL,
+//     payload    JSONB       NOT NULL,
+//     type_name  TEXT        NOT NULL,
+//     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+//     PRIMARY KEY (id, name)
+// );
+
+public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
+{
+    private readonly string _connectionString;
+    private readonly JsonSerializerOptions _jsonOptions;
+
+    public PostgresAggregatorPersistor(string connectionString, JsonSerializerOptions jsonOptions)
+    {
+        _connectionString = connectionString;
+        _jsonOptions      = jsonOptions;
+    }
+
+    public async Task InsertDataAsync(
+        object data,
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        var correlationId = ((Message)data).CorrelationId;
+        var typeName      = data.GetType().AssemblyQualifiedName!;
+        var payload       = JsonSerializer.Serialize(data, _jsonOptions);
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        await conn.ExecuteAsync(
+            @"INSERT INTO aggregator_messages (id, name, payload, type_name)
+              VALUES (@id, @name, @payload::jsonb, @typeName)
+              ON CONFLICT (id, name) DO NOTHING",
+            new { id = correlationId, name, payload, typeName });
+    }
+
+    public async Task<IList<object>> GetDataAsync(
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var rows = await conn.QueryAsync<(Guid Id, string Payload, string TypeName)>(
+            "SELECT id, payload::text, type_name FROM aggregator_messages WHERE name = @name ORDER BY created_at",
+            new { name });
+
+        return rows
+            .Select(r => JsonSerializer.Deserialize(r.Payload, Type.GetType(r.TypeName)!, _jsonOptions)!)
+            .ToList();
+    }
+
+    public async Task<IAggregatorSnapshot> GetSnapshotAsync(
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var rows = await conn.QueryAsync<(Guid Id, string Payload, string TypeName)>(
+            "SELECT id, payload::text, type_name FROM aggregator_messages WHERE name = @name ORDER BY created_at",
+            new { name });
+
+        var resolved   = new List<object>();
+        var resolvedIds = new List<Guid>();
+        var unresolved = 0;
+
+        foreach (var row in rows)
+        {
+            var type = Type.GetType(row.TypeName);
+            if (type is null)
+            {
+                unresolved++;
+                continue;
+            }
+            var obj = JsonSerializer.Deserialize(row.Payload, type, _jsonOptions);
+            if (obj is null)
+            {
+                unresolved++;
+                continue;
+            }
+            resolved.Add(obj);
+            resolvedIds.Add(row.Id);
+        }
+
+        return new AggregatorSnapshot(resolved, resolvedIds, unresolved);
+    }
+
+    public async Task RemoveDataAsync(
+        string name,
+        Guid correlationId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync(
+            "DELETE FROM aggregator_messages WHERE name = @name AND id = @id",
+            new { name, id = correlationId });
+    }
+
+    public async Task RemoveAllAsync(
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync(
+            "DELETE FROM aggregator_messages WHERE name = @name",
+            new { name });
+    }
+
+    public async Task RemoveSnapshotAsync(
+        string name,
+        IAggregatorSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        if (snapshot.ResolvedIds.Count == 0)
+            return;
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        // Delete exactly the ids captured in the snapshot — any records that arrived
+        // after GetSnapshotAsync was called are unaffected.
+        await conn.ExecuteAsync(
+            "DELETE FROM aggregator_messages WHERE name = @name AND id = ANY(@ids)",
+            new { name, ids = snapshot.ResolvedIds.ToArray() });
+    }
+
+    public async Task<int> CountAsync(
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        return await conn.ExecuteScalarAsync<int>(
+            "SELECT COUNT(*) FROM aggregator_messages WHERE name = @name",
+            new { name });
+    }
+
+    // Minimal snapshot value type used above.
+    private sealed record AggregatorSnapshot(
+        IReadOnlyList<object> ResolvedMessages,
+        IReadOnlyList<Guid> ResolvedIds,
+        int UnresolvedCount) : IAggregatorSnapshot;
+}
+```
+
+Register the implementation during bus startup:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
+    builder.ConfigurePersistence(p =>
+        p.SetAggregatorPersistor<PostgresAggregatorPersistor>());
+});
+```
+
+## See also
+
+- [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) — concept
+- [`Aggregator<T>`](../../process-managers/aggregator/) — related reference
+- [`IPersistenceConfiguration`](../../configuration/ipersistenceconfiguration/) — related reference

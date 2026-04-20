@@ -1,0 +1,321 @@
+---
+title: ILeaseAwareTimeoutStore
+description: A timeout store that guards removal and release operations with a lock-owner parameter, preventing duplicate dispatch when multiple bus instances share the same store.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`ILeaseAwareTimeoutStore` extends the base `ITimeoutStore` interface with a `lockOwner` parameter on its two mutating methods. Where `ITimeoutStore.RemoveDispatchedTimeoutAsync(id)` and `ITimeoutStore.ReleaseDispatchedTimeoutAsync(id)` act unconditionally, the lease-aware variants require the caller to prove it still holds the lease before the store will act.
+
+The mechanism works alongside `ITimeoutStore.GetTimeoutsBatchAsync`: when a bus instance pulls a batch of due timeouts it receives a `lockOwner` identifier (typically a per-instance `Guid`) that was written into each record. Passing that same `lockOwner` to `RemoveDispatchedTimeoutAsync` or `ReleaseDispatchedTimeoutAsync` ensures that if the original holder crashed and a second instance subsequently claimed the same timeout, only the current holder can complete or release it. This prevents duplicate dispatch in active-active deployments.
+
+See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the saga and timeout conceptual model.
+
+## Reference
+
+### `RemoveDispatchedTimeoutAsync`
+
+```csharp
+Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default);
+```
+
+Permanently removes a dispatched timeout, but only if the stored `lock_owner` matches `lockOwner`.
+
+**Parameters**
+- `id` — the timeout identifier, as assigned when the timeout was inserted via `ITimeoutStore.InsertTimeoutAsync`.
+- `lockOwner` — the `Guid` identifying the bus instance that currently holds the lease. The store must verify this matches the persisted value before deleting.
+- `cancellationToken` — cancels the database operation.
+
+**Remarks.** Call this after the timeout message has been delivered to the downstream consumer and acknowledged. If `lockOwner` does not match — because the original holder crashed and another instance has since claimed the record — the implementation should treat this as a no-op (or log a warning) rather than throw. Throwing would cause the calling instance to retry an operation it can never win.
+
+---
+
+### `ReleaseDispatchedTimeoutAsync`
+
+```csharp
+Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default);
+```
+
+Returns a dispatched timeout to the pending state so it may be dispatched again, but only if the stored `lock_owner` matches `lockOwner`.
+
+**Parameters**
+- `id` — the timeout identifier.
+- `lockOwner` — the bus instance that must currently hold the lease.
+- `cancellationToken` — cancels the database operation.
+
+**Remarks.** Call this when dispatch fails — the consumer rejected the message, the transport delivery failed, or the timeout is being requeued for retry. After a successful release the timeout is visible on the next `GetTimeoutsBatchAsync` call to any instance. As with `RemoveDispatchedTimeoutAsync`, a `lockOwner` mismatch should be a no-op rather than an error.
+
+---
+
+### Inherited from `ITimeoutStore`
+
+`ILeaseAwareTimeoutStore` implementations are expected to also fulfil the full `ITimeoutStore` contract. The base interface declares:
+
+```csharp
+Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default);
+Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default);
+Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
+Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
+```
+
+`InsertTimeoutAsync` persists a new timeout with its `scheduled_for` timestamp and target destination. `GetTimeoutsBatchAsync` polls for due timeouts, stamps each claimed record with the caller's `lockOwner` and a `lease_expires_at`, and returns them as a `TimeoutsBatch`. The base `RemoveDispatchedTimeoutAsync(id)` and `ReleaseDispatchedTimeoutAsync(id)` without `lockOwner` act unconditionally — they exist for single-instance deployments where lease ownership is not a concern.
+
+---
+
+## Implementing
+
+### Lease expiry
+
+Each record claimed by `GetTimeoutsBatchAsync` should carry two additional columns: `lock_owner UUID` and `lease_expires_at TIMESTAMPTZ`. The dispatcher sets both when it claims a batch. If the holding instance crashes before calling `RemoveDispatchedTimeoutAsync`, the lease expires naturally. The next `GetTimeoutsBatchAsync` call from any instance — filtered by `WHERE state = 'pending' OR (state = 'dispatched' AND lease_expires_at < now())` — will reclaim the record and stamp a new lease. The re-dispatched timeout reaches the consumer a second time, so consumers must treat timeout-driven messages as at-least-once.
+
+### Crash recovery
+
+When a consumer crashes mid-dispatch the unacknowledged timeout record remains in the `dispatched` state with the dead instance's `lock_owner`. Once `lease_expires_at` passes, the record re-enters the pending pool. Choose a lease duration that is longer than the worst-case consumer processing time but short enough that a crashed instance does not hold timeouts for an unacceptable period — one to five minutes is typical.
+
+### Ordering guarantees
+
+No ordering guarantee is required across timeouts — each timeout is independent. Within a single `GetTimeoutsBatchAsync` call the store should not return the same timeout to two concurrent callers; `FOR UPDATE SKIP LOCKED` in Postgres achieves this without blocking.
+
+### Skeletal Postgres implementation sketch
+
+```csharp
+public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, ITimeoutStore
+{
+    private readonly string _connectionString;
+    private readonly Guid   _instanceId = Guid.NewGuid(); // stable per bus instance
+
+    public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await using var tx = await conn.BeginTransactionAsync(cancellationToken);
+
+        var leaseExpiry = DateTime.UtcNow.AddMinutes(2);
+        var rows = await conn.QueryAsync<TimeoutData>(
+            @"SELECT id, destination, scheduled_for
+              FROM timeouts
+              WHERE (state = 'pending' OR (state = 'dispatched' AND lease_expires_at < now()))
+                AND scheduled_for <= now()
+              ORDER BY scheduled_for
+              LIMIT 50
+              FOR UPDATE SKIP LOCKED",
+            transaction: tx);
+
+        var ids = rows.Select(r => r.Id).ToArray();
+        if (ids.Length > 0)
+        {
+            await conn.ExecuteAsync(
+                @"UPDATE timeouts
+                  SET state = 'dispatched', lock_owner = @owner, lease_expires_at = @expiry
+                  WHERE id = ANY(@ids)",
+                new { owner = _instanceId, expiry = leaseExpiry, ids },
+                transaction: tx);
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return new TimeoutsBatch(rows.ToList(), _instanceId);
+    }
+
+    public async Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync(
+            "DELETE FROM timeouts WHERE id = @id AND lock_owner = @owner",
+            new { id, owner = lockOwner });
+        // Zero rows affected = lockOwner mismatch; treated as no-op.
+    }
+
+    public async Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync(
+            @"UPDATE timeouts
+              SET state = 'pending', lock_owner = NULL, lease_expires_at = NULL
+              WHERE id = @id AND lock_owner = @owner",
+            new { id, owner = lockOwner });
+        // Zero rows affected = lockOwner mismatch; treated as no-op.
+    }
+
+    // InsertTimeoutAsync and single-arg overloads omitted for brevity
+}
+```
+
+## Usage
+
+### Postgres-backed lease-aware timeout store
+
+The following example implements both `ILeaseAwareTimeoutStore` methods against a `timeouts` table that tracks `lock_owner` and `lease_expires_at`. Both operations are guarded by `WHERE id = @id AND lock_owner = @lockOwner`; zero rows affected is treated as a silent no-op with a diagnostic log entry.
+
+```csharp
+// Schema (run once during migration):
+// CREATE TABLE timeouts (
+//     id              UUID        NOT NULL PRIMARY KEY,
+//     destination     TEXT        NOT NULL,
+//     scheduled_for   TIMESTAMPTZ NOT NULL,
+//     lock_owner      UUID,
+//     lease_expires_at TIMESTAMPTZ,
+//     state           TEXT        NOT NULL DEFAULT 'pending',   -- pending | dispatched | completed
+//     payload         JSONB       NOT NULL
+// );
+// CREATE INDEX ix_timeouts_dispatch ON timeouts (scheduled_for, state, lease_expires_at);
+
+public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, ITimeoutStore
+{
+    private readonly string _connectionString;
+    private readonly ILogger<PostgresLeaseAwareTimeoutStore> _logger;
+
+    public PostgresLeaseAwareTimeoutStore(
+        string connectionString,
+        ILogger<PostgresLeaseAwareTimeoutStore> logger)
+    {
+        _connectionString = connectionString;
+        _logger           = logger;
+    }
+
+    public async Task InsertTimeoutAsync(
+        TimeoutData timeoutData,
+        CancellationToken cancellationToken = default)
+    {
+        var payload = JsonSerializer.Serialize(timeoutData);
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        await conn.ExecuteAsync(
+            @"INSERT INTO timeouts (id, destination, scheduled_for, state, payload)
+              VALUES (@id, @destination, @scheduledFor, 'pending', @payload::jsonb)",
+            new
+            {
+                id            = timeoutData.Id,
+                destination   = timeoutData.Destination,
+                scheduledFor  = timeoutData.Timeout,
+                payload,
+            });
+    }
+
+    public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+    {
+        var owner       = Guid.NewGuid(); // per-call owner; real implementations use a stable per-instance id
+        var leaseExpiry = DateTime.UtcNow.AddMinutes(2);
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await using var tx = await conn.BeginTransactionAsync(cancellationToken);
+
+        var rows = (await conn.QueryAsync<TimeoutData>(
+            @"SELECT id, destination, scheduled_for AS ""Timeout"", payload::text
+              FROM timeouts
+              WHERE state = 'pending'
+                 OR (state = 'dispatched' AND lease_expires_at < now())
+                AND scheduled_for <= now()
+              ORDER BY scheduled_for
+              LIMIT 100
+              FOR UPDATE SKIP LOCKED",
+            transaction: tx)).ToList();
+
+        if (rows.Count > 0)
+        {
+            var ids = rows.Select(r => r.Id).ToArray();
+            await conn.ExecuteAsync(
+                @"UPDATE timeouts
+                  SET state            = 'dispatched',
+                      lock_owner       = @owner,
+                      lease_expires_at = @expiry
+                  WHERE id = ANY(@ids)",
+                new { owner, expiry = leaseExpiry, ids },
+                transaction: tx);
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return new TimeoutsBatch(rows, owner);
+    }
+
+    // Unconditional overloads (ITimeoutStore, single-instance deployments).
+
+    public async Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync("DELETE FROM timeouts WHERE id = @id", new { id });
+    }
+
+    public async Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+        await conn.ExecuteAsync(
+            "UPDATE timeouts SET state = 'pending', lock_owner = NULL, lease_expires_at = NULL WHERE id = @id",
+            new { id });
+    }
+
+    // Lock-owner-aware overloads (ILeaseAwareTimeoutStore, multi-instance deployments).
+
+    public async Task RemoveDispatchedTimeoutAsync(
+        Guid id,
+        Guid lockOwner,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var rows = await conn.ExecuteAsync(
+            "DELETE FROM timeouts WHERE id = @id AND lock_owner = @lockOwner",
+            new { id, lockOwner });
+
+        if (rows == 0)
+        {
+            _logger.LogWarning(
+                "RemoveDispatchedTimeout for {TimeoutId} matched no rows — lock owner {LockOwner} no longer holds the lease.",
+                id, lockOwner);
+        }
+    }
+
+    public async Task ReleaseDispatchedTimeoutAsync(
+        Guid id,
+        Guid lockOwner,
+        CancellationToken cancellationToken = default)
+    {
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync(cancellationToken);
+
+        var rows = await conn.ExecuteAsync(
+            @"UPDATE timeouts
+              SET state            = 'pending',
+                  lock_owner       = NULL,
+                  lease_expires_at = NULL
+              WHERE id = @id AND lock_owner = @lockOwner",
+            new { id, lockOwner });
+
+        if (rows == 0)
+        {
+            _logger.LogWarning(
+                "ReleaseDispatchedTimeout for {TimeoutId} matched no rows — lock owner {LockOwner} no longer holds the lease.",
+                id, lockOwner);
+        }
+    }
+}
+```
+
+Register during bus startup:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
+    builder.ConfigurePersistence(p =>
+        p.SetTimeoutStore<PostgresLeaseAwareTimeoutStore>());
+});
+```
+
+In an active-active deployment with two `ShippingSaga` instances sharing this store, only the instance whose `lockOwner` matches the persisted column can delete or release a claimed timeout record. If the first instance crashes between claiming the record and calling `RemoveDispatchedTimeoutAsync`, the lease expires within two minutes and the second instance claims the timeout on its next `GetTimeoutsBatchAsync` poll.
+
+## See also
+
+- [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept
+- [`IProcessManagerFinder`](./iprocessmanagerfinder/) — related reference
+- [`IPersistenceConfiguration`](../../configuration/ipersistenceconfiguration/) — related reference
+- The base interface `ITimeoutStore` (no dedicated reference page yet) defines `InsertTimeoutAsync` and `GetTimeoutsBatchAsync` alongside the unconditional remove/release overloads.
