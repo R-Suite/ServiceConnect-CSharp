@@ -31,6 +31,15 @@ export default defineConfig({
           label: 'Learn',
           items: [
             { label: 'Getting Started', link: '/learn/getting-started/' },
+            {
+              label: 'Core Concepts',
+              items: [
+                { label: 'The Bus', link: '/learn/core-concepts/the-bus/' },
+                { label: 'Messages', link: '/learn/core-concepts/messages/' },
+                { label: 'Handlers', link: '/learn/core-concepts/handlers/' },
+                { label: 'Endpoints', link: '/learn/core-concepts/endpoints/' },
+              ],
+            },
           ],
         },
         {
