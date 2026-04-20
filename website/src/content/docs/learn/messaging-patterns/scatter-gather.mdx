@@ -1,0 +1,117 @@
+---
+title: Scatter-Gather
+description: Fan a request out to several responders in parallel and collect the replies into one list — request/reply, scaled sideways.
+---
+
+**Scatter-Gather** sends the same request to several services at once, waits for their replies, and hands you back the collected results. It is the many-responders cousin of [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/): one call site, one outgoing request, *N* replies, one return value.
+
+The canonical use is parallel lookup — "ask every catalog for what they have that matches this query" — but the shape fits anywhere you'd otherwise write a `Task.WhenAll` of HTTP calls.
+
+## When to use it
+
+- You have several services that can answer the same question independently.
+- You want the answers in parallel, not one at a time.
+- Partial results are acceptable — missing one responder shouldn't fail the whole operation.
+
+If you need every responder's answer or none at all, this is not the right pattern — you want a transactional coordination tool, not a messaging one. Scatter-Gather completes when a time budget expires, not when every responder is guaranteed to have replied.
+
+## The contract
+
+One request type, one reply type. Same shape as request/reply:
+
+```csharp
+// Contracts/Search.cs
+using ServiceConnect.Interfaces;
+
+public sealed class SearchRequest(Guid correlationId) : Message(correlationId)
+{
+    public string Query { get; init; } = string.Empty;
+}
+
+public sealed class SearchResponse(Guid correlationId) : Message(correlationId)
+{
+    public string Source { get; init; } = string.Empty;  // which responder answered
+    public IReadOnlyList<string> Hits { get; init; } = Array.Empty<string>();
+}
+```
+
+A `Source` field on the reply is a convention worth borrowing — the requester gets a bag of replies back and has to attribute them somehow. A string tag is enough.
+
+## The requester
+
+Scatter-Gather uses `SendRequestMultiAsync<TRequest, TReply>`. You supply a list of destination queues in `RequestOptions.EndPoints`, and you receive a `List<TReply>`:
+
+```csharp
+// Requester/Program.cs
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
+
+await bus.StartConsumingAsync();   // required — replies land on our queue
+
+var replies = await bus.SendRequestMultiAsync<SearchRequest, SearchResponse>(
+    new SearchRequest(Guid.NewGuid()) { Query = "widgets" },
+    new RequestOptions
+    {
+        EndPoints = new[] { "catalog-a", "catalog-b" },
+        ExpectedReplyCount = 2,
+        Timeout = 30_000,
+    });
+
+foreach (var reply in replies)
+    Console.WriteLine($"{reply.Source}: {reply.Hits.Count} hits");
+```
+
+Two things to notice:
+
+- **`ExpectedReplyCount`** controls when the call completes. With a positive value (here, `2`), `SendRequestMultiAsync` returns as soon as that many replies arrive **or** the timeout elapses — whichever comes first. Leave it unset and ServiceConnect defaults to `EndPoints.Count`, which is usually what you want: "I sent to two, I'd like two replies back."
+- **`Timeout`** is in milliseconds. It is not optional for safety reasons — a missing responder would leave the caller waiting forever otherwise. At the timeout, `SendRequestMultiAsync` returns whatever replies have actually arrived; it does not throw unless **no** replies arrive. That's what makes partial-result semantics the default.
+
+## The responders
+
+Each responder is a normal request/reply handler — identical to what you'd write for a single-responder request/reply:
+
+```csharp
+// CatalogA/SearchRequestHandler.cs
+public sealed class SearchRequestHandler : IMessageHandler<SearchRequest>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public async Task HandleAsync(SearchRequest message)
+    {
+        var hits = await SearchAsync(message.Query);
+        await Context!.ReplyAsync(new SearchResponse(message.CorrelationId)
+        {
+            Source = "catalog-a",
+            Hits = hits,
+        });
+    }
+
+    private Task<IReadOnlyList<string>> SearchAsync(string q) => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+}
+```
+
+The responders don't know each other. They don't coordinate. Each one sees a `SearchRequest`, runs its own search, and replies. The requester is the only place that knows there are multiple responders.
+
+Run as many as you want — add catalog-c later and just include `"catalog-c"` in `EndPoints` when you call. The responder side doesn't change.
+
+## Reply-count semantics
+
+`ExpectedReplyCount` is the knob that defines "done":
+
+- **Positive value** — wait for that many replies or the timeout, whichever is first.
+- **Zero or negative** — wait the full timeout and return every reply received.
+- **`null`** (default) — fall back to `EndPoints.Count` if `EndPoints` is set; otherwise behave as the negative case.
+
+The "wait the full timeout" case is useful when you don't know how many responders are listening — say, the set of catalogs is dynamic. You accept a fixed wait in exchange for not having to count responders.
+
+## When a reply doesn't come back
+
+Nothing bad happens. The response list comes back short, the call returns cleanly, and it is your job to decide what that means — "no results from catalog-b", a health alert, a fallback, nothing at all. The requester sees exactly the replies that arrived; the ones that didn't are simply absent.
+
+If you need to log specifically *which* responders failed to reply, compare the `Source` tags on the replies to the `EndPoints` list you sent. ServiceConnect doesn't surface this for you, and on purpose: the pattern's whole appeal is that the call site doesn't have to reason about per-responder failure.
+
+## What comes next
+
+- [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/) — the single-responder variant this extends.
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — when you want fan-out without needing replies.
+- [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) — when the collecting happens on the consumer side, not the sender's.
