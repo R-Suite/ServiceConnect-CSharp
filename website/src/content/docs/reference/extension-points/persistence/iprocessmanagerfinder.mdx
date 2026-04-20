@@ -138,7 +138,7 @@ public sealed class PostgresProcessManagerFinder : IProcessManagerFinder
 
         if (row is null) return null;
 
-        var (id, state, version) = row.Value;
+        var (_, state, version) = row.Value;
         var data = JsonSerializer.Deserialize<T>(state)!;
         return new PostgresPersistenceData<T>(data, version);
     }
@@ -222,7 +222,7 @@ public sealed class PostgresProcessManagerFinder : IProcessManagerFinder
         if (row is null)
             return null;
 
-        var (id, state, version) = row.Value;
+        var (_, state, version) = row.Value;
         var data = JsonSerializer.Deserialize<T>(state, _jsonOptions)!;
         return new PostgresPersistenceData<T>(data, version);
     }

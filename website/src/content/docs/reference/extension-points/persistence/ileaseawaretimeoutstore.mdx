@@ -96,7 +96,7 @@ public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, IT
 
         var leaseExpiry = DateTime.UtcNow.AddMinutes(2);
         var rows = await conn.QueryAsync<TimeoutData>(
-            @"SELECT id, destination, scheduled_for
+            @"SELECT id, destination, scheduled_for AS ""Time""
               FROM timeouts
               WHERE (state = 'pending' OR (state = 'dispatched' AND lease_expires_at < now()))
                 AND scheduled_for <= now()
@@ -200,7 +200,7 @@ public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, IT
             {
                 id            = timeoutData.Id,
                 destination   = timeoutData.Destination,
-                scheduledFor  = timeoutData.Timeout,
+                scheduledFor  = timeoutData.Time,
                 payload,
             });
     }
@@ -214,7 +214,7 @@ public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, IT
         await using var tx = await conn.BeginTransactionAsync(cancellationToken);
 
         var rows = (await conn.QueryAsync<TimeoutData>(
-            @"SELECT id, destination, scheduled_for AS ""Timeout"", payload::text
+            @"SELECT id, destination, scheduled_for AS ""Time"", payload::text
               FROM timeouts
               WHERE state = 'pending'
                  OR (state = 'dispatched' AND lease_expires_at < now())

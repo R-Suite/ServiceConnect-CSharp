@@ -364,9 +364,10 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
     {
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
-        return await conn.ExecuteScalarAsync<int>(
+        var count = await conn.ExecuteScalarAsync<long>(
             "SELECT COUNT(*) FROM aggregator_messages WHERE name = @name",
             new { name });
+        return (int)count;
     }
 
     // Minimal snapshot value type used above.
