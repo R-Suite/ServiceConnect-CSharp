@@ -1,8 +1,8 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <package>
   <metadata>
     <id>ServiceConnect</id>
-    <version>6.0.2</version>
+    <version>7.0.0</version>
     <title>ServiceConnect</title>
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
@@ -10,26 +10,36 @@
     <license type="expression">MIT</license>
     <description>A simple, easy to use asynchronous messaging framework for .NET.</description>
     <language>en-GB</language>
-    <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
-    <copyright>Copyright 2021 ServiceConnect. All rights reserved</copyright>
-    <tags>ServiceConnect,MessageBus,R MessageBus,RabbitMQ MessageBus,RMessageBus,Messaging,Message,Bus,Service</tags>
+    <projectUrl>https://github.com/R-Suite/ServiceConnect-CSharp</projectUrl>
+    <copyright>Copyright 2026 ServiceConnect. All rights reserved</copyright>
+    <tags>ServiceConnect,MessageBus,Messaging,Message,Bus,Service,RabbitMQ</tags>
     <dependencies>
-      <group>
-        <dependency id="Common.Logging" version="3.4.1" />
+      <group targetFramework="net8.0">
         <dependency id="Newtonsoft.Json" version="13.0.3" />
-        <dependency id="ServiceConnect.Interfaces" version="6.0.0" />
-        <dependency id="ServiceConnect.Client.RabbitMQ" version="6.0.6" />
-        <dependency id="Microsoft.Extensions.DependencyModel" version="7.0.0" />
-        <dependency id="System.Diagnostics.Process" version="4.3.0" />
-        <dependency id="System.Reflection.Extensions" version="4.3.0" />
+        <dependency id="Microsoft.Extensions.Logging.Abstractions" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.DependencyInjection.Abstractions" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.DependencyInjection" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.DependencyModel" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.Hosting.Abstractions" version="9.0.0" />
+        <dependency id="ServiceConnect.Interfaces" version="7.0.0" />
+      </group>
+      <group targetFramework="net10.0">
+        <dependency id="Newtonsoft.Json" version="13.0.3" />
+        <dependency id="Microsoft.Extensions.Logging.Abstractions" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.DependencyInjection.Abstractions" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.DependencyInjection" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.DependencyModel" version="9.0.0" />
+        <dependency id="Microsoft.Extensions.Hosting.Abstractions" version="9.0.0" />
+        <dependency id="ServiceConnect.Interfaces" version="7.0.0" />
       </group>
     </dependencies>
   </metadata>
-  <files>    
-    <file src="bin\Release\net6.0\ServiceConnect.Container.Default.*" target="lib\net6.0" />
-    <file src="bin\Release\net6.0\ServiceConnect.Core.*" target="lib\net6.0" />
-    <file src="bin\Release\net6.0\ServiceConnect.*" target="lib\net6.0" />
-    <file src="bin\Release\net6.0\ServiceConnect.Persistance.InMemory.*" target="lib\net6.0" />
-    <file src="bin\Release\net6.0\ServiceConnect.Persistance.SqlServer.*" target="lib\net6.0" />
+  <files>
+    <file src="bin\Release\net8.0\ServiceConnect.dll" target="lib\net8.0" />
+    <file src="bin\Release\net8.0\ServiceConnect.pdb" target="lib\net8.0" />
+    <file src="bin\Release\net8.0\ServiceConnect.xml" target="lib\net8.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.dll" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.pdb" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.xml" target="lib\net10.0" />
   </files>
 </package>
