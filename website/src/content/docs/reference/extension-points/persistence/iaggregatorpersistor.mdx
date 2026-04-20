@@ -68,6 +68,40 @@ Returns a snapshot of the buffered records, separating those that deserialised s
 
 ---
 
+### `IAggregatorSnapshot`
+
+`IAggregatorSnapshot` is the companion interface returned by `GetSnapshotAsync`. It separates the buffered records into those the store could deserialise (resolved) and those it could not (unresolved).
+
+### `IAggregatorSnapshot.ResolvedMessages`
+
+```csharp
+IReadOnlyList<object> ResolvedMessages { get; }
+```
+
+The deserialised message objects for all records that could be hydrated. The aggregator callback receives this list.
+
+---
+
+### `IAggregatorSnapshot.ResolvedIds`
+
+```csharp
+IReadOnlyList<Guid> ResolvedIds { get; }
+```
+
+The storage identifiers corresponding to `ResolvedMessages`, in the same order. `RemoveSnapshotAsync` uses these ids as the delete key set — implementations that store records by `(name, correlationId)` pairs should match on `correlationId`.
+
+---
+
+### `IAggregatorSnapshot.UnresolvedCount`
+
+```csharp
+int UnresolvedCount { get; }
+```
+
+The number of stored records that could not be deserialised to CLR objects. A positive value indicates schema drift or missing type registrations. The framework counts these towards the total when evaluating count-based conditions but cannot pass them to the aggregator callback.
+
+---
+
 ### `RemoveDataAsync`
 
 ```csharp
@@ -133,40 +167,6 @@ Returns the number of buffered records currently held for the named aggregator.
 **Returns.** The count of persisted records; `0` when the buffer is empty.
 
 **Remarks.** Used by the framework to evaluate count-based aggregation conditions without loading every record.
-
----
-
-## IAggregatorSnapshot
-
-`IAggregatorSnapshot` is the companion interface returned by `GetSnapshotAsync`. It separates the buffered records into those the store could deserialise (resolved) and those it could not (unresolved).
-
-### `ResolvedMessages`
-
-```csharp
-IReadOnlyList<object> ResolvedMessages { get; }
-```
-
-The deserialised message objects for all records that could be hydrated. The aggregator callback receives this list.
-
----
-
-### `ResolvedIds`
-
-```csharp
-IReadOnlyList<Guid> ResolvedIds { get; }
-```
-
-The storage identifiers corresponding to `ResolvedMessages`, in the same order. `RemoveSnapshotAsync` uses these ids as the delete key set — implementations that store records by `(name, correlationId)` pairs should match on `correlationId`.
-
----
-
-### `UnresolvedCount`
-
-```csharp
-int UnresolvedCount { get; }
-```
-
-The number of stored records that could not be deserialised to CLR objects. A positive value indicates schema drift or missing type registrations. The framework counts these towards the total when evaluating count-based conditions but cannot pass them to the aggregator callback.
 
 ---
 
