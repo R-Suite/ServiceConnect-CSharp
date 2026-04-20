@@ -1,0 +1,358 @@
+---
+title: IMessageSerializer
+description: The contract for converting CLR Message objects to and from bytes — replace to wire a binary protocol such as Protobuf or MessagePack.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IMessageSerializer` is the interface the framework calls to turn a CLR `Message` object into bytes on the way out and back into a typed object on the way in. The shipped default is JSON-based. Replace it when you need a binary wire format (Protobuf, MessagePack) or a custom serialization scheme that the default implementation does not support.
+
+A serializer is typically paired with an `IMessageTypeRegistry`. Some transports embed the CLR type name in a message header and call `Deserialize(data, Type)` directly, so the serializer never needs to discover the type from the payload. Other wire formats encode the type name inside the payload itself — in those cases the serializer calls `IMessageTypeRegistry.TryResolve` to map the wire name back to a CLR type.
+
+See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the conceptual model.
+
+## Reference
+
+### `Serialize<T>`
+
+```csharp
+byte[] Serialize<T>(T message) where T : Message;
+```
+
+Serializes `message` into a newly allocated byte array.
+
+**Parameters**
+- `message` — the message to serialize; constrained to `Message` subclasses.
+
+**Returns.** A byte array containing the full serialized payload. The array is owned by the caller; the implementation must not retain a reference to it.
+
+---
+
+### `Serialize<T>` (buffer-writer overload)
+
+```csharp
+void Serialize<T>(T message, System.Buffers.IBufferWriter<byte> output) where T : Message;
+```
+
+Serializes `message` directly into `output`, avoiding the intermediate array allocation. Prefer this overload on hot paths where the destination buffer is already available (for example, when writing directly to a network transport pipe).
+
+**Parameters**
+- `message` — the message to serialize.
+- `output` — the destination `IBufferWriter<byte>`. The implementation calls `output.GetSpan` / `output.Advance` or equivalent to write without copying.
+
+---
+
+### `Deserialize<T>` (byte array)
+
+```csharp
+T Deserialize<T>(byte[] data) where T : Message;
+```
+
+Deserializes `data` into an instance of `T`.
+
+**Parameters**
+- `data` — the raw serialized payload.
+
+**Returns.** A fully populated `T` instance.
+
+---
+
+### `Deserialize<T>` (ReadOnlySpan)
+
+```csharp
+T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message;
+```
+
+Deserializes a span of bytes into an instance of `T`. Prefer this overload when the caller already holds a span and no heap allocation is needed for the input.
+
+**Parameters**
+- `data` — a read-only span over the raw payload bytes.
+
+**Returns.** A fully populated `T` instance.
+
+---
+
+### `Deserialize` (byte array, Type)
+
+```csharp
+object Deserialize(byte[] data, Type type);
+```
+
+Deserializes `data` into the CLR type specified by `type`. The transport calls this overload when it has already resolved the target type from a message header.
+
+**Parameters**
+- `data` — the raw serialized payload.
+- `type` — the CLR type to deserialize into; must be a `Message` subclass.
+
+**Returns.** The deserialized object, typed as `object`.
+
+---
+
+### `Deserialize` (ReadOnlySpan, Type)
+
+```csharp
+object Deserialize(ReadOnlySpan<byte> data, Type type);
+```
+
+Deserializes a span of bytes into the CLR type specified by `type`.
+
+**Parameters**
+- `data` — a read-only span over the raw payload bytes.
+- `type` — the CLR type to deserialize into.
+
+**Returns.** The deserialized object, typed as `object`.
+
+---
+
+### `Deserialize` (ReadOnlyMemory, Type)
+
+```csharp
+object Deserialize(ReadOnlyMemory<byte> data, Type type)
+    => Deserialize(data.ToArray(), type);
+```
+
+Deserializes a `ReadOnlyMemory<byte>` block into the CLR type specified by `type`. The default implementation delegates to `Deserialize(byte[], Type)` via `data.ToArray()`, so implementors do not need to override this method unless they can provide a more efficient path.
+
+**Parameters**
+- `data` — the memory block containing the serialized payload.
+- `type` — the CLR type to deserialize into.
+
+**Returns.** The deserialized object, typed as `object`.
+
+---
+
+### `Deserialize<T>` (ReadOnlyMemory)
+
+```csharp
+T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
+    => (T)Deserialize(data, typeof(T));
+```
+
+Deserializes a `ReadOnlyMemory<byte>` block into an instance of `T`. The default implementation delegates to `Deserialize(ReadOnlyMemory<byte>, Type)` and casts the result, so implementors do not need to override this method unless a more efficient path is available.
+
+**Parameters**
+- `data` — the memory block containing the serialized payload.
+
+**Returns.** A fully populated `T` instance.
+
+---
+
+### `Deserialize` (ReadOnlySequence, Type)
+
+```csharp
+object Deserialize(in System.Buffers.ReadOnlySequence<byte> data, Type type)
+    => Deserialize(System.Buffers.BuffersExtensions.ToArray(data), type);
+```
+
+Deserializes a segmented `ReadOnlySequence<byte>` into the CLR type specified by `type`. The default implementation delegates to `Deserialize(byte[], Type)` by materializing the sequence via `BuffersExtensions.ToArray`, so implementors do not need to override this method unless zero-copy handling of multi-segment sequences is required.
+
+**Parameters**
+- `data` — the sequence of bytes constituting the serialized payload; may span multiple segments.
+- `type` — the CLR type to deserialize into.
+
+**Returns.** The deserialized object, typed as `object`.
+
+## Implementing
+
+### Thread-safety
+
+`IMessageSerializer` is resolved as a singleton. Every message processed by the bus — inbound and outbound — flows through the same instance. Implementations must be thread-safe. Stateless implementations (those that hold only read-only configuration) are safe by default. If the implementation holds mutable state (for example, a write buffer pool), protect shared state with a `ConcurrentQueue` or similar mechanism.
+
+### Type-id propagation
+
+The bus pipeline discovers the CLR type to deserialize into by one of two paths:
+
+- **Header-based:** the transport reads a type name from a message header and calls `Deserialize(data, Type)` directly. The serializer does not need to embed or read a type discriminator in the payload. This is the simpler path and works well with any wire format.
+- **Payload-embedded:** the serializer embeds a type discriminator (e.g. the wire name) in the payload on serialize and reads it back on deserialize. On the deserialize side, call `IMessageTypeRegistry.TryResolve(typeName, out var type)` to obtain the CLR type; if `TryResolve` returns `false`, throw so the pipeline routes the message to the error queue.
+
+Both paths are valid. Choose the header-based approach unless the protocol mandates an embedded type id.
+
+### Versioning
+
+Serialization format changes affect already-persisted messages — timeout state, aggregator snapshots, and messages sitting in dead-letter queues may have been written with an older format. When evolving a wire format:
+
+- Adding new optional fields is safe; absent fields should deserialize to their default value.
+- Removing fields or changing their wire ordering breaks replay of older messages.
+- Consider a version discriminator in the payload if you need to support multiple format versions simultaneously.
+
+### Error-handling contract
+
+Throw a descriptive exception on malformed or unrecognizable payloads. Do not return a default instance or swallow the error — throwing causes the bus pipeline to route the message to the error queue, where it can be inspected and retried. Swallowing an error would silently discard the message.
+
+### Skeletal Protobuf implementation
+
+```csharp
+using System.Buffers;
+using ServiceConnect.Interfaces;
+
+public sealed class ProtobufMessageSerializer : IMessageSerializer
+{
+    // Required members — implement using Google.Protobuf or protobuf-net.
+
+    public byte[] Serialize<T>(T message) where T : Message
+    {
+        throw new NotImplementedException();
+    }
+
+    public void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message
+    {
+        throw new NotImplementedException();
+    }
+
+    public T Deserialize<T>(byte[] data) where T : Message
+    {
+        throw new NotImplementedException();
+    }
+
+    public T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message
+    {
+        throw new NotImplementedException();
+    }
+
+    public object Deserialize(byte[] data, Type type)
+    {
+        throw new NotImplementedException();
+    }
+
+    public object Deserialize(ReadOnlySpan<byte> data, Type type)
+    {
+        throw new NotImplementedException();
+    }
+
+    // The three ReadOnlyMemory / ReadOnlySequence overloads have default
+    // interface implementations that delegate to Deserialize(byte[], Type).
+    // Override them only if you need a zero-copy fast path.
+}
+```
+
+## Usage
+
+### Protobuf-backed serializer
+
+The following example shows a `ProtobufMessageSerializer` that encodes the wire type name as a length-prefixed header followed by the Protobuf payload, and a companion `ProtobufMessageTypeRegistry` that maps wire names to CLR types. The exact framing is an implementation choice; a common alternative is to carry the type name in a transport message header and call `Deserialize(data, type)` directly from the pipeline, in which case the serializer payload contains only the Protobuf bytes.
+
+```csharp
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Text;
+using Google.Protobuf;
+using ServiceConnect.Interfaces;
+
+/// <summary>
+/// Wire format: [4-byte little-endian name length][UTF-8 type name][Protobuf payload].
+/// </summary>
+public sealed class ProtobufMessageSerializer : IMessageSerializer
+{
+    private readonly IMessageTypeRegistry _registry;
+
+    public ProtobufMessageSerializer(IMessageTypeRegistry registry)
+        => _registry = registry;
+
+    public byte[] Serialize<T>(T message) where T : Message
+    {
+        var proto = (IMessage)message;
+        var typeName = typeof(T).FullName ?? typeof(T).Name;
+        var nameBytes = Encoding.UTF8.GetBytes(typeName);
+
+        var buffer = new byte[4 + nameBytes.Length + proto.CalculateSize()];
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, nameBytes.Length);
+        nameBytes.CopyTo(buffer, 4);
+        proto.WriteTo(buffer.AsSpan(4 + nameBytes.Length));
+        return buffer;
+    }
+
+    public void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message
+    {
+        var proto = (IMessage)message;
+        var typeName = typeof(T).FullName ?? typeof(T).Name;
+        var nameBytes = Encoding.UTF8.GetBytes(typeName);
+        var protoSize = proto.CalculateSize();
+
+        var span = output.GetSpan(4 + nameBytes.Length + protoSize);
+        BinaryPrimitives.WriteInt32LittleEndian(span, nameBytes.Length);
+        nameBytes.CopyTo(span.Slice(4));
+        proto.WriteTo(span.Slice(4 + nameBytes.Length));
+        output.Advance(4 + nameBytes.Length + protoSize);
+    }
+
+    public T Deserialize<T>(byte[] data) where T : Message
+        => (T)Deserialize(data, typeof(T));
+
+    public T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message
+        => (T)Deserialize(data, typeof(T));
+
+    public object Deserialize(byte[] data, Type type)
+        => Deserialize(data.AsSpan(), type);
+
+    public object Deserialize(ReadOnlySpan<byte> data, Type type)
+    {
+        // Skip the type-name header — caller has already resolved the type.
+        var nameLen = BinaryPrimitives.ReadInt32LittleEndian(data);
+        var payload = data.Slice(4 + nameLen);
+        var parser = (MessageParser)type.GetProperty("Parser")!.GetValue(null)!;
+        return parser.ParseFrom(payload.ToArray());
+    }
+
+    private object DeserializeFromPayload(ReadOnlySpan<byte> data)
+    {
+        var nameLen = BinaryPrimitives.ReadInt32LittleEndian(data);
+        var typeName = Encoding.UTF8.GetString(data.Slice(4, nameLen));
+        var payload = data.Slice(4 + nameLen);
+
+        if (!_registry.TryResolve(typeName, out var type))
+            throw new InvalidOperationException(
+                $"Type '{typeName}' is not registered in the message type registry. " +
+                "Register it at startup before the bus receives messages of this type.");
+
+        var parser = (MessageParser)type.GetProperty("Parser")!.GetValue(null)!;
+        return parser.ParseFrom(payload.ToArray());
+    }
+}
+```
+
+Pair the serializer with a `ProtobufMessageTypeRegistry` (see [`IMessageTypeRegistry`](./imessagetyperegistry/) for the full registry example) and register both during bus startup:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.AddRegistration(svc =>
+    {
+        svc.AddSingleton<IMessageSerializer, ProtobufMessageSerializer>();
+        svc.AddSingleton<IMessageTypeRegistry, ProtobufMessageTypeRegistry>();
+    });
+});
+```
+
+Or wrap the registration in an extension method for cleaner startup code:
+
+```csharp
+public static class ProtobufSerializationExtensions
+{
+    public static ServiceConnectBuilder UseProtobufSerialization(this ServiceConnectBuilder builder)
+    {
+        builder.AddRegistration(svc =>
+        {
+            svc.AddSingleton<IMessageSerializer, ProtobufMessageSerializer>();
+            svc.AddSingleton<IMessageTypeRegistry, ProtobufMessageTypeRegistry>();
+        });
+        return builder;
+    }
+}
+
+// Startup:
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
+    builder.UseProtobufSerialization();
+});
+```
+
+When an `OrderPlaced` message is published by `OrderService`, the pipeline calls `Serialize<OrderPlaced>`, producing a framed byte array. On the receiving side, the transport reads the frame header, resolves the CLR type from the registry, and calls `Deserialize(data, typeof(OrderPlaced))` to reconstruct the message before dispatching to the handler.
+
+## See also
+
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — concept
+- [`IMessageTypeRegistry`](./imessagetyperegistry/) — companion registry interface
+- [`Envelope`](../../messages/envelope/) — the message wrapper the transport works with

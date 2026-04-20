@@ -136,7 +136,13 @@ export default defineConfig({
                 { label: 'ILeaseAwareTimeoutStore', link: '/reference/extension-points/persistence/ileaseawaretimeoutstore/' },
               ],
             },
-            { label: 'Serialization', items: [] },
+            {
+              label: 'Serialization',
+              items: [
+                { label: 'IMessageSerializer', link: '/reference/extension-points/serialization/imessageserializer/' },
+                { label: 'IMessageTypeRegistry', link: '/reference/extension-points/serialization/imessagetyperegistry/' },
+              ],
+            },
             { label: 'Transport', items: [] },
             { label: 'Registry', items: [] },
           ],
