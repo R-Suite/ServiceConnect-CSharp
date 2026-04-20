@@ -18,3 +18,8 @@
 .hero {
   padding-block: 3rem;
 }
+
+/* Widen the main content column — default 45rem cuts off API signatures. */
+:root {
+  --sl-content-width: 60rem;
+}
