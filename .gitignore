@@ -187,8 +187,6 @@ CLAUDE.md
 # Documentation site (Astro/Starlight)
 website/dist/
 website/.astro/
-website/public/api/
-website/_docfx_metadata/
 
 # Brainstorming companion artifacts
 .superpowers/
