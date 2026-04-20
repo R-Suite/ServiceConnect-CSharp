@@ -1,0 +1,120 @@
+---
+title: Samples
+description: Eleven runnable console applications, one per messaging pattern. Clone, start the docker-compose stack, and watch them work.
+---
+
+Every messaging pattern in the [Learn](/ServiceConnect-CSharp/learn/getting-started/) section has a matching runnable example in the [`examples/`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples) folder of the repository. They are full console apps: no stubs, no mocks, real RabbitMQ (and MongoDB where persistence is needed) running in Docker.
+
+## Prerequisites
+
+Every sample expects a RabbitMQ broker and — for the persistence-backed ones — a MongoDB instance. One docker-compose file starts them both:
+
+```bash
+docker compose -f examples/docker-compose.yml up -d
+```
+
+Each sample's `run.sh` (or `run.ps1` on Windows) launches the sender and consumer(s) in the right order with sensible pauses between them. If you want to see the individual invocations, the sample's README lists the raw `dotnet run` commands.
+
+## Catalog
+
+Each row below has a brief description, the pattern it illustrates, and a link to the source.
+
+### Point-to-Point
+
+Send one command from one sender to one consumer queue — the simplest shape.
+
+- Pattern: [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/)
+- Source: [`examples/PointToPoint`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/PointToPoint)
+
+### Pub/Sub
+
+Publish one event; several independent subscribers each get their own copy.
+
+- Pattern: [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/)
+- Source: [`examples/PublishSubscribe`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/PublishSubscribe)
+
+### Request/Reply
+
+Send a request, wait for a reply — async under the hood, blocking at the call site.
+
+- Pattern: [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/)
+- Source: [`examples/RequestReply`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/RequestReply)
+
+### Competing Consumers
+
+Two workers share a queue; each message goes to one of them — horizontal throughput.
+
+- Pattern: [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/)
+- Source: [`examples/CompetingConsumers`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CompetingConsumers)
+
+### Content-Based Routing
+
+Publish split-by-type events; different consumers bind to the types they care about.
+
+- Pattern: [Content-Based Routing](/ServiceConnect-CSharp/learn/messaging-patterns/content-based-routing/)
+- Source: [`examples/ContentBasedRouting`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/ContentBasedRouting)
+
+### Routing Slip
+
+Ordered multi-stage pipeline: inventory → billing → shipping. Stages don't know each other.
+
+- Pattern: [Routing Slip](/ServiceConnect-CSharp/learn/messaging-patterns/routing-slip/)
+- Source: [`examples/RoutingSlip`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/RoutingSlip)
+
+### Scatter-Gather
+
+Send the same request to several responders in parallel; collect replies into one list.
+
+- Pattern: [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/)
+- Source: [`examples/ScatterGather`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/ScatterGather)
+
+### Aggregator
+
+Buffer telemetry slices and flush by size or by time — batching as the unit of work.
+
+- Pattern: [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/)
+- Source: [`examples/Aggregator`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Aggregator)
+
+### Process Manager
+
+A saga coordinating order submission, inventory reservation, and payment across three services — state persisted in MongoDB.
+
+- Pattern: [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/)
+- Source: [`examples/ProcessManager`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/ProcessManager)
+
+### Filters
+
+Stamp an `X-Trace-Id` header on every outgoing message — filters as the cross-cutting hook.
+
+- Pattern: [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/)
+- Source: [`examples/Filters`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Filters)
+
+### Streaming
+
+Chunk a payload too large for one message, reassembled on the receiver, one handler invocation at the end.
+
+- Pattern: [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/)
+- Source: [`examples/Streaming`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Streaming)
+
+## Reading the output
+
+Each sample's processes print status lines in a uniform shape:
+
+- `READY:<name>` — the consumer is listening.
+- `SUCCESS:<name>:<what happened>` — a message was handled.
+
+So a Point-to-Point run produces:
+
+```
+READY:point-to-point-consumer
+SUCCESS:point-to-point-sender:sent work-001
+SUCCESS:point-to-point-consumer:processed work-001
+```
+
+That shape is deliberately minimal — enough to follow the sequence across terminals, not so much that it obscures the messaging itself. If you want more, each sample is just a few hundred lines of C#; read the source.
+
+## If you get stuck
+
+- **Docker services not up:** `docker compose -f examples/docker-compose.yml ps` should show RabbitMQ (and MongoDB for the persistence-backed samples) in a healthy state.
+- **Handlers don't fire:** check the RabbitMQ management UI at `http://localhost:15672` (guest/guest). Each example's README lists the queue names it declares.
+- **MongoDB-backed samples fail to start:** the Mongo container takes a few seconds longer than RabbitMQ. The samples' `DependencyWaiter` handles this; if you're running `dotnet run` manually, start the consumer and wait a moment before the sender.
