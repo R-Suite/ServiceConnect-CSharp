@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../../examples/ExampleSupport/ServiceConnect.Examples.Support.csproj" />
+    <ProjectReference Include="../ServiceConnect.Examples.CompetingConsumers.Contracts/ServiceConnect.Examples.CompetingConsumers.Contracts.csproj" />
+  </ItemGroup>
+</Project>

@@ -124,19 +124,21 @@ Choose a persistence store for process managers and aggregators:
 - `ServiceConnect.Persistance.SqlServer` - SQL Server
 - `ServiceConnect.Persistance.MongoDbSsl` - MongoDB with SSL
 
-## Samples
+## Examples
 
-Check out the [samples](samples) directory for complete examples:
+Check out the [examples](examples) directory for runnable console applications covering the supported messaging patterns:
 
-- [PointToPoint](samples/PointToPoint%20-%20Copy) - Basic send/receive
-- [PublishSubscribe](samples/PublishSubscribe) - Pub/Sub messaging
-- [RequestResponse](samples/RequestResponse) - Request/reply pattern
-- [ProcessManager](samples/ProcessManager) - Multi-step workflows
-- [RoutingSlip](samples/RoutingSlip) - Sequential routing
-- [ScatterGather](samples/ScatterGather) - Multicast with aggregation
-- [Aggregator](samples/Aggregator) - Message aggregation
-- [Filters](samples/Filters) - Custom message processing pipeline
-- [Streaming](samples/Streaming) - Large message handling
+- [PointToPoint](examples/PointToPoint) - Basic send/receive
+- [PublishSubscribe](examples/PublishSubscribe) - Pub/Sub messaging
+- [RequestReply](examples/RequestReply) - Request/reply pattern
+- [CompetingConsumers](examples/CompetingConsumers) - Multiple workers on one queue
+- [ContentBasedRouting](examples/ContentBasedRouting) - Route by published message type
+- [RoutingSlip](examples/RoutingSlip) - Sequential routing
+- [ScatterGather](examples/ScatterGather) - Multicast with multiple replies
+- [Aggregator](examples/Aggregator) - Mongo-backed message aggregation
+- [ProcessManager](examples/ProcessManager) - Mongo-backed workflow orchestration
+- [Filters](examples/Filters) - Custom message processing pipeline
+- [Streaming](examples/Streaming) - Chunked message streaming
 
 ## Requirements
 
