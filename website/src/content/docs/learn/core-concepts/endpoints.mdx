@@ -1,0 +1,138 @@
+---
+title: Endpoints
+description: How ServiceConnect chooses where a message goes — queue names, queue mappings, and the difference between Send and Publish routing.
+---
+
+An **endpoint** is a queue on the broker. Every service owns one, identified by name, and every send or publish eventually resolves to a queue that RabbitMQ can route to. Understanding how that resolution happens is the difference between "it works" and "it works and you know why."
+
+This page covers three things: how you name your own queue, how `SendAsync` chooses a destination, and how `PublishAsync` reaches subscribers without naming one at all.
+
+## Your queue
+
+A bus needs a queue name. You configure it once, when the bus is built:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(/* … */);
+    builder.ConfigureQueues(queues =>
+    {
+        queues.QueueName      = "orders";
+        queues.ErrorQueueName = "orders.errors"; // optional
+        queues.AuditQueueName = "orders.audit";  // optional
+        queues.AuditingEnabled = false;
+        queues.PurgeQueueOnStartup = false;
+    });
+});
+```
+
+Four things happen from that block:
+
+- **`QueueName`** is this bus's inbox. When `StartConsumingAsync` runs, ServiceConnect declares the queue on the broker (creating it if it doesn't exist) and starts consuming from it. Every message sent to `"orders"` from anywhere in the system lands here.
+- **`ErrorQueueName`** is where a message goes after its retry budget is exhausted. Defaults to `"<QueueName>.Errors"` when you don't set it. Operationally, this is the queue you watch: messages accumulating here mean something is wrong.
+- **`AuditQueueName`** only matters if `AuditingEnabled = true`. When auditing is on, every successfully handled message is copied to this queue. Useful for compliance or reconciliation; off by default because it doubles broker traffic.
+- **`PurgeQueueOnStartup`** does exactly what it says — it clears the queue when the bus starts. Convenient for development, dangerous for production. Default is `false`.
+
+### Naming
+
+ServiceConnect makes no assumptions about queue naming. You can use any string RabbitMQ will accept. A few conventions that pay off:
+
+- **Use the service name**, not the machine name: `orders`, `payments`, `notifications`. A queue outlives the process that consumes it.
+- **Keep names stable.** Renaming a queue means every other service that sends to it needs to know. Treat the queue name like a public API.
+- **Lower-kebab-case** reads well in RabbitMQ's management UI and survives copy-paste across shells without shell-quoting trouble.
+
+## Send: you name the destination
+
+`SendAsync` is point-to-point. You tell ServiceConnect where the message goes.
+
+There are two ways to do that.
+
+### Inline, on the call site
+
+```csharp
+await bus.SendAsync(
+    new PlaceOrder(Guid.NewGuid()) { Cart = cart },
+    new SendOptions { EndPoint = "orders" });
+```
+
+The `SendOptions.EndPoint` value is the destination queue name. The message travels to exactly that queue. Note the capitalisation — it's `EndPoint`, not `Endpoint`.
+
+Use the plural `EndPoints` to send one message to several queues:
+
+```csharp
+await bus.SendAsync(
+    new StockUpdated(correlationId) { Sku = "widget", Quantity = 10 },
+    new SendOptions
+    {
+        EndPoints = new[] { "pricing", "search-index", "reporting" },
+    });
+```
+
+This is still a point-to-point send — one copy of the message lands in each listed queue. It is not pub/sub; the sender decides the fan-out.
+
+### Configured up front
+
+When a message type always goes to the same queue, you can wire the mapping at startup and omit `SendOptions` at the call site:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.ConfigureQueues(queues =>
+    {
+        queues.QueueName = "web-api";
+        queues.AddQueueMapping(typeof(PlaceOrder),      "orders");
+        queues.AddQueueMapping(typeof(RefundRequested), "payments");
+    });
+});
+
+// Later:
+await bus.SendAsync(new PlaceOrder(Guid.NewGuid()) { Cart = cart });
+```
+
+ServiceConnect looks up `PlaceOrder` in the mapping table and routes to `"orders"` without being told again. If no mapping exists **and** no `SendOptions.EndPoint` is supplied, the send fails: ServiceConnect refuses to guess.
+
+You can also map one message to several queues:
+
+```csharp
+queues.AddQueueMapping(typeof(StockUpdated), new[] { "pricing", "search-index" });
+```
+
+Inline `SendOptions` always wins over the configured mapping. That lets you configure the common case and override it when you need to.
+
+### When to use which
+
+- **Inline** when the destination is dynamic — the handler decides based on content, or the caller is a test that picks a queue name per run.
+- **Configured** when the destination is a static part of your system's topology. Having it in one place makes the service's outbound contracts obvious to anyone reading the bus setup.
+
+## Publish: subscribers name themselves
+
+`PublishAsync` does not take a destination. You don't know — and shouldn't care — who is listening. That knowledge lives on the *consumer* side.
+
+```csharp
+await bus.PublishAsync(new OrderPlaced(correlationId) { OrderId = "order-100" });
+```
+
+ServiceConnect publishes through a RabbitMQ topic exchange named after the message type. Any consumer whose bus has registered a handler for `OrderPlaced` automatically creates a binding from that exchange to its own queue when it starts consuming. Subscribers come and go; the publisher never changes.
+
+The upshot:
+
+- To start receiving an event, **register a handler and start the bus**. The binding is created for you.
+- To stop receiving, **remove the handler and restart**. The binding is torn down.
+- The publisher needs no configuration change to gain or lose subscribers.
+
+This is the whole point of pub/sub — the shape of the listener set is decoupled from the code that produces events.
+
+## Error and audit endpoints
+
+Two special-purpose queues live alongside your main queue:
+
+- **Error queue** — receives messages that exhausted their retry budget, wrapped with headers describing the failure. Messages here do not replay themselves; someone (a person, a dead-letter UI, a scheduled job) has to look at them and decide. See [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/).
+- **Audit queue** — receives a copy of every successfully handled message when `AuditingEnabled = true`. Not consumed by ServiceConnect; it is yours to drain however you want (store it, forward it, analyse it).
+
+Both are queues like any other — you could consume them with a separate bus if you wanted to react to errors or audits programmatically.
+
+## What comes next
+
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — publishers and subscribers in depth.
+- [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/) — the canonical send pattern with a worked example.
+- [Routing Slip](/ServiceConnect-CSharp/learn/messaging-patterns/routing-slip/) — for when the destination isn't one queue, it's a list.
