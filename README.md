@@ -2,149 +2,121 @@
 
 [![NuGet](https://img.shields.io/nuget/v/ServiceConnect.svg)](https://www.nuget.org/packages/ServiceConnect/)
 
-ServiceConnect is a simple, easy-to-use asynchronous messaging framework for .NET. Built on top of RabbitMQ, it provides a clean abstraction for building distributed systems using well-known Enterprise Integration Patterns.
+Asynchronous messaging for .NET. Distributed systems, done cleanly.
 
-## What is it for?
+ServiceConnect is a thin, opinionated bus over RabbitMQ. It gives you the well-known Enterprise Integration Patterns — pub/sub, point-to-point, request/reply, process managers, aggregators, routing slips — behind a small async API that plugs into `Microsoft.Extensions.DependencyInjection`.
 
-ServiceConnect enables you to build loosely-coupled, asynchronous applications in .NET. It's ideal for:
+**📖 Full docs: [r-suite.github.io/ServiceConnect-CSharp](https://r-suite.github.io/ServiceConnect-CSharp/)**
 
-- **Microservices Communication** - Send messages between services without direct dependencies
-- **Event-Driven Architecture** - Publish events to multiple subscribers
-- **Distributed Systems** - Build systems that span multiple processes or machines
-- **CQRS Implementation** - Separate read and write concerns through messaging
-
-## Installation
-
-Install via NuGet:
+## Install
 
 ```bash
 dotnet add package ServiceConnect
 dotnet add package ServiceConnect.Client.RabbitMQ
 ```
 
-## Quick Start
+Optional extensions:
 
-### 1. Define a Message
+```bash
+# Process-manager and aggregator persistence
+dotnet add package ServiceConnect.Persistence.InMemory
+dotnet add package ServiceConnect.Persistence.MongoDb
+
+# OpenTelemetry
+dotnet add package ServiceConnect.Telemetry
+
+# Built-in filters
+dotnet add package ServiceConnect.Filters.MessageDeduplication
+```
+
+## Quick start
+
+Define a message:
 
 ```csharp
 using ServiceConnect.Interfaces;
 
-public class YourMessage : Message
+public sealed class OrderPlaced(Guid correlationId) : Message(correlationId)
 {
-    public YourMessage(Guid correlationId) : base(correlationId) { }
-    
-    public string Content { get; set; }
+    public string OrderId { get; init; } = "";
 }
 ```
 
-### 2. Create a Consumer
+Write a handler:
 
 ```csharp
 using ServiceConnect.Interfaces;
 
-public class YourMessageHandler : IMessageHandler<YourMessage>
+public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 {
-    public void Execute(YourMessage message)
+    public IConsumeContext? Context { get; set; }
+
+    public Task HandleAsync(OrderPlaced message)
     {
-        Console.WriteLine($"Received: {message.Content}");
+        Console.WriteLine($"Received order {message.OrderId}");
+        return Task.CompletedTask;
     }
 }
 ```
 
-### 3. Send a Message
+Wire up the bus:
 
 ```csharp
-var bus = Bus.Initialize();
-bus.Send(new YourMessage(Guid.NewGuid()), "YourEndpoint");
-```
+using Microsoft.Extensions.DependencyInjection;
+using ServiceConnect.Interfaces;
 
-### 4. Receive Messages
+var services = new ServiceCollection();
+services.AddLogging();
 
-```csharp
-var bus = Bus.Initialize(config => 
-    config.SetEndpoint("YourEndpoint")
-          .ScanForMessageHandlers());
-```
-
-## Features
-
-### Enterprise Integration Patterns
-
-- **Point-to-Point** - Send messages to a specific endpoint
-- **Publish/Subscribe** - Broadcast messages to multiple consumers
-- **Process Manager** - Coordinate multi-step workflows
-- **Routing Slip** - Route messages through a sequence of endpoints
-- **Scatter-Gather** - Send to multiple recipients and collect responses
-- **Message Aggregation** - Combine multiple messages into one
-- **Content-Based Routing** - Route based on message content
-
-### Additional Features
-
-- Asynchronous message handlers
-- Priority queue support
-- Automatic retries with configurable delays
-- Message auditing
-- SSL/TLS support
-- Polymorphic message dispatch
-- Multi-threaded consumers
-- Message filtering pipeline
-- Streaming support
-
-## Configuration
-
-```csharp
-var bus = Bus.Initialize(config =>
+services.AddServiceConnect(builder =>
 {
-    config.SetEndpoint("MyEndpoint");
-    config.SetHost("localhost");
-    config.SetUsername("guest");
-    config.SetPassword("guest");
-    config.ScanForMessageHandlers();
-    config.SetMaxRetries(3);
-    config.SetRetryDelay(3000);
-    config.EnableAuditing();
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "localhost";
+        transport.Username = "guest";
+        transport.Password = "guest";
+    });
+
+    builder.ConfigureQueues(queues => queues.QueueName = "order-service");
 });
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+// Start consuming, then publish
+await bus.StartConsumingAsync();
+await bus.PublishAsync(new OrderPlaced(Guid.NewGuid()) { OrderId = "ORD-001" });
 ```
 
-## Container Support
+## Messaging patterns
 
-ServiceConnect supports multiple IoC containers:
+- **Publish/Subscribe** — broadcast events to every subscriber
+- **Point-to-Point** — send commands to a specific endpoint
+- **Request/Reply** — single-reply and multi-reply RPC
+- **Competing Consumers** — scale out handlers across processes
+- **Content-Based Routing** — dispatch by message type or content
+- **Routing Slip** — sequential pipeline of endpoints
+- **Scatter-Gather** — multicast with reply aggregation
+- **Process Manager** — long-running, stateful workflows (sagas)
+- **Aggregator** — accumulate related messages until complete
+- **Streaming** — chunked delivery of large payloads
+- **Filters & Middleware** — inspect, transform, or short-circuit the pipeline
 
-- `ServiceConnect.Container.Default` - Built-in container
-- `ServiceConnect.Container.ServiceCollection` - Microsoft.Extensions.DependencyInjection
-- `ServiceConnect.Container.StructureMap` - StructureMap
-- `ServiceConnect.Container.Ninject` - Ninject
-
-## Persistence
-
-Choose a persistence store for process managers and aggregators:
-
-- `ServiceConnect.Persistance.InMemory` - In-memory storage (development)
-- `ServiceConnect.Persistance.MongoDb` - MongoDB
-- `ServiceConnect.Persistance.SqlServer` - SQL Server
-- `ServiceConnect.Persistance.MongoDbSsl` - MongoDB with SSL
+Each pattern has a conceptual guide and worked example in [the docs](https://r-suite.github.io/ServiceConnect-CSharp/learn/).
 
 ## Examples
 
-Check out the [examples](examples) directory for runnable console applications covering the supported messaging patterns:
+Runnable console apps live in [`examples/`](examples), one per pattern:
 
-- [PointToPoint](examples/PointToPoint) - Basic send/receive
-- [PublishSubscribe](examples/PublishSubscribe) - Pub/Sub messaging
-- [RequestReply](examples/RequestReply) - Request/reply pattern
-- [CompetingConsumers](examples/CompetingConsumers) - Multiple workers on one queue
-- [ContentBasedRouting](examples/ContentBasedRouting) - Route by published message type
-- [RoutingSlip](examples/RoutingSlip) - Sequential routing
-- [ScatterGather](examples/ScatterGather) - Multicast with multiple replies
-- [Aggregator](examples/Aggregator) - Mongo-backed message aggregation
-- [ProcessManager](examples/ProcessManager) - Mongo-backed workflow orchestration
-- [Filters](examples/Filters) - Custom message processing pipeline
-- [Streaming](examples/Streaming) - Chunked message streaming
+[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [Streaming](examples/Streaming)
+
+Each example ships with a `run.sh` and a `docker-compose.yml` at `examples/docker-compose.yml` for a local RabbitMQ broker.
 
 ## Requirements
 
-- .NET 10.0+
+- .NET 8 or .NET 10
 - RabbitMQ 3.7+
 
 ## License
 
-Licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
+MIT — see [LICENSE.md](LICENSE.md).
