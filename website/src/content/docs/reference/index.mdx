@@ -3,13 +3,50 @@ title: API Reference
 description: Reference documentation for the ServiceConnect public API — every type a consumer calls, implements, or configures.
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+export const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 Reference documentation for the ServiceConnect public API. Every type a consumer calls, implements, or configures has a page here.
 
 Organised into two tiers:
 
-- **API Reference** — the primary consumer surface: the bus, handlers, messages, configuration, process managers, filters.
-- **Extension Points** — pluggable internals you only touch when replacing a default (custom persistence, serializer, or transport).
+- **API Reference** — the primary consumer surface (this section).
+- **[Extension Points](/ServiceConnect-CSharp/reference/extension-points/)** — pluggable internals you only touch when replacing a default.
 
-Use the sidebar to browse. Link cards covering each group will land here in a follow-up.
+## Primary API
+
+<CardGrid>
+  <LinkCard
+    title="Bus"
+    href={`${base}/reference/bus/ibus/`}
+    description="The runtime API — publish, send, request/reply, lifecycle."
+  />
+  <LinkCard
+    title="Messages"
+    href={`${base}/reference/messages/message/`}
+    description="Message base class, envelope, per-call options."
+  />
+  <LinkCard
+    title="Handlers"
+    href={`${base}/reference/handlers/imessagehandler/`}
+    description="Write consumers — IMessageHandler, IStreamHandler, IConsumeContext."
+  />
+  <LinkCard
+    title="Configuration"
+    href={`${base}/reference/configuration/itransportconfiguration/`}
+    description="Configure transport, queues, persistence, and pipelines."
+  />
+  <LinkCard
+    title="Process Managers"
+    href={`${base}/reference/process-managers/iprocesshandler/`}
+    description="Sagas and aggregators — long-running, stateful flows."
+  />
+  <LinkCard
+    title="Filters & Middleware"
+    href={`${base}/reference/filters/ifilter/`}
+    description="Pipeline stages for consume and send."
+  />
+</CardGrid>
 
 > Want to learn how to use ServiceConnect, not just look up a method? Start with [Getting Started](/ServiceConnect-CSharp/learn/getting-started/).
