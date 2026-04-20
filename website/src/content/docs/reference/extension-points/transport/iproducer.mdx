@@ -12,8 +12,8 @@ import { Aside } from '@astrojs/starlight/components';
 The four send-shaped methods cover distinct routing patterns:
 
 - `PublishAsync` — pub/sub fan-out. The broker routes the message to every subscriber bound to the message type. Use this when `OrderService` publishes `OrderPlaced` and multiple downstream services each receive a copy.
-- `SendAsync(Type, ...)` — auto-routed point-to-point. The caller resolves the destination queue from the queue mappings configured in `IQueueConfiguration` and passes the resulting endpoint to the transport. The producer does not look up queue mappings itself.
-- `SendAsync(string, Type, ...)` — explicit destination point-to-point. The caller supplies the endpoint directly. The producer sends to that address without consulting any configuration.
+- `SendAsync(Type, ...)` — auto-routed point-to-point. The **producer** receives a `Type`, looks up `IQueueConfiguration.QueueMappings` itself to resolve the destination queue or queues, and sends to each. The caller does not need to know the destination — the producer owns the mapping lookup.
+- `SendAsync(string, Type, ...)` — explicit destination point-to-point. The **caller** has already resolved the endpoint and supplies it directly. The producer sends to that address without consulting any configuration.
 - `SendBytesAsync(string, byte[], ...)` — raw-bytes delivery to an explicit endpoint. Used by control-plane channels (request/reply correlation, timeout signals) when the caller has already framed the payload and does not need type routing.
 
 `MaximumMessageSize` lets the pipeline pre-check payload size before attempting a send, avoiding a roundtrip to the broker for a message that will be rejected.
@@ -49,7 +49,7 @@ Publishes `message` to all subscribers registered for `type`. The broker routes 
 Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 ```
 
-Sends `message` to the single destination queue mapped for `type`. The caller resolves the endpoint from `IQueueConfiguration.QueueMappings` and supplies it to the transport. The producer does not perform queue-mapping lookups.
+Sends `message` to the destination queue (or queues) mapped for `type`. The transport implementation receives the `Type` and looks up `IQueueConfiguration.QueueMappings` itself — keyed on the type's fully qualified name — to resolve the destination. If no mapping exists, the producer should throw rather than silently drop the message. This is the overload to use when queue-mapping configuration fully controls routing and the caller does not need to name the destination.
 
 **Parameters**
 
@@ -133,7 +133,13 @@ The producer should retry on transient broker errors — connection blips, throt
 
 ### Routing
 
-`SendAsync(Type, ...)` receives a type for routing, but the queue mapping lookup happens in the pipeline layer before the producer is called — the producer receives an already-resolved `endPoint` from the caller. Do not re-resolve queue mappings inside the producer. For `SendAsync(endPoint, Type, ...)` and `SendBytesAsync`, trust the caller's endpoint value and send to it without modification.
+The three point-to-point overloads have different responsibilities:
+
+- `SendAsync(Type, ...)` — the **implementation** must consult `IQueueConfiguration.QueueMappings` to resolve the destination. Inject `IQueueConfiguration` via the constructor and call `TryGetQueueMapping` (or equivalent) inside this method. If no mapping is registered for the type, throw `InvalidOperationException` rather than silently dropping the message.
+- `SendAsync(string endPoint, Type, ...)` — the **caller** has already resolved the endpoint. The implementation should trust the supplied `endPoint` and send directly without performing any queue-mapping lookup.
+- `SendBytesAsync(string endPoint, ...)` — same as the explicit-endpoint overload: trust the caller's endpoint value and send without modification.
+
+`PublishAsync(Type, ...)` is distinct from all three: it is a pub/sub fan-out. Derive the exchange name, topic, or routing key from the type and publish to every subscriber — no queue mapping is involved.
 
 ### Skeletal producer
 
@@ -160,8 +166,8 @@ public sealed class BrokerProducer : IProducer
         Dictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
-        // The caller has already resolved the destination via IQueueConfiguration.
-        // Treat this the same as an explicit-endpoint send.
+        // Resolve the destination queue from IQueueConfiguration.QueueMappings.
+        // Inject IQueueConfiguration via the constructor and call TryGetQueueMapping here.
         throw new NotImplementedException();
     }
 
@@ -241,8 +247,8 @@ public sealed class KafkaProducer : IProducer
         Dictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
-        // Caller has resolved the destination from IQueueConfiguration.QueueMappings.
-        // Fall through to the explicit-endpoint overload — not shown here for brevity.
+        // Resolve the destination from IQueueConfiguration.QueueMappings, then
+        // fall through to the explicit-endpoint overload — not shown here for brevity.
         throw new NotImplementedException();
     }
 
@@ -269,7 +275,12 @@ public sealed class KafkaProducer : IProducer
 
     public Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        _inner.Flush(cancellationToken);
+        var remaining = _inner.Flush(cancellationToken);
+        if (remaining > 0)
+        {
+            // Some messages were not acknowledged by the broker before the flush timeout.
+            // The caller decides whether to treat this as an error; here we accept best-effort delivery.
+        }
         return Task.CompletedTask;
     }
 
