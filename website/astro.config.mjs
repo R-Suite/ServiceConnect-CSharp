@@ -143,7 +143,14 @@ export default defineConfig({
                 { label: 'IMessageTypeRegistry', link: '/reference/extension-points/serialization/imessagetyperegistry/' },
               ],
             },
-            { label: 'Transport', items: [] },
+            {
+              label: 'Transport',
+              items: [
+                { label: 'IServiceConnectConnection', link: '/reference/extension-points/transport/iserviceconnectconnection/' },
+                { label: 'IConsumer', link: '/reference/extension-points/transport/iconsumer/' },
+                { label: 'IProducer', link: '/reference/extension-points/transport/iproducer/' },
+              ],
+            },
             { label: 'Registry', items: [] },
           ],
         },
