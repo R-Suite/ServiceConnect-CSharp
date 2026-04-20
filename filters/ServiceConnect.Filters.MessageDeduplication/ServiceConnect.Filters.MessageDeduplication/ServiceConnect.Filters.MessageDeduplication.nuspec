@@ -7,6 +7,7 @@
     <authors>Jakub Pachansky,Tim Watson</authors>
     <owners>Jakub Pachansky,Tim Watson</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
     <description>A set of filters that ensures each message is processed only once</description>
     <language>en-GB</language>
     <projectUrl>https://github.com/R-Suite/ServiceConnect</projectUrl>
