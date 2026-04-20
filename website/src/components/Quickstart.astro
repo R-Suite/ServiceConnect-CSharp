@@ -5,9 +5,13 @@
 
 <section class="quickstart" aria-label="60-second quickstart">
   <p class="quickstart__label">60-second quickstart</p>
-  <pre class="quickstart__code"><code><span class="qs-prompt">$</span> dotnet add package ServiceConnect
+  <pre class="quickstart__code"><code><span class="qs-comment"># Install</span>
+<span class="qs-prompt">$</span> dotnet add package ServiceConnect
 
-services.AddServiceConnect(b =&gt; b.UseRabbitMQ(t =&gt; t.Host = <span class="qs-string">"localhost"</span>));
+<span class="qs-comment">// Configure &amp; publish</span>
+services.AddServiceConnect(b =&gt;
+    b.UseRabbitMQ(t =&gt; t.Host = <span class="qs-string">"localhost"</span>));
+
 <span class="qs-keyword">await</span> bus.PublishAsync(<span class="qs-keyword">new</span> OrderPlaced(correlationId));</code></pre>
 </section>
 
@@ -48,4 +52,5 @@ services.AddServiceConnect(b =&gt; b.UseRabbitMQ(t =&gt; t.Host = <span class="q
   .qs-prompt { color: #64748b; user-select: none; }
   .qs-keyword { color: #c084fc; }
   .qs-string { color: #86efac; }
+  .qs-comment { color: #64748b; font-style: italic; }
 </style>
