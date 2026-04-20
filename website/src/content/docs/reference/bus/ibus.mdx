@@ -16,7 +16,11 @@ See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for the conce
 ### `PublishAsync<T>`
 
 ```csharp
-Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
+Task PublishAsync<T>(
+    T message,
+    PublishOptions? options = null,
+    CancellationToken cancellationToken = default)
+    where T : Message;
 ```
 
 Broadcasts a message to every subscriber of the message type. Use for domain events that any number of interested services may consume.
@@ -33,7 +37,11 @@ Broadcasts a message to every subscriber of the message type. Use for domain eve
 ### `SendAsync<T>`
 
 ```csharp
-Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
+Task SendAsync<T>(
+    T message,
+    SendOptions? options = null,
+    CancellationToken cancellationToken = default)
+    where T : Message;
 ```
 
 Sends a message to a specific endpoint or to the queue resolved from the configured queue mappings. Use for commands with a single owner.
@@ -50,8 +58,12 @@ Sends a message to a specific endpoint or to the queue resolved from the configu
 ### `SendRequestAsync<T, TReply>`
 
 ```csharp
-Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-    where T : Message where TReply : Message;
+Task<TReply> SendRequestAsync<T, TReply>(
+    T message,
+    RequestOptions? options = null,
+    CancellationToken cancellationToken = default)
+    where T : Message
+    where TReply : Message;
 ```
 
 Sends a request to a single endpoint and awaits exactly one reply. Use when the caller needs a synchronous-looking answer from a single respondent.
@@ -70,8 +82,12 @@ Sends a request to a single endpoint and awaits exactly one reply. Use when the 
 ### `SendRequestMultiAsync<T, TReply>`
 
 ```csharp
-Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-    where T : Message where TReply : Message;
+Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(
+    T message,
+    RequestOptions? options = null,
+    CancellationToken cancellationToken = default)
+    where T : Message
+    where TReply : Message;
 ```
 
 Sends a request that may fan out to multiple respondents and collects every reply received before the deadline. Use for scatter-gather over a known endpoint list.
@@ -90,8 +106,13 @@ Sends a request that may fan out to multiple respondents and collects every repl
 ### `PublishRequestAsync<TRequest, TReply>`
 
 ```csharp
-Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
-    where TRequest : Message where TReply : Message;
+Task PublishRequestAsync<TRequest, TReply>(
+    TRequest message,
+    Action<TReply> onReply,
+    RequestOptions? options = null,
+    CancellationToken cancellationToken = default)
+    where TRequest : Message
+    where TReply : Message;
 ```
 
 Publishes a request to every subscriber of the request type and invokes `onReply` each time a reply arrives. Use for streaming scatter-gather where replies should be processed as they arrive rather than collected into a list.
@@ -109,7 +130,11 @@ Publishes a request to every subscriber of the request type and invokes `onReply
 ### `RouteAsync<T>`
 
 ```csharp
-Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message;
+Task RouteAsync<T>(
+    T message,
+    IList<string> destinations,
+    CancellationToken cancellationToken = default)
+    where T : Message;
 ```
 
 Starts a routing slip: sends the message to the first destination with a routing-slip header listing the remaining hops. Each handler forwards to the next destination when it completes.
@@ -185,7 +210,10 @@ Indicates whether the bus is currently consuming messages. Useful in health chec
 ### `RequestTimeoutAsync`
 
 ```csharp
-Task RequestTimeoutAsync(Guid correlationId, TimeSpan delay, CancellationToken cancellationToken = default);
+Task RequestTimeoutAsync(
+    Guid correlationId,
+    TimeSpan delay,
+    CancellationToken cancellationToken = default);
 ```
 
 Schedules a `TimeoutMessage` to be delivered back to the current bus's queue after `delay`. The delivered message's `CorrelationId` equals the supplied `correlationId`, which is the standard key a process manager uses to correlate a timeout with its saga instance.

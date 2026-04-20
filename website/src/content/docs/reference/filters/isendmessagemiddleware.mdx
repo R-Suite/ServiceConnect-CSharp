@@ -52,7 +52,12 @@ The continuation passed to each middleware as `next`. Invoking it advances the s
 ### `ExecutePublishMessagePipelineAsync`
 
 ```csharp
-Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default);
+Task ExecutePublishMessagePipelineAsync(
+    Type typeObject,
+    byte[] messageBytes,
+    Dictionary<string, string>? headers = null,
+    string? endPoint = null,
+    CancellationToken cancellationToken = default);
 ```
 
 Runs the configured outbound middleware chain for a publish and hands off to the transport.
@@ -71,7 +76,12 @@ Runs the configured outbound middleware chain for a publish and hands off to the
 ### `ExecuteSendMessagePipelineAsync`
 
 ```csharp
-Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default);
+Task ExecuteSendMessagePipelineAsync(
+    Type typeObject,
+    byte[] messageBytes,
+    Dictionary<string, string>? headers = null,
+    string? endPoint = null,
+    CancellationToken cancellationToken = default);
 ```
 
 Runs the configured outbound middleware chain for a point-to-point send.

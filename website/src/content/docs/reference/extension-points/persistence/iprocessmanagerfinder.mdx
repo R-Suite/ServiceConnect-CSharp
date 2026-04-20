@@ -18,7 +18,11 @@ See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-ma
 ### `FindDataAsync<T>`
 
 ```csharp
-Task<IPersistenceData<T>?> FindDataAsync<T>(IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
+Task<IPersistenceData<T>?> FindDataAsync<T>(
+    IProcessManagerPropertyMapper mapper,
+    Message message,
+    CancellationToken cancellationToken = default)
+    where T : class, IProcessManagerData;
 ```
 
 Locates the persisted state record that correlates with `message` according to the rules in `mapper`.
@@ -53,7 +57,10 @@ Persists a freshly-constructed state record the first time a correlation id is s
 ### `UpdateDataAsync<T>`
 
 ```csharp
-Task UpdateDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
+Task UpdateDataAsync<T>(
+    IPersistenceData<T> data,
+    CancellationToken cancellationToken = default)
+    where T : class, IProcessManagerData;
 ```
 
 Persists mutations to an existing state record.
@@ -69,7 +76,10 @@ Persists mutations to an existing state record.
 ### `DeleteDataAsync<T>`
 
 ```csharp
-Task DeleteDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
+Task DeleteDataAsync<T>(
+    IPersistenceData<T> data,
+    CancellationToken cancellationToken = default)
+    where T : class, IProcessManagerData;
 ```
 
 Removes the persisted state record, ending the saga's lifetime.

@@ -40,7 +40,9 @@ Inspects or mutates `envelope` and returns whether the pipeline should continue.
 ### `ExecuteOutgoingFiltersAsync`
 
 ```csharp
-Task<bool> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
+Task<bool> ExecuteOutgoingFiltersAsync(
+    Envelope envelope,
+    CancellationToken cancellationToken = default);
 ```
 
 Runs every outgoing filter in registration order against `envelope`.
@@ -58,7 +60,9 @@ Runs every outgoing filter in registration order against `envelope`.
 ### `ExecuteBeforeConsumingFiltersAsync`
 
 ```csharp
-Task<bool> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
+Task<bool> ExecuteBeforeConsumingFiltersAsync(
+    Envelope envelope,
+    CancellationToken cancellationToken = default);
 ```
 
 Runs the before-consuming filters that fence the handler call.
@@ -74,7 +78,9 @@ Runs the before-consuming filters that fence the handler call.
 ### `ExecuteAfterConsumingFiltersAsync`
 
 ```csharp
-Task<bool> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
+Task<bool> ExecuteAfterConsumingFiltersAsync(
+    Envelope envelope,
+    CancellationToken cancellationToken = default);
 ```
 
 Runs the after-consuming filters once the handler has returned.

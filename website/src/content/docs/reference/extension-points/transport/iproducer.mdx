@@ -27,7 +27,11 @@ See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for how the p
 ### `PublishAsync`
 
 ```csharp
-Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+Task PublishAsync(
+    Type type,
+    byte[] message,
+    Dictionary<string, string>? headers = null,
+    CancellationToken cancellationToken = default);
 ```
 
 Publishes `message` to all subscribers registered for `type`. The broker routes the delivery using whatever fan-out mechanism the transport supports (exchange/binding for RabbitMQ, topic for Kafka, topic with multiple subscriptions for Azure Service Bus).
@@ -46,7 +50,11 @@ Publishes `message` to all subscribers registered for `type`. The broker routes 
 ### `SendAsync` (auto-routed)
 
 ```csharp
-Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+Task SendAsync(
+    Type type,
+    byte[] message,
+    Dictionary<string, string>? headers = null,
+    CancellationToken cancellationToken = default);
 ```
 
 Sends `message` to the destination queue (or queues) mapped for `type`. The transport implementation receives the `Type` and looks up `IQueueConfiguration.QueueMappings` itself — keyed on the type's fully qualified name — to resolve the destination. If no mapping exists, the producer should throw rather than silently drop the message. This is the overload to use when queue-mapping configuration fully controls routing and the caller does not need to name the destination.
@@ -63,7 +71,12 @@ Sends `message` to the destination queue (or queues) mapped for `type`. The tran
 ### `SendAsync` (explicit endpoint)
 
 ```csharp
-Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+Task SendAsync(
+    string endPoint,
+    Type type,
+    byte[] message,
+    Dictionary<string, string>? headers = null,
+    CancellationToken cancellationToken = default);
 ```
 
 Sends `message` to `endPoint` directly. The producer does not consult queue mappings — it trusts the caller and sends to the given address.
@@ -81,7 +94,11 @@ Sends `message` to `endPoint` directly. The producer does not consult queue mapp
 ### `SendBytesAsync`
 
 ```csharp
-Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+Task SendBytesAsync(
+    string endPoint,
+    byte[] packet,
+    Dictionary<string, string>? headers = null,
+    CancellationToken cancellationToken = default);
 ```
 
 Delivers a pre-framed byte packet to `endPoint` without any type-routing logic. Used by control-plane channels (for example, reply-to envelopes and timeout signals) where the caller has already composed the full payload.

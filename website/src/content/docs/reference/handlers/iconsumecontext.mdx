@@ -68,7 +68,11 @@ Gets a cancellation token tied to the consumer loop. It fires when consumption i
 ### `ReplyAsync<TReply>`
 
 ```csharp
-Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default) where TReply : Message;
+Task ReplyAsync<TReply>(
+    TReply message,
+    Dictionary<string, string>? headers = null,
+    CancellationToken cancellationToken = default)
+    where TReply : Message;
 ```
 
 Sends `message` back to the requester as a reply. The helper sets the `ResponseMessageId` header so the originating `SendRequestAsync` call is correlated with this reply.
