@@ -1,0 +1,192 @@
+---
+title: Handlers
+description: How incoming messages reach your code — IMessageHandler, IConsumeContext, registration, and handler lifetime.
+---
+
+A **handler** is the code that runs when a message arrives. You write one class per message type (or more, if you want several things to happen for the same message), implement a single interface, and ServiceConnect takes care of dispatch: it pulls the message off the queue, deserialises it, resolves your handler from the container, and invokes you.
+
+Handlers are the simplest unit of work in a ServiceConnect application — and the one you will write most often.
+
+## The interface
+
+```csharp
+public interface IMessageHandler<in TMessage> where TMessage : Message
+{
+    IConsumeContext? Context { get; set; }
+    Task HandleAsync(TMessage message);
+}
+```
+
+Two members. One property the pipeline sets for you, and one method you implement.
+
+```csharp
+using ServiceConnect.Interfaces;
+
+public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public async Task HandleAsync(WorkSubmitted message)
+    {
+        Console.WriteLine($"Processing {message.WorkId}");
+        await Task.CompletedTask;
+    }
+}
+```
+
+The contravariant `in` on the generic parameter means a handler written for a base message type also runs for any derived message types registered against the same handler. Most handlers target a single concrete type.
+
+## The consume context
+
+`Context` is set by the dispatch pipeline **before** `HandleAsync` is called. It exposes the things a handler needs to do something useful beyond just reading the incoming message:
+
+```csharp
+public interface IConsumeContext
+{
+    IBus Bus { get; }
+    IReadOnlyDictionary<string, object> Headers { get; }
+    string? MessageId { get; }
+    Guid CorrelationId { get; }
+    CancellationToken CancellationToken { get; }
+
+    Task ReplyAsync<TReply>(
+        TReply message,
+        Dictionary<string, string>? headers = null,
+        CancellationToken cancellationToken = default) where TReply : Message;
+}
+```
+
+A few things worth knowing:
+
+- **`Bus`** is the same `IBus` you inject elsewhere. Prefer using `Context.Bus` inside a handler — it makes the data-flow explicit: "this message produced that message."
+- **`CorrelationId`** is the incoming message's correlation id. Pass it through to any outgoing messages you produce in this handler so logs and process managers can tie them back to the same conversation.
+- **`CancellationToken`** is tied to the consumer's lifetime. When the bus stops consuming, the token fires. Long-running handlers should pass it to downstream awaits so they unwind cleanly on shutdown.
+- **`ReplyAsync<TReply>`** is the correct way to reply to a request sent by `SendRequestAsync`. It sets the `ResponseMessageId` header that ServiceConnect uses to correlate the reply. A plain `Bus.SendAsync` back to the caller **will not** resolve the pending request — always use `ReplyAsync` when replying to a request.
+
+A typical request/reply handler:
+
+```csharp
+public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public async Task HandleAsync(QuoteRequest message)
+    {
+        var price = Quote(message.ProductCode);
+        await Context!.ReplyAsync(new QuoteResponse(message.CorrelationId)
+        {
+            Price = price,
+        });
+    }
+}
+```
+
+The `Context!` null-forgiving is safe in handler code — the dispatch pipeline always populates `Context` before calling `HandleAsync`. The property is nullable only because it is a settable property rather than a constructor parameter.
+
+## Registering handlers
+
+ServiceConnect offers two ways to tell the bus which handlers exist.
+
+### Scan
+
+For full applications, let the bus find handlers by reflection. Set `ScanForMessageHandlers` in the bus configuration and ServiceConnect walks your assemblies looking for classes that implement `IMessageHandler<>`:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(/* … */);
+    builder.ConfigureQueues(q => q.QueueName = "orders");
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = true);
+});
+```
+
+By default the scanner searches `AppDomain.CurrentDomain.GetAssemblies()`. If your handlers live in a library that isn't yet loaded at startup, register it explicitly:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = true);
+    builder.ScanAssemblies(typeof(WorkSubmittedHandler).Assembly);
+});
+```
+
+### Explicit registration
+
+For tests, examples, or when you want a single place to see every handler, register a `HandlerReference` list manually:
+
+```csharp
+services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(WorkSubmittedHandler),   MessageType = typeof(WorkSubmitted) },
+    new() { HandlerType = typeof(OrderPlacedAuditHandler), MessageType = typeof(OrderPlaced) },
+});
+
+services.AddServiceConnect(builder =>
+{
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);
+    // …
+});
+```
+
+This is what the examples in this repository use, and what the [Getting Started](/ServiceConnect-CSharp/learn/getting-started/) guide shows. Keeping handler registration explicit makes the wiring obvious to any reader.
+
+You can combine approaches — enable scanning and also add a `HandlerReference` entry for something the scanner wouldn't pick up, like a handler type resolved dynamically.
+
+## Handler lifetime
+
+**Handlers are always transient.** Each message dispatch resolves a fresh handler instance from the container.
+
+This is not negotiable. The `Context` property is mutable per-message state; a singleton handler would race across concurrent dispatches. ServiceConnect enforces the rule at registration time:
+
+```csharp
+// This will throw at host startup:
+services.AddSingleton<WorkSubmittedHandler>();
+services.AddServiceConnect(builder => { /* … */ });
+```
+
+The error says exactly what's wrong:
+
+> Message handler 'WorkSubmittedHandler' must not be registered as a singleton. Handler instances hold per-message `IConsumeContext` state and must be transient or scoped. Remove the singleton registration and let `AddServiceConnect` register the handler as transient.
+
+If you need shared state across handlers — a cache, a database connection pool, a metrics client — inject it. The handler stays transient; the dependency is a singleton that the handler resolves from the container.
+
+```csharp
+public sealed class WorkSubmittedHandler(IWorkItemStore store, ILogger<WorkSubmittedHandler> log)
+    : IMessageHandler<WorkSubmitted>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public async Task HandleAsync(WorkSubmitted message)
+    {
+        log.LogInformation("Received {WorkId}", message.WorkId);
+        await store.SaveAsync(message);
+    }
+}
+```
+
+## Multiple handlers for one message
+
+Any number of `IMessageHandler<T>` implementations can coexist for the same `T`. When a message of that type arrives, every registered handler runs. This is useful for splitting cross-cutting concerns — one handler does the work, another writes an audit row, a third emits a metric.
+
+```csharp
+public sealed class RefundDomainHandler   : IMessageHandler<RefundRequested> { /* does the refund */ }
+public sealed class RefundAuditHandler    : IMessageHandler<RefundRequested> { /* records it */ }
+public sealed class RefundMetricsHandler  : IMessageHandler<RefundRequested> { /* emits a gauge */ }
+```
+
+All three are registered, all three run, each with its own transient instance. If any handler throws, the message is retried and eventually moved to the error queue per the bus's retry policy — so prefer short, idempotent handlers that can cope with being invoked more than once.
+
+## Exceptions and retries
+
+If `HandleAsync` throws, ServiceConnect applies the configured retry policy and, after retries are exhausted, forwards the message to the error queue. Write handlers to be:
+
+- **Idempotent** — the same message may be delivered again after a transient failure. Design the effect so re-delivery is safe (use the `CorrelationId` as a deduplication key, upsert rather than insert).
+- **Quick to recognise failure** — blocking a consumer for minutes on a downstream timeout blocks every other message in the queue. Wrap external calls in reasonable timeouts.
+
+See [Exception Handling](/ServiceConnect-CSharp/learn/operations/exception-handling/) for how to customise the behaviour.
+
+## What comes next
+
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — where sends land and how subscribers are chosen.
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — publish a message and let multiple handlers react.
+- [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/) — for when a handler needs to return a value.
