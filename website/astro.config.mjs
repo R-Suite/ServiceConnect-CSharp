@@ -96,7 +96,15 @@ export default defineConfig({
                 { label: 'Event args', link: '/reference/handlers/event-args/' },
               ],
             },
-            { label: 'Configuration', items: [] },
+            {
+              label: 'Configuration',
+              items: [
+                { label: 'ITransportConfiguration', link: '/reference/configuration/itransportconfiguration/' },
+                { label: 'IQueueConfiguration', link: '/reference/configuration/iqueueconfiguration/' },
+                { label: 'IPersistenceConfiguration', link: '/reference/configuration/ipersistenceconfiguration/' },
+                { label: 'IPipelineConfiguration', link: '/reference/configuration/ipipelineconfiguration/' },
+              ],
+            },
             { label: 'Process Managers', items: [] },
             { label: 'Filters & Middleware', items: [] },
           ],

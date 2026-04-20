@@ -1,0 +1,174 @@
+---
+title: IQueueConfiguration
+description: Queue-level configuration — queue names, error and audit queues, and explicit message-to-queue routing.
+---
+
+## Overview
+
+`IQueueConfiguration` names the queues a service owns and declares the routing table used when `IBus.SendAsync` has to pick a destination for a message type. Configure it through `builder.ConfigureQueues(q => ...)`. It owns the primary inbox, the error queue for terminally failed messages, the audit queue for observability copies, and the explicit per-type mappings that override convention-based discovery.
+
+See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) for how queue names map to logical services.
+
+## Reference
+
+### `QueueName`
+
+```csharp
+string QueueName { get; set; }
+```
+
+Gets or sets the primary queue name used by the bus.
+
+**Remarks.** This is the inbox consumed by `IBus.StartConsumingAsync` and the `SourceAddress` header stamped on outgoing messages. An empty value causes consumption to fail at startup.
+
+---
+
+### `ErrorQueueName`
+
+```csharp
+string ErrorQueueName { get; set; }
+```
+
+Gets or sets the queue name used for failed messages.
+
+**Remarks.** Messages that exhaust `ITransportConfiguration.MaxRetries` are forwarded here for operator attention. A common convention is `<primary>.errors` or `<primary>.dlq`.
+
+---
+
+### `AuditQueueName`
+
+```csharp
+string AuditQueueName { get; set; }
+```
+
+Gets or sets the queue name used for audit copies.
+
+**Remarks.** Only populated when [`AuditingEnabled`](#auditingenabled) is true.
+
+---
+
+### `AuditingEnabled`
+
+```csharp
+bool AuditingEnabled { get; set; }
+```
+
+Gets or sets a value indicating whether message auditing is enabled. When true, a copy of every processed message is forwarded to [`AuditQueueName`](#auditqueuename).
+
+---
+
+### `DisableErrors`
+
+```csharp
+bool DisableErrors { get; set; }
+```
+
+Gets or sets a value indicating whether failed messages bypass the error queue.
+
+**Remarks.** When true, terminally failed messages are discarded rather than copied to [`ErrorQueueName`](#errorqueuename). Only appropriate for throwaway workloads; production deployments should leave this false.
+
+---
+
+### `PurgeQueueOnStartup`
+
+```csharp
+bool PurgeQueueOnStartup { get; set; }
+```
+
+Gets or sets a value indicating whether the main queue is purged during startup.
+
+**Remarks.** Useful for disposable test fixtures; destructive in production.
+
+---
+
+### `QueueMappings`
+
+```csharp
+IReadOnlyDictionary<string, IReadOnlyList<string>> QueueMappings { get; }
+```
+
+Gets the configured message-to-queue routing table, keyed by assembly-qualified message type name.
+
+**Remarks.** Populate it via [`AddQueueMapping`](#addqueuemapping); look it up via [`TryGetQueueMapping`](#trygetqueuemapping).
+
+---
+
+### `AddQueueMapping`
+
+```csharp
+void AddQueueMapping(Type messageType, string queue)
+```
+
+Adds a single queue mapping for the specified message type.
+
+**Parameters**
+- `messageType` — The message type to route.
+- `queue` — The destination queue name.
+
+---
+
+### `AddQueueMapping`
+
+```csharp
+void AddQueueMapping(Type messageType, IList<string> queues)
+```
+
+Adds multiple queue mappings for the specified message type. Used when the same message must be sent to several services (for example the `OrderPlaced` event routed to both `shipping-service` and `invoicing-service`).
+
+**Parameters**
+- `messageType` — The message type to route.
+- `queues` — The destination queue names.
+
+---
+
+### `TryGetQueueMapping`
+
+```csharp
+bool TryGetQueueMapping(Type messageType, out IReadOnlyList<string> queues)
+```
+
+Attempts to resolve the configured queue mappings for a message type.
+
+**Parameters**
+- `messageType` — The message type to look up.
+- `queues` — When this method returns, contains the configured queues if a mapping exists.
+
+**Returns.** `true` when a mapping exists; otherwise `false`.
+
+## Usage
+
+### Declaring a durable queue with a dead-letter exchange
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "rabbit.internal.example";
+        transport.Username = "order-service";
+        transport.Password = Environment.GetEnvironmentVariable("ORDER_RABBIT_PASSWORD");
+        transport.MaxRetries = 5;
+        transport.RetryDelay = 2_000;
+    });
+
+    builder.ConfigureQueues(queues =>
+    {
+        queues.QueueName = "order-service";
+        queues.ErrorQueueName = "order-service.dlq";
+
+        queues.AuditingEnabled = true;
+        queues.AuditQueueName = "order-service.audit";
+
+        queues.AddQueueMapping(typeof(ShipOrderCommand), "shipping-service");
+        queues.AddQueueMapping(typeof(ChargeCardCommand), "payment-service");
+    });
+});
+```
+
+The `order-service` queue is the primary inbox; messages that exhaust their retry budget land in `order-service.dlq` for an operator to inspect. Auditing is on for traceability — every processed message is copied to `order-service.audit`. Outbound `ShipOrderCommand` and `ChargeCardCommand` sends are routed to their owning services by the explicit mappings, regardless of any convention-based routing the registry would otherwise apply.
+
+## See also
+
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — concept
+- [`ITransportConfiguration`](../itransportconfiguration/) — related reference
+- [`IBusConfiguration`](../../bus/ibusconfiguration/) — related reference

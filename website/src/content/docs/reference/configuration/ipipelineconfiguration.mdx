@@ -1,0 +1,128 @@
+---
+title: IPipelineConfiguration
+description: Registered filter and middleware types that wrap incoming and outgoing messages.
+---
+
+## Overview
+
+`IPipelineConfiguration` is the read-only view of the filter and middleware types registered for the consume and send pipelines. It is populated through the `ServiceConnectBuilder` helpers — `AddBeforeConsumingFilter<T>()`, `AddAfterConsumingFilter<T>()`, `AddOutgoingFilter<T>()`, `AddMessageProcessingMiddleware<T>()`, and `AddSendMessageMiddleware<T>()` — and exposed so transports and diagnostics can enumerate the configured types without mutating them.
+
+See [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) for the conceptual model and for when to reach for a filter over a middleware.
+
+## Reference
+
+### `BeforeConsumingFilters`
+
+```csharp
+IReadOnlyList<Type> BeforeConsumingFilters { get; }
+```
+
+Gets the filters that run before handler invocation.
+
+**Remarks.** Each type must implement `IFilter`. Filters run in registration order; returning `false` short-circuits the pipeline and skips the handler.
+
+---
+
+### `AfterConsumingFilters`
+
+```csharp
+IReadOnlyList<Type> AfterConsumingFilters { get; }
+```
+
+Gets the filters that run after handler invocation.
+
+**Remarks.** Each type must implement `IFilter`. Handy for post-processing concerns such as metrics emission or cleanup.
+
+---
+
+### `OutgoingFilters`
+
+```csharp
+IReadOnlyList<Type> OutgoingFilters { get; }
+```
+
+Gets the filters that run on outgoing messages.
+
+**Remarks.** Each type must implement `IFilter`. Invoked for every publish, send, and reply.
+
+---
+
+### `MessageProcessingMiddleware`
+
+```csharp
+IReadOnlyList<Type> MessageProcessingMiddleware { get; }
+```
+
+Gets the middleware types that wrap message processing.
+
+**Remarks.** Each type must implement `IMessageProcessingMiddleware`. Middleware is an `await next()` model — preferred over filters when you need to surround the handler with a `try/finally`, a scope, or an activity.
+
+---
+
+### `SendMessageMiddleware`
+
+```csharp
+IReadOnlyList<Type> SendMessageMiddleware { get; }
+```
+
+Gets the middleware types that wrap outgoing send and publish operations.
+
+**Remarks.** Each type must implement `ISendMessageMiddleware`.
+
+## Usage
+
+### Adding a logging filter and an outgoing retry filter
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "rabbit.internal.example";
+        transport.Username = "order-service";
+        transport.Password = Environment.GetEnvironmentVariable("ORDER_RABBIT_PASSWORD");
+    });
+
+    builder.ConfigureQueues(queues => queues.QueueName = "order-service");
+
+    builder.AddBeforeConsumingFilter<LoggingFilter>();
+    builder.AddOutgoingFilter<OutgoingRetryFilter>();
+});
+
+// Filters wired up above.
+public sealed class LoggingFilter : IFilter
+{
+    private readonly ILogger<LoggingFilter> _logger;
+
+    public LoggingFilter(ILogger<LoggingFilter> logger) => _logger = logger;
+
+    public bool Process(Envelope envelope)
+    {
+        _logger.LogInformation(
+            "Consuming {MessageType} {MessageId} from {SourceAddress}",
+            envelope.Headers.GetValueOrDefault("MessageType"),
+            envelope.Headers.GetValueOrDefault("MessageId"),
+            envelope.Headers.GetValueOrDefault("SourceAddress"));
+        return true;
+    }
+}
+
+public sealed class OutgoingRetryFilter : IFilter
+{
+    public bool Process(Envelope envelope)
+    {
+        envelope.Headers["RetryPolicy"] = "exponential";
+        envelope.Headers["RetryBudget"] = "5";
+        return true;
+    }
+}
+```
+
+`LoggingFilter` sits on the consume side, writing a structured log line for every message the `OrderService` processes before it reaches the handler. `OutgoingRetryFilter` sits on the send side, stamping an explicit retry-policy hint onto every outbound envelope so downstream services can apply a uniform retry strategy. Both types are registered once during startup and resolved per-message from the DI container.
+
+## See also
+
+- [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) — concept
+- [`IFilter`](../../filters/ifilter/) — related reference
+- [`IMessageProcessingMiddleware`](../../filters/imessageprocessingmiddleware/) — related reference
+- [`ISendMessageMiddleware`](../../filters/isendmessagemiddleware/) — related reference

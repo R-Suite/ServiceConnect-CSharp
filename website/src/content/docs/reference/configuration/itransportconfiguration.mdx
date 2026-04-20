@@ -1,0 +1,272 @@
+---
+title: ITransportConfiguration
+description: The transport-layer configuration — host, port, credentials, TLS, retry, and prefetch.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`ITransportConfiguration` is the transport-layer configuration surface: broker host, credentials, virtual host, retry policy, consumer prefetch, graceful-shutdown drain window, and TLS. The shape is deliberately transport-neutral; the exact semantics of each field depend on the concrete transport in use. RabbitMQ is the only shipped implementation — access this configuration via `builder.ConfigureTransport(...)` or the `configure` delegate of `UseRabbitMQ(...)`.
+
+See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for how transport configuration fits into the wider bus setup.
+
+## Reference
+
+### `Host`
+
+```csharp
+string Host { get; set; }
+```
+
+Gets or sets the transport host name.
+
+**Remarks.** RabbitMQ accepts a comma-separated host list for cluster failover (`"rabbit-a,rabbit-b,rabbit-c"`). The builder rejects an empty host at configuration time.
+
+---
+
+### `Username`
+
+```csharp
+string? Username { get; set; }
+```
+
+Gets or sets the transport username.
+
+---
+
+### `Password`
+
+```csharp
+string? Password { get; set; }
+```
+
+Gets or sets the transport password.
+
+<Aside type="caution" title="Secrets in configuration">
+  Load credentials from a secret store or environment variables — do not commit them alongside source. ServiceConnect never logs `Password`.
+</Aside>
+
+---
+
+### `VirtualHost`
+
+```csharp
+string? VirtualHost { get; set; }
+```
+
+Gets or sets the virtual host or namespace used by the broker. On RabbitMQ this is the vhost (`/` by default); on other transports it maps to whatever logical partition the broker exposes.
+
+---
+
+### `RetryDelay`
+
+```csharp
+int RetryDelay { get; set; }
+```
+
+Gets or sets the dead-letter retry delay, in milliseconds.
+
+**Remarks.** Applied between retries when a handler throws. Must be non-negative; the builder validates this at configuration time.
+
+---
+
+### `MaxRetries`
+
+```csharp
+int MaxRetries { get; set; }
+```
+
+Gets or sets the maximum retry attempts before a message is treated as terminally failed and routed to the error queue.
+
+**Remarks.** Must be non-negative.
+
+---
+
+### `PrefetchCount`
+
+```csharp
+ushort PrefetchCount { get; set; }
+```
+
+Gets or sets the consumer prefetch count — the maximum number of unacknowledged messages the broker will deliver to a consumer at once.
+
+**Remarks.** Higher values improve throughput on I/O-bound handlers but increase the blast radius of a crashed consumer (every prefetched message is redelivered). For short handlers, values in the low tens are typical; for long-running handlers, keep it at `1`.
+
+---
+
+### `GracefulShutdownTimeoutMilliseconds`
+
+```csharp
+int GracefulShutdownTimeoutMilliseconds { get; set; }
+```
+
+Gets or sets the time the bus will wait for in-flight messages to drain during graceful shutdown, in milliseconds.
+
+**Remarks.** Must be non-negative. After this budget expires, remaining in-flight messages are abandoned and will be redelivered when the consumer reconnects.
+
+---
+
+### `SslEnabled`
+
+```csharp
+bool SslEnabled { get; set; }
+```
+
+Gets or sets a value indicating whether TLS is enabled for the broker connection.
+
+---
+
+### `AcceptablePolicyErrors`
+
+```csharp
+SslPolicyErrors AcceptablePolicyErrors { get; set; }
+```
+
+Gets or sets the TLS policy errors that are tolerated during remote certificate validation.
+
+**Remarks.** Defaults to `SslPolicyErrors.None`. Widening this (for example to accept `RemoteCertificateNameMismatch`) trades verification strictness for deployability in environments where the certificate CN does not match the hostname.
+
+---
+
+### `ServerName`
+
+```csharp
+string? ServerName { get; set; }
+```
+
+Gets or sets the expected remote server name for TLS validation.
+
+---
+
+### `CertPath`
+
+```csharp
+string? CertPath { get; set; }
+```
+
+Gets or sets the client certificate file path used for mutual TLS.
+
+---
+
+### `CertPassphrase`
+
+```csharp
+string? CertPassphrase { get; set; }
+```
+
+Gets or sets the passphrase used to open the client certificate file.
+
+---
+
+### `Certs`
+
+```csharp
+X509CertificateCollection? Certs { get; set; }
+```
+
+Gets or sets the in-memory client certificates to present to the broker. Use this when certificates are loaded from a store or a secret manager rather than from disk.
+
+---
+
+### `SslProtocol`
+
+```csharp
+SslProtocols SslProtocol { get; set; }
+```
+
+Gets or sets the TLS protocol selection.
+
+**Remarks.** Prefer `SslProtocols.Tls12` or `SslProtocols.Tls13` in production; avoid the default `SslProtocols.None` handoff when you know the broker's supported versions.
+
+---
+
+### `CertificateSelectionCallback`
+
+```csharp
+LocalCertificateSelectionCallback? CertificateSelectionCallback { get; set; }
+```
+
+Gets or sets the callback used to choose a local client certificate when the broker requests one.
+
+---
+
+### `CertificateValidationCallback`
+
+```csharp
+RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
+```
+
+Gets or sets the callback used to validate the remote broker certificate. A custom callback fully replaces the default chain check — use sparingly.
+
+<Aside type="caution" title="Validation bypass">
+  Returning `true` unconditionally from this callback disables certificate verification and is unsafe outside local development.
+</Aside>
+
+---
+
+### `ClientSettings`
+
+```csharp
+IReadOnlyDictionary<string, object> ClientSettings { get; }
+```
+
+Gets the provider-specific client settings bag. RabbitMQ populates this with transport-specific flags keyed by well-known names (see `RabbitMQSettingKeys`).
+
+**Returns.** A read-only view; mutation goes through [`SetClientSetting`](#setclientsetting).
+
+---
+
+### `SetClientSetting`
+
+```csharp
+void SetClientSetting(string key, object value)
+```
+
+Stores a provider-specific client setting.
+
+**Parameters**
+- `key` — The setting key, typically a well-known constant from the transport's setting-keys class.
+- `value` — The setting value.
+
+## Usage
+
+### Configuring a TLS-enabled RabbitMQ connection with a non-default prefetch
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "rabbit.internal.example";
+        transport.Username = "order-service";
+        transport.Password = Environment.GetEnvironmentVariable("ORDER_RABBIT_PASSWORD");
+        transport.VirtualHost = "/orders";
+
+        transport.SslEnabled = true;
+        transport.SslProtocol = SslProtocols.Tls12;
+        transport.ServerName = "rabbit.internal.example";
+        transport.CertPath = "/var/run/secrets/order-service/client.pfx";
+        transport.CertPassphrase = Environment.GetEnvironmentVariable("ORDER_RABBIT_CERT_PASS");
+
+        transport.PrefetchCount = 32;
+        transport.MaxRetries = 5;
+        transport.RetryDelay = 2_000;
+        transport.GracefulShutdownTimeoutMilliseconds = 15_000;
+    });
+
+    builder.ConfigureQueues(queues =>
+    {
+        queues.QueueName = "order-service";
+        queues.ErrorQueueName = "order-service.errors";
+    });
+});
+```
+
+The `OrderService` handlers spend most of their time waiting on a downstream HTTP API, so a prefetch of 32 keeps several handler slots busy without saturating memory. Mutual TLS is negotiated with a client certificate read from the host's secret mount, and the policy errors default (`None`) is left intact so a hostname or chain mismatch refuses the connection rather than silently trusting it.
+
+## See also
+
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — concept
+- [`IBusConfiguration`](../../bus/ibusconfiguration/) — related reference
+- [`IQueueConfiguration`](../iqueueconfiguration/) — related reference

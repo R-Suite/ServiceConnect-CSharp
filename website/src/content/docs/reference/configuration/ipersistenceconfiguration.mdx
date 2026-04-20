@@ -1,0 +1,116 @@
+---
+title: IPersistenceConfiguration
+description: Persistence settings shared by process managers, aggregators, and timeouts.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IPersistenceConfiguration` exposes the provider-agnostic persistence settings used by process managers, aggregators, and the timeout store. It is reached via `builder.ConfigurePersistence(p => ...)` and is typically populated as a side-effect of the provider extension method you call — `UseInMemoryPersistence()` for tests and local development, `UseMongoDbPersistence(...)` for production. Both providers ship in the box.
+
+See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the higher-level picture of what persistence stores are storing.
+
+## Reference
+
+### `ConnectionString`
+
+```csharp
+string ConnectionString { get; set; }
+```
+
+Gets or sets the provider-specific connection string.
+
+**Remarks.** Only meaningful for providers that connect to an external store (MongoDB). The in-memory provider ignores it.
+
+---
+
+### `DatabaseName`
+
+```csharp
+string DatabaseName { get; set; }
+```
+
+Gets or sets the database or logical store name.
+
+**Remarks.** MongoDB uses this as the database name. The in-memory provider ignores it.
+
+---
+
+### `AggregatorCollectionName`
+
+```csharp
+string AggregatorCollectionName { get; set; }
+```
+
+Gets or sets the collection or container name used for aggregator state.
+
+**Remarks.** MongoDB uses this as the collection name for aggregator snapshots. The in-memory provider ignores it.
+
+## Usage
+
+### Development: in-memory persistence
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "localhost";
+        transport.Username = "guest";
+        transport.Password = "guest";
+    });
+
+    builder.ConfigureQueues(queues => queues.QueueName = "order-service");
+
+    builder.UseInMemoryPersistence();
+
+    builder.ConfigureBus(bus => bus.EnableProcessManagerTimeouts = true);
+});
+```
+
+`UseInMemoryPersistence()` wires up `IProcessManagerFinder`, `ITimeoutStore`, and `IAggregatorPersistor` against a single in-process state object. Nothing survives an app restart — ideal for tests and developer machines, never for production.
+
+<Aside type="caution" title="Not for production">
+  The in-memory provider loses all saga, aggregator, and timeout state when the process exits. Use it only for tests and local development.
+</Aside>
+
+### Production: MongoDB with a named database
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "rabbit.internal.example";
+        transport.Username = "order-service";
+        transport.Password = Environment.GetEnvironmentVariable("ORDER_RABBIT_PASSWORD");
+    });
+
+    builder.ConfigureQueues(queues =>
+    {
+        queues.QueueName = "order-service";
+        queues.ErrorQueueName = "order-service.dlq";
+    });
+
+    builder.UseMongoDbPersistence(options =>
+    {
+        options.ConnectionString = Environment.GetEnvironmentVariable("ORDER_MONGO_URI");
+        options.DatabaseName = "OrderService";
+    });
+
+    builder.ConfigureBus(bus =>
+    {
+        bus.EnableProcessManagerTimeouts = true;
+        bus.ProcessManagerTimeoutPollInterval = TimeSpan.FromSeconds(5);
+    });
+});
+```
+
+`UseMongoDbPersistence(...)` registers `MongoDbProcessManagerFinder`, `MongoDbTimeoutStore`, and `MongoDbAggregatorPersistor` against a single shared `IMongoClient`. The `OrderService` database holds the `ShippingSaga` state documents alongside the timeout collection; the poll interval controls how quickly scheduled `TimeoutMessage` deliveries fire.
+
+## See also
+
+- [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept
+- [`IAggregatorPersistor`](../../extension-points/persistence/iaggregatorpersistor/) — related reference
+- [`IProcessManagerFinder`](../../extension-points/persistence/iprocessmanagerfinder/) — related reference
