@@ -1,0 +1,158 @@
+---
+title: The Bus
+description: What IBus represents, how it's created, and the operations it exposes for sending, publishing, requesting, routing, and consuming messages.
+---
+
+The **bus** is the handle your code uses to talk to the rest of the system. Concretely, it is the `IBus` interface. Once you have one, you can send messages to a specific queue, publish them to subscribers, fire a request and await a reply, route through a chain of services, stream large payloads, or consume messages from your own queue.
+
+```csharp
+public interface IBus : IAsyncDisposable
+{
+    Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
+    Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
+    Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+        where T : Message where TReply : Message;
+    Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message;
+    IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message;
+
+    Task StartConsumingAsync(CancellationToken cancellationToken = default);
+    Task StopConsumingAsync(CancellationToken cancellationToken = default);
+    bool IsConsuming { get; }
+    // …plus SendRequestMultiAsync, PublishRequestAsync, RequestTimeoutAsync
+}
+```
+
+You do **not** construct `IBus` directly. You configure it, register it with dependency injection, and resolve it by type.
+
+## Creating a bus
+
+ServiceConnect integrates with `Microsoft.Extensions.DependencyInjection`. The entry point is `AddServiceConnect`:
+
+```csharp
+var services = new ServiceCollection();
+services.AddLogging();
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "localhost";
+        transport.Username = "guest";
+        transport.Password = "guest";
+    });
+
+    builder.ConfigureQueues(queues => queues.QueueName = "orders");
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+```
+
+The builder composes four concerns:
+
+- **Transport** — which broker the bus talks to. `UseRabbitMQ` is the supported transport in v1.
+- **Queues** — the name of this service's queue, plus error and audit queue names, plus any message-to-queue routing for `SendAsync`. See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/).
+- **Bus** — runtime behaviour flags: handler scanning, auto-start, consumer count, exception handler. See `IBusConfiguration`.
+- **Persistence** — optional. Required for process managers, aggregators, and persisted timeouts. Configured via `UseMongoDbPersistence` or `UseSqlServerPersistence`.
+
+## Lifecycle
+
+In a hosted application (ASP.NET Core, Worker Service, generic host), the bus is a **singleton** registered by `AddServiceConnect`. It starts consuming automatically when the host starts, and shuts down cleanly on host stop.
+
+```csharp
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddServiceConnect(sc =>
+{
+    sc.UseRabbitMQ(t => { /* … */ });
+    sc.ConfigureQueues(q => q.QueueName = "orders");
+});
+await builder.Build().RunAsync();
+```
+
+For a sender-only process — something that produces a message and exits, like the Getting Started sender — you can skip `StartConsumingAsync` and just call `SendAsync`. The bus still needs a queue name so replies and errors have somewhere to land.
+
+### Stop is terminal
+
+Calling `StopConsumingAsync` disposes the underlying consumer. After that, `StartConsumingAsync` throws `InvalidOperationException`. If you need to resume, dispose the bus and create a new one. This makes lifecycle reasoning explicit: a bus instance is either *new*, *consuming*, or *stopped* — never *restarted*.
+
+```csharp
+await bus.StopConsumingAsync();
+await bus.StartConsumingAsync(); // throws — stop is terminal
+```
+
+## What the bus does
+
+All outbound operations take a subtype of `Message` so ServiceConnect can flow a correlation id and attach headers.
+
+### Send
+
+Point-to-point. You know the destination queue. ServiceConnect writes one message to that queue.
+
+```csharp
+await bus.SendAsync(
+    new WorkSubmitted(Guid.NewGuid()) { WorkId = "work-001" },
+    new SendOptions { EndPoint = "fulfillment" });
+```
+
+### Publish
+
+Fan-out. Subscribers of the message type receive a copy. You don't name destinations; RabbitMQ's exchange handles the fan-out.
+
+```csharp
+await bus.PublishAsync(new OrderPlaced(correlationId) { OrderId = "order-100" });
+```
+
+### Request / reply
+
+A message that expects a single response, or a bounded set of responses.
+
+```csharp
+var quote = await bus.SendRequestAsync<QuoteRequested, QuoteReady>(
+    new QuoteRequested(Guid.NewGuid()) { Sku = "widget" });
+```
+
+The caller `await`s the reply. Under the hood, ServiceConnect correlates the reply using the correlation id and a `ResponseMessageId` header.
+
+### Route
+
+A message flows through an ordered list of destinations. Each service does its work and forwards along the slip.
+
+```csharp
+await bus.RouteAsync(message, new[] { "validate", "enrich", "notify" });
+```
+
+See [Routing Slip](/ServiceConnect-CSharp/learn/messaging-patterns/routing-slip/) for the pattern it implements.
+
+### Stream
+
+For payloads too large for a single message, `CreateStream<T>` opens a chunked write stream to a named endpoint. The receiving side exposes a matching `IMessageBusReadStream`.
+
+### Scheduled timeout
+
+Process managers use `RequestTimeoutAsync` to ask the bus to deliver a `TimeoutMessage` back to this queue after a delay. It is the mechanism behind saga timeouts.
+
+```csharp
+await bus.RequestTimeoutAsync(processManagerId, TimeSpan.FromMinutes(30));
+```
+
+## Injecting the bus into your code
+
+Inside a handler, prefer `IConsumeContext.Bus` — it is the same `IBus` instance but makes the dependency explicit at the point of use. Elsewhere, take `IBus` as a constructor parameter:
+
+```csharp
+public sealed class PaymentsGateway(IBus bus)
+{
+    public Task RefundAsync(Guid orderId) =>
+        bus.SendAsync(
+            new RefundRequested(orderId) { OrderId = orderId.ToString() },
+            new SendOptions { EndPoint = "payments" });
+}
+```
+
+The bus is thread-safe. One instance is shared across the process.
+
+## What comes next
+
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — the contracts you pass to the bus.
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — how incoming messages reach your code.
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — how `Send` chooses a queue and how subscriptions work.
