@@ -96,24 +96,24 @@ public sealed class LoggingFilter : IFilter
 
     public LoggingFilter(ILogger<LoggingFilter> logger) => _logger = logger;
 
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
             "Consuming {MessageType} {MessageId} from {SourceAddress}",
             envelope.Headers.GetValueOrDefault("MessageType"),
             envelope.Headers.GetValueOrDefault("MessageId"),
             envelope.Headers.GetValueOrDefault("SourceAddress"));
-        return true;
+        return Task.FromResult(true);
     }
 }
 
 public sealed class OutgoingRetryFilter : IFilter
 {
-    public bool Process(Envelope envelope)
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         envelope.Headers["RetryPolicy"] = "exponential";
         envelope.Headers["RetryBudget"] = "5";
-        return true;
+        return Task.FromResult(true);
     }
 }
 ```
