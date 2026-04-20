@@ -1,0 +1,214 @@
+---
+title: Message options
+description: Per-call overrides for publish, send, and request operations — headers, destinations, timeouts.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`PublishOptions`, `SendOptions`, and `RequestOptions` are the per-call override bags passed to `IBus.PublishAsync`, `IBus.SendAsync`, and `IBus.SendRequestAsync` (and its multi variants) respectively. Each is optional — when omitted, defaults come from `IBusConfiguration`. You reach for these types when a single call needs to deviate from the configured defaults: adding headers, overriding the destination endpoint, or tightening a request timeout.
+
+See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for where the baseline defaults are set.
+
+## Reference
+
+## `PublishOptions`
+
+Passed to `IBus.PublishAsync`. A mutable `sealed class` with object-initialiser syntax.
+
+### `Headers`
+
+```csharp
+public Dictionary<string, string>? Headers { get; set; }
+```
+
+Gets or sets additional headers to attach to the published message.
+
+**Remarks.** Default is `null`. Keys and values are both strings; transports serialise them verbatim.
+
+---
+
+### `RoutingKey`
+
+```csharp
+public string? RoutingKey { get; set; }
+```
+
+Gets or sets the routing key used by the transport, when applicable.
+
+**Remarks.** Default is `null`. Only transports that support routing keys (e.g., RabbitMQ topic exchanges) consult this value; others ignore it.
+
+## `SendOptions`
+
+Passed to `IBus.SendAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction.
+
+### `Headers`
+
+```csharp
+public Dictionary<string, string>? Headers { get; init; }
+```
+
+Gets the additional headers to attach to the message.
+
+**Remarks.** Default is `null`.
+
+---
+
+### `EndPoint`
+
+```csharp
+public string? EndPoint { get; init; }
+```
+
+Gets the single destination endpoint.
+
+**Remarks.** Default is `null`. When set, overrides the queue mapping configured for the message type. Mutually exclusive with `EndPoints`.
+
+---
+
+### `EndPoints`
+
+```csharp
+public IList<string>? EndPoints { get; init; }
+```
+
+Gets the destination endpoints when sending to multiple queues.
+
+**Remarks.** Default is `null`. Use this when a single logical send should be delivered to several queues in one call.
+
+## `RequestOptions`
+
+Passed to `IBus.SendRequestAsync` and `IBus.SendRequestMultiAsync`. A mutable `sealed class`.
+
+### `DefaultTimeoutMs`
+
+```csharp
+public const int DefaultTimeoutMs = 10_000;
+```
+
+The default request timeout, in milliseconds (10 seconds).
+
+---
+
+### `Default`
+
+```csharp
+public static RequestOptions Default { get; } = new();
+```
+
+Gets the default request options instance.
+
+**Returns.** A shared `RequestOptions` with all properties at their default values. Handy when you want to pass defaults explicitly rather than `null`.
+
+---
+
+### `Headers`
+
+```csharp
+public Dictionary<string, string>? Headers { get; set; }
+```
+
+Gets or sets additional headers to attach to the request message.
+
+**Remarks.** Default is `null`.
+
+---
+
+### `EndPoint`
+
+```csharp
+public string? EndPoint { get; set; }
+```
+
+Gets or sets the single destination endpoint for the request.
+
+**Remarks.** Default is `null`. Overrides the configured queue mapping for the request message type.
+
+---
+
+### `EndPoints`
+
+```csharp
+public IList<string>? EndPoints { get; set; }
+```
+
+Gets or sets the destination endpoints when broadcasting a multi-request.
+
+**Remarks.** Default is `null`. Used by `SendRequestMultiAsync` to fan out to several respondents.
+
+---
+
+### `Timeout`
+
+```csharp
+public int Timeout { get; set; } = DefaultTimeoutMs;
+```
+
+Gets or sets the request timeout, in milliseconds.
+
+**Remarks.** Defaults to `DefaultTimeoutMs` (10,000). For single-reply requests, the call faults if no reply arrives before the deadline. For multi-requests, see `ExpectedReplyCount` for how timeout and count interact.
+
+---
+
+### `ExpectedReplyCount`
+
+```csharp
+public int? ExpectedReplyCount { get; set; }
+```
+
+Number of replies the multi-request should wait for before completing. Only consulted by `SendRequestMultiAsync`.
+
+<Aside type="note" title="ExpectedReplyCount semantics">
+  The property has three modes:
+
+  - **Positive value** — the call completes as soon as that many replies have arrived, or when `Timeout` elapses, whichever happens first.
+  - **Zero or negative** — the call always waits the full `Timeout` and returns every reply received during the window.
+  - **`null` (default)** — falls back to `EndPoints.Count` when `EndPoints` is set; otherwise behaves as the zero-or-negative case (timeout-only).
+
+  Set a positive count when you know how many respondents to expect and want to return as soon as they have all replied; leave it unset (or zero) when you want to drain the full window.
+</Aside>
+
+## Usage
+
+### Publishing with custom headers
+
+```csharp
+await bus.PublishAsync(
+    new OrderPlaced(Guid.NewGuid(), orderId, total),
+    new PublishOptions
+    {
+        Headers = new Dictionary<string, string>
+        {
+            ["X-Tenant"] = tenantId,
+            ["X-Source"] = "OrderService",
+        },
+    });
+```
+
+Use `PublishOptions.Headers` when a downstream subscriber or audit consumer needs metadata that doesn't belong on the message contract itself — for example, a tenant discriminator or the name of the originating service.
+
+### Sending to an explicit endpoint override
+
+```csharp
+await bus.SendAsync(
+    new ProcessPayment(correlationId, orderId, total),
+    new SendOptions { EndPoint = "payments-priority" });
+```
+
+Pass `SendOptions.EndPoint` when the usual queue mapping isn't what you want — for example, routing a high-priority payment to a dedicated queue rather than the default `PaymentProcessor` queue.
+
+### Setting a request timeout
+
+```csharp
+var reply = await bus.SendRequestAsync<GetShippingQuote, ShippingQuote>(
+    new GetShippingQuote(correlationId, orderId),
+    new RequestOptions { Timeout = 2_000 });
+```
+
+Use `RequestOptions.Timeout` to tighten the deadline for a single call — here, a shipping-quote lookup that must return in 2 seconds or be considered failed, rather than inheriting the default 10-second window.
+
+## See also
+
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — concept
+- [`IBus`](../../bus/ibus/) — related reference page

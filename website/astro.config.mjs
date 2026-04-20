@@ -79,7 +79,14 @@ export default defineConfig({
                 { label: 'AddServiceConnect', link: '/reference/bus/add-serviceconnect/' },
               ],
             },
-            { label: 'Messages', items: [] },
+            {
+              label: 'Messages',
+              items: [
+                { label: 'Message', link: '/reference/messages/message/' },
+                { label: 'Envelope', link: '/reference/messages/envelope/' },
+                { label: 'Message options', link: '/reference/messages/options/' },
+              ],
+            },
             { label: 'Handlers', items: [] },
             { label: 'Configuration', items: [] },
             { label: 'Process Managers', items: [] },
