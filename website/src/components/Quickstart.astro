@@ -7,8 +7,8 @@
   <p class="quickstart__label">60-second quickstart</p>
   <pre class="quickstart__code"><code><span class="qs-prompt">$</span> dotnet add package ServiceConnect
 
-<span class="qs-keyword">var</span> bus = Bus.Initialize(c =&gt; c.SetEndpoint(<span class="qs-string">"orders"</span>));
-bus.Publish(<span class="qs-keyword">new</span> OrderPlaced(orderId));</code></pre>
+services.AddServiceConnect(b =&gt; b.UseRabbitMQ(t =&gt; t.Host = <span class="qs-string">"localhost"</span>));
+<span class="qs-keyword">await</span> bus.PublishAsync(<span class="qs-keyword">new</span> OrderPlaced(correlationId));</code></pre>
 </section>
 
 <style>
