@@ -106,7 +106,7 @@ export default defineConfig({
               ],
             },
             {
-              label: 'Process Managers',
+              label: 'Process Managers & Aggregators',
               items: [
                 { label: 'IProcessHandler', link: '/reference/process-managers/iprocesshandler/' },
                 { label: 'IProcessManagerData', link: '/reference/process-managers/iprocessmanagerdata/' },
