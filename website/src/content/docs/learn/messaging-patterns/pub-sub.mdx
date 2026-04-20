@@ -1,0 +1,154 @@
+---
+title: Pub/Sub
+description: Publish an event once and let every interested subscriber react independently, without the publisher knowing who is listening.
+---
+
+**Pub/Sub** is the pattern you reach for when more than one service cares about the same fact. A publisher emits an event — "an order was placed" — and every subscriber that has registered interest in that event gets a copy. The publisher doesn't know, and shouldn't care, who the subscribers are.
+
+This page walks through the full shape with a runnable example: one publisher, two subscribers, one event.
+
+## The contract
+
+A shared project holds the message type. Both the publisher and the subscribers reference it — that's what makes them agree on the wire format.
+
+```csharp
+// Contracts/OrderPlaced.cs
+using ServiceConnect.Interfaces;
+
+public sealed class OrderPlaced(Guid correlationId) : Message(correlationId)
+{
+    public string OrderId { get; init; } = string.Empty;
+}
+```
+
+Nothing publisher-specific, nothing subscriber-specific. A command-events-contracts project with a single event is typical. See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the design conventions worth following.
+
+## The publisher
+
+The publisher does one thing: it builds a bus and calls `PublishAsync`.
+
+```csharp
+// Publisher/Program.cs
+using Microsoft.Extensions.DependencyInjection;
+using PubSubDemo.Contracts;
+using ServiceConnect;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.Interfaces;
+
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t =>
+    {
+        t.Host = "localhost";
+        t.Username = "guest";
+        t.Password = "guest";
+    });
+    builder.ConfigureQueues(q => q.QueueName = "orders-publisher");
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+await bus.PublishAsync(new OrderPlaced(Guid.NewGuid()) { OrderId = "order-100" });
+Console.WriteLine("Published order-100");
+```
+
+Notice what is missing:
+
+- **No destination.** `PublishAsync` doesn't take a queue name or an `EndPoints` list. Fan-out is RabbitMQ's job, not yours.
+- **No subscriber list.** The publisher has no idea how many subscribers are running or where they are. It publishes into an exchange and walks away.
+
+That is the entire point. A new subscriber can come online tomorrow without any change to the publisher.
+
+## The subscribers
+
+Each subscriber is its own process with its own queue. All it needs is a handler for the event:
+
+```csharp
+// AnalyticsSubscriber/OrderPlacedAnalyticsHandler.cs
+using PubSubDemo.Contracts;
+using ServiceConnect.Interfaces;
+
+public sealed class OrderPlacedAnalyticsHandler : IMessageHandler<OrderPlaced>
+{
+    public IConsumeContext? Context { get; set; }
+
+    public Task HandleAsync(OrderPlaced message)
+    {
+        Console.WriteLine($"Analytics: recording {message.OrderId}");
+        return Task.CompletedTask;
+    }
+}
+```
+
+And a bootstrap that registers the handler, starts consuming, and waits:
+
+```csharp
+// AnalyticsSubscriber/Program.cs
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(OrderPlacedAnalyticsHandler), MessageType = typeof(OrderPlaced) },
+});
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { /* … */ });
+    builder.ConfigureQueues(q => q.QueueName = "analytics");
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+await bus.StartConsumingAsync();
+await Task.Delay(Timeout.InfiniteTimeSpan);
+```
+
+A billing subscriber is structurally identical — different queue name (`billing`), different handler class — but the same shape. Run both, and each gets its own copy of every published `OrderPlaced`.
+
+## How the fan-out works
+
+Under the hood, ServiceConnect publishes through a RabbitMQ **topic exchange** named after the message type's full name. When a bus starts consuming and has a handler for `OrderPlaced`, it creates a binding from that exchange to its own queue. Every published message is copied to every bound queue.
+
+```
+                              ┌─────────────┐
+                              │ analytics Q │ ──▶ analytics handler
+                              └─────────────┘
+                                     ▲
+ publisher ──▶ OrderPlaced exchange ─┤
+                                     ▼
+                              ┌─────────────┐
+                              │ billing Q   │ ──▶ billing handler
+                              └─────────────┘
+```
+
+A few consequences worth understanding:
+
+- **Subscribers added after a publish don't receive old messages.** Bindings only exist once a subscriber's bus starts consuming. If no subscriber was bound when the publisher fired, the message has nowhere to go. This is not a durability problem — messages already in a subscriber's queue survive restarts — but a missing subscriber at publish time means a missing delivery.
+- **Each subscriber gets a full copy.** Pub/sub is not load-balanced delivery. If you want *one-of-many workers* semantics, you want [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/), not Pub/Sub.
+- **The publisher blocks on the broker, not on subscribers.** `PublishAsync` completes when RabbitMQ has accepted the message. It does not wait for subscribers to process it — pub/sub is fire-and-forget by design.
+
+## Events, not commands
+
+Pub/Sub works because the message is an **event**: a past-tense fact that multiple interested parties may react to. Try to publish a command (`ChargeCreditCard`, `SendEmail`) and you get weird emergent behaviour — every subscriber tries to run the command, or worse, exactly one does because only one is registered today and now the "command" semantics secretly depend on subscription state.
+
+Rule of thumb:
+
+- **Event**: past-tense fact (`OrderPlaced`, `PaymentSettled`, `CustomerRegistered`). Publish.
+- **Command**: imperative intent (`PlaceOrder`, `SettlePayment`, `RegisterCustomer`). Send.
+
+See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/#separate-commands-from-events) for more on the distinction.
+
+## Error and retry behaviour
+
+If a subscriber's handler throws, **only that subscriber's message is affected.** Other subscribers have already received their own copy into their own queue, and their handlers have already run (or will run independently). Pub/Sub isolates subscriber failures by construction.
+
+The failing subscriber's message is retried per its bus's policy and eventually lands in that subscriber's error queue. The publisher — long since returned from `PublishAsync` — has no visibility into this, which is correct: the publisher produced a fact, what happens next is a subscriber concern.
+
+## What comes next
+
+- [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/) — the opposite pattern, when you know exactly who the recipient is.
+- [Content-Based Routing](/ServiceConnect-CSharp/learn/messaging-patterns/content-based-routing/) — when different subscribers need different subsets of events.
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — how subscriber bindings are created and managed.
