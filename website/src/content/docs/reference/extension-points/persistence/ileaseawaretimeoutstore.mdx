@@ -7,9 +7,11 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`ILeaseAwareTimeoutStore` extends the base `ITimeoutStore` interface with a `lockOwner` parameter on its two mutating methods. Where `ITimeoutStore.RemoveDispatchedTimeoutAsync(id)` and `ITimeoutStore.ReleaseDispatchedTimeoutAsync(id)` act unconditionally, the lease-aware variants require the caller to prove it still holds the lease before the store will act.
+`ILeaseAwareTimeoutStore` is a companion interface to `ITimeoutStore`. Implementations typically satisfy both on one type, letting the dispatcher call the lease-owner-aware overloads when it has a valid lease and fall back to the base interface's overloads otherwise. Where `ITimeoutStore.RemoveDispatchedTimeoutAsync(id)` and `ITimeoutStore.ReleaseDispatchedTimeoutAsync(id)` act unconditionally, the lease-aware variants require the caller to prove it still holds the lease before the store will act.
 
-The mechanism works alongside `ITimeoutStore.GetTimeoutsBatchAsync`: when a bus instance pulls a batch of due timeouts it receives a `lockOwner` identifier (typically a per-instance `Guid`) that was written into each record. Passing that same `lockOwner` to `RemoveDispatchedTimeoutAsync` or `ReleaseDispatchedTimeoutAsync` ensures that if the original holder crashed and a second instance subsequently claimed the same timeout, only the current holder can complete or release it. This prevents duplicate dispatch in active-active deployments.
+The mechanism works alongside `ITimeoutStore.GetTimeoutsBatchAsync`: when a bus instance pulls a batch of due timeouts, it stamps each claimed record with a `lockOwner` identifier (a stable per-instance `Guid`). Passing that same `lockOwner` to `RemoveDispatchedTimeoutAsync` or `ReleaseDispatchedTimeoutAsync` ensures that if the original holder crashed and a second instance subsequently claimed the same timeout, only the current holder can complete or release it. This prevents duplicate dispatch in active-active deployments.
+
+Because `GetTimeoutsBatchAsync` stamps claimed records and does not return the `lockOwner` in the batch itself, the holding instance must use a stable per-instance id — typically stored as a class field — as the lock owner value for all subsequent calls. Consumers of dispatched timeouts must therefore treat timeout-driven messages as at-least-once: if the holding instance crashes before calling `RemoveDispatchedTimeoutAsync`, the lease expires and another instance re-dispatches the same timeout.
 
 See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the saga and timeout conceptual model.
 
@@ -49,9 +51,9 @@ Returns a dispatched timeout to the pending state so it may be dispatched again,
 
 ---
 
-### Inherited from `ITimeoutStore`
+### Companion interface: `ITimeoutStore`
 
-`ILeaseAwareTimeoutStore` implementations are expected to also fulfil the full `ITimeoutStore` contract. The base interface declares:
+`ILeaseAwareTimeoutStore` and `ITimeoutStore` are separate interfaces; implementations typically implement both on the same class. `ITimeoutStore` declares:
 
 ```csharp
 Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default);
@@ -60,7 +62,7 @@ Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken =
 Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
 ```
 
-`InsertTimeoutAsync` persists a new timeout with its `scheduled_for` timestamp and target destination. `GetTimeoutsBatchAsync` polls for due timeouts, stamps each claimed record with the caller's `lockOwner` and a `lease_expires_at`, and returns them as a `TimeoutsBatch`. The base `RemoveDispatchedTimeoutAsync(id)` and `ReleaseDispatchedTimeoutAsync(id)` without `lockOwner` act unconditionally — they exist for single-instance deployments where lease ownership is not a concern.
+`InsertTimeoutAsync` persists a new timeout with its `scheduled_for` timestamp and target destination. `GetTimeoutsBatchAsync` polls for due timeouts, stamps each claimed record with the implementation's own stable instance id and a `lease_expires_at`, and returns them as a `TimeoutsBatch`. The base `RemoveDispatchedTimeoutAsync(id)` and `ReleaseDispatchedTimeoutAsync(id)` without `lockOwner` act unconditionally — they exist for single-instance deployments where lease ownership is not a concern.
 
 ---
 
@@ -115,7 +117,12 @@ public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, IT
         }
 
         await tx.CommitAsync(cancellationToken);
-        return new TimeoutsBatch(rows.ToList(), _instanceId);
+        var nextPoll = DateTimeOffset.UtcNow.AddSeconds(30);
+        return new TimeoutsBatch
+        {
+            DueTimeouts = rows.ToList(),
+            NextQueryTime = nextPoll,
+        };
     }
 
     public async Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
@@ -167,6 +174,7 @@ public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, IT
 {
     private readonly string _connectionString;
     private readonly ILogger<PostgresLeaseAwareTimeoutStore> _logger;
+    private readonly Guid _instanceId = Guid.NewGuid(); // stable per bus instance
 
     public PostgresLeaseAwareTimeoutStore(
         string connectionString,
@@ -199,7 +207,6 @@ public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, IT
 
     public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
     {
-        var owner       = Guid.NewGuid(); // per-call owner; real implementations use a stable per-instance id
         var leaseExpiry = DateTime.UtcNow.AddMinutes(2);
 
         await using var conn = new NpgsqlConnection(_connectionString);
@@ -223,15 +230,20 @@ public sealed class PostgresLeaseAwareTimeoutStore : ILeaseAwareTimeoutStore, IT
             await conn.ExecuteAsync(
                 @"UPDATE timeouts
                   SET state            = 'dispatched',
-                      lock_owner       = @owner,
+                      lock_owner       = @instanceId,
                       lease_expires_at = @expiry
                   WHERE id = ANY(@ids)",
-                new { owner, expiry = leaseExpiry, ids },
+                new { instanceId = _instanceId, expiry = leaseExpiry, ids },
                 transaction: tx);
         }
 
         await tx.CommitAsync(cancellationToken);
-        return new TimeoutsBatch(rows, owner);
+        var nextPoll = DateTimeOffset.UtcNow.AddSeconds(30);
+        return new TimeoutsBatch
+        {
+            DueTimeouts = rows.ToList(),
+            NextQueryTime = nextPoll,
+        };
     }
 
     // Unconditional overloads (ITimeoutStore, single-instance deployments).
@@ -306,8 +318,15 @@ Register during bus startup:
 services.AddServiceConnect(builder =>
 {
     builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
-    builder.ConfigurePersistence(p =>
-        p.SetTimeoutStore<PostgresLeaseAwareTimeoutStore>());
+    builder.AddRegistration(services =>
+    {
+        services.AddSingleton<PostgresLeaseAwareTimeoutStore>(_ =>
+            new PostgresLeaseAwareTimeoutStore(connectionString, logger));
+        services.AddSingleton<ITimeoutStore>(sp =>
+            sp.GetRequiredService<PostgresLeaseAwareTimeoutStore>());
+        services.AddSingleton<ILeaseAwareTimeoutStore>(sp =>
+            sp.GetRequiredService<PostgresLeaseAwareTimeoutStore>());
+    });
 });
 ```
 

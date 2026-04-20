@@ -9,7 +9,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 `IAggregatorPersistor` is the storage contract that an `Aggregator<T>` uses to buffer incoming messages between deliveries. When a message arrives the framework calls `InsertDataAsync` to persist it; once the aggregation condition is met, it calls `GetSnapshotAsync` to obtain the resolved records, fires the aggregator callback, then removes the records via `RemoveSnapshotAsync`. The interface also exposes `CountAsync`, `GetDataAsync`, and bulk-removal methods for management and recovery paths.
 
-ServiceConnect ships in-memory and MongoDB implementations out of the box. Swap in a custom implementation — Postgres, Redis, DynamoDB — by registering it through `IPersistenceConfiguration`.
+ServiceConnect ships in-memory and MongoDB implementations out of the box. Swap in a custom implementation — Postgres, Redis, DynamoDB — by registering it via `ServiceConnectBuilder.AddRegistration`.
 
 See [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) for the conceptual model.
 
@@ -194,28 +194,26 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
     public PostgresAggregatorPersistor(string connectionString)
         => _connectionString = connectionString;
 
-    public async Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
-    {
-        var payload = JsonSerializer.Serialize(data);
-        var correlationId = ((Message)data).CorrelationId;
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync(cancellationToken);
-        await conn.ExecuteAsync(
-            "INSERT INTO aggregator_messages (id, name, payload, created_at) VALUES (@id, @name, @payload::jsonb, now())",
-            new { id = correlationId, name, payload });
-    }
+    public Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
 
-    public async Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
-    {
-        if (snapshot.ResolvedIds.Count == 0) return;
-        await using var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync(cancellationToken);
-        await conn.ExecuteAsync(
-            "DELETE FROM aggregator_messages WHERE name = @name AND id = ANY(@ids)",
-            new { name, ids = snapshot.ResolvedIds.ToArray() });
-    }
+    public Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
 
-    // ... remaining members omitted for brevity
+    public Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public Task RemoveAllAsync(string name, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+
+    public Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
 }
 ```
 
@@ -252,6 +250,7 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
         string name,
         CancellationToken cancellationToken = default)
     {
+        // Aggregator payloads derive from Message; the cast surfaces the correlation id.
         var correlationId = ((Message)data).CorrelationId;
         var typeName      = data.GetType().AssemblyQualifiedName!;
         var payload       = JsonSerializer.Serialize(data, _jsonOptions);
@@ -384,8 +383,8 @@ Register the implementation during bus startup:
 services.AddServiceConnect(builder =>
 {
     builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
-    builder.ConfigurePersistence(p =>
-        p.SetAggregatorPersistor<PostgresAggregatorPersistor>());
+    builder.AddRegistration(services =>
+        services.AddSingleton<IAggregatorPersistor>(_ => new PostgresAggregatorPersistor(connectionString, jsonOptions)));
 });
 ```
 
