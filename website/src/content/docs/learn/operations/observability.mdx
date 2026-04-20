@@ -1,0 +1,99 @@
+---
+title: Observability
+description: The three observability surfaces — logs, the audit queue, and headers — and how to stitch them into a useful view.
+---
+
+Observability in a messaging system is three overlapping views of the same events: *logs* tell you what the bus did, the *audit queue* gives you a replayable copy of every message it handled, and *headers* carry enough metadata to correlate each processed message back to a specific run. ServiceConnect offers all three. This page covers what each one is for, and how to wire them together so an on-call engineer can answer "what happened to message X?".
+
+## Logs
+
+The bus logs through `Microsoft.Extensions.Logging`. No special setup is needed — the `ILogger<T>` instances in the container are what the bus writes to, so whatever sink you've configured (console, file, Seq, Application Insights) receives its logs automatically.
+
+Key log events you'll see in a healthy system:
+
+- **Startup**: `"Bus starting to consume on queue {QueueName} for {Count} message types."` — fired once during `StartConsumingAsync`. If the bus has started, this has logged.
+- **Shutdown**: `"Bus stopping message consumption."` — fired from `StopConsumingAsync`.
+- **Unregistered type** (warning): `"Unregistered message type '{TypeName}'. Rejecting"` — fired for an incoming message whose type name isn't in the handler registry. Usually a topology mistake (wrong queue binding) or a forgotten handler registration.
+
+Key log events for failures:
+
+- **Dispatch error** (error): `"Error dispatching message of type {MessageType}"` — fired every time a handler (or a filter, or the deserializer) throws. Always paired with an exception.
+- **Max retries exceeded** (error): `"Max retries exceeded for MessageId {MessageId}"` — fired when a retried message reaches `MaxRetries` and is about to land in the error queue.
+- **Terminal rejection** (error): `"Rejecting permanently invalid inbound message with MessageId {MessageId}"` — fired for messages that are unparsable on the wire (missing headers, oversized payload) and go straight to the error queue without retries.
+
+Structure log queries around `MessageId`. Every published message has one (the bus stamps it); it follows the message through retries and into the error queue via the `MessageId` header. Searching for a single `MessageId` in your log aggregator gets you the full processing history of that message.
+
+## The audit queue
+
+When `AuditingEnabled = true`, every successfully processed message is republished to `AuditQueueName` (default `"audit"`) with its headers preserved. Setup:
+
+```csharp
+builder.ConfigureQueues(q =>
+{
+    q.QueueName = "orders-service";
+    q.AuditingEnabled = true;
+    q.AuditQueueName = "orders-service.audit";
+});
+```
+
+What audit gives you that logs don't:
+
+- **Full message body.** Logs have the exception and the `MessageId`; the audit queue has the actual bytes the handler saw. When a bug surfaces days later, you have the payload to reproduce.
+- **Replay.** The audit queue is just a queue. Nothing stops you from draining it into the main queue and re-running the workflow against a fixed handler. Treat that as a manual operator action, not an automated retry.
+- **Downstream analytics.** Because audit is a copy of the real traffic, you can point a stream processor (Kafka mirror, Logstash, whatever) at it without being in the critical path.
+
+Two important caveats:
+
+- **Byte-stream messages are not audited.** The stream packets ([Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/)) would flood the audit queue with raw frames; the audit publisher skips anything tagged as a stream.
+- **Failed messages are not audited.** Audit is the success path. Failed messages go to the error queue ([Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/)), and the two queues are deliberately separate.
+
+Size the audit queue. If you keep it around indefinitely it grows linearly with traffic; either consume it to archive storage on a schedule, or set a queue-level TTL or length limit in RabbitMQ.
+
+## Standard headers
+
+Every message the bus sends carries a consistent set of headers. These are the primitives you stitch telemetry from:
+
+| Header | What it is | Typical use |
+|---|---|---|
+| `MessageId` | Unique per send | Log correlation, idempotency key |
+| `CorrelationId` | The conversation id | Stitch request/reply or a saga's full trace together |
+| `SourceAddress` | Sending queue name | "Who sent this?" — populated automatically |
+| `DestinationAddress` | Receiving queue | "Where is this going?" |
+| `TimeSent` | UTC timestamp at send | Compare to `TimeReceived` to observe transit time |
+| `TimeReceived` | UTC timestamp at consume | End-to-end latency signal |
+| `TimeProcessed` | UTC timestamp after handler | Handler duration if you want to split transit from processing |
+| `RetryCount` | Attempts so far | Diagnose retry storms; populated by the retry handler |
+| `Exception` | JSON-serialised error | Present in error-queue entries only |
+
+All header names live in `ServiceConnect.Interfaces.HeaderKeys` so you don't have to spell them. The `IConsumeContext` on a handler exposes the whole header dictionary — see [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/).
+
+There are also two opt-in headers:
+
+- **`SourceMachine`** and **`DestinationMachine`** — sender and receiver hostnames. Off by default: `IncludeMachineNameInHeaders = true` on the bus config turns them on. Useful for multi-tenant brokers where you need to identify the sender host, but be aware that exposing internal hostnames to every audit consumer is an information-disclosure risk.
+
+## Tracing (as a filter)
+
+There is no built-in OpenTelemetry integration. The point where one belongs is the [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) API: write an outgoing filter that reads the current `Activity` and stamps `traceparent`/`tracestate` headers, and a before-consuming filter that restores them on the receiving side. A few dozen lines — and then your handlers' `ActivitySource.StartActivity(...)` calls participate in the same trace as the caller that published the message.
+
+This is the right split: tracing is a cross-cutting concern, and filters are the cross-cutting hook. Putting it in the handler would duplicate the setup across every handler you write.
+
+## No health checks
+
+ServiceConnect does not ship an `IHealthCheck` implementation. For a consumer, the useful liveness signal is "the bus is consuming, and the broker connection is open" — which the existence of the `BusHostedService` and the absence of startup exceptions ought to tell you. For a readiness signal, the one worth adding is "I can reach RabbitMQ" — a standard RabbitMQ health check from your usual library is enough.
+
+If you need more than that, wrap `IBus.IsConsuming` in a custom `IHealthCheck` pointed at the container's bus.
+
+## Putting it together
+
+An on-call engineer is looking at a ticket that says "the welcome-email job didn't fire for user X." The stitching looks like this:
+
+1. **Find the message by correlation id** (probably the user id) in the audit queue — that tells you whether the event actually hit the bus.
+2. **If it's there, search logs for that `MessageId`** — a handler exception, or a warning about an unregistered type, falls out here.
+3. **If the log trail ends with "Max retries exceeded,"** pull the message from the error queue — the `Exception` header tells you what threw. Fix the root cause, then replay from audit or from the error queue back into the main queue.
+4. **If the audit queue doesn't have it,** the problem is upstream of the bus — the publisher didn't send it. That's a different investigation, but one this stack doesn't obscure.
+
+## What comes next
+
+- [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) — the error-queue side of the investigation flow above.
+- [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) — the hook to add tracing, redaction, or custom header stamping.
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — `AuditingEnabled`, `AuditQueueName`, `IncludeMachineNameInHeaders`.
