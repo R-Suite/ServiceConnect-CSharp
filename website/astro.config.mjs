@@ -151,7 +151,14 @@ export default defineConfig({
                 { label: 'IProducer', link: '/reference/extension-points/transport/iproducer/' },
               ],
             },
-            { label: 'Registry', items: [] },
+            {
+              label: 'Registry',
+              items: [
+                { label: 'IHandlerRegistry', link: '/reference/extension-points/registry/ihandlerregistry/' },
+                { label: 'IMessageDispatcher', link: '/reference/extension-points/registry/imessagedispatcher/' },
+                { label: 'IMessageProcessor', link: '/reference/extension-points/registry/imessageprocessor/' },
+              ],
+            },
           ],
         },
         {
