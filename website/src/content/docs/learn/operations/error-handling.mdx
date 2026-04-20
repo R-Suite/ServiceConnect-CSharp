@@ -1,0 +1,93 @@
+---
+title: Error Handling
+description: What happens when a handler throws — retries, the error queue, headers that tell you what went wrong, and when to replay.
+---
+
+A handler throws. What happens next is the most important operational contract a messaging library offers. ServiceConnect's answer is the same shape RabbitMQ's users will expect: a bounded retry loop, then a dead-letter queue, with enough metadata on the rejected message to diagnose and replay.
+
+## The failure path
+
+When `HandleAsync` throws, the consumer inspects a `RetryCount` header on the delivery:
+
+- If `RetryCount < MaxRetries`, the message is republished to a dedicated **retry queue** (`<queueName>.Retries`) with `RetryCount` incremented. That queue has a per-message TTL of `RetryDelay` milliseconds — when the TTL fires, RabbitMQ dead-letters the message back into the main queue, where the consumer picks it up again.
+- If `RetryCount >= MaxRetries`, the message is published to the **error queue** (`ErrorQueueName`, default `"errors"`) with an `Exception` header stamped on. It is not redelivered automatically.
+
+`MaxRetries` and `RetryDelay` live on the transport configuration:
+
+```csharp
+builder.UseRabbitMQ(transport =>
+{
+    transport.MaxRetries = 3;           // default 3
+    transport.RetryDelay = 3_000;       // ms; default 3000
+});
+```
+
+Tuning hint: `MaxRetries * RetryDelay` is the *minimum* time a bad message blocks the queue head from progressing. Three retries at three seconds apart is fine for transient faults. If your handler's transient-failure mode is slow (a downstream RPC with a 30-second timeout, say), either raise `PrefetchCount` so the queue drains in parallel or accept that a burst of failures will slow the queue.
+
+## The error queue
+
+When retries are exhausted, the message lands in the error queue unchanged except for two header additions:
+
+- **`RetryCount`** — the number of attempts that were made (always equal to `MaxRetries` for messages that got here through exhaustion).
+- **`Exception`** — a JSON-serialised object:
+  ```json
+  { "TimeStamp": "2026-04-20T12:34:56Z", "ExceptionType": "System.InvalidOperationException", "Message": "Widget not found: W-001" }
+  ```
+
+Only the exception **type name and message** are stored. Stack traces are deliberately not serialised to the error queue — they are unbounded, sometimes sensitive, and already in your logs keyed to the same `MessageId`. Correlate the two via `MessageId` when triaging.
+
+The error queue is a normal RabbitMQ queue. You are not expected to consume it programmatically; it is an operator dashboard — `rabbitmqadmin get queue=errors`, a UI, a scheduled drain, a manual replay. Replay is: pull the message, fix the downstream condition, publish it back to the original queue.
+
+## Disabling the error queue
+
+For bus instances that should not have an error queue at all — a short-lived CLI tool, a load-test sender — set `DisableErrors = true`:
+
+```csharp
+builder.ConfigureQueues(q =>
+{
+    q.QueueName = "onetime-sender";
+    q.DisableErrors = true;
+});
+```
+
+With this on, retries still happen, but exhausted messages are dropped silently instead of going to the error queue. The audit publish path is also bypassed. This is a scalpel — don't use it in a consumer that processes real traffic.
+
+## Terminal failures
+
+Not every failure is retryable. A message with no `TypeName` header, a message that exceeds the transport's `MessageSize` limit, a payload the serialiser can't parse — these land straight in the error queue on the first attempt, without consuming retry budget. The log line for these reads `"Rejecting permanently invalid inbound message..."` rather than `"Max retries exceeded..."`.
+
+This is the right distinction. A message that is malformed at the wire level can't be fixed by trying harder; retrying it just wastes broker time. A message that a handler *chose* to reject (because its own dependencies are down) gets the full retry budget.
+
+## Observing failures in code
+
+`IBusConfiguration.ExceptionHandler` is a callback invoked on every dispatch-level exception. It runs alongside the retry machinery — not instead of it:
+
+```csharp
+builder.ConfigureBus(bus =>
+{
+    bus.ExceptionHandler = ex =>
+    {
+        _metrics.RecordHandlerFailure(ex.GetType().Name);
+        _alerting.NotifyIfBudgetExceeded();
+    };
+});
+```
+
+Two things to notice:
+
+- **It is observational.** You cannot change the retry/error-queue decision from inside the callback. That machinery has already run.
+- **It is a callback, not an interceptor.** Use it for metrics, alerting, a Sentry push. If you need to wrap the whole handler call with a `try`/`finally` — opening a span, starting a timer — reach for message-processing middleware instead.
+
+If the callback itself throws, the exception is caught and logged as a warning, so a bug in your error handler doesn't cascade.
+
+## Idempotency is part of error handling
+
+A message that retries has a non-trivial chance of being redelivered after partial success — the handler did its work, then failed before acknowledging. This is a [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) problem amplified: at-least-once delivery is the default, and "at-least-once with retries" amplifies the duplicate rate.
+
+Design handlers to tolerate being run twice on the same message: upsert instead of insert, check state before acting, use the correlation id or message id as the idempotency key for downstream calls. This is not optional — the retry loop assumes it.
+
+## What comes next
+
+- [Observability](/ServiceConnect-CSharp/learn/operations/observability/) — the log lines this page references and how to correlate them with error-queue entries.
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — the `MaxRetries`, `RetryDelay`, `ErrorQueueName`, `DisableErrors` knobs.
+- [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) — why idempotency is load-bearing.
