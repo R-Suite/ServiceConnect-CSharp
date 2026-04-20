@@ -1,0 +1,100 @@
+---
+title: Competing Consumers
+description: Scale work through a queue by running multiple consumers against the same queue name — RabbitMQ delivers each message to exactly one of them.
+---
+
+**Competing Consumers** is how you scale throughput on a single queue. Instead of one consumer handling every message serially, you run several — in the same process, in different processes, or across different machines — all pointing at the same queue name. RabbitMQ delivers each message to exactly one of them.
+
+This is not a variant of pub/sub. In pub/sub, every subscriber gets a copy. Here, every consumer is a replica of the same worker, and a message being handled by one means it is not handled by the others.
+
+## When to use it
+
+- A single-threaded consumer can't keep up and the work is horizontally parallelisable.
+- You want a handler's throughput to scale linearly with process count.
+- Work is independent — two instances of the handler can run the same message (or two different messages) without stepping on each other.
+
+If the handler has order-sensitive state, competing consumers will surprise you. RabbitMQ gives no per-message ordering across competing consumers — consumer A may finish message 2 before consumer B finishes message 1. Design handlers to be order-independent, or keep the pattern out of that queue.
+
+## The shape
+
+Multiple processes or threads, same queue name, same handler type. Producers don't change:
+
+```csharp
+// Producer — identical to point-to-point
+await bus.SendAsync(
+    new JobQueued(Guid.NewGuid()) { JobId = "job-42" },
+    new SendOptions { EndPoint = "jobs" });
+```
+
+The interesting part is the consumer side: two worker processes, each running its own bus, both pointing at the queue `"jobs"`.
+
+```csharp
+// Worker-A/Program.cs
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(JobQueuedHandler), MessageType = typeof(JobQueued) },
+});
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { /* … */ });
+    builder.ConfigureQueues(q => q.QueueName = "jobs");   // same queue …
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+await bus.StartConsumingAsync();
+await Task.Delay(Timeout.InfiniteTimeSpan);
+```
+
+Worker-B is a byte-for-byte copy with the same queue name. Run both; each message sent to `jobs` arrives at exactly one of them.
+
+The producer can send 100 messages without knowing how many workers exist. If you start a third worker later, it starts taking a share without any change to the producer or the other workers.
+
+## In-process parallelism
+
+You don't always need separate processes. A single bus can run multiple consumer loops against its own queue by raising `ConsumerCount`:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.ConfigureQueues(q => q.QueueName = "jobs");
+    builder.ConfigureBus(bus =>
+    {
+        bus.ScanForMessageHandlers = false;
+        bus.ConsumerCount = 8;   // eight parallel dispatchers within this process
+    });
+});
+```
+
+Each loop pulls from the same queue and dispatches to a fresh handler instance. Handlers are transient by construction (see [Handler lifetime](/ServiceConnect-CSharp/learn/core-concepts/handlers/#handler-lifetime)), so concurrent dispatches don't share state.
+
+When to use which:
+
+- **`ConsumerCount`** — your bottleneck is within one process: a CPU-bound handler, a downstream I/O call that benefits from concurrency, a single box with room to breathe.
+- **Separate processes** — you want horizontal scaling across machines, rolling deployments without pausing consumption, or isolation between workers (an OOM in one shouldn't kill the others).
+
+Both are live at the same time: you can run 4 processes with `ConsumerCount = 8` each, giving 32 concurrent handlers against one queue.
+
+## Idempotency becomes your job
+
+With one consumer, at-least-once delivery is usually benign — the same handler runs until it succeeds. With competing consumers, the failure modes multiply:
+
+- A message delivered to worker A and left unacknowledged (a crash mid-handler) is redelivered. **Another worker will likely pick it up** — and may already have a sibling message from the same conversation in flight.
+- Two messages from the same logical conversation can execute in parallel on different workers. If they both try to update the same row, one wins, one retries, one may land in the error queue.
+
+Design for this. Use the message's correlation id (or a dedicated natural key) to make the effect idempotent: upsert rather than insert, check state before acting, take a row-level lock when the operation requires ordering. A handler that can tolerate being run twice is the only kind that scales.
+
+## Prefetch and fairness
+
+RabbitMQ's prefetch settings control how many unacknowledged messages a single consumer can hold. The default in ServiceConnect is conservative enough that you rarely need to tune it, but under very uneven workloads — a few slow messages blocking fast ones — you may want to lower prefetch so the broker can redistribute work. If you find yourself needing this, the transport configuration exposes per-client settings via `transport.SetClientSetting(...)`.
+
+For most workloads: don't tune until you have a measured reason to.
+
+## What comes next
+
+- [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/) — the pattern this extends.
+- [Content-Based Routing](/ServiceConnect-CSharp/learn/messaging-patterns/content-based-routing/) — when you want different workers for different kinds of the same message.
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — the transient-lifetime rule that makes competing consumers safe.
