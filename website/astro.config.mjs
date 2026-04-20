@@ -40,6 +40,18 @@ export default defineConfig({
                 { label: 'Endpoints', link: '/learn/core-concepts/endpoints/' },
               ],
             },
+            {
+              label: 'Messaging Patterns',
+              items: [
+                { label: 'Pub/Sub', link: '/learn/messaging-patterns/pub-sub/' },
+                { label: 'Point-to-Point', link: '/learn/messaging-patterns/point-to-point/' },
+                { label: 'Request/Reply', link: '/learn/messaging-patterns/request-reply/' },
+                { label: 'Competing Consumers', link: '/learn/messaging-patterns/competing-consumers/' },
+                { label: 'Content-Based Routing', link: '/learn/messaging-patterns/content-based-routing/' },
+                { label: 'Routing Slip', link: '/learn/messaging-patterns/routing-slip/' },
+                { label: 'Scatter-Gather', link: '/learn/messaging-patterns/scatter-gather/' },
+              ],
+            },
           ],
         },
         {
