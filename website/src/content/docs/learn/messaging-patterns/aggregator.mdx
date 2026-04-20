@@ -1,0 +1,113 @@
+---
+title: Aggregator
+description: Buffer related messages into a batch, then handle them together — by size, by time, or both.
+---
+
+**Aggregator** is the pattern for "don't handle each message immediately — wait until I have enough of them, then process the group." Telemetry slices that should be rolled up every 10 seconds. Line items that should be billed in one statement per order. A reconciliation pass that only makes sense once the day's feeds are all in.
+
+It is the collecting counterpart to [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/): scatter-gather collects on the *sender* side (I sent, I wait for replies); aggregator collects on the *receiver* side (I consume, I buffer, I flush).
+
+## When to use it
+
+- Handling each message one at a time is the wrong unit of work — batching is what's natural.
+- You have a clear flush condition: either a size threshold, a time window, or both.
+- Holding messages briefly before processing is acceptable. Aggregators trade latency for batching.
+
+If each message is independently meaningful and complete, don't aggregate. If the flush condition is "when every expected message has arrived," the discrete-correlation shape of a [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) fits better than a rolling window.
+
+## The contract
+
+One message type feeds the aggregator:
+
+```csharp
+// Contracts/TelemetrySlice.cs
+using ServiceConnect.Interfaces;
+
+public sealed class TelemetrySlice(Guid correlationId) : Message(correlationId)
+{
+    public string Source { get; init; } = string.Empty;
+    public int Value { get; init; }
+}
+```
+
+Messages in a batch don't need a shared correlation id — each message carries its own. The aggregator groups by *arrival*, not by correlation.
+
+## The aggregator
+
+An aggregator derives from `Aggregator<T>` and overrides three methods: when to flush by size, when to flush by time, and what to do with the batch:
+
+```csharp
+// Consumer/TelemetrySliceAggregator.cs
+public sealed class TelemetrySliceAggregator : Aggregator<TelemetrySlice>
+{
+    public override int BatchSize() => 100;
+    public override TimeSpan Timeout() => TimeSpan.FromSeconds(10);
+
+    public override void Execute(IList<TelemetrySlice> messages)
+    {
+        var total = messages.Sum(m => m.Value);
+        Console.WriteLine($"rolled up {messages.Count} slices, total {total}");
+    }
+}
+```
+
+Three things to notice:
+
+- **`Execute` is synchronous.** This is deliberate — it runs on a background flush and returns a batch outcome, not a handler result. If the work inside is I/O-bound, block or use your own async-to-sync bridge. Don't `.Result` on a `Task` without understanding what deadlock looks like.
+- **Both size and time are optional knobs.** Return `0` from `BatchSize()` to disable size-based flushing; return `default` (`TimeSpan.Zero`) from `Timeout()` to disable time-based flushing. Whichever you set is the flush trigger. Setting both — as above — flushes on whichever happens first.
+- **There is no correlation key.** One aggregator instance buffers every message of its type that arrives on its queue. If you need per-group batching ("aggregate *per order*"), use a [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) keyed on the group id; aggregator is the right shape only when one big pool is what you want.
+
+## Registration and persistence
+
+An aggregator is registered like a handler — it consumes a message type from a queue — but it is bound to its base class, not to `IMessageHandler<T>`:
+
+```csharp
+// Consumer/Program.cs
+services.AddTransient<Aggregator<TelemetrySlice>, TelemetrySliceAggregator>();
+
+services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(TelemetrySliceAggregator), MessageType = typeof(TelemetrySlice) },
+});
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { t.Host = "localhost"; });
+    builder.ConfigureQueues(q => q.QueueName = "telemetry-rollup");
+    builder.UseMongoDbPersistence(options =>
+    {
+        options.ConnectionString = "mongodb://localhost:27017";
+        options.DatabaseName = "telemetry";
+    });
+});
+```
+
+The MongoDB persistence provider is what makes aggregators safe across restarts. Each buffered message is inserted into a collection keyed by the aggregator name; on restart, the buffer is restored. Flushing removes the batch. If you omit the persistence configuration, the bus has no `IAggregatorPersistor` and registration fails.
+
+Don't keep state in private fields of the aggregator. The instance is recreated per dispatch — the buffer lives in persistence, not in memory.
+
+## Flush semantics
+
+Once a flush condition is met, the aggregator:
+
+1. Loads the current batch from the persistor.
+2. Deserialises it back into `T` instances.
+3. Calls `Execute(batch)`.
+4. Removes the flushed records from the persistor.
+
+If `Execute` throws, the batch is not removed — it flushes again on the next trigger. This is the expected shape: `Execute` should be idempotent where possible (write to a system that upserts, or tag the flush with a batch id you can deduplicate on).
+
+A batch that arrives out-of-order is still one batch. The aggregator does not sort; if ordering within the batch matters, sort inside `Execute`.
+
+## When not to aggregate
+
+Two anti-patterns worth naming:
+
+- **Accumulating indefinitely.** If there's no flush condition — no size, no timeout — messages pile up. Always set at least one flush trigger.
+- **Using the aggregator as a poor-man's queue.** If your real need is "process these in the background," a normal queue with a competing-consumer worker is simpler and clearer. Reach for aggregator when the *batch* is the unit of work, not when you want deferred processing.
+
+## What comes next
+
+- [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/) — the sender-side counterpart.
+- [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — when the batch is keyed by a correlation id rather than arrival.
+- [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) — when you want parallelism, not batching.
