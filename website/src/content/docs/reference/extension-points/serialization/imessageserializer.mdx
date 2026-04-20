@@ -231,50 +231,34 @@ public sealed class ProtobufMessageSerializer : IMessageSerializer
 
 ### Protobuf-backed serializer
 
-The following example shows a `ProtobufMessageSerializer` that encodes the wire type name as a length-prefixed header followed by the Protobuf payload, and a companion `ProtobufMessageTypeRegistry` that maps wire names to CLR types. The exact framing is an implementation choice; a common alternative is to carry the type name in a transport message header and call `Deserialize(data, type)` directly from the pipeline, in which case the serializer payload contains only the Protobuf bytes.
+The following example implements the **header-based strategy**: the type name travels in a transport message header, so the pipeline resolves the CLR type before calling `Deserialize` and passes it as an explicit argument. The serializer payload contains only the Protobuf bytes — no type discriminator is embedded. The serializer therefore needs no registry and has no constructor dependencies.
 
 ```csharp
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Text;
 using Google.Protobuf;
 using ServiceConnect.Interfaces;
 
 /// <summary>
-/// Wire format: [4-byte little-endian name length][UTF-8 type name][Protobuf payload].
+/// Wire format: pure Protobuf bytes. The CLR type is carried in a transport
+/// header and resolved by the pipeline before Deserialize is called.
 /// </summary>
 public sealed class ProtobufMessageSerializer : IMessageSerializer
 {
-    private readonly IMessageTypeRegistry _registry;
-
-    public ProtobufMessageSerializer(IMessageTypeRegistry registry)
-        => _registry = registry;
-
     public byte[] Serialize<T>(T message) where T : Message
     {
         var proto = (IMessage)message;
-        var typeName = typeof(T).FullName ?? typeof(T).Name;
-        var nameBytes = Encoding.UTF8.GetBytes(typeName);
-
-        var buffer = new byte[4 + nameBytes.Length + proto.CalculateSize()];
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, nameBytes.Length);
-        nameBytes.CopyTo(buffer, 4);
-        proto.WriteTo(buffer.AsSpan(4 + nameBytes.Length));
-        return buffer;
+        var payload = proto.ToByteArray();
+        return payload;
     }
 
     public void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message
     {
         var proto = (IMessage)message;
-        var typeName = typeof(T).FullName ?? typeof(T).Name;
-        var nameBytes = Encoding.UTF8.GetBytes(typeName);
-        var protoSize = proto.CalculateSize();
-
-        var span = output.GetSpan(4 + nameBytes.Length + protoSize);
-        BinaryPrimitives.WriteInt32LittleEndian(span, nameBytes.Length);
-        nameBytes.CopyTo(span.Slice(4));
-        proto.WriteTo(span.Slice(4 + nameBytes.Length));
-        output.Advance(4 + nameBytes.Length + protoSize);
+        var payload = proto.ToByteArray();
+        var span = output.GetSpan(payload.Length);
+        payload.AsSpan().CopyTo(span);
+        output.Advance(payload.Length);
     }
 
     public T Deserialize<T>(byte[] data) where T : Message
@@ -284,35 +268,17 @@ public sealed class ProtobufMessageSerializer : IMessageSerializer
         => (T)Deserialize(data, typeof(T));
 
     public object Deserialize(byte[] data, Type type)
-        => Deserialize(data.AsSpan(), type);
+    {
+        var parser = (MessageParser)type.GetProperty("Parser")!.GetValue(null)!;
+        return parser.ParseFrom(data);
+    }
 
     public object Deserialize(ReadOnlySpan<byte> data, Type type)
-    {
-        // Skip the type-name header — caller has already resolved the type.
-        var nameLen = BinaryPrimitives.ReadInt32LittleEndian(data);
-        var payload = data.Slice(4 + nameLen);
-        var parser = (MessageParser)type.GetProperty("Parser")!.GetValue(null)!;
-        return parser.ParseFrom(payload.ToArray());
-    }
-
-    private object DeserializeFromPayload(ReadOnlySpan<byte> data)
-    {
-        var nameLen = BinaryPrimitives.ReadInt32LittleEndian(data);
-        var typeName = Encoding.UTF8.GetString(data.Slice(4, nameLen));
-        var payload = data.Slice(4 + nameLen);
-
-        if (!_registry.TryResolve(typeName, out var type))
-            throw new InvalidOperationException(
-                $"Type '{typeName}' is not registered in the message type registry. " +
-                "Register it at startup before the bus receives messages of this type.");
-
-        var parser = (MessageParser)type.GetProperty("Parser")!.GetValue(null)!;
-        return parser.ParseFrom(payload.ToArray());
-    }
+        => Deserialize(data.ToArray(), type);
 }
 ```
 
-Pair the serializer with a `ProtobufMessageTypeRegistry` (see [`IMessageTypeRegistry`](./imessagetyperegistry/) for the full registry example) and register both during bus startup:
+Register the serializer during bus startup (register a `ProtobufMessageTypeRegistry` alongside it if your transport needs one — see [`IMessageTypeRegistry`](./imessagetyperegistry/) for the full registry example):
 
 ```csharp
 services.AddServiceConnect(builder =>
@@ -349,7 +315,7 @@ services.AddServiceConnect(builder =>
 });
 ```
 
-When an `OrderPlaced` message is published by `OrderService`, the pipeline calls `Serialize<OrderPlaced>`, producing a framed byte array. On the receiving side, the transport reads the frame header, resolves the CLR type from the registry, and calls `Deserialize(data, typeof(OrderPlaced))` to reconstruct the message before dispatching to the handler.
+When an `OrderPlaced` message is published by `OrderService`, the pipeline calls `Serialize<OrderPlaced>`, producing a Protobuf byte array. On the receiving side, the transport reads the CLR type name from the message header, resolves it to `typeof(OrderPlaced)` (via the registry or a direct lookup), and calls `Deserialize(data, typeof(OrderPlaced))` to reconstruct the message before dispatching to the handler.
 
 ## See also
 
