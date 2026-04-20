@@ -56,6 +56,15 @@ export default defineConfig({
                 { label: 'Streaming', link: '/learn/messaging-patterns/streaming/' },
               ],
             },
+            {
+              label: 'Operations',
+              items: [
+                { label: 'Configuration', link: '/learn/operations/configuration/' },
+                { label: 'Hosting & Lifecycle', link: '/learn/operations/hosting/' },
+                { label: 'Error Handling', link: '/learn/operations/error-handling/' },
+                { label: 'Observability', link: '/learn/operations/observability/' },
+              ],
+            },
           ],
         },
         {
