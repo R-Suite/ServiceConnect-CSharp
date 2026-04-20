@@ -1,0 +1,161 @@
+---
+title: IBusConfiguration
+description: The aggregate configuration surface for the ServiceConnect bus — runtime behaviour plus transport, queue, persistence, and pipeline sub-configurations.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IBusConfiguration` is the bus-wide configuration surface. It holds the knobs that govern handler discovery, consumer concurrency, process-manager timeouts, reply validation, and routing-slip processing. It is exposed through the builder delegate passed to [`AddServiceConnect`](../add-serviceconnect/) — you mutate it via `builder.ConfigureBus(b => …)` and via the sub-configuration helpers that wrap transport, queues, persistence, and pipeline.
+
+See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for the bigger picture.
+
+## Reference
+
+### `ScanForMessageHandlers`
+
+```csharp
+bool ScanForMessageHandlers { get; set; }
+```
+
+Controls whether `AddServiceConnect` scans the configured assemblies for message-handler types. When false, handlers must be registered explicitly.
+
+**Remarks.** Defaults to scanning the assemblies supplied via `ServiceConnectBuilder.ScanAssemblies(...)`, or the current app domain if none were supplied. Explicit registration is preferred for deterministic, testable startup.
+
+---
+
+### `AutoStartConsuming`
+
+```csharp
+bool AutoStartConsuming { get; set; }
+```
+
+Controls whether the hosted service calls `IBus.StartConsumingAsync` automatically when the host starts. Disable when your process produces messages but does not consume any, or when tests need to start consumption manually.
+
+---
+
+### `EnableProcessManagerTimeouts`
+
+```csharp
+bool EnableProcessManagerTimeouts { get; set; }
+```
+
+Controls whether the timeout-polling hosted service dispatches scheduled `TimeoutMessage` deliveries for process managers.
+
+**Remarks.** Requires an `ITimeoutStore` registration (for example via `UseMongoDbPersistence`). With no timeout store, enabling this produces a startup error the first time a timeout fires.
+
+---
+
+### `ProcessManagerTimeoutPollInterval`
+
+```csharp
+TimeSpan ProcessManagerTimeoutPollInterval { get; set; }
+```
+
+Sets how often the timeout-polling hosted service scans the timeout store for due timeouts.
+
+**Remarks.** Shorter intervals reduce latency between scheduled delivery and actual delivery at the cost of more database round-trips. A few seconds is typical.
+
+---
+
+### `ConsumerCount`
+
+```csharp
+int ConsumerCount { get; set; }
+```
+
+Sets the number of consumer loops that run in parallel against the configured queue.
+
+**Remarks.** Higher values improve throughput for handlers that spend time in I/O; they do not improve throughput for CPU-bound handlers and increase memory footprint per consumer.
+
+---
+
+### `ExceptionHandler`
+
+```csharp
+Action<Exception>? ExceptionHandler { get; set; }
+```
+
+Sets a callback invoked when handler processing throws. Use for push-based telemetry or alerting that sits outside the normal logging pipeline.
+
+**Remarks.** The callback must not throw — any exception raised from `ExceptionHandler` is swallowed by the caller. For structured observability, prefer the pipeline's middleware and filters.
+
+---
+
+### `IncludeMachineNameInHeaders`
+
+```csharp
+bool IncludeMachineNameInHeaders { get; set; }
+```
+
+When true, stamps `Environment.MachineName` into outgoing `SourceMachine` and incoming `DestinationMachine` headers.
+
+**Remarks.** Defaults to false. Leaking an internal hostname to broker audit consumers is information disclosure in shared-broker deployments.
+
+<Aside type="caution" title="Hostname disclosure">
+  Enabling `IncludeMachineNameInHeaders` adds the local machine name to every message header. Do not enable where messages cross trust boundaries or where the broker is shared with untrusted consumers.
+</Aside>
+
+---
+
+### `ValidateReplyDestinations`
+
+```csharp
+bool ValidateReplyDestinations { get; set; }
+```
+
+When true, `IConsumeContext.ReplyAsync<TReply>` validates that the incoming `SourceAddress` header points to a queue known from `IQueueConfiguration.QueueMappings`, `QueueName`, `ErrorQueueName`, or `AuditQueueName`. Set to false to allow replies to arbitrary queue names.
+
+**Remarks.** Defaults to true. Leaving it enabled prevents a compromised or misbehaving upstream from coercing your service into replying to an attacker-controlled queue.
+
+---
+
+### `EnableRoutingSlipProcessing`
+
+```csharp
+bool EnableRoutingSlipProcessing { get; set; }
+```
+
+When true, the handler processor forwards messages along the destinations listed in the `RoutingSlip` header after each hop's handler completes. When false, routing-slip headers are silently ignored.
+
+**Remarks.** Defaults to true. Destinations are validated against known queue names when enabled.
+
+## Usage
+
+### Configuring a RabbitMQ bus with a named queue
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "rabbitmq.internal";
+        transport.Username = "order-service";
+        transport.Password = "…";
+    });
+
+    builder.ConfigureQueues(queues =>
+    {
+        queues.QueueName = "order-service";
+        queues.ErrorQueueName = "order-service.errors";
+    });
+
+    builder.ConfigureBus(bus =>
+    {
+        bus.ConsumerCount = 4;
+        bus.AutoStartConsuming = true;
+        bus.EnableProcessManagerTimeouts = false;
+    });
+});
+```
+
+This wires the `OrderService` process up to consume from its own queue on a shared RabbitMQ broker. Four parallel consumer loops give handlers headroom while keeping the memory footprint modest, and timeouts are left disabled because this service has no sagas that schedule them.
+
+## See also
+
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — concept
+- [`ITransportConfiguration`](../../configuration/itransportconfiguration/) — related reference
+- [`IQueueConfiguration`](../../configuration/iqueueconfiguration/) — related reference
+- [`IPersistenceConfiguration`](../../configuration/ipersistenceconfiguration/) — related reference
+- [`IPipelineConfiguration`](../../configuration/ipipelineconfiguration/) — related reference

@@ -1,0 +1,84 @@
+---
+title: AddServiceConnect
+description: The DI entry point for ServiceConnect — registers IBus, its configuration, and hosted services with an IServiceCollection.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`AddServiceConnect` is the dependency-injection entry point. Call it once on your `IServiceCollection` during composition; pass a builder delegate that selects a transport (for example `UseRabbitMQ`), configures queues and persistence, and registers pipeline middleware. The method wires up `IBus`, the configuration interfaces, handler registries, message processors, and the hosted services that drive consumption and timeout polling.
+
+See [Getting Started](/ServiceConnect-CSharp/learn/getting-started/) for a walk-through from zero to a running consumer.
+
+## Reference
+
+### `AddServiceConnect`
+
+```csharp
+public static IServiceCollection AddServiceConnect(
+    this IServiceCollection services,
+    Action<ServiceConnectBuilder> configure);
+```
+
+Registers the core ServiceConnect services, handler discovery, message processors, and hosted services with `services`, using `configure` to populate transport, queue, persistence, and pipeline settings.
+
+**Parameters**
+- `services` — the service collection to extend.
+- `configure` — a callback that receives a `ServiceConnectBuilder`. Chain calls to `UseRabbitMQ`, `ConfigureQueues`, `ConfigurePersistence`, and `ConfigurePipeline` inside it to build up the bus configuration.
+
+**Returns.** The same `services` instance for chaining.
+
+**Remarks.** Transport selection is not baked in; pick a transport via extension methods on `ServiceConnectBuilder` (`UseRabbitMQ`, etc.). Handler types are discovered from `builder.ScanAssemblies(...)` when `IBusConfiguration.ScanForMessageHandlers` is true. Call `AddServiceConnect` exactly once per service collection.
+
+<Aside type="caution" title="Handlers must not be singletons">
+  If a handler type is pre-registered as a singleton in `services` before `AddServiceConnect` runs, the call throws `InvalidOperationException`. Handlers hold per-message `IConsumeContext` state and must be transient or scoped.
+</Aside>
+
+## Usage
+
+### Minimal: RabbitMQ transport only
+
+```csharp
+services.AddServiceConnect(b =>
+    b.UseRabbitMQ(t => t.Host = "localhost"));
+```
+
+This is enough for a producer-only service: it registers `IBus`, the RabbitMQ producer and consumer, and the hosted services. Handlers discovered in the app-domain assemblies are registered as transient. With no persistence registered, process-manager timeouts are unavailable; leave `IBusConfiguration.EnableProcessManagerTimeouts` off.
+
+### With MongoDB-backed persistence for process managers and timeouts
+
+```csharp
+services.AddServiceConnect(b =>
+{
+    b.UseRabbitMQ(t =>
+    {
+        t.Host = "rabbitmq.internal";
+        t.Username = "shipping-service";
+        t.Password = "…";
+    });
+
+    b.UseMongoDbPersistence(opts =>
+    {
+        opts.ConnectionString = "mongodb://mongo.internal:27017";
+        opts.DatabaseName = "shipping";
+    });
+
+    b.ConfigureQueues(q => q.QueueName = "shipping-service");
+
+    b.ConfigureBus(bus =>
+    {
+        bus.EnableProcessManagerTimeouts = true;
+        bus.ProcessManagerTimeoutPollInterval = TimeSpan.FromSeconds(5);
+    });
+});
+```
+
+`UseMongoDbPersistence` registers `IProcessManagerFinder`, `IAggregatorPersistor`, and `ITimeoutStore` against a single shared `IMongoClient`. Combined with `EnableProcessManagerTimeouts`, this wires up the full `ShippingSaga` story: state persisted in Mongo, timeouts polled from Mongo, and deliveries round-tripped through RabbitMQ back to the saga's queue.
+
+## See also
+
+- [Getting Started](/ServiceConnect-CSharp/learn/getting-started/) — concept
+- [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) — concept
+- [`IBusConfiguration`](../ibusconfiguration/) — related reference
+- [`IBus`](../ibus/) — related reference

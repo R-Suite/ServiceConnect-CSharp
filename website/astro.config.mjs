@@ -71,7 +71,14 @@ export default defineConfig({
           label: 'API Reference',
           items: [
             { label: 'Overview', link: '/reference/' },
-            { label: 'Bus', items: [] },
+            {
+              label: 'Bus',
+              items: [
+                { label: 'IBus', link: '/reference/bus/ibus/' },
+                { label: 'IBusConfiguration', link: '/reference/bus/ibusconfiguration/' },
+                { label: 'AddServiceConnect', link: '/reference/bus/add-serviceconnect/' },
+              ],
+            },
             { label: 'Messages', items: [] },
             { label: 'Handlers', items: [] },
             { label: 'Configuration', items: [] },

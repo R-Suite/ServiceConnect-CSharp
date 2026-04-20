@@ -1,0 +1,264 @@
+---
+title: IBus
+description: The runtime message bus — publish, send, request/reply, routing slip, streams, and consumer lifecycle.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IBus` is the runtime surface for moving messages. A handler, service, or controller resolves `IBus` from DI and uses it to publish domain events, send commands to a known endpoint, issue a request and await a reply, route a message through a list of destinations, stream a large payload, schedule a process-manager timeout, and start or stop message consumption. You configure it via [`AddServiceConnect`](../add-serviceconnect/); you use it by resolving the interface.
+
+See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for the conceptual tour.
+
+## Reference
+
+### `PublishAsync<T>`
+
+```csharp
+Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
+```
+
+Broadcasts a message to every subscriber of the message type. Use for domain events that any number of interested services may consume.
+
+**Parameters**
+- `message` — the event instance to publish; must derive from `Message`.
+- `options` — optional headers, routing key override, priority, or per-call overrides.
+- `cancellationToken` — cancels the publish before the broker acknowledges.
+
+**Remarks.** Publish is fire-and-forget from the publisher's perspective; it completes once the broker accepts the message, not when subscribers process it. There is no built-in guarantee that any subscriber exists.
+
+---
+
+### `SendAsync<T>`
+
+```csharp
+Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
+```
+
+Sends a message to a specific endpoint or to the queue resolved from the configured queue mappings. Use for commands with a single owner.
+
+**Parameters**
+- `message` — the command instance; must derive from `Message`.
+- `options` — optional destination override, headers, or priority.
+- `cancellationToken` — cancels the send before the broker acknowledges.
+
+**Remarks.** If no destination is supplied via `options` and no queue mapping is registered for the message type, the call throws.
+
+---
+
+### `SendRequestAsync<T, TReply>`
+
+```csharp
+Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+    where T : Message where TReply : Message;
+```
+
+Sends a request to a single endpoint and awaits exactly one reply. Use when the caller needs a synchronous-looking answer from a single respondent.
+
+**Parameters**
+- `message` — the request payload; must derive from `Message`.
+- `options` — optional timeout, destination override, or correlation hints.
+- `cancellationToken` — cancels the wait; the request may still have been delivered.
+
+**Returns.** The single reply returned by the respondent.
+
+**Remarks.** If the reply does not arrive before the configured timeout, the task faults. The reply type must derive from `Message`.
+
+---
+
+### `SendRequestMultiAsync<T, TReply>`
+
+```csharp
+Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+    where T : Message where TReply : Message;
+```
+
+Sends a request that may fan out to multiple respondents and collects every reply received before the deadline. Use for scatter-gather over a known endpoint list.
+
+**Parameters**
+- `message` — the request payload; must derive from `Message`.
+- `options` — expected reply count and timeout are typically set here.
+- `cancellationToken` — cancels the aggregate wait.
+
+**Returns.** The list of replies that arrived before the timeout or the expected count was reached.
+
+**Remarks.** Returns whatever replies arrived — a partial result is a valid outcome. Inspect the list length against `RequestOptions.ExpectedReplyCount` to decide whether the scatter-gather succeeded.
+
+---
+
+### `PublishRequestAsync<TRequest, TReply>`
+
+```csharp
+Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
+    where TRequest : Message where TReply : Message;
+```
+
+Publishes a request to every subscriber of the request type and invokes `onReply` each time a reply arrives. Use for streaming scatter-gather where replies should be processed as they arrive rather than collected into a list.
+
+**Parameters**
+- `message` — the request payload; must derive from `Message`.
+- `onReply` — a delegate invoked for each reply, on a thread-pool thread.
+- `options` — expected reply count and timeout.
+- `cancellationToken` — stops dispatching replies to the callback.
+
+**Remarks.** The callback may be invoked concurrently; keep it thread-safe and short-lived. The task completes when the expected reply count is reached or the timeout elapses.
+
+---
+
+### `RouteAsync<T>`
+
+```csharp
+Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message;
+```
+
+Starts a routing slip: sends the message to the first destination with a routing-slip header listing the remaining hops. Each handler forwards to the next destination when it completes.
+
+**Parameters**
+- `message` — the payload to route; must derive from `Message`.
+- `destinations` — an ordered list of queue names the message should visit.
+- `cancellationToken` — cancels the initial send.
+
+**Remarks.** Routing-slip forwarding is handled by the consumer side and requires `IBusConfiguration.EnableRoutingSlipProcessing` (the default) to be true on every intermediate service.
+
+---
+
+### `CreateStream<T>`
+
+```csharp
+IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message;
+```
+
+Opens a write stream for sending a large payload as a sequence of ordered chunks to a single endpoint.
+
+**Parameters**
+- `endpoint` — the queue name to stream to.
+
+**Returns.** A write stream the caller disposes to signal end-of-stream.
+
+**Remarks.** Each stream uses its own sequence number; consumers must use the matching `IStreamHandler<T>` to reassemble. Dispose the stream even on failure to release broker resources.
+
+---
+
+### `StartConsumingAsync`
+
+```csharp
+Task StartConsumingAsync(CancellationToken cancellationToken = default);
+```
+
+Starts consuming messages from the bus's configured queue. The hosted service calls this automatically when `IBusConfiguration.AutoStartConsuming` is true; call it yourself when you have disabled auto-start.
+
+**Parameters**
+- `cancellationToken` — cancels the startup handshake.
+
+**Remarks.** Throws `InvalidOperationException` if the bus is already consuming or has previously been stopped.
+
+---
+
+### `StopConsumingAsync`
+
+```csharp
+Task StopConsumingAsync(CancellationToken cancellationToken = default);
+```
+
+Stops the consumer loop and disposes the underlying consumer connection.
+
+**Parameters**
+- `cancellationToken` — bounds the graceful-shutdown wait.
+
+<Aside type="caution" title="Stop is terminal">
+  Once a bus has been stopped it cannot be restarted. Calling `StartConsumingAsync` on a stopped bus throws `InvalidOperationException`. To resume consumption, dispose the bus and resolve a new `IBus` instance from DI.
+</Aside>
+
+---
+
+### `IsConsuming`
+
+```csharp
+bool IsConsuming { get; }
+```
+
+Indicates whether the bus is currently consuming messages. Useful in health checks and tests that must wait for the consumer to become ready.
+
+---
+
+### `RequestTimeoutAsync`
+
+```csharp
+Task RequestTimeoutAsync(Guid correlationId, TimeSpan delay, CancellationToken cancellationToken = default);
+```
+
+Schedules a `TimeoutMessage` to be delivered back to the current bus's queue after `delay`. The delivered message's `CorrelationId` equals the supplied `correlationId`, which is the standard key a process manager uses to correlate a timeout with its saga instance.
+
+**Parameters**
+- `correlationId` — the correlation id stamped on the delivered `TimeoutMessage`.
+- `delay` — how long to wait before delivery.
+- `cancellationToken` — cancels the scheduling call, not the timeout itself.
+
+<Aside type="note" title="Not every implementation supports this">
+  The default interface implementation throws `NotSupportedException`. A concrete bus must be paired with a registered `ITimeoutStore` (for example via `UseMongoDbPersistence`) and have `IBusConfiguration.EnableProcessManagerTimeouts` set to true for this call to succeed.
+</Aside>
+
+## Usage
+
+### Publishing a domain event
+
+```csharp
+public sealed class OrderService
+{
+    private readonly IBus _bus;
+
+    public OrderService(IBus bus) => _bus = bus;
+
+    public async Task PlaceOrderAsync(PlaceOrder command, CancellationToken cancellationToken)
+    {
+        // … persist the order, charge the card, etc. …
+
+        await _bus.PublishAsync(
+            new OrderPlaced
+            {
+                OrderId = command.OrderId,
+                CustomerId = command.CustomerId,
+                Total = command.Total
+            },
+            cancellationToken: cancellationToken);
+    }
+}
+```
+
+`OrderPlaced` is a domain event; any number of downstream services (shipping, invoicing, analytics) may subscribe. The publisher does not know or care who listens, and does not wait for subscribers to process the message.
+
+### Request/reply with a single respondent
+
+```csharp
+public sealed class ShippingSaga : IProcessManager<ShippingState>
+{
+    private readonly IBus _bus;
+
+    public ShippingSaga(IBus bus) => _bus = bus;
+
+    public async Task HandleAsync(OrderPlaced @event, CancellationToken cancellationToken)
+    {
+        var quote = await _bus.SendRequestAsync<QuoteShipping, ShippingQuote>(
+            new QuoteShipping
+            {
+                OrderId = @event.OrderId,
+                Destination = @event.ShippingAddress
+            },
+            cancellationToken: cancellationToken);
+
+        Data.QuotedCost = quote.Cost;
+        Data.CarrierCode = quote.CarrierCode;
+    }
+}
+```
+
+Use `SendRequestAsync` when there is exactly one respondent and the caller needs the reply in-line. The await will fault if the reply does not arrive within `RequestOptions.Timeout`, so set a timeout that matches the respondent's worst-case latency and let the saga compensate via a timeout handler when it trips.
+
+## See also
+
+- [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) — concept
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — concept
+- [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/) — concept
+- [`IBusConfiguration`](../ibusconfiguration/) — related reference
+- [`AddServiceConnect`](../add-serviceconnect/) — related reference
