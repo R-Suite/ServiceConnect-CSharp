@@ -7,7 +7,7 @@
           "src": "../.."
         }
       ],
-      "dest": "../../website/_docfx_metadata",
+      "dest": "../../website/_docfx_metadata/reference",
       "filter": "filterConfig.yml",
       "disableGitFeatures": true,
       "outputFormat": "mref"
@@ -16,11 +16,11 @@
   "build": {
     "content": [
       {
-        "files": ["**/*.{md,yml}"],
+        "files": ["reference/**/*.{md,yml}", "reference/*.{md,yml}"],
         "src": "../_docfx_metadata"
       },
       {
-        "files": ["index.md"],
+        "files": ["index.md", "toc.yml"],
         "src": "."
       }
     ],
