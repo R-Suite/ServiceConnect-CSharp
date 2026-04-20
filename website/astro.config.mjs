@@ -105,7 +105,15 @@ export default defineConfig({
                 { label: 'IPipelineConfiguration', link: '/reference/configuration/ipipelineconfiguration/' },
               ],
             },
-            { label: 'Process Managers', items: [] },
+            {
+              label: 'Process Managers',
+              items: [
+                { label: 'IProcessHandler', link: '/reference/process-managers/iprocesshandler/' },
+                { label: 'IProcessManagerData', link: '/reference/process-managers/iprocessmanagerdata/' },
+                { label: 'IProcessManagerPropertyMapper', link: '/reference/process-managers/iprocessmanagerpropertymapper/' },
+                { label: 'Aggregator<T>', link: '/reference/process-managers/aggregator/' },
+              ],
+            },
             { label: 'Filters & Middleware', items: [] },
           ],
         },

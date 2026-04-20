@@ -1,0 +1,150 @@
+---
+title: Aggregator<T>
+description: Buffer related messages and release them as a batch when a size or time condition fires — the receiver-side fan-in pattern.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`Aggregator<T>` is the base class for a consumer that buffers messages of a single type and processes them as a batch once a flush condition (size, time, or both) is met. `AggregatorSnapshot` is the record the persistence layer returns when it materialises the buffered records back into messages plus a count of records it could not deserialise. Reach for an aggregator when the natural unit of work is the batch — telemetry rollups, periodic reconciliations, the [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/) fan-in — rather than the individual message.
+
+See [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) for the conceptual tour.
+
+## Aggregator\<T\>
+
+```csharp
+public abstract class Aggregator<T> where T : Message
+```
+
+`Aggregator<T>` is an abstract class: the framework resolves one per dispatch, invokes the configured flush triggers, and calls `Execute` with the buffered batch.
+
+### `Timeout`
+
+```csharp
+public virtual TimeSpan Timeout()
+```
+
+Gets the maximum amount of time to wait before dispatching the current batch. Override to enable a time-based flush; leave the default to disable it.
+
+**Returns.** The maximum aggregation window. Returning `default` (`TimeSpan.Zero`) disables the timeout-based flush.
+
+---
+
+### `BatchSize`
+
+```csharp
+public virtual int BatchSize()
+```
+
+Gets the maximum number of messages to buffer before dispatching the batch. Override to enable a size-based flush; leave the default to disable it.
+
+**Returns.** The batch size limit. Returning `0` means no size-based flush is enforced.
+
+<Aside type="caution" title="Always set at least one flush trigger">
+  If both `Timeout()` and `BatchSize()` return their defaults, the aggregator accumulates indefinitely and never flushes. Override at least one.
+</Aside>
+
+---
+
+### `Execute`
+
+```csharp
+public abstract void Execute(IList<T> messages)
+```
+
+Processes a completed batch. The framework calls this on a background flush after materialising the buffered records through the configured `IAggregatorPersistor`; throwing from `Execute` leaves the batch in the persistor so the next flush retries it.
+
+**Parameters**
+- `messages` — the messages collected for the batch, in the order the persistor returned them. Sort inside `Execute` if intra-batch ordering matters.
+
+**Remarks.** `Execute` is synchronous by design — it runs on a background flush timer and returns a batch outcome, not a handler result. Block or use your own async-to-sync bridge if the work is I/O-bound; `.Result` on a `Task` is a deadlock waiting to happen without the right synchronisation context.
+
+## AggregatorSnapshot
+
+```csharp
+public sealed record AggregatorSnapshot(
+    IReadOnlyList<object> ResolvedMessages,
+    IReadOnlyList<Guid> ResolvedIds,
+    int UnresolvedCount) : IAggregatorSnapshot
+```
+
+A point-in-time capture of aggregator messages returned by the configured `IAggregatorPersistor`. Carries the deserialised messages, the ids of the underlying storage records, and the count of records that could not be resolved — typically because the CLR type the record was serialised against has been renamed or removed.
+
+### `ResolvedMessages`
+
+```csharp
+IReadOnlyList<object> ResolvedMessages { get; init; }
+```
+
+Gets the deserialised messages recovered from the persistor. Values are boxed to `object` because the snapshot spans heterogeneous record types; cast to `T` before handing the list to `Aggregator<T>.Execute`.
+
+---
+
+### `ResolvedIds`
+
+```csharp
+IReadOnlyList<Guid> ResolvedIds { get; init; }
+```
+
+Gets the storage-record ids for the resolved messages. The persistor uses these ids to remove the flushed records after a successful `Execute`.
+
+---
+
+### `UnresolvedCount`
+
+```csharp
+int UnresolvedCount { get; init; }
+```
+
+Gets the number of storage records that could not be resolved to a CLR type. A non-zero value usually indicates a message contract rename since the records were written; the unresolved rows remain in storage and do not participate in the flush.
+
+---
+
+### `Empty`
+
+```csharp
+public static AggregatorSnapshot Empty { get; } = new([], [], 0);
+```
+
+Gets an empty snapshot with no resolved or unresolved records. Persistor implementations return `Empty` instead of allocating a fresh empty instance per call.
+
+## Usage
+
+### Collecting carrier quotes before acting on them
+
+```csharp
+public sealed class QuoteAggregator : Aggregator<ShippingQuote>
+{
+    private readonly IBus _bus;
+
+    public QuoteAggregator(IBus bus) => _bus = bus;
+
+    public override int BatchSize() => 25;
+
+    public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
+
+    public override void Execute(IList<ShippingQuote> messages)
+    {
+        if (messages.Count == 0) return;
+
+        var correlationId = messages[0].CorrelationId;
+        var cheapest = messages.OrderBy(q => q.Price).First();
+
+        _bus.PublishAsync(new ShippingQuotesReceived(correlationId)
+        {
+            CarrierCount = messages.Count,
+            SelectedCarrier = cheapest.Carrier,
+            SelectedPrice = cheapest.Price,
+        }).GetAwaiter().GetResult();
+    }
+}
+```
+
+`QuoteAggregator` flushes either once 25 quotes have arrived or every 30 seconds — whichever happens first. `Execute` publishes the fan-in event `ShippingQuotesReceived` carrying the winning quote; because `Execute` is synchronous, an async publish is bridged with `GetAwaiter().GetResult()`. If `PublishAsync` throws, the batch remains in the persistor and the next flush retries it.
+
+## See also
+
+- [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) — concept
+- [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/) — concept
+- [`IAggregatorPersistor`](../../extension-points/persistence/iaggregatorpersistor/) — related reference
