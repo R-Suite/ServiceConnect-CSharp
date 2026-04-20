@@ -5,12 +5,7 @@ on:
     branches: [master]
     paths:
       - 'website/**'
-      - 'src/**'
-      - 'filters/**'
-      - '**/*.csproj'
-      - '**/*.cs'
       - '.github/workflows/docs.yml'
-      - '.config/dotnet-tools.json'
   workflow_dispatch:
 
 permissions:
@@ -29,28 +24,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: website/package-lock.json
-
-      - name: Restore .NET tools (DocFX)
-        run: dotnet tool restore
-
-      - name: Build .NET solution (emits XML doc files)
-        run: dotnet build src/ServiceConnect.sln --configuration Release --nologo
-
-      - name: Build API reference (DocFX)
-        run: dotnet docfx website/docfx/docfx.json
 
       - name: Install website dependencies
         working-directory: website
