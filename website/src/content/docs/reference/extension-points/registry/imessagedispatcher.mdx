@@ -9,14 +9,15 @@ import { Aside } from '@astrojs/starlight/components';
 
 `IMessageDispatcher` is the top-level orchestrator that the transport consumer calls for every incoming message. When a raw delivery arrives from the broker, the framework invokes `Dispatch` with the raw bytes, the wire type name, and the transport headers. From that point on, the dispatcher is responsible for the complete consume pipeline:
 
-1. Build an `Envelope` from the raw bytes and headers.
-2. Run `IMessageProcessor` entries where `RunBeforeDeserialization == true`. If any returns `ProcessResult.Handled`, short-circuit.
+1. Extract `FullTypeName` from headers and build the `Envelope`. Throw if the header is absent.
+2. Run `IMessageProcessor` entries where `RunBeforeDeserialization == true`. If any returns `ProcessResult.Handled`, short-circuit with `Success = true`.
 3. Resolve the CLR `Type` via `IMessageTypeRegistry.TryResolve(messageType, out type)`. If the type is not registered and the message is not a reply, return `Success = false`.
 4. Run `IFilter` before-consuming filters. If any returns `false`, short-circuit with `Success = true`.
-5. Deserialise the message body via `IMessageSerializer`.
-6. Run `IMessageProcessor` entries where `RunBeforeDeserialization == false` through the `IMessageProcessingMiddleware` chain.
-7. Run after-consuming filters in a `finally` block so they fire even on failure.
-8. Return a `ConsumeEventResult` describing the outcome.
+5. If the delivery carries a `ResponseMessageId` header and a `ReplyProcessor` is registered, invoke it. `Handled` → `Success = true`; otherwise return `Success = false` with an exception.
+6. Deserialise the message body via `IMessageSerializer`.
+7. Run `IMessageProcessor` entries where `RunBeforeDeserialization == false` through the `IMessageProcessingMiddleware` chain.
+8. Run after-consuming filters in a `finally` block so they fire even on failure.
+9. Return a `ConsumeEventResult` describing the outcome.
 
 ServiceConnect ships a default implementation (`ServiceConnect.Services.MessageDispatcher`) that follows this exact order. Replace it only when every other extension point — `IFilter`, `IMessageProcessor`, `IMessageProcessingMiddleware` — is insufficient for your use case.
 
@@ -47,14 +48,15 @@ Executes the full consume pipeline for one message delivery.
 
 A custom `IMessageDispatcher` must preserve the default order of operations. The built-in filters, processors, and middleware all assume this sequence; departing from it produces undefined behaviour:
 
-1. Build `Envelope`.
-2. Pre-deserialization processors (`RunBeforeDeserialization == true`) — short-circuit on `ProcessResult.Handled`.
-3. Type resolution — return `Success = false` for unknown, non-reply types.
+1. Extract `FullTypeName` header; throw `InvalidOperationException` if absent. Build `Envelope`.
+2. Pre-deserialization processors (`RunBeforeDeserialization == true`) — short-circuit with `Success = true` on `ProcessResult.Handled`.
+3. Type resolution via `IMessageTypeRegistry` — return `Success = false` for unknown, non-reply types.
 4. Before-consuming filters — short-circuit with `Success = true` on `false`.
-5. Deserialise.
-6. Post-deserialization processors (`RunBeforeDeserialization == false`) through the middleware chain.
-7. After-consuming filters in `finally`.
-8. Return `ConsumeEventResult`.
+5. Reply short-circuit — if `ResponseMessageId` header is present and a `ReplyProcessor` is registered, invoke it. `Handled` → `Success = true`; otherwise return `Success = false` with an exception.
+6. Deserialise via `IMessageSerializer`.
+7. Post-deserialization processors (`RunBeforeDeserialization == false`) through the middleware chain.
+8. After-consuming filters in `finally`.
+9. Return `ConsumeEventResult`.
 
 ### Error-handling contract
 
@@ -67,6 +69,10 @@ After-consuming filters must run in a `finally` block, unconditionally. They car
 ### Observability
 
 The dispatcher is the natural home for a root `ActivitySource` span that wraps the entire consume pipeline. Starting the activity before step 1 and stopping it in the same `finally` as the after-consuming filters gives a single, bounded span covering every phase of message processing.
+
+### Lifetime
+
+Register a custom `IMessageDispatcher` as a **singleton**. The dispatcher is invoked on every message delivery; registering as transient or scoped creates unnecessary allocations on a hot path. The default `MessageDispatcher` implementation is registered as a singleton.
 
 ### Skeletal stub
 
@@ -108,9 +114,9 @@ public sealed class CustomMessageDispatcher : IMessageDispatcher
 
 ## Usage
 
-### Tracing dispatcher with per-phase Activity spans
+### Tracing dispatcher with a root Activity span
 
-The following example wraps the `IMessageDispatcher` call and emits a root `Activity` for the entire consume pipeline plus child spans for each phase. Because it replaces the default dispatcher it must also re-implement the pipeline; in practice, prefer delegating to the default dispatcher if all you need is the root span.
+The following example delegates to the default `IMessageDispatcher` and wraps it in a single root `Activity` that covers the entire consume pipeline. Because it does not re-implement the pipeline, only the root span is available — not per-phase spans. That is the right trade-off when all you need is one bounded trace entry per delivery.
 
 ```csharp
 using System.Diagnostics;
@@ -140,13 +146,7 @@ public sealed class TracingMessageDispatcher : IMessageDispatcher
         ConsumeEventResult result;
         try
         {
-            using (Source.StartActivity("resolve"))
-            using (Source.StartActivity("filter"))
-            using (Source.StartActivity("deserialize"))
-            using (Source.StartActivity("dispatch"))
-            {
-                result = await _inner.Dispatch(messageBytes, messageType, headers, cancellationToken);
-            }
+            result = await _inner.Dispatch(messageBytes, messageType, headers, cancellationToken);
         }
         catch (Exception ex)
         {

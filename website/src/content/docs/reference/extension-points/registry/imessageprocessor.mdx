@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IMessageProcessor` is a chain-of-responsibility hook that `IMessageDispatcher` invokes at two points during the consume pipeline: once before deserialization (for processors that opt in) and once after. Multiple implementations can be registered; the dispatcher iterates them in DI registration order and short-circuits on the first that returns `ProcessResult.Handled`.
+`IMessageProcessor` is a chain-of-responsibility hook that `IMessageDispatcher` invokes during the consume pipeline. Each processor participates in exactly one phase — pre-deserialization if `RunBeforeDeserialization` returns `true`, post-deserialization otherwise — never both. The dispatcher runs the pre-deserialization iteration first, then (after type resolution, before-consuming filters, and deserialization) runs the post-deserialization iteration. Multiple implementations can be registered; within each phase the dispatcher iterates them in DI registration order and short-circuits on the first that returns `ProcessResult.Handled`.
 
 Built-in processors handle the framework's own concerns — reply routing, aggregator accumulation, saga dispatch, stream delivery, and standard handler invocation. Custom processors extend the same chain to implement bespoke consume patterns without replacing the dispatcher or modifying existing processors.
 

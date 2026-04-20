@@ -41,32 +41,6 @@ Implementations hold no persistent state beyond the validation logic executed in
 
 Because construction is single-threaded during startup, thread-safety inside the constructor is not a concern.
 
-### Skeletal stub
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using ServiceConnect.Interfaces;
-
-public sealed class StartupValidatingHandlerRegistry : IHandlerRegistry
-{
-    public StartupValidatingHandlerRegistry(IServiceProvider services)
-    {
-        // Verify that handlers for the expected message types are registered.
-        AssertHandlerPresent<OrderPlaced>(services);
-        AssertHandlerPresent<PaymentAuthorised>(services);
-    }
-
-    private static void AssertHandlerPresent<TMessage>(IServiceProvider services)
-    {
-        var handler = services.GetService<IMessageHandler<TMessage>>();
-        if (handler is null)
-            throw new InvalidOperationException(
-                $"No IMessageHandler<{typeof(TMessage).Name}> is registered. " +
-                "Ensure the handler is added before AddServiceConnect is called.");
-    }
-}
-```
-
 ## Usage
 
 ### Startup validation registry
