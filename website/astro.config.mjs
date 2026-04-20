@@ -114,7 +114,14 @@ export default defineConfig({
                 { label: 'Aggregator<T>', link: '/reference/process-managers/aggregator/' },
               ],
             },
-            { label: 'Filters & Middleware', items: [] },
+            {
+              label: 'Filters & Middleware',
+              items: [
+                { label: 'IFilter', link: '/reference/filters/ifilter/' },
+                { label: 'IMessageProcessingMiddleware', link: '/reference/filters/imessageprocessingmiddleware/' },
+                { label: 'ISendMessageMiddleware', link: '/reference/filters/isendmessagemiddleware/' },
+              ],
+            },
           ],
         },
         {
