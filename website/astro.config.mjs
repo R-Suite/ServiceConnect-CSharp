@@ -69,7 +69,7 @@ export default defineConfig({
         },
         {
           label: 'API Reference',
-          link: '/api/',
+          link: '/api/index.html',
         },
         {
           label: 'Samples',
