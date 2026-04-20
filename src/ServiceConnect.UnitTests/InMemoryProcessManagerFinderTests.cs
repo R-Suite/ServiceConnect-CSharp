@@ -184,7 +184,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task ShouldThrowWhenUpdatingTwoInstancesOfSameDataAtTheSameTime()
+        public async Task ShouldThrowConcurrencyExceptionWhenUpdatingStaleVersion()
         {
             // Arrange
             IProcessManagerData data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
@@ -199,8 +199,10 @@ namespace ServiceConnect.UnitTests
 
             await processManagerFinder.UpdateDataAsync(foundData1Temp, CancellationToken.None); // first update should be fine
 
-            // Act / Assert
-            await Assert.ThrowsAsync<PersistenceException>(() => processManagerFinder.UpdateDataAsync(foundData2Temp, CancellationToken.None)); // second update should fail
+            // Act / Assert — second update is a stale-version conflict; ProcessManagerProcessor
+            // only retries on ConcurrencyException, so the in-memory finder must raise that type
+            // to match MongoDbProcessManagerFinder's contract.
+            await Assert.ThrowsAsync<ConcurrencyException>(() => processManagerFinder.UpdateDataAsync(foundData2Temp, CancellationToken.None));
         }
 
         [Fact]

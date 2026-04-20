@@ -234,42 +234,35 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            string? error = null;
             var newData = (MemoryData<T>)data;
             string key = data.Data.CorrelationId.ToString();
 
-            if (_state.Provider.Contains(key))
+            if (!_state.Provider.Contains(key))
             {
-                // Read version via a typed IVersioned interface so the cast is
-                // compile-time-checked rather than the old dynamic dispatch.
-                var storedData = _state.Provider.Get<string, object>(key);
-                int currentVersion = storedData is IVersioned versioned
-                    ? versioned.Version
-                    : throw new PersistenceException(
-                        $"Stored item for CorrelationId {key} is of unexpected type {storedData.GetType()} and does not implement IVersioned.");
-
-                var updatedData = new MemoryData<T>
-                {
-                    Data = data.Data,
-                    Version = newData.Version + 1
-                };
-
-                if (currentVersion == newData.Version)
-                {
-                    _state.Provider.Update(key, updatedData);
-                }
-                else
-                {
-                    error = $"Possible Concurrency Error. ProcessManagerData with CorrelationId {key} and Version {currentVersion} could not be updated.";
-                }
-            }
-            else
-            {
-                error = $"ProcessManagerData with CorrelationId {key} does not exist in memory.";
+                throw new PersistenceException(
+                    $"ProcessManagerData with CorrelationId {key} does not exist in memory.");
             }
 
-            if (!string.IsNullOrEmpty(error))
-                throw new PersistenceException(error);
+            // Read version via a typed IVersioned interface so the cast is
+            // compile-time-checked rather than the old dynamic dispatch.
+            var storedData = _state.Provider.Get<string, object>(key);
+            int currentVersion = storedData is IVersioned versioned
+                ? versioned.Version
+                : throw new PersistenceException(
+                    $"Stored item for CorrelationId {key} is of unexpected type {storedData.GetType()} and does not implement IVersioned.");
+
+            if (currentVersion != newData.Version)
+            {
+                // Stale-version conflict — ProcessManagerProcessor retries on this type.
+                throw new ConcurrencyException(
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} and Version {currentVersion} could not be updated.");
+            }
+
+            _state.Provider.Update(key, new MemoryData<T>
+            {
+                Data = data.Data,
+                Version = newData.Version + 1
+            });
         }
         finally
         {
