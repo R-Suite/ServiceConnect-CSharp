@@ -36,7 +36,7 @@ Hierarchical under `/reference/`, grouped by concept:
 /reference/bus/add-serviceconnect/
 /reference/messages/message/
 /reference/messages/envelope/
-/reference/messages/attributes/
+/reference/messages/options/
 /reference/handlers/imessagehandler/
 /reference/handlers/istreamhandler/
 /reference/handlers/iconsumecontext/
@@ -84,7 +84,7 @@ The tables below are the authoritative set of pages this spec creates. Each row 
 | Bus | `AddServiceConnect` | `reference/bus/add-serviceconnect.mdx` |
 | Messages | `Message` | `reference/messages/message.mdx` |
 | Messages | `Envelope` | `reference/messages/envelope.mdx` |
-| Messages | Attributes (`Route`, `MessageEndpoint`, others) | `reference/messages/attributes.mdx` |
+| Messages | `PublishOptions`, `SendOptions`, `RequestOptions` | `reference/messages/options.mdx` |
 | Handlers | `IMessageHandler<T>` | `reference/handlers/imessagehandler.mdx` |
 | Handlers | `IStreamHandler` | `reference/handlers/istreamhandler.mdx` |
 | Handlers | `IConsumeContext` | `reference/handlers/iconsumecontext.mdx` |
@@ -271,10 +271,10 @@ Representative mapping:
 | Learn page | Reference links |
 |------------|-----------------|
 | `learn/core-concepts/the-bus/` | `reference/bus/ibus/`, `reference/bus/ibusconfiguration/`, `reference/bus/add-serviceconnect/` |
-| `learn/core-concepts/messages/` | `reference/messages/message/`, `reference/messages/envelope/`, `reference/messages/attributes/` |
+| `learn/core-concepts/messages/` | `reference/messages/message/`, `reference/messages/envelope/`, `reference/messages/options/` |
 | `learn/core-concepts/handlers/` | `reference/handlers/imessagehandler/`, `reference/handlers/iconsumecontext/` |
 | `learn/core-concepts/endpoints/` | `reference/configuration/itransportconfiguration/`, `reference/configuration/iqueueconfiguration/` |
-| `learn/messaging-patterns/pub-sub/` | `reference/bus/ibus/#publishasync`, `reference/messages/attributes/` |
+| `learn/messaging-patterns/pub-sub/` | `reference/bus/ibus/#publishasync`, `reference/messages/options/` |
 | `learn/messaging-patterns/point-to-point/` | `reference/bus/ibus/#sendasync` |
 | `learn/messaging-patterns/request-reply/` | `reference/bus/ibus/#requestasync` |
 | `learn/messaging-patterns/process-manager/` | the whole `reference/process-managers/` group |
