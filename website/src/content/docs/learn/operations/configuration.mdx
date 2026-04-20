@@ -1,0 +1,155 @@
+---
+title: Configuration
+description: The five knobs on the ServiceConnect builder — transport, queues, persistence, pipeline, bus — and what each one controls.
+---
+
+ServiceConnect is configured through a single builder on the service collection. Every production setting — connection, retries, queue names, TLS, filters, handler scanning — lives under one of five `Configure*` methods. This page is the map.
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => { /* transport */ });
+    builder.ConfigureQueues(queues => { /* queues */ });
+    builder.ConfigurePersistence(p => { /* persistence */ });
+    builder.ConfigurePipeline(p => { /* filters and middleware */ });
+    builder.ConfigureBus(bus => { /* runtime behaviour */ });
+});
+```
+
+Each callback mutates an options object. You never construct the configuration yourself — the builder hands you the live instance to edit.
+
+## Transport
+
+`ConfigureTransport` (or the `UseRabbitMQ` shortcut, which wraps it) sets everything about the connection to the broker.
+
+```csharp
+builder.UseRabbitMQ(transport =>
+{
+    transport.Host = "rabbit.prod.example.com";
+    transport.Username = "service-connect";
+    transport.Password = Environment.GetEnvironmentVariable("RMQ_PASSWORD");
+    transport.VirtualHost = "/production";
+
+    transport.MaxRetries = 3;
+    transport.RetryDelay = 3_000;           // ms between retries
+    transport.PrefetchCount = 50;           // unacked messages per consumer
+    transport.GracefulShutdownTimeoutMilliseconds = 30_000;
+});
+```
+
+The essentials: `Host` is required — a single hostname or a comma-separated list for clustered brokers. `Username`/`Password`/`VirtualHost` are optional and default to the broker's guest settings.
+
+Retry knobs drive the error-handling pipeline — see [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) for what happens after `MaxRetries` is exhausted.
+
+### TLS
+
+For brokers behind TLS:
+
+```csharp
+transport.SslEnabled = true;
+transport.ServerName = "rabbit.prod.example.com";
+transport.CertPath = "/etc/ssl/client.pfx";
+transport.CertPassphrase = Environment.GetEnvironmentVariable("CLIENT_CERT_PASSPHRASE");
+```
+
+Client certs can also be supplied in memory via `Certs`, or selected dynamically via `CertificateSelectionCallback`. For broker chains that don't validate cleanly, `AcceptablePolicyErrors` lets you widen acceptance — use sparingly, and never `SslPolicyErrors.RemoteCertificateNameMismatch` in production.
+
+### Provider-specific settings
+
+Anything RabbitMQ-specific that isn't on the interface — connection timeout, heartbeat, socket options — goes through `SetClientSetting`:
+
+```csharp
+transport.SetClientSetting("Port", 5671);
+transport.SetClientSetting("RequestedHeartbeat", TimeSpan.FromSeconds(30));
+```
+
+The keys are passed through to the RabbitMQ client; see that client's documentation for the full list.
+
+## Queues
+
+`ConfigureQueues` sets the queue names the bus uses and any explicit message-to-queue routing.
+
+```csharp
+builder.ConfigureQueues(queues =>
+{
+    queues.QueueName = "orders-service";
+    queues.ErrorQueueName = "orders-service.errors";
+    queues.AuditQueueName = "orders-service.audit";
+    queues.AuditingEnabled = true;
+    queues.DisableErrors = false;
+    queues.PurgeQueueOnStartup = false;
+
+    queues.AddQueueMapping(typeof(ShipOrder), "shipping-service");
+});
+```
+
+The main setting is `QueueName` — every other queue name defaults off of it if you leave them unset. `PurgeQueueOnStartup` is a development-only knob; leave it `false` in anything you care about.
+
+Queue mappings are the static routing table: "when the bus sees a `ShipOrder`, send it to `shipping-service`." See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) for how this plays against per-call `SendOptions.EndPoint`.
+
+## Persistence
+
+`ConfigurePersistence` — or one of the `Use*Persistence` extension methods — sets the store used for process-manager state, aggregator buffers, and timeout storage:
+
+```csharp
+builder.UseMongoDbPersistence(options =>
+{
+    options.ConnectionString = "mongodb://mongo:27017";
+    options.DatabaseName = "service-connect-state";
+});
+```
+
+There's also an in-memory provider (`UseInMemoryPersistence`) useful for tests and short-lived workflows. If your bus never uses a process manager, aggregator, or timeout, you can omit persistence entirely — the bus will fail fast if you later try to use one without it.
+
+## Pipeline
+
+`ConfigurePipeline` — or the shortcut methods `AddOutgoingFilter<T>`, `AddBeforeConsumingFilter<T>`, `AddAfterConsumingFilter<T>` — registers filters and middleware in order:
+
+```csharp
+builder.AddOutgoingFilter<TraceHeaderFilter>();
+builder.AddBeforeConsumingFilter<AuthFilter>();
+builder.AddAfterConsumingFilter<AuditFilter>();
+```
+
+The full shape of filters, what they can do, and when to prefer middleware is [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/).
+
+## Bus runtime behaviour
+
+`ConfigureBus` is the catch-all for runtime behaviour that doesn't fit the other four:
+
+```csharp
+builder.ConfigureBus(bus =>
+{
+    bus.ScanForMessageHandlers = false;     // prefer explicit HandlerReference lists
+    bus.AutoStartConsuming = true;          // start when the host starts
+    bus.ConsumerCount = 4;                  // parallel consumer loops
+
+    bus.EnableProcessManagerTimeouts = true;
+    bus.ProcessManagerTimeoutPollInterval = TimeSpan.FromSeconds(10);
+
+    bus.EnableRoutingSlipProcessing = true; // default; set false to ignore slips
+    bus.ValidateReplyDestinations = true;   // default; guard against unknown reply queues
+
+    bus.IncludeMachineNameInHeaders = false; // default; opt in only when safe
+    bus.ExceptionHandler = ex => _metrics.RecordHandlerFailure(ex);
+});
+```
+
+A few worth a note:
+
+- **`ScanForMessageHandlers`** — when `true`, loaded assemblies are scanned for `IMessageHandler<T>` implementations. Deterministic, testable code sets this `false` and registers handlers explicitly via `IList<HandlerReference>` ([Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/)).
+- **`AutoStartConsuming`** — when `true`, the bus starts consuming when the host starts; when `false`, you call `bus.StartConsumingAsync()` yourself. [Hosting & Lifecycle](/ServiceConnect-CSharp/learn/operations/hosting/) covers the trade-off.
+- **`ConsumerCount`** — how many parallel dispatch loops the bus runs. See [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for when to raise it.
+- **`IncludeMachineNameInHeaders`** — adds `SourceMachine`/`DestinationMachine` headers. Off by default because the hostname leak is a problem in shared-broker deployments.
+
+## Validation is at startup, not runtime
+
+The builder validates as you go: a missing `Host`, a negative `MaxRetries`, a negative `GracefulShutdownTimeoutMilliseconds` — any of these throw when `AddServiceConnect` runs. That is by design; configuration errors should fail the process at startup, not surface as confusing broker errors hours later.
+
+If you're writing a config file or a builder helper, structure it so every required setting runs through `ConfigureTransport`, `ConfigureQueues`, and so on — not through field assignment on a bare options object. That's what gets you the validation.
+
+## What comes next
+
+- [Hosting & Lifecycle](/ServiceConnect-CSharp/learn/operations/hosting/) — `AutoStartConsuming`, `BusHostedService`, manual control.
+- [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) — what retries and the error queue actually do.
+- [Observability](/ServiceConnect-CSharp/learn/operations/observability/) — auditing, logging, tracing.
