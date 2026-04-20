@@ -1,0 +1,112 @@
+---
+title: Streaming
+description: Send a payload too large for one message — chunked on the wire, reassembled on the receiver, one handler invocation at the end.
+---
+
+**Streaming** is for payloads that won't fit comfortably in a single message. Images, PDFs, logs, CSV exports. The sender splits the payload into packets and writes them through a stream handle; the bus delivers each packet on the transport; the receiver reassembles the bytes and invokes the handler exactly once, when the whole payload has arrived.
+
+This is the pattern for "the message is the bytes." When the payload is small enough to live in the message body, use normal send or publish. Streaming exists for the cases where that would be impractical.
+
+## When to use it
+
+- The payload is too big to carry in a single bus message (broker limits, memory pressure, serialiser cost).
+- The receiver wants the whole payload as one blob, not as a stream of independent messages.
+- You are willing to accept that the handler waits for the full transfer before starting.
+
+If the receiver can process packets as they arrive — say, a video consumer that renders frames — that is a different shape, and you should look at fan-out patterns instead. If the payload is small, don't reach for streaming; the overhead isn't worth it.
+
+## The message contract
+
+A streamed payload pairs a message with bytes. The message carries *metadata*; the bytes live on the stream:
+
+```csharp
+// Contracts/DocumentUploaded.cs
+using ServiceConnect.Interfaces;
+
+public sealed class DocumentUploaded(Guid correlationId) : Message(correlationId)
+{
+    public string FileName { get; init; } = string.Empty;
+    public int TotalBytes { get; init; }
+}
+```
+
+The sender decides what goes on the message vs. the stream. The rule of thumb: anything the receiver needs to know *about* the payload — filename, size, content-type, trace id — goes on the message; the payload itself goes on the stream.
+
+## The sender
+
+`bus.CreateStream<T>(endpoint)` opens a write stream pointed at a receiver queue. Write packets with `WriteAsync`, and call `CloseAsync` when done:
+
+```csharp
+// Uploader/Program.cs
+var document = new DocumentUploaded(Guid.NewGuid())
+{
+    FileName = "report.pdf",
+    TotalBytes = payload.Length,
+};
+
+await using var stream = bus.CreateStream<DocumentUploaded>("document-receiver");
+for (int offset = 0; offset < payload.Length; offset += chunkSize)
+{
+    var count = Math.Min(chunkSize, payload.Length - offset);
+    await stream.WriteAsync(payload, offset, count);
+}
+await stream.CloseAsync();
+```
+
+Four things to notice:
+
+- **Chunking is your job.** The API takes `buffer, offset, count` like any other byte-oriented stream. You decide how big each packet is. A few kilobytes to a few hundred kilobytes is typical — small enough to fit well inside broker limits, large enough that per-packet overhead doesn't dominate.
+- **Close is not optional.** Until `CloseAsync` is called, the receiver does not know the stream is complete and the handler will not fire. The `await using` ensures disposal, but the explicit `CloseAsync` is what marks the final packet.
+- **Each `WriteAsync` is one bus message.** The packet becomes an envelope on the wire. Ordering, at-least-once delivery, and backpressure all apply at the packet level; the bus reassembles them in order on the receiver.
+- **The message body rides with the stream.** The generic parameter `<DocumentUploaded>` tells the bus what message type to serialize and include in the stream's metadata. The receiver's handler gets this instance along with the assembled bytes.
+
+## The receiver
+
+A stream handler implements `IStreamHandler<TMessage>`. It's slightly different in shape from a normal `IMessageHandler<T>`:
+
+```csharp
+// Receiver/DocumentUploadedHandler.cs
+public sealed class DocumentUploadedHandler : IStreamHandler<DocumentUploaded>
+{
+    public IMessageBusReadStream Stream { get; set; } = null!;
+
+    public void Execute(DocumentUploaded message)
+    {
+        var bytes = Stream.Read();
+        File.WriteAllBytes(message.FileName, bytes);
+    }
+}
+```
+
+- **`Stream` is a property, not a parameter.** The dispatcher sets it before calling `Execute`. This is the same pattern as `IConsumeContext` on a normal handler — framework-populated.
+- **`Execute` is synchronous.** By the time it is called, every packet has arrived and been reassembled in memory; the I/O-bound wait is over. If the work inside `Execute` is itself async, run it on a background task or block — but *don't* make that work slow, because it serialises against the next stream's reassembly.
+- **`Stream.Read()` returns the whole byte array.** The reassembly is complete by the time the handler fires; no packet-by-packet processing is expected. For very large payloads where holding everything in memory is painful, `Stream.ReadSequence()` returns a `ReadOnlySequence<byte>` you can stream through.
+
+Register the handler the same way you register any consumer — a `HandlerReference` and a DI registration — except the interface is `IStreamHandler<T>`:
+
+```csharp
+// Receiver/Program.cs
+services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(DocumentUploadedHandler), MessageType = typeof(DocumentUploaded) },
+});
+services.AddTransient<IStreamHandler<DocumentUploaded>, DocumentUploadedHandler>();
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { t.Host = "localhost"; });
+    builder.ConfigureQueues(q => q.QueueName = "document-receiver");
+});
+```
+
+## The cost model
+
+Streaming is not free. Each packet is a transport message — RabbitMQ allocates, routes, and acknowledges it. A 50 MB payload at 64 KB packets is ~800 transport messages. At 1 MB packets it is 50. The broker is happier with fewer larger packets, up to the point where a single message becomes uncomfortable for other reasons (memory pressure on the broker, redelivery cost if a packet fails).
+
+The receiver reassembles in memory. A 5 GB payload will hold 5 GB in the receiver's heap until `Execute` returns. If that is not acceptable, chunking the *semantics* (many small `DocumentChunkUploaded` messages with sequence numbers) is the right move, not streaming.
+
+## What comes next
+
+- [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/) — the normal "one message to one queue" model streaming builds on.
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — the message-vs-body distinction; streaming is where that distinction matters most.
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — `IStreamHandler<T>` lives alongside `IMessageHandler<T>` and shares the same lifetime rules.
