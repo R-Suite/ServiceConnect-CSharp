@@ -1,0 +1,112 @@
+---
+title: Filters
+description: Intercept messages on the way out or on the way in — stamp headers, short-circuit delivery, log, or enrich.
+---
+
+**Filters** run on the envelope — the bytes-and-headers wrapper that carries a message through the transport — at three points in the pipeline: before a message is published or sent, before an incoming message reaches a handler, and after a handler returns. They are the hook for cross-cutting concerns that should apply to *every* message passing a certain point, rather than being added to each handler individually.
+
+Use filters for the things every handler would otherwise duplicate: tracing headers, auth checks, logging, message shape normalisation, redaction.
+
+## When to use it
+
+- You have a concern that applies to many or all messages — correlation propagation, auth, telemetry, redaction.
+- You want the concern enforced at the transport boundary, not scattered across handler bodies.
+- You need the ability to *block* a message centrally. Filters can decide the pipeline stops here.
+
+If the concern only applies to one or two handlers, put it in those handlers. Filters earn their place by being uniform.
+
+## The contract
+
+One interface, one method, one boolean return:
+
+```csharp
+public interface IFilter
+{
+    Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
+}
+```
+
+The return value tells the pipeline what to do next:
+
+- **`true`** — continue. The next filter runs; eventually the message is sent, or reaches the handler, or finishes processing.
+- **`false`** — block. No further filters run on this envelope, and the message does not proceed. On the outgoing side that means not sent; on the incoming side that means not dispatched to the handler.
+
+The `Envelope` gives you two things: mutable `Headers` and a read-only `Body`. You modify the bytes only indirectly — by letting serialisation happen upstream of the filter and working with headers here. If a filter needs to change the payload itself, it's usually a sign the concern belongs in a handler instead.
+
+## An outgoing filter
+
+The canonical example: stamp a trace id on every outgoing message. The handler shouldn't have to know — the filter puts it on for you:
+
+```csharp
+// Sender/TraceHeaderFilter.cs
+public sealed class TraceHeaderFilter(ITracingContext tracing) : IFilter
+{
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    {
+        envelope.Headers["X-Trace-Id"] = tracing.CurrentTraceId;
+        return Task.FromResult(true);
+    }
+}
+```
+
+Registration is a one-liner on the builder, plus whatever DI setup the filter's dependencies need:
+
+```csharp
+// Sender/Program.cs
+services.AddSingleton<ITracingContext, TracingContext>();
+services.AddSingleton<TraceHeaderFilter>();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { t.Host = "localhost"; });
+    builder.ConfigureQueues(q => q.QueueName = "notifications-sender");
+    builder.AddOutgoingFilter<TraceHeaderFilter>();
+});
+```
+
+Every `SendAsync` and `PublishAsync` on this bus now runs through `TraceHeaderFilter` before hitting the wire. Consumers see `X-Trace-Id` in the message headers without the sending handler knowing the filter exists.
+
+Note the DI registration. Filters are resolved from the container, so they **must** be registered as services — the builder's `AddOutgoingFilter<T>()` call only tells the pipeline which type to resolve; the container is what actually constructs one. Register filters as `Singleton` unless they hold per-message state, which they shouldn't.
+
+## Incoming filters
+
+Two hooks on the incoming side, each for a different purpose:
+
+```csharp
+builder.AddBeforeConsumingFilter<AuthFilter>();     // runs before the handler
+builder.AddAfterConsumingFilter<AuditFilter>();     // runs after the handler returns
+```
+
+The *before* position is where "should this message even be processed?" goes — auth, deduplication, feature-flag gates. Returning `false` here drops the message cleanly: the handler never runs, and the pipeline treats it as successfully processed (so the message is acked and does not go to the error queue).
+
+The *after* position is where post-processing goes — audit logging, metrics, cleanup. The handler has already run; a filter returning `false` here has no effect on the handler outcome but does stop any filters further down the after-chain from running.
+
+```csharp
+public sealed class AuthFilter(IAuthChecker auth) : IFilter
+{
+    public async Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    {
+        if (!envelope.Headers.TryGetValue("X-Principal", out var principal))
+            return false;                             // drop unauthenticated messages
+
+        return await auth.IsAuthorizedAsync((string)principal!, cancellationToken);
+    }
+}
+```
+
+## Order of execution
+
+Filters run in registration order. If you register `A` then `B` as outgoing filters, `A` runs first; if `A` returns `false`, `B` never sees the envelope. Design filters to be independent where you can — a pipeline where filter order silently matters is a pipeline that breaks the first time someone reorders registrations.
+
+When *order must matter* (stamp the trace id before an auth check that depends on it), state that coupling in a comment next to the registration, not hidden inside the filter.
+
+## The middleware alternative
+
+ServiceConnect also has two middleware hooks — `AddSendMessageMiddleware<T>` and `AddMessageProcessingMiddleware<T>` — which wrap the whole operation with `next`-delegate semantics, the way ASP.NET Core middleware does. Filters are the lighter tool: stateless, returning `true`/`false`. Middleware is heavier: full control over the surrounding context, `try`/`finally` around `next()`.
+
+Reach for a filter when "inspect or stamp headers, maybe block" is the whole job. Reach for middleware when you need to wrap — time the whole operation, open and close a scope around it, catch exceptions from the inner pipeline.
+
+## What comes next
+
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — where filtered messages end up.
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — outgoing filters run for both sends and publishes.
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — filters attach to the bus, not the endpoint; the same filters apply to every queue the bus talks to.
