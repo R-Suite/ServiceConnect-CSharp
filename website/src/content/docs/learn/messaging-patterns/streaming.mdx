@@ -105,6 +105,11 @@ Streaming is not free. Each packet is a transport message — RabbitMQ allocates
 
 The receiver reassembles in memory. A 5 GB payload will hold 5 GB in the receiver's heap until `Execute` returns. If that is not acceptable, chunking the *semantics* (many small `DocumentChunkUploaded` messages with sequence numbers) is the right move, not streaming.
 
+## Reference
+
+- [`IStreamHandler`](/ServiceConnect-CSharp/reference/handlers/istreamhandler/) — streaming consumer contract
+- [`IBus.CreateStream`](/ServiceConnect-CSharp/reference/bus/ibus/#createstreamt) — streaming producer entry point
+
 ## What comes next
 
 - [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/) — the normal "one message to one queue" model streaming builds on.

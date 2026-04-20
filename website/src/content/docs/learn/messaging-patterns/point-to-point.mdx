@@ -151,6 +151,11 @@ This is still point-to-point — one copy per listed queue. The sender is choosi
 
 If the handler throws, ServiceConnect applies the retry policy and, after retries are exhausted, moves the message to the consumer's error queue. The sender has no visibility — `SendAsync` completed the moment RabbitMQ accepted the message. If the sender needs an answer, you want [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/), not Send.
 
+## Reference
+
+- [`IBus.SendAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#sendasynct) — the send method
+- [Message options](/ServiceConnect-CSharp/reference/messages/options/) — `SendOptions` for endpoint overrides
+
 ## What comes next
 
 - [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/) — point-to-point, but the sender awaits a response.

@@ -148,6 +148,12 @@ var response = await bus.SendRequestAsync<QuoteRequest, QuoteResponse>(
 
 Inline `RequestOptions.EndPoint` still overrides the mapping per call. As with Send, if no mapping and no endpoint exists, the call fails — ServiceConnect does not guess.
 
+## Reference
+
+- [`IBus.SendRequestAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#sendrequestasynct-treply) — single-reply request
+- [`IBus.SendRequestMultiAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#sendrequestmultiasynct-treply) — multi-reply request
+- [Message options](/ServiceConnect-CSharp/reference/messages/options/) — `RequestOptions` for timeouts and expected replies
+
 ## What comes next
 
 - [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/) — request/reply with several responders and a bounded set of replies.

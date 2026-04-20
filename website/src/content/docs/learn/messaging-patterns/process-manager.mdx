@@ -197,6 +197,13 @@ builder.ConfigureBus(bus =>
 
 If the workflow completes before the timeout fires, the state flag check in the timeout handler is what stops you from compensating a workflow that already succeeded.
 
+## Reference
+
+- [`IProcessHandler`](/ServiceConnect-CSharp/reference/process-managers/iprocesshandler/) — saga step contract
+- [`IProcessManagerData`](/ServiceConnect-CSharp/reference/process-managers/iprocessmanagerdata/) — saga state marker
+- [`IProcessManagerPropertyMapper`](/ServiceConnect-CSharp/reference/process-managers/iprocessmanagerpropertymapper/) — correlation mapping
+- [`IProcessManagerFinder`](/ServiceConnect-CSharp/reference/extension-points/persistence/iprocessmanagerfinder/) — extension point for custom persistence
+
 ## What comes next
 
 - [Routing Slip](/ServiceConnect-CSharp/learn/messaging-patterns/routing-slip/) — simpler alternative when the sequence is fixed.

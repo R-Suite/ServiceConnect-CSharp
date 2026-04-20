@@ -148,6 +148,14 @@ The builder validates as you go: a missing `Host`, a negative `MaxRetries`, a ne
 
 If you're writing a config file or a builder helper, structure it so every required setting runs through `ConfigureTransport`, `ConfigureQueues`, and so on — not through field assignment on a bare options object. That's what gets you the validation.
 
+## Reference
+
+- [`IBusConfiguration`](/ServiceConnect-CSharp/reference/bus/ibusconfiguration/) — the configure delegate target
+- [`ITransportConfiguration`](/ServiceConnect-CSharp/reference/configuration/itransportconfiguration/) — transport-level config
+- [`IQueueConfiguration`](/ServiceConnect-CSharp/reference/configuration/iqueueconfiguration/) — per-queue config
+- [`IPersistenceConfiguration`](/ServiceConnect-CSharp/reference/configuration/ipersistenceconfiguration/) — persistence provider selection
+- [`IPipelineConfiguration`](/ServiceConnect-CSharp/reference/configuration/ipipelineconfiguration/) — pipeline wiring
+
 ## What comes next
 
 - [Hosting & Lifecycle](/ServiceConnect-CSharp/learn/operations/hosting/) — `AutoStartConsuming`, `BusHostedService`, manual control.

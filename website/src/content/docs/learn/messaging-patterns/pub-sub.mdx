@@ -147,6 +147,11 @@ If a subscriber's handler throws, **only that subscriber's message is affected.*
 
 The failing subscriber's message is retried per its bus's policy and eventually lands in that subscriber's error queue. The publisher — long since returned from `PublishAsync` — has no visibility into this, which is correct: the publisher produced a fact, what happens next is a subscriber concern.
 
+## Reference
+
+- [`IBus.PublishAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#publishasynct) — the publish method
+- [Message options](/ServiceConnect-CSharp/reference/messages/options/) — `PublishOptions` for headers and routing overrides
+
 ## What comes next
 
 - [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/) — the opposite pattern, when you know exactly who the recipient is.

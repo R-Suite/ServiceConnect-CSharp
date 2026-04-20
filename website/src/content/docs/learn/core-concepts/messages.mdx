@@ -119,6 +119,12 @@ public sealed class PlaceOrderHandler(IBus bus) : IMessageHandler<PlaceOrder>
 
 The reply helper on `IConsumeContext` does this for you automatically — replies always carry the request's correlation id. For `PublishAsync` and forward `SendAsync` calls, it's on you to carry it through.
 
+## Reference
+
+- [`Message`](/ServiceConnect-CSharp/reference/messages/message/) — base class and correlation id
+- [`Envelope`](/ServiceConnect-CSharp/reference/messages/envelope/) — transport-level wrapper
+- [Message options](/ServiceConnect-CSharp/reference/messages/options/) — `PublishOptions`, `SendOptions`, `RequestOptions`
+
 ## What comes next
 
 - [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — how incoming messages reach code.

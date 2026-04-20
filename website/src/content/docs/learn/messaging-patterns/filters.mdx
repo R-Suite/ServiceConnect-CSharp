@@ -105,6 +105,13 @@ ServiceConnect also has two middleware hooks — `AddSendMessageMiddleware<T>` a
 
 Reach for a filter when "inspect or stamp headers, maybe block" is the whole job. Reach for middleware when you need to wrap — time the whole operation, open and close a scope around it, catch exceptions from the inner pipeline.
 
+## Reference
+
+- [`IFilter`](/ServiceConnect-CSharp/reference/filters/ifilter/) — short-circuit consume-pipeline stage
+- [`IMessageProcessingMiddleware`](/ServiceConnect-CSharp/reference/filters/imessageprocessingmiddleware/) — wrap the consume pipeline
+- [`ISendMessageMiddleware`](/ServiceConnect-CSharp/reference/filters/isendmessagemiddleware/) — wrap the send pipeline
+- [`IPipelineConfiguration`](/ServiceConnect-CSharp/reference/configuration/ipipelineconfiguration/) — wiring config
+
 ## What comes next
 
 - [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — where filtered messages end up.
