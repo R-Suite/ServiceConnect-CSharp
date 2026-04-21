@@ -408,6 +408,7 @@ file static class PmTestBusFactory
         var pipelineConfiguration = new Mock<IPipelineConfiguration>();
         pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns(new List<Type>());
 
+        var rootProvider = new ServiceCollection().BuildServiceProvider();
         return new Bus(
             serializer.Object,
             filterPipeline.Object,
@@ -418,6 +419,8 @@ file static class PmTestBusFactory
             dispatcher.Object,
             new List<HandlerReference>(),
             pipelineConfiguration.Object,
+            rootProvider.GetRequiredService<IServiceScopeFactory>(),
+            new ConsumeScopeAccessor(),
             timeoutStore: timeoutStore,
             consumeContextAccessor: accessor);
     }

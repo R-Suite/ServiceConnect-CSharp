@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
@@ -24,6 +25,8 @@ public sealed class Bus : IBus
     private readonly IProducer? _producer;
     private readonly ITimeoutStore? _timeoutStore;
     private readonly ConsumeContextAccessor _consumeContextAccessor;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly bool _hasOutgoingFilters;
     private readonly TimeSpan _disposeTimeout;
     private readonly object _stateLock = new();
@@ -42,6 +45,8 @@ public sealed class Bus : IBus
         IMessageDispatcher dispatcher,
         IList<HandlerReference> handlerReferences,
         IPipelineConfiguration pipelineConfig,
+        IServiceScopeFactory scopeFactory,
+        ConsumeScopeAccessor scopeAccessor,
         IConsumer? consumer = null,
         IProducer? producer = null,
         TimeSpan? disposeTimeout = null,
@@ -58,6 +63,8 @@ public sealed class Bus : IBus
         _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
         if (pipelineConfig == null) throw new ArgumentNullException(nameof(pipelineConfig));
         _hasOutgoingFilters = pipelineConfig.OutgoingFilters.Count > 0;
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
         _consumer = consumer;
         _producer = producer;
         _disposeTimeout = disposeTimeout ?? TimeSpan.FromSeconds(30);
@@ -79,7 +86,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
-            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 return;
             headers = ExtractHeaders(envelope);
         }
@@ -105,7 +112,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
-            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 return;
             headers = ExtractHeaders(envelope);
         }
@@ -140,7 +147,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
-            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
@@ -169,7 +176,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
-            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
@@ -204,7 +211,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
-            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
@@ -236,7 +243,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId);
-            if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 return;
             headers = ExtractHeaders(envelope);
         }
@@ -398,6 +405,17 @@ public sealed class Bus : IBus
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+    }
+
+    // Outgoing filters share the scoped-pipeline contract with inbound filters and
+    // middleware: a fresh per-send DI scope is pushed through ConsumeScopeAccessor so
+    // scoped/transient filter dependencies are honoured instead of being leaked via
+    // the root provider. The scope is disposed as soon as the filter chain completes.
+    private async Task<bool> RunOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        using var _ = _scopeAccessor.Push(scope.ServiceProvider);
+        return await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
     }
 
     private static Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, Dictionary<string, string>? additionalHeaders = null)

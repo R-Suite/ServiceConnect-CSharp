@@ -8,6 +8,8 @@ namespace ServiceConnect.Services;
 
 /// <summary>
 /// Deserializes incoming envelopes and routes them through filters, processors, and middleware.
+/// A fresh DI scope is created for each dispatch and flowed through <see cref="ConsumeScopeAccessor"/>
+/// so filters, middleware, and handlers share the same per-message container scope.
 /// </summary>
 public sealed class MessageDispatcher : IMessageDispatcher
 {
@@ -17,25 +19,13 @@ public sealed class MessageDispatcher : IMessageDispatcher
     private readonly ILogger<MessageDispatcher> _logger;
     private readonly IBusConfiguration _config;
     private readonly IPipelineConfiguration _pipelineConfig;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly IMessageTypeRegistry _typeRegistry;
-
-    // Chain is built once (lazily) at first message dispatch and cached.
-    // IMessageProcessingMiddleware implementations MUST be singletons; scoped/transient
-    // registrations will be silently promoted to singleton lifetime here.
-    private readonly Lazy<MessageProcessingDelegate> _processingChain;
 
     /// <summary>
     /// Creates a dispatcher for incoming broker messages.
     /// </summary>
-    /// <param name="serializer">The serializer used to materialize messages.</param>
-    /// <param name="filterPipeline">The filter pipeline applied before and after dispatch.</param>
-    /// <param name="processors">The ordered processors that can handle the message.</param>
-    /// <param name="logger">The logger used for dispatch diagnostics.</param>
-    /// <param name="config">The bus configuration used for exception handling and behavior flags.</param>
-    /// <param name="pipelineConfig">The pipeline configuration used to build middleware chains.</param>
-    /// <param name="serviceProvider">The service provider used to resolve middleware instances.</param>
-    /// <param name="typeRegistry">The registry used to map wire type names to CLR types.</param>
     public MessageDispatcher(
         IMessageSerializer serializer,
         IFilterPipeline filterPipeline,
@@ -43,7 +33,8 @@ public sealed class MessageDispatcher : IMessageDispatcher
         ILogger<MessageDispatcher> logger,
         IBusConfiguration config,
         IPipelineConfiguration pipelineConfig,
-        IServiceProvider serviceProvider,
+        IServiceScopeFactory scopeFactory,
+        ConsumeScopeAccessor scopeAccessor,
         IMessageTypeRegistry typeRegistry)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
@@ -52,14 +43,17 @@ public sealed class MessageDispatcher : IMessageDispatcher
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
-        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
-        _processingChain = new Lazy<MessageProcessingDelegate>(BuildProcessingChain, isThreadSafe: true);
     }
 
     /// <inheritdoc />
     public async Task<ConsumeEventResult> Dispatch(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
+        using var scope = _scopeFactory.CreateScope();
+        using var _ = _scopeAccessor.Push(scope.ServiceProvider);
+
         Envelope? envelope = null;
         var beforeFiltersRan = false;
         try
@@ -79,17 +73,13 @@ public sealed class MessageDispatcher : IMessageDispatcher
             if (primaryCandidate is null && fullTypeNameCandidate is null && typeNameCandidate is null)
                 throw new InvalidOperationException("Message is missing type information: messageType parameter is empty and neither FullTypeName nor TypeName header is present.");
 
-            // fullTypeName is the name we use for error reporting if no candidate resolves.
-            // Prefer the most specific name we have for that purpose.
             fullTypeName = primaryCandidate ?? fullTypeNameCandidate ?? typeNameCandidate!;
 
-            // 2. Build envelope
             envelope = new Envelope { Headers = headers, Body = messageBytes };
 
             ReplyProcessor? replyProcessor = null;
             var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
 
-            // 3. Run stream-style pre-deserialization processors before type resolution.
             foreach (var proc in _processors)
             {
                 if (proc is ReplyProcessor typedReplyProcessor)
@@ -104,9 +94,6 @@ public sealed class MessageDispatcher : IMessageDispatcher
                     return new ConsumeEventResult { Success = true };
             }
 
-            // 4. Resolve CLR type for handler dispatch. Try each candidate in priority order;
-            //    the first resolving name wins. Reply traffic only needs a best-effort wire type
-            //    because RequestReplyManager owns the actual reply deserialization.
             Type? type = null;
             bool typeResolvedFromRegistry =
                 (primaryCandidate is not null && _typeRegistry.TryResolve(primaryCandidate, out type))
@@ -120,12 +107,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
                     return new ConsumeEventResult { Success = false };
                 }
 
-                // Reply with unregistered wire type: use Message; RequestReplyManager owns deserialization.
                 type = typeof(Message);
             }
 
-            // 5. Run BeforeConsumingFilters. Once this returns, AfterConsumingFilters must run
-            // on every exit path — enforced by the finally below.
             bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
             beforeFiltersRan = true;
             if (blocked)
@@ -149,8 +133,11 @@ public sealed class MessageDispatcher : IMessageDispatcher
 
             var message = _serializer.Deserialize(messageBytes, type!);
 
-            // 6. Run post-deserialization processors wrapped in the cached processing chain
-            return await _processingChain.Value(messageBytes, type!, message, headers, envelope, cancellationToken);
+            // Build the middleware chain per dispatch from the scoped provider so scoped/transient
+            // middleware lifetimes are honoured — a cached chain would pin the first instance for
+            // the lifetime of the bus.
+            var chain = BuildProcessingChain(scope.ServiceProvider);
+            return await chain(messageBytes, type!, message, headers, envelope, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -195,7 +182,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         return new ConsumeEventResult { Success = true, NotHandled = true };
     }
 
-    private MessageProcessingDelegate BuildProcessingChain()
+    private MessageProcessingDelegate BuildProcessingChain(IServiceProvider scopedProvider)
     {
         var middlewareTypes = _pipelineConfig.MessageProcessingMiddleware;
         if (middlewareTypes.Count == 0)
@@ -204,7 +191,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         MessageProcessingDelegate chain = RunProcessors;
         for (int i = middlewareTypes.Count - 1; i >= 0; i--)
         {
-            var mw = (IMessageProcessingMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
+            var mw = (IMessageProcessingMiddleware)scopedProvider.GetRequiredService(middlewareTypes[i]);
             var next = chain;
             chain = (mb, mt, m, h, e, ct) => mw.Process(mb, mt, m, h, e, next, ct);
         }

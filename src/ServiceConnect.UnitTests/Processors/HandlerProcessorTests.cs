@@ -21,6 +21,16 @@ public class HandlerProcessorTests
         AuditQueueName = "audit"
     };
 
+    // Tests resolve handlers through a ConsumeScopeAccessor whose AsyncLocal is primed
+    // with a per-test provider; each test class instance (xUnit creates one per fact)
+    // runs in its own async flow, so the Push disposable can be discarded.
+    private static ConsumeScopeAccessor NewScope(IServiceProvider sp)
+    {
+        var accessor = new ConsumeScopeAccessor();
+        accessor.Push(sp);
+        return accessor;
+    }
+
     [Fact]
     public async Task ProcessAsync_WithRegisteredHandler_InvokesHandler()
     {
@@ -31,7 +41,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -50,7 +60,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -66,7 +76,7 @@ public class HandlerProcessorTests
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(), provider, new Lazy<IBus>(() => new Mock<IBus>().Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(), NewScope(provider), new Lazy<IBus>(() => new Mock<IBus>().Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -85,7 +95,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -115,7 +125,7 @@ public class HandlerProcessorTests
         queueConfig.AddQueueMapping(typeof(TestHpMsg), "Step2");
         queueConfig.AddQueueMapping(typeof(TestHpMsg), "Step3");
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "Step2,Step3" };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -142,7 +152,7 @@ public class HandlerProcessorTests
         var queueConfig = new QueueConfiguration { QueueName = "test-queue" };
         queueConfig.AddQueueMapping(typeof(TestHpMsg), "NextQueue");
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = System.Text.Encoding.UTF8.GetBytes("NextQueue") };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -162,7 +172,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -182,7 +192,7 @@ public class HandlerProcessorTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "unknown-evil-queue" };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -203,7 +213,7 @@ public class HandlerProcessorTests
         var provider = services.BuildServiceProvider();
 
         var busConfig = new BusConfiguration { EnableRoutingSlipProcessing = false };
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => mockBus.Object), busConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), busConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
         // This would normally throw because "SomeQueue" isn't known, but routing slip is disabled
         var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "SomeQueue" };
@@ -228,7 +238,7 @@ public class HandlerProcessorTests
         services.AddSingleton<IBus>(bus);
         var provider = services.BuildServiceProvider();
 
-        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), provider, new Lazy<IBus>(() => bus), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), accessor);
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => bus), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), accessor);
         var correlationId = Guid.NewGuid();
         var headers = new Dictionary<string, object>
         {
@@ -335,6 +345,7 @@ file static class TestBusFactory
         var pipelineConfiguration = new Mock<IPipelineConfiguration>();
         pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns(new List<Type>());
 
+        var rootProvider = new ServiceCollection().BuildServiceProvider();
         return new Bus(
             serializer.Object,
             filterPipeline.Object,
@@ -345,6 +356,8 @@ file static class TestBusFactory
             dispatcher.Object,
             new List<HandlerReference>(),
             pipelineConfiguration.Object,
+            rootProvider.GetRequiredService<IServiceScopeFactory>(),
+            new ConsumeScopeAccessor(),
             timeoutStore: timeoutStore,
             consumeContextAccessor: accessor);
     }

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using ServiceConnect.Interfaces;
@@ -27,6 +28,8 @@ namespace ServiceConnect.UnitTests
         private readonly Mock<IQueueConfiguration> _mockQueueConfig;
         private readonly Mock<IMessageDispatcher> _mockDispatcher;
         private readonly IList<HandlerReference> _handlerReferences;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ConsumeScopeAccessor _scopeAccessor;
         private readonly Bus _bus;
 
         public BusTests()
@@ -49,6 +52,8 @@ namespace ServiceConnect.UnitTests
 
             _mockDispatcher = new Mock<IMessageDispatcher>();
             _handlerReferences = new List<HandlerReference>();
+            _scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+            _scopeAccessor = new ConsumeScopeAccessor();
 
             _bus = new Bus(
                 _mockSerializer.Object,
@@ -59,7 +64,9 @@ namespace ServiceConnect.UnitTests
                 _mockQueueConfig.Object,
                 _mockDispatcher.Object,
                 _handlerReferences,
-                _mockPipelineConfig.Object);
+                _mockPipelineConfig.Object,
+                _scopeFactory,
+                _scopeAccessor);
         }
 
         [Fact]
@@ -92,6 +99,8 @@ namespace ServiceConnect.UnitTests
                 _mockDispatcher.Object,
                 _handlerReferences,
                 _mockPipelineConfig.Object,
+                _scopeFactory,
+                _scopeAccessor,
                 mockConsumer.Object);
 
             // Act
@@ -138,6 +147,8 @@ namespace ServiceConnect.UnitTests
                 _mockDispatcher.Object,
                 _handlerReferences,
                 _mockPipelineConfig.Object,
+                _scopeFactory,
+                _scopeAccessor,
                 mockConsumer.Object,
                 null,
                 TimeSpan.FromMilliseconds(50));
@@ -186,7 +197,9 @@ namespace ServiceConnect.UnitTests
                 _mockQueueConfig.Object,
                 _mockDispatcher.Object,
                 _handlerReferences,
-                pipelineConfigWithFilter.Object);
+                pipelineConfigWithFilter.Object,
+                _scopeFactory,
+                _scopeAccessor);
 
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
             var messageBytes = new byte[] { 1, 2, 3 };
@@ -220,7 +233,9 @@ namespace ServiceConnect.UnitTests
                 _mockQueueConfig.Object,
                 _mockDispatcher.Object,
                 _handlerReferences,
-                pipelineConfigWithFilter.Object);
+                pipelineConfigWithFilter.Object,
+                _scopeFactory,
+                _scopeAccessor);
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
             _mockSerializer.Setup(x => x.Serialize(message)).Returns(new byte[] { 1, 2, 3 });
 
@@ -287,7 +302,9 @@ namespace ServiceConnect.UnitTests
                 _mockQueueConfig.Object,
                 _mockDispatcher.Object,
                 _handlerReferences,
-                pipelineConfigWithFilter.Object);
+                pipelineConfigWithFilter.Object,
+                _scopeFactory,
+                _scopeAccessor);
             var message = new FakeMessage1(correlationId) { Username = "Tim" };
 
             await busWithFilters.PublishAsync(message);
@@ -299,6 +316,95 @@ namespace ServiceConnect.UnitTests
                     h.ContainsKey(HeaderKeys.CorrelationId) &&
                     h[HeaderKeys.CorrelationId] == correlationId.ToString()),
                 null), Times.Once);
+        }
+
+        [Fact]
+        public async Task PublishAsync_WithOutgoingFilters_RunsFilterInOwnScope()
+        {
+            // Each outbound call must establish a fresh per-call DI scope so filters
+            // can resolve scoped services. The accessor must see a non-null Current
+            // during filter execution and revert once the filter returns.
+            var services = new ServiceCollection();
+            var serviceProvider = services.BuildServiceProvider();
+            var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+            var scopeAccessor = new ConsumeScopeAccessor();
+
+            IServiceProvider? providerDuringFilter = null;
+            _mockFilterPipeline
+                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() =>
+                {
+                    providerDuringFilter = scopeAccessor.Current;
+                    return false;
+                });
+
+            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
+
+            var busWithFilters = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                pipelineConfigWithFilter.Object,
+                scopeFactory,
+                scopeAccessor);
+
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+            await busWithFilters.PublishAsync(message);
+
+            Assert.NotNull(providerDuringFilter);
+            // Accessor must revert to no-scope once the filter returns.
+            Assert.Throws<InvalidOperationException>(() => _ = scopeAccessor.Current);
+        }
+
+        [Fact]
+        public async Task PublishAsync_TwoCalls_CreateDistinctOutgoingFilterScopes()
+        {
+            // Per-call isolation: the second call must not share a scope with the first.
+            var services = new ServiceCollection();
+            services.AddScoped<MarkerProbe>();
+            var serviceProvider = services.BuildServiceProvider();
+            var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+            var scopeAccessor = new ConsumeScopeAccessor();
+
+            var seenMarkers = new List<MarkerProbe>();
+            _mockFilterPipeline
+                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() =>
+                {
+                    seenMarkers.Add(scopeAccessor.Current.GetRequiredService<MarkerProbe>());
+                    return false;
+                });
+
+            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
+
+            var busWithFilters = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                pipelineConfigWithFilter.Object,
+                scopeFactory,
+                scopeAccessor);
+
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+            await busWithFilters.PublishAsync(message);
+            await busWithFilters.PublishAsync(message);
+
+            Assert.Equal(2, seenMarkers.Count);
+            Assert.NotSame(seenMarkers[0], seenMarkers[1]);
         }
 
         [Fact]
@@ -417,7 +523,9 @@ namespace ServiceConnect.UnitTests
                 _mockQueueConfig.Object,
                 _mockDispatcher.Object,
                 _handlerReferences,
-                pipelineConfigWithFilter.Object);
+                pipelineConfigWithFilter.Object,
+                _scopeFactory,
+                _scopeAccessor);
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
             _mockSerializer.Setup(x => x.Serialize(message)).Returns(new byte[] { 1, 2, 3 });
 
@@ -539,7 +647,9 @@ namespace ServiceConnect.UnitTests
                 _mockQueueConfig.Object,
                 _mockDispatcher.Object,
                 _handlerReferences,
-                pipelineConfigWithFilter.Object);
+                pipelineConfigWithFilter.Object,
+                _scopeFactory,
+                _scopeAccessor);
 
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
@@ -615,15 +725,19 @@ namespace ServiceConnect.UnitTests
         public void Constructor_ShouldThrow_WhenDependencyIsNull()
         {
             var p = _mockPipelineConfig.Object;
-            Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, null!, _mockDispatcher.Object, _handlerReferences, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, (IMessageDispatcher)null!, _handlerReferences, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, null!, p));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, null!));
+            var sf = _scopeFactory;
+            var sa = _scopeAccessor;
+            Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, null!, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, (IMessageDispatcher)null!, _handlerReferences, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, null!, p, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, null!, sf, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, null!, sa));
+            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, null!));
         }
 
         // --- Helper ---
@@ -639,6 +753,8 @@ namespace ServiceConnect.UnitTests
                 _mockDispatcher.Object,
                 _handlerReferences,
                 _mockPipelineConfig.Object,
+                _scopeFactory,
+                _scopeAccessor,
                 consumer);
 
         // Lifecycle serialization tests.
@@ -767,6 +883,8 @@ namespace ServiceConnect.UnitTests
                 "dispatcher" => _mockDispatcher.Object,
                 "handlerReferences" => _handlerReferences,
                 "pipelineConfig" => _mockPipelineConfig.Object,
+                "scopeFactory" => _scopeFactory,
+                "scopeAccessor" => _scopeAccessor,
                 "consumer" => null,
                 "producer" => null,
                 "disposeTimeout" => null,
@@ -777,5 +895,9 @@ namespace ServiceConnect.UnitTests
 
             return (Bus)constructor.Invoke(args);
         }
+    }
+
+    file sealed class MarkerProbe
+    {
     }
 }

@@ -52,7 +52,8 @@ public class ExceptionHandlerTests
             NullLogger<MessageDispatcher>.Instance,
             _mockConfig.Object,
             mockPipelineConfig.Object,
-            sp,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            new ConsumeScopeAccessor(),
             registry);
     }
 

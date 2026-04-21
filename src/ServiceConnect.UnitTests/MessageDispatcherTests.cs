@@ -98,13 +98,14 @@ public class MessageDispatcherTests
 
     private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider)
     {
+        var scopeAccessor = new ConsumeScopeAccessor();
         var handlerRegistry = BuildHandlerRegistry(
             (typeof(FakeMessage1), typeof(TestDispatchHandler)),
             (typeof(PolyBaseMessage), typeof(PolyBaseHandler)));
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(handlerRegistry, serviceProvider, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
+            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
         };
 
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
@@ -116,7 +117,8 @@ public class MessageDispatcherTests
             NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
-            serviceProvider,
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            scopeAccessor,
             registry);
     }
 
@@ -131,7 +133,8 @@ public class MessageDispatcherTests
             NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
-            sp,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            new ConsumeScopeAccessor(),
             registry);
     }
 
@@ -456,10 +459,11 @@ public class MessageDispatcherTests
         // Arrange — empty registry, no types registered
         var emptyRegistry = new MessageTypeRegistry();
         var sp = new ServiceCollection().BuildServiceProvider();
+        var scopeAccessor = new ConsumeScopeAccessor();
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(BuildHandlerRegistry(), sp, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
+            new HandlerProcessor(BuildHandlerRegistry(), scopeAccessor, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
         };
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,
@@ -468,7 +472,8 @@ public class MessageDispatcherTests
             NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
-            sp,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            scopeAccessor,
             emptyRegistry);
 
         var headers = new Dictionary<string, object>
@@ -574,6 +579,92 @@ public class MessageDispatcherTests
         Assert.False(result.Success);
         Assert.IsType<InvalidOperationException>(result.Exception);
     }
+
+    // ---------------- H3/H4/M12: per-dispatch DI scope ----------------
+
+    [Fact]
+    public async Task Dispatch_CreatesFreshScope_AndDisposesAfterHandler()
+    {
+        // Per-message scope lifecycle: a scoped service resolved inside the dispatch
+        // must be the same instance across resolutions in that dispatch, and the scope
+        // must be disposed before Dispatch returns.
+        var message = new FakeMessage1(Guid.NewGuid());
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(new TestDispatchHandler());
+        services.AddSingleton(_mockBus.Object);
+        services.AddScoped<DisposableMarker>();
+        var sp = services.BuildServiceProvider();
+
+        DisposableMarker? scopedFromProcessor1 = null;
+        DisposableMarker? scopedFromProcessor2 = null;
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var captureProcessor = new CapturingProcessor(scopedProvider =>
+        {
+            scopedFromProcessor1 = scopedProvider.GetRequiredService<DisposableMarker>();
+            scopedFromProcessor2 = scopedProvider.GetRequiredService<DisposableMarker>();
+        }, scopeAccessor);
+
+        var dispatcher = new MessageDispatcher(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            new List<IMessageProcessor> { captureProcessor },
+            NullLogger<MessageDispatcher>.Instance,
+            new Mock<IBusConfiguration>().Object,
+            CreateEmptyPipelineConfig().Object,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            scopeAccessor,
+            CreateRegistryWithTypes(typeof(FakeMessage1)));
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+
+        Assert.True(result.Success);
+        Assert.NotNull(scopedFromProcessor1);
+        Assert.Same(scopedFromProcessor1, scopedFromProcessor2);
+        Assert.True(scopedFromProcessor1!.Disposed, "Scoped service should have been disposed when the dispatch scope exited.");
+    }
+
+    [Fact]
+    public async Task Dispatch_CreatesDistinctScopes_AcrossDispatches()
+    {
+        // Two back-to-back dispatches must receive independent scopes — a cached
+        // middleware chain would pin the first scope for the life of the bus.
+        var message = new FakeMessage1(Guid.NewGuid());
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(new TestDispatchHandler());
+        services.AddSingleton(_mockBus.Object);
+        services.AddScoped<DisposableMarker>();
+        var sp = services.BuildServiceProvider();
+
+        var captured = new List<DisposableMarker>();
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var captureProcessor = new CapturingProcessor(scopedProvider =>
+        {
+            captured.Add(scopedProvider.GetRequiredService<DisposableMarker>());
+        }, scopeAccessor);
+
+        var dispatcher = new MessageDispatcher(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            new List<IMessageProcessor> { captureProcessor },
+            NullLogger<MessageDispatcher>.Instance,
+            new Mock<IBusConfiguration>().Object,
+            CreateEmptyPipelineConfig().Object,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            scopeAccessor,
+            CreateRegistryWithTypes(typeof(FakeMessage1)));
+
+        await dispatcher.Dispatch(new byte[] { 1 }, "FakeMessage1", MakeHeaders());
+        await dispatcher.Dispatch(new byte[] { 1 }, "FakeMessage1", MakeHeaders());
+
+        Assert.Equal(2, captured.Count);
+        Assert.NotSame(captured[0], captured[1]);
+        Assert.True(captured[0].Disposed);
+        Assert.True(captured[1].Disposed);
+    }
 }
 
 file class AlwaysHandledProcessor : IMessageProcessor
@@ -610,6 +701,38 @@ file class PolyBaseHandler : IMessageHandler<PolyBaseMessage>
 file sealed class UnregisteredReplyMessage : Message
 {
     public UnregisteredReplyMessage(Guid correlationId) : base(correlationId) { }
+}
+
+file sealed class DisposableMarker : IDisposable
+{
+    public bool Disposed { get; private set; }
+    public void Dispose() => Disposed = true;
+}
+
+file sealed class CapturingProcessor : IMessageProcessor
+{
+    private readonly Action<IServiceProvider> _capture;
+    private readonly ConsumeScopeAccessor _scopeAccessor;
+
+    public CapturingProcessor(Action<IServiceProvider> capture, ConsumeScopeAccessor scopeAccessor)
+    {
+        _capture = capture;
+        _scopeAccessor = scopeAccessor;
+    }
+
+    public bool RunBeforeDeserialization => false;
+
+    public Task<ProcessResult> ProcessAsync(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object? message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        CancellationToken cancellationToken = default)
+    {
+        _capture(_scopeAccessor.Current);
+        return Task.FromResult(ProcessResult.Handled);
+    }
 }
 
 file sealed class TestDispatcherReplyManager : IReplyStatusRequestReplyManager

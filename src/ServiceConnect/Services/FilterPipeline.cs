@@ -6,15 +6,14 @@ namespace ServiceConnect.Services;
 
 /// <summary>
 /// Resolves and executes configured filters for outgoing and incoming message envelopes.
+/// Filters are resolved per call from <see cref="ConsumeScopeAccessor.Current"/> so that
+/// scoped dependencies honour the same message scope as the dispatcher and handlers.
 /// </summary>
-public sealed class FilterPipeline(IPipelineConfiguration config, IServiceProvider serviceProvider) : IFilterPipeline
+public sealed class FilterPipeline(IPipelineConfiguration config, ConsumeScopeAccessor scopeAccessor) : IFilterPipeline
 {
     /// <summary>
     /// Runs the configured outgoing filters and returns whether processing was stopped.
     /// </summary>
-    /// <param name="envelope">The envelope being sent or published.</param>
-    /// <param name="cancellationToken">A token used to cancel filter execution.</param>
-    /// <returns><see langword="true"/> when a filter stops processing; otherwise <see langword="false"/>.</returns>
     public Task<bool> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         return ExecuteFiltersAsync(config.OutgoingFilters, envelope, cancellationToken);
@@ -23,9 +22,6 @@ public sealed class FilterPipeline(IPipelineConfiguration config, IServiceProvid
     /// <summary>
     /// Runs the configured pre-consume filters and returns whether processing was stopped.
     /// </summary>
-    /// <param name="envelope">The incoming envelope.</param>
-    /// <param name="cancellationToken">A token used to cancel filter execution.</param>
-    /// <returns><see langword="true"/> when a filter stops processing; otherwise <see langword="false"/>.</returns>
     public Task<bool> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         return ExecuteFiltersAsync(config.BeforeConsumingFilters, envelope, cancellationToken);
@@ -34,9 +30,6 @@ public sealed class FilterPipeline(IPipelineConfiguration config, IServiceProvid
     /// <summary>
     /// Runs the configured post-consume filters and returns whether processing was stopped.
     /// </summary>
-    /// <param name="envelope">The processed envelope.</param>
-    /// <param name="cancellationToken">A token used to cancel filter execution.</param>
-    /// <returns><see langword="true"/> when a filter stops processing; otherwise <see langword="false"/>.</returns>
     public Task<bool> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         return ExecuteFiltersAsync(config.AfterConsumingFilters, envelope, cancellationToken);
@@ -46,6 +39,8 @@ public sealed class FilterPipeline(IPipelineConfiguration config, IServiceProvid
     {
         if (filterTypes == null || filterTypes.Count == 0)
             return false;
+
+        var serviceProvider = scopeAccessor.Current;
 
         foreach (Type filterType in filterTypes)
         {

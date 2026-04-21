@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 2/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 4/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -104,12 +104,12 @@ Severity bands:
 - **What:** The public `IMessageDispatcher` contract takes `Type messageType` separately, but the implementation uses it only in the exception log path; all type resolution reads the `HeaderKeys.FullTypeName` header. A transport that honours the public contract still fails at runtime.
 - **Fix:** Use the supplied `messageType`; treat the header as tie-break.
 
-### [ ] H3. Inbound middleware resolves from the root `IServiceProvider` and the chain is cached
+### [x] H3. Inbound middleware resolves from the root `IServiceProvider` and the chain is cached
 - **File:** [MessageDispatcher.cs:26-57,179-192](../src/ServiceConnect/Services/MessageDispatcher.cs), [ServiceCollectionExtensions.cs:41,150-163](../src/ServiceConnect/ServiceCollectionExtensions.cs)
 - **What:** `BuildProcessingChain()` resolves middleware from the root `_serviceProvider` and is wrapped in `Lazy<>`, so a transient middleware instance is pinned for the bus lifetime. `ValidateSendMessageMiddlewareLifetimes` only validates the send pipeline — no equivalent check for `MessageProcessingMiddleware`.
 - **Fix:** Resolve per-message from a scoped provider; extend startup validation to the inbound side.
 
-### [ ] H4. `FilterPipeline` resolves filters from the root provider on every execution
+### [x] H4. `FilterPipeline` resolves filters from the root provider on every execution
 - **File:** [FilterPipeline.cs:10,45-53](../src/ServiceConnect/Services/FilterPipeline.cs), [ServiceCollectionExtensions.cs:61](../src/ServiceConnect/ServiceCollectionExtensions.cs#L61)
 - **What:** `FilterPipeline` registered as singleton; `ExecuteFiltersAsync` calls `serviceProvider.GetRequiredService(filterType)` against the root-captured provider. Scoped filters or filters depending on scoped services silently behave as root-scoped. No startup guard.
 - **Fix:** Scope-aware resolution + startup validation.
@@ -253,7 +253,7 @@ Severity bands:
 - **What:** Public `set` accessor; subscribers can rewrite `MessageId`, `DestinationAddress`, etc., after the event fires but before transport send.
 - **Fix:** Expose as read-only or snapshot before raising.
 
-### [ ] M12. Startup validation skips inbound pipelines
+### [x] M12. Startup validation skips inbound pipelines
 - **File:** [ServiceCollectionExtensions.cs:41,150-163](../src/ServiceConnect/ServiceCollectionExtensions.cs#L41-L163)
 - **What:** Only `ValidateSendMessageMiddlewareLifetimes` runs. Inbound middleware (H3) and filter (H4) lifetime misconfigurations silently slip through.
 - **Fix:** Extend validator; mirror the send-side checks for inbound.

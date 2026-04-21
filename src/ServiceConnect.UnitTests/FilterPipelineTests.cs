@@ -31,7 +31,12 @@ namespace ServiceConnect.UnitTests
         {
             _config = new PipelineConfiguration();
             _mockServiceProvider = new Mock<IServiceProvider>();
-            _pipeline = new FilterPipeline(_config, _mockServiceProvider.Object);
+            // ConsumeScopeAccessor flows the scope through AsyncLocal — each xUnit
+            // test instance runs in its own async flow, so pushing in the ctor and
+            // discarding the disposable is safe.
+            var scopeAccessor = new ConsumeScopeAccessor();
+            scopeAccessor.Push(_mockServiceProvider.Object);
+            _pipeline = new FilterPipeline(_config, scopeAccessor);
         }
 
         [Fact]
@@ -164,6 +169,45 @@ namespace ServiceConnect.UnitTests
             var envelope = new Envelope();
             var result = await _pipeline.ExecuteAfterConsumingFiltersAsync(envelope);
             Assert.False(result);
+        }
+
+        [Fact]
+        public async Task ExecuteFilter_ResolvesFromCurrentScope()
+        {
+            // Filters must be resolved from the scope pushed onto ConsumeScopeAccessor,
+            // not from any previously captured provider. Swap the current scope mid-flight
+            // and verify the new provider is the one queried.
+            var firstFilter = new Mock<FakeFilter1>();
+            firstFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            _mockServiceProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(firstFilter.Object);
+
+            var otherProvider = new Mock<IServiceProvider>();
+            var swappedFilter = new Mock<FakeFilter1>();
+            swappedFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            otherProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(swappedFilter.Object);
+
+            _config.OutgoingFilters.Add(typeof(FakeFilter1));
+
+            var accessor = new ConsumeScopeAccessor();
+            accessor.Push(otherProvider.Object);
+            var pipeline = new FilterPipeline(_config, accessor);
+
+            await pipeline.ExecuteOutgoingFiltersAsync(new Envelope());
+
+            swappedFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
+            firstFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task ExecuteFilter_ThrowsWhenNoScopePushed()
+        {
+            // Guard-rail: resolving a filter with no scope pushed is always a misuse.
+            // Throw loudly rather than silently falling back to a root provider.
+            var config = new PipelineConfiguration();
+            config.OutgoingFilters.Add(typeof(FakeFilter1));
+            var pipeline = new FilterPipeline(config, new ConsumeScopeAccessor());
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => pipeline.ExecuteOutgoingFiltersAsync(new Envelope()));
         }
 
         [Fact]

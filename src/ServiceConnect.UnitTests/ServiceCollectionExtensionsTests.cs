@@ -149,6 +149,84 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddServiceConnect_ThrowsWhenInboundMiddlewareIsNotRegistered()
+    {
+        // Inbound middleware referenced by the pipeline must be registered in DI,
+        // or it will fail to resolve at dispatch time. We surface this at startup.
+        var services = CreateServices();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => b
+                .ConfigureQueues(q => q.QueueName = "test")
+                .ConfigureBus(c => c.ScanForMessageHandlers = false)
+                .AddMessageProcessingMiddleware<TestInboundMiddleware>()));
+
+        Assert.Contains(nameof(TestInboundMiddleware), exception.Message);
+    }
+
+    [Fact]
+    public void AddServiceConnect_ThrowsWhenBeforeConsumingFilterIsNotRegistered()
+    {
+        var services = CreateServices();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => b
+                .ConfigureQueues(q => q.QueueName = "test")
+                .ConfigureBus(c => c.ScanForMessageHandlers = false)
+                .AddBeforeConsumingFilter<TestInboundFilter>()));
+
+        Assert.Contains(nameof(TestInboundFilter), exception.Message);
+    }
+
+    [Fact]
+    public void AddServiceConnect_ThrowsWhenOutgoingFilterIsNotRegistered()
+    {
+        var services = CreateServices();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => b
+                .ConfigureQueues(q => q.QueueName = "test")
+                .ConfigureBus(c => c.ScanForMessageHandlers = false)
+                .AddOutgoingFilter<TestInboundFilter>()));
+
+        Assert.Contains(nameof(TestInboundFilter), exception.Message);
+    }
+
+    [Fact]
+    public void AddServiceConnect_AcceptsScopedInboundMiddleware()
+    {
+        // Unlike send middleware (which must be singleton because it runs in the
+        // producer scope), inbound middleware may be registered with any lifetime
+        // because it resolves from the per-message scope.
+        var services = CreateServices();
+        services.AddScoped<TestInboundMiddleware>();
+
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false)
+            .AddMessageProcessingMiddleware<TestInboundMiddleware>());
+
+        // Did not throw — registration accepted.
+        var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetService<IBus>());
+    }
+
+    [Fact]
+    public void AddServiceConnect_AcceptsTransientBeforeConsumingFilter()
+    {
+        var services = CreateServices();
+        services.AddTransient<TestInboundFilter>();
+
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false)
+            .AddBeforeConsumingFilter<TestInboundFilter>());
+
+        var provider = services.BuildServiceProvider();
+        Assert.NotNull(provider.GetService<IBus>());
+    }
+
+    [Fact]
     public void AddServiceConnect_ThrowsWhenSendMiddlewareIsNotSingleton()
     {
         var services = CreateServices();
@@ -163,6 +241,25 @@ public class ServiceCollectionExtensionsTests
         Assert.Contains(nameof(TestSendMiddleware), exception.Message);
         Assert.Contains("singleton", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+}
+
+file sealed class TestInboundMiddleware : IMessageProcessingMiddleware
+{
+    public Task<ConsumeEventResult> Process(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        MessageProcessingDelegate next,
+        CancellationToken cancellationToken = default) =>
+        next(messageBytes, messageType, message, headers, envelope, cancellationToken);
+}
+
+file sealed class TestInboundFilter : IFilter
+{
+    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default) =>
+        Task.FromResult(true);
 }
 
 file sealed class TestSendMiddleware : ISendMessageMiddleware

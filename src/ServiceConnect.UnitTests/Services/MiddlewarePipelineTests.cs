@@ -211,7 +211,8 @@ public class ProcessingMiddlewarePipelineTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             mockPipelineConfig.Object,
-            sp,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            new ConsumeScopeAccessor(),
             registry);
 
         var headers = MakeHeaders(typeof(TestMiddlewareMessage));
@@ -251,7 +252,8 @@ public class ProcessingMiddlewarePipelineTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             mockPipelineConfig.Object,
-            sp,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            new ConsumeScopeAccessor(),
             registry2);
 
         var headers = MakeHeaders(typeof(TestMiddlewareMessage));

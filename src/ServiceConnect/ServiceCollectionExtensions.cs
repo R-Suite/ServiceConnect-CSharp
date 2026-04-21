@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         }
 
         ValidateSendMessageMiddlewareLifetimes(services, builder.BusConfig.Pipeline.SendMessageMiddleware);
+        ValidateInboundMiddlewareAndFilterRegistrations(services, builder.BusConfig.Pipeline);
         RegisterBus(services);
 
         return services;
@@ -69,6 +70,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
         services.TryAddSingleton<ConsumeContextPool>();
         services.TryAddSingleton<ConsumeContextAccessor>();
+        // The consume-scope accessor flows the current DI scope through AsyncLocal so
+        // inbound filters, middleware, and processors resolve scoped services from the
+        // per-message scope established by MessageDispatcher and outgoing filter sites.
+        services.TryAddSingleton<ConsumeScopeAccessor>();
     }
 
     private static void RegisterProcessors(IServiceCollection services)
@@ -131,6 +136,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IMessageDispatcher>(),
                 sp.GetRequiredService<IList<HandlerReference>>(),
                 sp.GetRequiredService<IPipelineConfiguration>(),
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<ConsumeScopeAccessor>(),
                 sp.GetService<IConsumer>(),
                 sp.GetService<IProducer>(),
                 timeoutStore: sp.GetService<ITimeoutStore>(),
@@ -160,6 +167,30 @@ public static class ServiceCollectionExtensions
                 throw new InvalidOperationException(
                     $"Send message middleware '{middlewareType.FullName}' must be registered as a singleton.");
             }
+        }
+    }
+
+    // Inbound middleware and filters (both incoming and outgoing) run inside a
+    // per-message DI scope, so any lifetime is permitted — but they still have to be
+    // registered. Catch missing registrations at startup rather than letting them
+    // surface as opaque DI resolution failures when the first message arrives.
+    private static void ValidateInboundMiddlewareAndFilterRegistrations(IServiceCollection services, IPipelineConfiguration pipeline)
+    {
+        ValidateTypesRegistered(services, pipeline.MessageProcessingMiddleware, "Message processing middleware");
+        ValidateTypesRegistered(services, pipeline.BeforeConsumingFilters, "Before-consuming filter");
+        ValidateTypesRegistered(services, pipeline.AfterConsumingFilters, "After-consuming filter");
+        ValidateTypesRegistered(services, pipeline.OutgoingFilters, "Outgoing filter");
+    }
+
+    private static void ValidateTypesRegistered(IServiceCollection services, IReadOnlyList<Type> types, string role)
+    {
+        foreach (var type in types)
+        {
+            var registered = services.Any(d => d.ServiceType == type || d.ImplementationType == type);
+            if (!registered)
+                throw new InvalidOperationException(
+                    $"{role} '{type.FullName}' is referenced by the pipeline but is not registered in the service collection. "
+                    + "Register the type via services.AddScoped/AddTransient/AddSingleton before calling AddServiceConnect.");
         }
     }
 

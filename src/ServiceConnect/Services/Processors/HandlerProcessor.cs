@@ -10,7 +10,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class HandlerProcessor(
     MessageHandlerRegistry registry,
-    IServiceProvider serviceProvider,
+    ConsumeScopeAccessor scopeAccessor,
     Lazy<IBus> bus,
     IBusConfiguration busConfig,
     IQueueConfiguration queueConfig,
@@ -29,6 +29,8 @@ internal sealed class HandlerProcessor(
         cancellationToken.ThrowIfCancellationRequested();
         if (message == null) return ProcessResult.NotHandled;
 
+        var scopedProvider = scopeAccessor.Current;
+
         // Walk up the message hierarchy — stop at Message and object. All matching
         // handlers in the hierarchy are invoked. Defer list allocation until we
         // actually find a handler; most no-op dispatches keep the list null.
@@ -38,7 +40,7 @@ internal sealed class HandlerProcessor(
         {
             if (registry.TryGetOrBuild(checkedType, out var descriptor))
             {
-                foreach (var h in serviceProvider.GetServices(descriptor.HandlerInterfaceType))
+                foreach (var h in scopedProvider.GetServices(descriptor.HandlerInterfaceType))
                 {
                     if (h != null)
                         (invocations ??= new(capacity: 1)).Add((h, descriptor));
@@ -52,8 +54,8 @@ internal sealed class HandlerProcessor(
 
         var resolvedBus = bus.Value;
         var trustQuery = replyStatusRequestReplyManager
-            ?? serviceProvider.GetService<IReplyStatusRequestReplyManager>()
-            ?? serviceProvider.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
+            ?? scopedProvider.GetService<IReplyStatusRequestReplyManager>()
+            ?? scopedProvider.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
         var context = _contextPool.Rent(
             resolvedBus,
             headers,
