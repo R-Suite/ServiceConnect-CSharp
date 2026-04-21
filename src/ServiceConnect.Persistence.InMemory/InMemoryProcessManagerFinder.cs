@@ -13,7 +13,6 @@ namespace ServiceConnect.Persistence.InMemory;
 public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 {
     private readonly ProcessManagerPredicateCache _cache;
-    private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
 
     /// <summary>
@@ -23,17 +22,15 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         : this(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System)) { }
 
     internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache, TimeProvider? timeProvider = null)
-        : this(cache, new InMemoryPersistenceState(timeProvider), timeProvider) { }
+        : this(cache, new InMemoryPersistenceState(timeProvider)) { }
 
-    internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache, InMemoryPersistenceState state, TimeProvider? timeProvider = null)
+    internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache, InMemoryPersistenceState state)
     {
         _cache = cache ?? throw new ArgumentNullException(nameof(cache));
-        _timeProvider = timeProvider ?? TimeProvider.System;
         _state = state ?? throw new ArgumentNullException(nameof(state));
     }
 
     private const int InitialVersion = 1;
-    private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (Func<object, object?> Data, Func<object, object?> Version)>
         ReflectionAccessors = new();
@@ -193,7 +190,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             if (_state.Provider.Contains(key))
                 throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
 
-            _state.Provider.Add(key, memoryData, _timeProvider.GetUtcNow().Add(ExpiryDuration));
+            // Saga state has no TTL: lifetime is managed explicitly via Delete. A background
+            // expiry silently dropping a live saga at the 2-day mark is a data-loss bug.
+            _state.Provider.Add(key, memoryData);
         }
         finally
         {

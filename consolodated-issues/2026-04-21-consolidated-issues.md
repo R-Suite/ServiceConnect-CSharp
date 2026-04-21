@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 7/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 9/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -60,12 +60,12 @@ Severity bands:
 - **What:** `RunProcessors` logs "No processor handled message" but returns `new ConsumeEventResult { Success = true }`. A deliberately rejected / unhandled message is indistinguishable from a handled one — no audit trail, no DLQ, no retry.
 - **Fix:** Make `NotHandled` its own state; ack with explicit "skipped" trace or nack to DLQ based on config.
 
-### [ ] C7. Active in-memory process managers expire at 2 days even while being updated
+### [x] C7. Active in-memory process managers expire at 2 days even while being updated
 - **File:** [InMemoryProcessManagerFinder.cs:36,196](../src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs#L36), [CacheProvider.cs:155-163](../src/ServiceConnect.Persistence.InMemory/CacheProvider.cs#L155-L163)
 - **What:** Inserts set an absolute 2-day expiry (`ExpiryDuration = TimeSpan.FromDays(2)`); `CacheProvider.Update()` only swaps the value — timer and sliding state untouched. Long-running sagas vanish after 48h; next correlated message starts a new instance.
 - **Fix:** Remove absolute expiry on saga state, make it configurable, or refresh expiry on every write.
 
-### [ ] C8. In-memory aggregator buffers expire on the same 2-day absolute timer
+### [x] C8. In-memory aggregator buffers expire on the same 2-day absolute timer
 - **File:** [InMemoryAggregatorPersistor.cs:28,172](../src/ServiceConnect.Persistence.InMemory/InMemoryAggregatorPersistor.cs#L28)
 - **What:** Same root cause as C7 for aggregators — absolute 2-day expiry set once; `InsertDataAsync` appends without refresh. Slow or long-lived aggregators lose in-flight messages after 48h.
 - **Fix:** Same — configurable / refresh-on-write.

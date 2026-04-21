@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
@@ -227,6 +228,25 @@ namespace ServiceConnect.UnitTests
             cts.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
                 () => persistor.CountAsync("test", cts.Token));
+        }
+
+        // --- Aggregator buffer is caller-managed (C8): no background TTL ---
+
+        [Fact]
+        public async Task Inserted_AggregatorBuffer_StillResolvable_After3Days()
+        {
+            // Aggregator buffers flush via RemoveSnapshot/RemoveAll. A background
+            // 2-day expiry silently dropping buffered messages mid-aggregation
+            // is a data-loss bug.
+            var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
+            IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty, timeProvider);
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "buffered" }, "slow-stream", CancellationToken.None);
+
+            timeProvider.Advance(TimeSpan.FromDays(3));
+
+            var result = await persistor.GetDataAsync("slow-stream", CancellationToken.None);
+            Assert.Single(result);
+            Assert.Equal("buffered", ((AggregatorTestData)result[0]).Value);
         }
     }
 }

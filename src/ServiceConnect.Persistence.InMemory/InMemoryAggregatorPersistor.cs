@@ -25,8 +25,6 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
     private readonly object _memoryCacheLock = new();
 #endif
 
-    private static readonly TimeSpan ExpiryDuration = TimeSpan.FromDays(2);
-
     private sealed record Entry(Guid Id, object Data);
 
     /// <summary>
@@ -169,7 +167,10 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
             return (List<Entry>)_provider.Get<string, object>(name);
 
         var list = new List<Entry>();
-        _provider.Add(name, list, _timeProvider.GetUtcNow().Add(ExpiryDuration));
+        // Aggregator buffers have no TTL: flush is caller-driven via RemoveSnapshot /
+        // RemoveAll. A background expiry silently dropping buffered messages mid-aggregation
+        // is a data-loss bug, not a feature.
+        _provider.Add(name, list);
         return list;
     }
 }

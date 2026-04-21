@@ -473,6 +473,48 @@ namespace ServiceConnect.UnitTests
                 typeof(System.Threading.ReaderWriterLockSlim),
                 typeof(InMemoryPersistenceState).GetProperty(nameof(InMemoryPersistenceState.SyncRoot))!.PropertyType);
         }
+
+        // --- Saga lifetime is caller-managed (C7): no background TTL ---
+
+        [Fact]
+        public async Task Inserted_SagaStillResolvable_After3Days()
+        {
+            // Saga state must persist until Delete. A background 2-day expiry
+            // silently dropping live sagas is a data-loss bug.
+            var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
+            var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), timeProvider);
+            var data = new TestData { CorrelationId = _correlationId, Name = "LongLivedSaga" };
+            await finder.InsertDataAsync(data, CancellationToken.None);
+
+            timeProvider.Advance(TimeSpan.FromDays(3));
+
+            var found = await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+            Assert.NotNull(found);
+            Assert.Equal("LongLivedSaga", ((TestData)found.Data).Name);
+        }
+
+        [Fact]
+        public async Task Updated_SagaStillResolvable_After3DaysFromInsert()
+        {
+            var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
+            var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), timeProvider);
+            await finder.InsertDataAsync(new TestData { CorrelationId = _correlationId, Name = "v1" }, CancellationToken.None);
+
+            timeProvider.Advance(TimeSpan.FromDays(1));
+
+            var loaded = (MemoryData<IProcessManagerData>)(await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
+            await finder.UpdateDataAsync(new MemoryData<IProcessManagerData>
+            {
+                Data = new TestData { CorrelationId = _correlationId, Name = "v2" },
+                Version = loaded.Version
+            }, CancellationToken.None);
+
+            timeProvider.Advance(TimeSpan.FromDays(2));
+
+            var found = await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+            Assert.NotNull(found);
+            Assert.Equal("v2", ((TestData)found.Data).Name);
+        }
     }
 
     /// <summary>

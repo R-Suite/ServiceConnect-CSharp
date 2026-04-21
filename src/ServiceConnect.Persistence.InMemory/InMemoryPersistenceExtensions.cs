@@ -28,8 +28,7 @@ public static class InMemoryPersistenceExtensions
             services.TryAddSingleton<InMemoryProcessManagerFinder>(sp =>
                 new InMemoryProcessManagerFinder(
                     sp.GetRequiredService<ProcessManagerPredicateCache>(),
-                    sp.GetRequiredService<InMemoryPersistenceState>(),
-                    sp.GetRequiredService<TimeProvider>()));
+                    sp.GetRequiredService<InMemoryPersistenceState>()));
             services.TryAddSingleton<InMemoryTimeoutStore>(sp =>
                 new InMemoryTimeoutStore(
                     sp.GetRequiredService<InMemoryPersistenceState>(),

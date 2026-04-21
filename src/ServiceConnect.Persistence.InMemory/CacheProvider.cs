@@ -49,6 +49,18 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     }
 
     /// <summary>
+    /// Add a value that never expires. No timer is scheduled and no sliding window is
+    /// maintained — the entry persists until <see cref="Remove{TKey}"/>,
+    /// <see cref="Clear"/>, or <see cref="PurgeNormalPriorities"/> removes it.
+    /// Intended for caller-managed state (e.g. saga/aggregator persistence) where a
+    /// background expiry would silently drop in-flight data.
+    /// </summary>
+    public void Add<TKey, TValue>(TKey key, TValue value, CacheItemPriority priority = CacheItemPriority.Normal)
+    {
+        _cache.TryAdd(key!, new CacheItem(value!, priority, null));
+    }
+
+    /// <summary>
     /// Gets a value from the cache for specified key.
     /// </summary>
     public TValue Get<TKey, TValue>(TKey key)
