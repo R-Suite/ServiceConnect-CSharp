@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 17/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 18/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -283,7 +283,7 @@ Severity bands:
 - **What:** Snapshot reads use `Find(filter).ToListAsync(cancellationToken)` with no explicit sort before projecting messages — insertion order not guaranteed stable.
 - **Fix:** Sort by a deterministic key (e.g. insertion timestamp / sequence).
 
-### [ ] M18. Mongo timeout lease has no background reaper for crashes
+### [x] M18. Mongo timeout lease has no background reaper for crashes
 - **File:** [MongoDbTimeoutStore.cs:28,110,260-266](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs)
 - **What:** `LockLeaseDuration` (5 min) + `BuildDueTimeoutFilter` re-claims stale leases on the next `GetTimeoutsBatchAsync` poll. Works but entirely poll-driven — a crashed handler's lease is only recovered when the next poll fires.
 - **Fix:** Short TTL on lease + background reaper for liveness guarantees.

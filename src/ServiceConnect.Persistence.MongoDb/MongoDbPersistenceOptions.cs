@@ -26,4 +26,12 @@ public sealed class MongoDbPersistenceOptions
     /// due rows are picked up on the next poll. Must be positive.
     /// </summary>
     public int TimeoutBatchSize { get; set; } = 500;
+
+    /// <summary>
+    /// Gets or sets the lease duration applied when claiming a timeout for
+    /// dispatch. Shorter leases recover faster from crashed handlers; longer
+    /// leases are safer for handlers with variable dispatch latency. Must
+    /// be positive.
+    /// </summary>
+    public TimeSpan TimeoutLockLeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
 }

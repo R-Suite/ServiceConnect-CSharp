@@ -400,6 +400,80 @@ public class MongoDbTimeoutStoreTests
     }
 
     [Fact]
+    public void Ctor_RejectsNonPositiveTimeoutLockLeaseDuration()
+    {
+        // M18 regression: lease duration must be strictly positive — a
+        // zero or negative lease would either claim rows forever (no TTL)
+        // or immediately reap every claim before dispatch can complete.
+        var client = new Mock<IMongoClient>();
+        client.Setup(c => c.GetDatabase("test", null)).Returns(Mock.Of<IMongoDatabase>());
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MongoDbTimeoutStore(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "test", TimeoutLockLeaseDuration = TimeSpan.Zero },
+            NullLogger<MongoDbTimeoutStore>.Instance));
+    }
+
+    [Fact]
+    public async Task ReapStaleLeases_FiltersOnLockedAndExpiredLease_AndClearsLockFields()
+    {
+        // M18 regression: the reaper must target only rows where the lease
+        // has expired (Locked=true AND LockExpiresAt <= now) and must clear
+        // Locked/LockedBy/LockExpiresAt so the next poll can reclaim them.
+        var now = new DateTimeOffset(2026, 4, 22, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+
+        FilterDefinition<TimeoutData>? capturedFilter = null;
+        UpdateDefinition<TimeoutData>? capturedUpdate = null;
+
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<FilterDefinition<TimeoutData>, UpdateDefinition<TimeoutData>, UpdateOptions?, CancellationToken>((filter, update, _, _) =>
+            {
+                capturedFilter = filter;
+                capturedUpdate = update;
+            })
+            .ReturnsAsync(BuildUpdateResult(7, 7));
+
+        var indexes = new Mock<IMongoIndexManager<TimeoutData>>();
+        indexes.Setup(m => m.CreateManyAsync(
+                It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<string> { "ok" });
+        collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
+
+        var database = new Mock<IMongoDatabase>();
+        database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null)).Returns(collection.Object);
+
+        var client = new Mock<IMongoClient>();
+        client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
+
+        var store = new MongoDbTimeoutStore(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "test" },
+            NullLogger<MongoDbTimeoutStore>.Instance,
+            time);
+
+        var reaped = await store.ReapStaleLeasesAsync();
+
+        Assert.Equal(7, reaped);
+        var filterJson = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
+        Assert.Contains("\"Locked\" : true", filterJson);
+        Assert.Contains("\"LockExpiresAt\"", filterJson);
+        Assert.Contains("\"$lte\"", filterJson);
+
+        var updateJson = RenderUpdate(Assert.IsAssignableFrom<UpdateDefinition<TimeoutData>>(capturedUpdate));
+        Assert.Contains("\"Locked\" : false", updateJson);
+        Assert.Contains("\"LockedBy\"", updateJson);
+        Assert.Contains(Guid.Empty.ToString(), updateJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"LockExpiresAt\" : null", updateJson);
+    }
+
+    [Fact]
     public void Ctor_RejectsNonPositiveTimeoutBatchSize()
     {
         // M15 regression: the per-poll cap must be positive — a zero or

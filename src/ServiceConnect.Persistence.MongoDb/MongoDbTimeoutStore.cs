@@ -22,11 +22,11 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
     private readonly IMongoDatabase _mongoDatabase;
     private readonly TimeProvider _timeProvider;
     private readonly int _batchSize;
+    private readonly TimeSpan _lockLeaseDuration;
     private int _timeoutIndexEnsuredFlag;
 
     private const string TimeoutsCollectionName = "Timeouts";
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
-    private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Creates a timeout store backed by MongoDB.
@@ -50,6 +50,11 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
                 nameof(options), options.TimeoutBatchSize,
                 $"{nameof(MongoDbPersistenceOptions.TimeoutBatchSize)} must be positive.");
         _batchSize = options.TimeoutBatchSize;
+        if (options.TimeoutLockLeaseDuration <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(
+                nameof(options), options.TimeoutLockLeaseDuration,
+                $"{nameof(MongoDbPersistenceOptions.TimeoutLockLeaseDuration)} must be positive.");
+        _lockLeaseDuration = options.TimeoutLockLeaseDuration;
 
         try
         {
@@ -113,7 +118,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
             var lockUpdate = Builders<TimeoutData>.Update
                 .Set(x => x.Locked, true)
                 .Set(x => x.LockedBy, sessionId)
-                .Set(x => x.LockExpiresAt, utcNow.Add(LockLeaseDuration));
+                .Set(x => x.LockExpiresAt, utcNow.Add(_lockLeaseDuration));
 
             // Cap per-poll batch size. Two-step pattern because MongoDB
             // UpdateMany has no .Limit(): first pull up to _batchSize
@@ -283,6 +288,38 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to release dispatched timeout with Id '{id}' and lock owner '{lockOwner}'.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Clears lock fields on every row whose lease has expired, independent
+    /// of the main poll. Safe to invoke from a background timer at a faster
+    /// cadence than the dispatch poll — expired rows become due-unlocked
+    /// immediately and the next poll (or this reaper) picks them up.
+    /// </summary>
+    /// <returns>The number of rows unlocked by this pass.</returns>
+    public async Task<long> ReapStaleLeasesAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            var utcNow = _timeProvider.GetUtcNow();
+
+            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
+                         Builders<TimeoutData>.Filter.Lte(x => x.LockExpiresAt, utcNow);
+            var update = Builders<TimeoutData>.Update
+                .Set(x => x.Locked, false)
+                .Set(x => x.LockedBy, Guid.Empty)
+                .Set(x => x.LockExpiresAt, null);
+            var result = await collection.UpdateManyAsync(filter, update, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return result.IsAcknowledged ? result.ModifiedCount : 0L;
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException("Failed to reap stale timeout leases.", ex);
         }
     }
 
