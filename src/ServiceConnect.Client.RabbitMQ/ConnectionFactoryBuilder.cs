@@ -10,15 +10,21 @@ namespace ServiceConnect.Client.RabbitMQ;
 internal static class ConnectionFactoryBuilder
 {
     /// <summary>
+    /// Default heartbeat interval applied when the caller hasn't configured one.
+    /// Matches Connection.cs' previous hard-coded 120-second fallback so the behaviour
+    /// is identical whether the builder is invoked from a producer or a consumer.
+    /// </summary>
+    private static readonly TimeSpan DefaultHeartbeat = TimeSpan.FromSeconds(120);
+
+    /// <summary>
     /// Builds a <see cref="ConnectionFactory"/> from the transport configuration.
+    /// Heartbeat is resolved from <see cref="RabbitMQSettingKeys.HeartbeatEnabled"/> and
+    /// <see cref="RabbitMQSettingKeys.HeartbeatTime"/> so producer and consumer code paths
+    /// honour the same configured values — previously Producer passed a null interval and
+    /// silently fell back to RabbitMQ defaults.
     /// </summary>
     /// <param name="transport">Transport settings including SSL, credentials, and hosts.</param>
-    /// <param name="heartbeatInterval">
-    /// Optional heartbeat interval. Callers that read a `HeartbeatEnabled` / `HeartbeatTime`
-    /// setting explicitly (Connection.cs does) pass the resolved value; callers that don't
-    /// care (Producer.cs) pass <c>null</c> to accept RabbitMQ defaults.
-    /// </param>
-    public static ConnectionFactory Build(ITransportConfiguration transport, TimeSpan? heartbeatInterval)
+    public static ConnectionFactory Build(ITransportConfiguration transport)
     {
         ArgumentNullException.ThrowIfNull(transport);
 
@@ -32,11 +38,9 @@ internal static class ConnectionFactoryBuilder
             VirtualHost = "/",
             Port = port,
             AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true
+            TopologyRecoveryEnabled = true,
+            RequestedHeartbeat = ResolveHeartbeat(transport),
         };
-
-        if (heartbeatInterval.HasValue)
-            factory.RequestedHeartbeat = heartbeatInterval.Value;
 
         if (!string.IsNullOrEmpty(transport.Username))
             factory.UserName = transport.Username;
@@ -57,5 +61,24 @@ internal static class ConnectionFactoryBuilder
             factory.VirtualHost = transport.VirtualHost;
 
         return factory;
+    }
+
+    private static TimeSpan ResolveHeartbeat(ITransportConfiguration transport)
+    {
+        var settings = transport.ClientSettings;
+
+        // Explicit opt-out disables heartbeats (TimeSpan.Zero == "never send one").
+        if (settings.TryGetValue(RabbitMQSettingKeys.HeartbeatEnabled, out var enabledRaw)
+            && enabledRaw is bool enabled && !enabled)
+        {
+            return TimeSpan.Zero;
+        }
+
+        if (settings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var timeRaw))
+        {
+            return TimeSpan.FromSeconds(Convert.ToInt32(timeRaw));
+        }
+
+        return DefaultHeartbeat;
     }
 }

@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 18/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 19/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -184,7 +184,7 @@ Severity bands:
 - **What:** Insert/update bind the caller's object directly. Process-manager reads do `MemberwiseClone()` with deep-copy only for `byte[]` properties — nested collections still alias. Aggregator reads return the raw stored reference with no cloning. `CacheProvider.Get()` returns the raw reference. Callers mutating nested collections mutate stored state.
 - **Fix:** Deep-clone via serializer, or document stored types must be immutable.
 
-### [ ] H20. Producer ignores configured heartbeat settings
+### [x] H20. Producer ignores configured heartbeat settings
 - **File:** [Producer.cs:115](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L115), [Connection.cs:47-50](../src/ServiceConnect.Client.RabbitMQ/Connection.cs#L47-L50), [ConnectionFactoryBuilder.cs:21,38-39](../src/ServiceConnect.Client.RabbitMQ/ConnectionFactoryBuilder.cs)
 - **What:** `Producer.CreateConnectionAsync` calls `Build(..., heartbeatInterval: null)`. Consumer-side connections correctly resolve `_heartbeatEnabled`/`_heartbeatTime`. Producer connections never honour configured heartbeat.
 - **Fix:** Pass the resolved heartbeat settings from `ClientSettings`.

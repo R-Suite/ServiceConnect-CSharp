@@ -16,8 +16,6 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private volatile bool _disposed;
 
-    private readonly bool _heartbeatEnabled = !transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.HeartbeatEnabled, out var hbEnabled) || (bool)hbEnabled;
-    private readonly TimeSpan _heartbeatTime = transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var hbTime) ? new TimeSpan(0, 0, (int)hbTime) : new TimeSpan(0, 0, 120);
     private readonly string[] _hosts = transportSettings.Host.Split(',');
 
     private async Task ConnectAsync(CancellationToken cancellationToken)
@@ -45,9 +43,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     }
 
     private ConnectionFactory BuildConnectionFactory() =>
-        ConnectionFactoryBuilder.Build(
-            transportSettings,
-            _heartbeatEnabled ? _heartbeatTime : TimeSpan.Zero);
+        ConnectionFactoryBuilder.Build(transportSettings);
 
     /// <summary>
     /// Determines whether the underlying RabbitMQ connection is open.
