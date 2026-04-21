@@ -194,8 +194,11 @@ public class MessageRetryHandlerTests
     }
 
     [Fact]
-    public async Task HandleFailureAsync_IgnoresCorruptRetryCount()
+    public async Task HandleFailureAsync_MalformedRetryCount_RoutesToErrorExchange()
     {
+        // Regression for H14: a malformed RetryCount header must not silently reset the
+        // retry budget to 0 — that would let a corrupt or attacker-controlled header loop
+        // the message forever. Route straight to the error exchange instead.
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -209,6 +212,42 @@ public class MessageRetryHandlerTests
 
         await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
 
-        Assert.Equal(1, (int)headers[HeaderKeys.RetryCount]);
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicPublishAsync(
+            string.Empty, "q.Retries", false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-42)]
+    [InlineData(9999)]
+    public async Task HandleFailureAsync_OutOfRangeRetryCount_RoutesToErrorExchange(int badCount)
+    {
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var args = MakeArgs();
+        var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = badCount };
+
+        await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
+
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicPublishAsync(
+            string.Empty, "q.Retries", false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 }

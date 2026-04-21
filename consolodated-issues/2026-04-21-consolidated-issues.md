@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 13/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 14/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -159,7 +159,7 @@ Severity bands:
 - **What:** `InvokeExecute(aggregator, typedList)` runs before `RemoveSnapshotAsync(...)`. If cancellation hits between them, the snapshot remains persisted and can be flushed again on the next timer tick — same batch delivered twice.
 - **Fix:** Remove-before-execute, or use a single atomic swap.
 
-### [ ] H14. Malformed `RetryCount` header resets the retry budget
+### [x] H14. Malformed `RetryCount` header resets the retry budget
 - **File:** [MessageRetryHandler.cs:38-47](../src/ServiceConnect.Client.RabbitMQ/MessageRetryHandler.cs#L38-L47)
 - **What:** Non-parseable or out-of-range `RetryCount` values yield `candidate = -1`, fail the `>= 0` guard, and leave `retryCount = 0`. The handler then increments and republishes as if the message were on its first retry — a publisher or broker corruption can force infinite retries.
 - **Fix:** Treat parse failure as "route to error" (or preserve a sane counter); never silently reset to 0.

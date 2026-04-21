@@ -40,8 +40,18 @@ internal sealed class MessageRetryHandler
         {
             int candidate = raw is int i ? i
                 : (raw is not null && int.TryParse(raw.ToString(), out var parsed) ? parsed : -1);
-            if (candidate >= 0 && candidate <= _maxRetries + 1)
-                retryCount = candidate;
+            if (candidate < 0 || candidate > _maxRetries + 1)
+            {
+                // Never silently reset to 0 here — a corrupt or attacker-controlled header
+                // would otherwise force infinite retries. Route to error so an operator
+                // can see the malformed value instead of the broker looping forever.
+                _logger.LogWarning(
+                    "Malformed or out-of-range RetryCount header '{RetryCount}' for MessageId {MessageId}; routing to error exchange.",
+                    raw, args.BasicProperties.MessageId);
+                await PublishErrorAsync(channel, args, headers, ex, logAsMaxRetries: false, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            retryCount = candidate;
         }
 
         if (retryCount < _maxRetries)
