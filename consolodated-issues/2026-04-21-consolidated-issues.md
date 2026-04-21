@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 7/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 8/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -228,7 +228,7 @@ Severity bands:
 - **What:** `ExtractTraceIdAndState` switches only on `Dictionary<string,object>` / `Dictionary<string,string>`. `ReadOnlyDictionary` (as wrapped by `ConsumeContext`) and other `IDictionary` implementations silently lose `traceparent`/`tracestate`.
 - **Fix:** Iterate via the interface.
 
-### [ ] M7. `send` span tagged as `publish` (OTel semconv mismatch)
+### [x] M7. `send` span tagged as `publish` (OTel semconv mismatch)
 - **File:** [ServiceConnectActivitySource.cs:140-153](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L140-L153)
 - **What:** `Send()` starts the activity with operation `"publish"` and display name `"<endpoint> publish"`. OTel messaging semconv distinguishes `publish` (pub/sub) from `send` (point-to-point); backend dashboards mis-aggregate.
 - **Fix:** `publish` for `PublishAsync`; `send` for `SendAsync`.

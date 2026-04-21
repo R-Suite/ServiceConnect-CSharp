@@ -141,17 +141,21 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
     {
+        // OTel messaging semconv distinguishes "publish" (pub/sub) from "send"
+        // (point-to-point). This method backs SendAsync, so both the operation
+        // tag and display name carry "send"; backends otherwise mis-aggregate
+        // direct-to-queue traffic with fanout publishes.
         Activity? activity = StartActivity(
             _sendActivitySource,
             SendActivitySourceName,
             ActivityKind.Producer,
             Options.EnableSendTelemetry,
-            "publish",
+            "send",
             linkedContext);
 
         if (activity is null) return null;
 
-        activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? "anonymous" : eventArgs.EndPoint) + " publish";
+        activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? "anonymous" : eventArgs.EndPoint) + " send";
 
         if (!string.IsNullOrEmpty(eventArgs.EndPoint))
         {

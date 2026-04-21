@@ -271,7 +271,10 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Send(args);
 
         Assert.NotNull(activity);
-        Assert.Equal("svc.queue publish", activity!.DisplayName);
+        // M7: Send spans use "send" per OTel messaging semconv, distinguishing
+        // point-to-point traffic from fanout publish.
+        Assert.Equal("svc.queue send", activity!.DisplayName);
+        Assert.Equal("send", activity.GetTagItem(MessagingOperation));
         Assert.Equal("svc.queue", activity.GetTagItem(MessagingDestination));
     }
 
@@ -287,7 +290,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Send(args);
 
         Assert.NotNull(activity);
-        Assert.Equal("anonymous publish", activity!.DisplayName);
+        Assert.Equal("anonymous send", activity!.DisplayName);
         Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
     }
 
