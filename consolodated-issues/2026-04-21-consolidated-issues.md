@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 2/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 4/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -203,12 +203,12 @@ Severity bands:
 - **What:** If caller sets both `EndPoint` and `EndPoints`, the `foreach` branch is entered and `EndPoint` is silently ignored — no exception, no log.
 - **Fix:** Validate-or-merge at the call site.
 
-### [ ] M2. `QueueConfiguration.AddQueueMapping` doesn't validate list elements
+### [x] M2. `QueueConfiguration.AddQueueMapping` doesn't validate list elements
 - **File:** [QueueConfiguration.cs:48-64,118-132](../src/ServiceConnect/Configuration/QueueConfiguration.cs#L48-L132)
 - **What:** The `IList<string>` overload validates the list reference but not individual elements — null/empty/whitespace queue names stored silently, unlike the single-queue overload which guards via `IsNullOrWhiteSpace`.
 - **Fix:** Per-element validation.
 
-### [ ] M3. Queue mappings keyed solely on `Type.FullName`
+### [x] M3. Queue mappings keyed solely on `Type.FullName`
 - **File:** [QueueConfiguration.cs:27,40](../src/ServiceConnect/Configuration/QueueConfiguration.cs)
 - **What:** `_queueMappings` keyed by `messageType.FullName!`. Two types with the same namespace/name from different assemblies collide into one bucket.
 - **Fix:** Key by `AssemblyQualifiedName` or full `Type` identity.

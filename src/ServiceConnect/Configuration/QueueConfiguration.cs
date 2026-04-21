@@ -22,9 +22,17 @@ public sealed class QueueConfiguration : IQueueConfiguration
     /// <inheritdoc />
     public bool PurgeQueueOnStartup { get; set; }
 
-    // Keyed by message-type FullName. The list preserves registration order for callers,
-    // while the set gives O(1) duplicate checks when adding mappings.
+    // Keyed by message-type AssemblyQualifiedName so two types sharing a FullName
+    // (same namespace+name in different assemblies) don't collide into one bucket
+    // and cross-wire each other's routing. The list preserves registration order
+    // for callers while the set gives O(1) duplicate checks.
     private readonly ConcurrentDictionary<string, QueueMappingEntry> _queueMappings = new();
+
+    private static string GetMappingKey(Type messageType) =>
+        messageType.AssemblyQualifiedName
+            ?? throw new ArgumentException(
+                $"Message type '{messageType}' has no AssemblyQualifiedName and cannot be used as a queue-mapping key.",
+                nameof(messageType));
 
     /// <inheritdoc />
     public IReadOnlyDictionary<string, IReadOnlyList<string>> QueueMappings =>
@@ -37,7 +45,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
         if (string.IsNullOrWhiteSpace(queue))
             throw new ArgumentException("Queue must be a non-empty string.", nameof(queue));
 
-        string key = messageType.FullName!;
+        string key = GetMappingKey(messageType);
         _queueMappings.AddOrUpdate(
             key,
             _ => QueueMappingEntry.Create(queue),
@@ -49,7 +57,18 @@ public sealed class QueueConfiguration : IQueueConfiguration
     {
         ArgumentNullException.ThrowIfNull(messageType);
         ArgumentNullException.ThrowIfNull(queues);
-        string key = messageType.FullName!;
+
+        // Match the single-queue overload: reject null/empty/whitespace entries up front.
+        // Previously the list form accepted any element and silently stored garbage
+        // (e.g. a "" bucket inside the mapping), while the single overload guarded it.
+        for (int i = 0; i < queues.Count; i++)
+        {
+            if (string.IsNullOrWhiteSpace(queues[i]))
+                throw new ArgumentException(
+                    $"Queue at index {i} must be a non-empty string.", nameof(queues));
+        }
+
+        string key = GetMappingKey(messageType);
         _queueMappings.AddOrUpdate(
             key,
             _ => QueueMappingEntry.Create(queues),
@@ -68,7 +87,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
     public bool TryGetQueueMapping(Type messageType, out IReadOnlyList<string> queues)
     {
         ArgumentNullException.ThrowIfNull(messageType);
-        if (_queueMappings.TryGetValue(messageType.FullName!, out var entry))
+        if (_queueMappings.TryGetValue(GetMappingKey(messageType), out var entry))
         {
             queues = entry.List;
             return true;

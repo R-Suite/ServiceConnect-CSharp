@@ -63,9 +63,9 @@ namespace ServiceConnect.UnitTests
             var config = new QueueConfiguration();
             config.AddQueueMapping(typeof(string), "queue1");
 
-            Assert.True(config.QueueMappings.ContainsKey(typeof(string).FullName!));
-            Assert.Single(config.QueueMappings[typeof(string).FullName!]);
-            Assert.Equal("queue1", config.QueueMappings[typeof(string).FullName!][0]);
+            Assert.True(config.QueueMappings.ContainsKey(typeof(string).AssemblyQualifiedName!));
+            Assert.Single(config.QueueMappings[typeof(string).AssemblyQualifiedName!]);
+            Assert.Equal("queue1", config.QueueMappings[typeof(string).AssemblyQualifiedName!][0]);
         }
 
         [Fact]
@@ -75,7 +75,7 @@ namespace ServiceConnect.UnitTests
             config.AddQueueMapping(typeof(string), "queue1");
             config.AddQueueMapping(typeof(string), "queue2");
 
-            var queues = config.QueueMappings[typeof(string).FullName!];
+            var queues = config.QueueMappings[typeof(string).AssemblyQualifiedName!];
             Assert.Equal(2, queues.Count);
             Assert.Contains("queue1", queues);
             Assert.Contains("queue2", queues);
@@ -87,7 +87,7 @@ namespace ServiceConnect.UnitTests
             var config = new QueueConfiguration();
             config.AddQueueMapping(typeof(int), new List<string> { "queueA", "queueB" });
 
-            var key = typeof(int).FullName!;
+            var key = typeof(int).AssemblyQualifiedName!;
             Assert.True(config.QueueMappings.ContainsKey(key));
             Assert.Equal(2, config.QueueMappings[key].Count);
             Assert.Contains("queueA", config.QueueMappings[key]);
@@ -101,11 +101,25 @@ namespace ServiceConnect.UnitTests
             config.AddQueueMapping(typeof(int), new List<string> { "queueA" });
             config.AddQueueMapping(typeof(int), new List<string> { "queueB", "queueC" });
 
-            var queues = config.QueueMappings[typeof(int).FullName!];
+            var queues = config.QueueMappings[typeof(int).AssemblyQualifiedName!];
             Assert.Equal(3, queues.Count);
             Assert.Contains("queueA", queues);
             Assert.Contains("queueB", queues);
             Assert.Contains("queueC", queues);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("  ")]
+        public void AddQueueMappingListOfQueues_RejectsInvalidElement(string? badQueue)
+        {
+            // M2 regression: previously only the list reference was validated, so null/
+            // empty/whitespace entries were silently stored — the single-queue overload
+            // already guarded this, leaving the list form inconsistent.
+            var config = new QueueConfiguration();
+            Assert.Throws<ArgumentException>(
+                () => config.AddQueueMapping(typeof(int), new List<string> { "ok", badQueue! }));
         }
 
         [Fact]
@@ -116,8 +130,8 @@ namespace ServiceConnect.UnitTests
             config.AddQueueMapping(typeof(int), "int-queue");
 
             Assert.Equal(2, config.QueueMappings.Count);
-            Assert.Equal("string-queue", config.QueueMappings[typeof(string).FullName!][0]);
-            Assert.Equal("int-queue", config.QueueMappings[typeof(int).FullName!][0]);
+            Assert.Equal("string-queue", config.QueueMappings[typeof(string).AssemblyQualifiedName!][0]);
+            Assert.Equal("int-queue", config.QueueMappings[typeof(int).AssemblyQualifiedName!][0]);
         }
 
         [Fact]
