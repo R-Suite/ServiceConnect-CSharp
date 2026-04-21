@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 15/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 16/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -273,7 +273,7 @@ Severity bands:
 - **What:** `UpdateManyAsync` claims every due unlocked row for the session, and the `Due` facet reads them all with no `.Limit(...)`. Under load a single poll can claim and return an unbounded set.
 - **Fix:** Cap per-poll batch size with `.Limit(...)`.
 
-### [ ] M16. Mongo timeout persistence does not enforce unique timeout IDs
+### [x] M16. Mongo timeout persistence does not enforce unique timeout IDs
 - **File:** [MongoDbTimeoutStore.cs:278-280](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L278-L280)
 - **What:** The `Id` index is created without `Unique = true`.
 - **Fix:** Make it unique.

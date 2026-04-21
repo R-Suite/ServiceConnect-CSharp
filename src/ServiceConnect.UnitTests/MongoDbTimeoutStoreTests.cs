@@ -352,6 +352,54 @@ public class MongoDbTimeoutStoreTests
     }
 
     [Fact]
+    public async Task EnsureTimeoutIndex_IdIndex_IsCreatedWithUniqueConstraint()
+    {
+        // M16 regression: duplicate-insert collisions on the same timeout Id
+        // were previously possible because the Id index was non-unique. Mongo
+        // InsertOne does not reject duplicates without a unique index.
+        List<CreateIndexModel<TimeoutData>>? capturedModels = null;
+
+        var indexes = new Mock<IMongoIndexManager<TimeoutData>>();
+        indexes.Setup(m => m.CreateManyAsync(
+                It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<CreateIndexModel<TimeoutData>>, CancellationToken>((models, _) =>
+                capturedModels = models.ToList())
+            .ReturnsAsync(new List<string> { "ok" });
+
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
+        collection.Setup(c => c.InsertOneAsync(
+                It.IsAny<TimeoutData>(),
+                It.IsAny<InsertOneOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var database = new Mock<IMongoDatabase>();
+        database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null)).Returns(collection.Object);
+
+        var client = new Mock<IMongoClient>();
+        client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
+
+        var store = new MongoDbTimeoutStore(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "test" },
+            NullLogger<MongoDbTimeoutStore>.Instance);
+
+        await store.InsertTimeoutAsync(new TimeoutData { Id = Guid.NewGuid(), Time = DateTimeOffset.UtcNow });
+
+        Assert.NotNull(capturedModels);
+        var idIndex = capturedModels!.Single(m =>
+        {
+            var renderedKeys = m.Keys.Render(
+                BsonSerializer.LookupSerializer<TimeoutData>(),
+                BsonSerializer.SerializerRegistry);
+            return renderedKeys.ElementCount == 1 && renderedKeys.Contains("_id");
+        });
+        Assert.True(idIndex.Options.Unique);
+    }
+
+    [Fact]
     public void Ctor_RejectsNonPositiveTimeoutBatchSize()
     {
         // M15 regression: the per-poll cap must be positive — a zero or

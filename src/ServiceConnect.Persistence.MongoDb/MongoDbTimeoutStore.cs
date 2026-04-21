@@ -325,7 +325,8 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var idIndexModel = new CreateIndexModel<TimeoutData>(
-                Builders<TimeoutData>.IndexKeys.Ascending(x => x.Id));
+                Builders<TimeoutData>.IndexKeys.Ascending(x => x.Id),
+                new CreateIndexOptions { Unique = true });
 
             var lockedTimeIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys
