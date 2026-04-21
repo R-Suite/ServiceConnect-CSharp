@@ -212,12 +212,53 @@ namespace ServiceConnect.UnitTests
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
             IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
+            var loaded = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+            Assert.NotNull(loaded);
 
             // Act
-            await processManagerFinder.DeleteDataAsync(new MemoryData<IProcessManagerData> { Data = data }, CancellationToken.None);
+            await processManagerFinder.DeleteDataAsync(loaded, CancellationToken.None);
 
             // Assert
             Assert.Null(await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task DeleteDataAsync_WithStaleVersion_ThrowsConcurrencyException()
+        {
+            // Arrange
+            IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            await finder.InsertDataAsync(new TestData { CorrelationId = _correlationId, Name = "v1" }, CancellationToken.None);
+            var stale = (MemoryData<IProcessManagerData>)(await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
+
+            // Bump the stored version via a successful update so `stale` is behind.
+            await finder.UpdateDataAsync(new MemoryData<IProcessManagerData>
+            {
+                Data = new TestData { CorrelationId = _correlationId, Name = "v2" },
+                Version = stale.Version
+            }, CancellationToken.None);
+
+            // Act / Assert — delete with the stale version is a conflict, not a silent no-op.
+            await Assert.ThrowsAsync<ConcurrencyException>(
+                () => finder.DeleteDataAsync(stale, CancellationToken.None));
+
+            // The record must still be present.
+            Assert.NotNull(await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task DeleteDataAsync_WhenKeyMissing_ThrowsConcurrencyException()
+        {
+            // Matches the UpdateDataAsync contract: deleting a record that no longer exists
+            // is a conflict (another consumer already completed the saga), not a silent no-op.
+            IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            var stub = new MemoryData<IProcessManagerData>
+            {
+                Data = new TestData { CorrelationId = _correlationId, Name = "ghost" },
+                Version = 1
+            };
+
+            await Assert.ThrowsAsync<ConcurrencyException>(
+                () => finder.DeleteDataAsync(stub, CancellationToken.None));
         }
 
         [Fact]

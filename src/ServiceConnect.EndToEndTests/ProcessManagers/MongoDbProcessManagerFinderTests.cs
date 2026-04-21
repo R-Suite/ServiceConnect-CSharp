@@ -189,4 +189,48 @@ public class MongoDbProcessManagerFinderTests
         var result = collection.Find(Builders<MongoDbData<TestData>>.Filter.Eq(x => x.Data.CorrelationId, correlationId)).FirstOrDefault();
         Assert.Null(result);
     }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task ShouldThrowConcurrencyExceptionOnStaleDelete()
+    {
+        var (finder, connectionString, dbName) = CreateFinder();
+        var correlationId = Guid.NewGuid();
+        await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v1" });
+
+        var mapper = CreateMapper();
+        var message = new Message(correlationId);
+
+        // Load twice at the same version, then bump the stored version via the first copy.
+        var stale = await finder.FindDataAsync<TestData>(mapper, message);
+        Assert.NotNull(stale);
+        var current = await finder.FindDataAsync<TestData>(mapper, message);
+        Assert.NotNull(current);
+
+        current.Data.Name = "v2";
+        await finder.UpdateDataAsync(current);
+
+        // Deleting via the stale copy must fail with ConcurrencyException, not silently succeed.
+        await Assert.ThrowsAsync<ConcurrencyException>(() => finder.DeleteDataAsync(stale));
+
+        // And the record must still be present.
+        var collection = GetCollection(connectionString, dbName);
+        var survivor = collection.Find(Builders<MongoDbData<TestData>>.Filter.Eq(x => x.Data.CorrelationId, correlationId)).FirstOrDefault();
+        Assert.NotNull(survivor);
+        Assert.Equal("v2", survivor.Data.Name);
+    }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task ShouldThrowConcurrencyExceptionWhenDeletingMissingRecord()
+    {
+        var (finder, _, _) = CreateFinder();
+        var stub = new MongoDbData<TestData>
+        {
+            Data = new TestData { CorrelationId = Guid.NewGuid(), Name = "ghost" },
+            Version = 1
+        };
+
+        await Assert.ThrowsAsync<ConcurrencyException>(() => finder.DeleteDataAsync(stub));
+    }
 }

@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 9/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 10/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -75,7 +75,7 @@ Severity bands:
 - **What:** `IsTrustedRequestReplyEnvelope` derives trust from attacker-controlled inbound headers (`RequestMessageId`, `SourceAddress`, `DestinationAddress`, `MessageId`) and compares `destinationAddress == queueConfig.QueueName`. `ValidateReplyDestinations` (defaults true) narrows the blast radius but the trust decision still rests on caller-controlled values. Combined with C1, a malicious publisher can redirect replies.
 - **Fix:** Tie reply routing to a verified producer identity; reject reply headers that name queues the bus is not configured to talk to.
 
-### [ ] C10. Process-manager delete bypasses optimistic concurrency (both backends)
+### [x] C10. Process-manager delete bypasses optimistic concurrency (both backends)
 - **File:** [MongoDbProcessManagerFinder.cs:240-241](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs#L240-L241), [InMemoryProcessManagerFinder.cs:285-286](../src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs#L285-L286)
 - **What:** Both `DeleteDataAsync` implementations filter by `CorrelationId` only, with no `Version` predicate, unlike `UpdateDataAsync` which ANDs `Version`. A concurrent delete racing with an update loses the optimistic-concurrency contract — the saga can vanish mid-update.
 - **Fix:** Delete with `{CorrelationId, Version}`; throw `ConcurrencyException` on 0-affected.

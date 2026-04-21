@@ -273,15 +273,39 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 
     /// <summary>
     /// Deletes the stored process manager record identified by the supplied data.
+    /// Enforces optimistic concurrency — delete fails with <see cref="ConcurrencyException"/>
+    /// if the stored version does not match or the record is missing, matching the update
+    /// contract so a delete cannot race an in-flight update and silently drop a saga.
     /// </summary>
     public Task DeleteDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(data);
+
+        var expected = (MemoryData<T>)data;
 
         _state.SyncRoot.EnterWriteLock();
         try
         {
             string key = data.Data.CorrelationId.ToString();
+            if (!_state.Provider.Contains(key))
+            {
+                throw new ConcurrencyException(
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} does not exist and cannot be deleted.");
+            }
+
+            var stored = _state.Provider.Get<string, object>(key);
+            int currentVersion = stored is IVersioned versioned
+                ? versioned.Version
+                : throw new PersistenceException(
+                    $"Stored item for CorrelationId {key} is of unexpected type {stored.GetType()} and does not implement IVersioned.");
+
+            if (currentVersion != expected.Version)
+            {
+                throw new ConcurrencyException(
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} and Version {currentVersion} could not be deleted.");
+            }
+
             _state.Provider.Remove(key);
         }
         finally

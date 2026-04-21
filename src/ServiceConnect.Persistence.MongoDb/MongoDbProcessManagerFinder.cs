@@ -228,22 +228,35 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     public async Task DeleteDataAsync<T>(IPersistenceData<T> persistenceData, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(persistenceData);
 
         var collectionName = GetCollectionName(persistenceData.Data);
+        var expectedVersion = ((MongoDbData<T>)persistenceData).Version;
+        var correlationId = persistenceData.Data.CorrelationId;
 
+        DeleteResult result;
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
             await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
 
-            // CorrelationId is unique per process manager type; DeleteOneAsync is sufficient.
-            var filter = Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, persistenceData.Data.CorrelationId);
-            await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
+            // Match on {CorrelationId, Version} so a delete racing an in-flight update
+            // cannot silently drop a saga mid-transition. Same contract as UpdateDataAsync.
+            var filter = Builders<MongoDbData<T>>.Filter.And(
+                Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, correlationId),
+                Builders<MongoDbData<T>>.Filter.Eq(x => x.Version, expectedVersion));
+            result = await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
             throw new PersistenceException(
-                $"Failed to delete process manager data with CorrelationId '{persistenceData.Data.CorrelationId}'.", ex);
+                $"Failed to delete process manager data with CorrelationId '{correlationId}'.", ex);
+        }
+
+        if (result.DeletedCount == 0)
+        {
+            throw new ConcurrencyException(
+                $"Concurrency conflict: ProcessManagerData with CorrelationId {correlationId} and Version {expectedVersion} could not be deleted.");
         }
     }
 
