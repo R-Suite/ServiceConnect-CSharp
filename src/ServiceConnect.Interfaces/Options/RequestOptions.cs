@@ -11,9 +11,10 @@ public sealed class RequestOptions
     public const int DefaultTimeoutMs = 10_000;
 
     /// <summary>
-    /// Gets the default request options instance.
+    /// Gets a fresh instance populated with default request options. Callers are free to
+    /// mutate the returned instance without affecting other consumers of Default.
     /// </summary>
-    public static RequestOptions Default { get; } = new();
+    public static RequestOptions Default => new();
 
     /// <summary>
     /// Gets or sets additional headers to attach to the request message.

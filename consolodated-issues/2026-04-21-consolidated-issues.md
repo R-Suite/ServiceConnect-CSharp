@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 1/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 2/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -322,7 +322,7 @@ Severity bands:
 - **What:** Array null is guarded; a `null` element inside the array slips through and later NREs in `HandlerScanner`.
 - **Fix:** Per-element `ArgumentNullException.ThrowIfNull`.
 
-### [ ] L2. `RequestOptions.Default` is a mutable singleton
+### [x] L2. `RequestOptions.Default` is a mutable singleton
 - **File:** [RequestOptions.cs:16](../src/ServiceConnect.Interfaces/Options/RequestOptions.cs#L16)
 - **What:** Static `Default` exposes settable properties; mutating it affects all callers using the fallback.
 - **Fix:** Immutable shape (`readonly record struct` or frozen getter).
