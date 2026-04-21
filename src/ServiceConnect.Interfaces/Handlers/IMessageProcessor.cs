@@ -23,8 +23,11 @@ public interface IMessageProcessor
 {
     /// <summary>
     /// When true, this processor can run before the message body is deserialized
-    /// (the message parameter will be null). Pre-deserialization processors are
-    /// invoked before filters and before the serializer is called.
+    /// (the message parameter will be null). Pre-deserialization processors still run
+    /// inside the before/after consuming filter gate, but they are intentionally not
+    /// wrapped by <see cref="IMessageProcessingMiddleware"/> — that middleware's delegate
+    /// signature requires a non-null <c>object message</c>, which pre-deserialization
+    /// processors by definition do not yet have.
     /// </summary>
     bool RunBeforeDeserialization => false;
 

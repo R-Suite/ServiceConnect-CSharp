@@ -276,6 +276,82 @@ public class MessageDispatcherTests
         Assert.Equal(0, Assert.IsType<TestDispatcherReplyManager>(_replyManager).CallCount);
     }
 
+    // ---------------- H6: pre-deserialization processor filter coverage ----------------
+
+    [Fact]
+    public async Task Dispatch_PreDeserProcessor_RunsAfterBeforeFilter()
+    {
+        // Before-filters must run before pre-deserialization processors so nothing
+        // — including StreamProcessor-style pre-deser handling — can bypass the
+        // filter gate.
+        var order = new List<string>();
+        _mockFilterPipeline
+            .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .Callback(() => order.Add("before-filter"))
+            .ReturnsAsync(false);
+
+        var preDeser = new OrderRecordingPreDeserProcessor(order);
+        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+            .Returns(new FakeMessage1(Guid.NewGuid()));
+
+        await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+
+        Assert.Equal("before-filter", order[0]);
+        Assert.Equal("pre-deser-processor", order[1]);
+    }
+
+    [Fact]
+    public async Task Dispatch_PreDeserProcessor_BlockedByBeforeFilter_DoesNotRun()
+    {
+        // A blocking before-filter must prevent pre-deserialization processors
+        // from running at all — they used to run first and silently bypass filters.
+        _mockFilterPipeline
+            .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var preDeser = new OrderRecordingPreDeserProcessor(new List<string>());
+        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+
+        Assert.True(result.Success);
+        Assert.Equal(0, preDeser.CallCount);
+    }
+
+    [Fact]
+    public async Task Dispatch_PreDeserProcessor_Handled_StillRunsAfterFilter()
+    {
+        // When a pre-deser processor reports Handled (e.g., stream packet accepted),
+        // after-consuming filters must still fire — they were being skipped when
+        // the processor returned before the before-filter step.
+        var preDeser = new OrderRecordingPreDeserProcessor(new List<string>()) { ReturnHandled = true };
+        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+
+        Assert.True(result.Success);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Dispatch_PreDeserProcessor_Handled_SkipsDeserialization()
+    {
+        // Pre-deser Handled return short-circuits dispatch before deserialization,
+        // keeping the middleware asymmetry (middleware requires a deserialized message).
+        var preDeser = new OrderRecordingPreDeserProcessor(new List<string>()) { ReturnHandled = true };
+        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+
+        await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+
+        _mockSerializer.Verify(
+            s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task Dispatch_ResponseMessage_WithUnknownReplyId_ReturnsFailure()
     {
@@ -751,4 +827,31 @@ file sealed class TestDispatcherReplyManager : IReplyStatusRequestReplyManager
     }
 
     public bool IsTrackedRequest(string messageId) => false;
+}
+
+file sealed class OrderRecordingPreDeserProcessor : IMessageProcessor
+{
+    private readonly List<string> _order;
+
+    public OrderRecordingPreDeserProcessor(List<string> order)
+    {
+        _order = order;
+    }
+
+    public bool RunBeforeDeserialization => true;
+    public bool ReturnHandled { get; set; }
+    public int CallCount { get; private set; }
+
+    public Task<ProcessResult> ProcessAsync(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object? message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        CancellationToken cancellationToken = default)
+    {
+        CallCount++;
+        _order.Add("pre-deser-processor");
+        return Task.FromResult(ReturnHandled ? ProcessResult.Handled : ProcessResult.NotHandled);
+    }
 }

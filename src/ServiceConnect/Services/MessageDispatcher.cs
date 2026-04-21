@@ -10,6 +10,13 @@ namespace ServiceConnect.Services;
 /// Deserializes incoming envelopes and routes them through filters, processors, and middleware.
 /// A fresh DI scope is created for each dispatch and flowed through <see cref="ConsumeScopeAccessor"/>
 /// so filters, middleware, and handlers share the same per-message container scope.
+/// <para>
+/// Filters (before- and after-consuming) run on every dispatch, including pre-deserialization
+/// processors such as <see cref="StreamProcessor"/> and <see cref="ReplyProcessor"/>.
+/// <see cref="IMessageProcessingMiddleware"/> only wraps the post-deserialization dispatch
+/// path because its delegate signature requires a non-null <c>object message</c>; pre-deserialization
+/// processors handle raw bytes without a resolved message instance and therefore bypass middleware by design.
+/// </para>
 /// </summary>
 public sealed class MessageDispatcher : IMessageDispatcher
 {
@@ -77,8 +84,20 @@ public sealed class MessageDispatcher : IMessageDispatcher
 
             envelope = new Envelope { Headers = headers, Body = messageBytes };
 
-            ReplyProcessor? replyProcessor = null;
             var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
+
+            // Before-consuming filters run first so they gate every dispatch path —
+            // including pre-deserialization processors like StreamProcessor. A processor
+            // that previously returned Handled prior to this call would have bypassed
+            // both pre- and post-consume filters (after-filters only fire once
+            // beforeFiltersRan is set). Filters now see stream packets and replies the
+            // same way they see any other message.
+            bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+            beforeFiltersRan = true;
+            if (blocked)
+                return new ConsumeEventResult { Success = true };
+
+            ReplyProcessor? replyProcessor = null;
 
             foreach (var proc in _processors)
             {
@@ -109,11 +128,6 @@ public sealed class MessageDispatcher : IMessageDispatcher
 
                 type = typeof(Message);
             }
-
-            bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
-            beforeFiltersRan = true;
-            if (blocked)
-                return new ConsumeEventResult { Success = true };
 
             if (replyProcessor != null && hasResponseMessageId)
             {

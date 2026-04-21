@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 5/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 6/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -119,7 +119,7 @@ Severity bands:
 - **What:** `RegisterHandlerType` guards only against existing singleton registrations. If the app pre-registered the handler transient or scoped, `AddTransient` adds a second registration and `HandlerProcessor.GetServices(...)` resolves + invokes both — one message handled twice.
 - **Fix:** Skip if *any* registration exists for the closed handler interface, or use `TryAddEnumerable` with descriptor equality.
 
-### [ ] H6. `ReplyProcessor` / `StreamProcessor` bypass inbound filters and middleware
+### [x] H6. `ReplyProcessor` / `StreamProcessor` bypass inbound filters and middleware
 - **File:** [MessageDispatcher.cs:80-92,133-134](../src/ServiceConnect/Services/MessageDispatcher.cs), [ReplyProcessor.cs:11-33](../src/ServiceConnect/Services/Processors/ReplyProcessor.cs), [StreamProcessor.cs:57-155](../src/ServiceConnect/Services/Processors/StreamProcessor.cs)
 - **What:** Both processors set `RunBeforeDeserialization = true`; dispatcher runs the before-deser path before `ExecuteBeforeConsumingFiltersAsync`, and only post-deserialization dispatch is wrapped by `IMessageProcessingMiddleware`. Replies skip all middleware; completed stream messages skip filters + middleware.
 - **Fix:** Wrap reply and stream-complete dispatch in the same middleware/filter chain, or document the asymmetry.
