@@ -19,4 +19,11 @@ public sealed class MongoDbPersistenceOptions
     /// Gets or sets optional SSL/TLS settings for the MongoDB connection.
     /// </summary>
     public MongoDbSslOptions? Ssl { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of timeouts claimed per poll by the
+    /// timeout store. Keeps a single poll bounded under load — the unclaimed
+    /// due rows are picked up on the next poll. Must be positive.
+    /// </summary>
+    public int TimeoutBatchSize { get; set; } = 500;
 }

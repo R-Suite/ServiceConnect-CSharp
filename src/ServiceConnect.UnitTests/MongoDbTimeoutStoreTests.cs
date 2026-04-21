@@ -352,6 +352,91 @@ public class MongoDbTimeoutStoreTests
     }
 
     [Fact]
+    public void Ctor_RejectsNonPositiveTimeoutBatchSize()
+    {
+        // M15 regression: the per-poll cap must be positive — a zero or
+        // negative batch size would produce an unbounded (or vacuous) claim
+        // pass, which is exactly the problem the cap exists to prevent.
+        var client = new Mock<IMongoClient>();
+        client.Setup(c => c.GetDatabase("test", null)).Returns(Mock.Of<IMongoDatabase>());
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MongoDbTimeoutStore(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "test", TimeoutBatchSize = 0 },
+            NullLogger<MongoDbTimeoutStore>.Instance));
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatch_PassesConfiguredLimitToFindCandidates()
+    {
+        // M15 regression: the poll must cap the claim pass at TimeoutBatchSize
+        // by threading the value into FindOptions.Limit. Before the fix
+        // UpdateMany had no bound and a single poll could claim the entire
+        // due backlog.
+        const int configuredLimit = 37;
+
+        FindOptions<TimeoutData, Guid>? capturedFindOptions = null;
+
+        var emptyCursor = new Mock<IAsyncCursor<Guid>>();
+        emptyCursor.SetupSequence(c => c.MoveNext(It.IsAny<CancellationToken>()))
+            .Returns(false);
+        emptyCursor.SetupSequence(c => c.MoveNextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        emptyCursor.SetupGet(c => c.Current).Returns([]);
+
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<FindOptions<TimeoutData, Guid>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<FilterDefinition<TimeoutData>, FindOptions<TimeoutData, Guid>, CancellationToken>(
+                (_, opts, _) => capturedFindOptions = opts)
+            .ReturnsAsync(emptyCursor.Object);
+
+        var database = new Mock<IMongoDatabase>();
+        database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null)).Returns(collection.Object);
+        var indexes = new Mock<IMongoIndexManager<TimeoutData>>();
+        indexes.Setup(m => m.CreateManyAsync(
+                It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<string> { "ok" });
+        collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
+
+        var client = new Mock<IMongoClient>();
+        client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
+        // Make StartSessionAsync throw NotSupportedException so the store
+        // falls back to the unsessioned path — keeps the test independent
+        // of session-mock plumbing.
+        client.Setup(c => c.StartSessionAsync(
+                It.IsAny<ClientSessionOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NotSupportedException());
+
+        var store = new MongoDbTimeoutStore(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "test", TimeoutBatchSize = configuredLimit },
+            NullLogger<MongoDbTimeoutStore>.Instance);
+
+        try
+        {
+            await store.GetTimeoutsBatchAsync();
+        }
+        catch (PersistenceException)
+        {
+            // Expected: Aggregate isn't mocked, but FindAsync runs first so
+            // capturedFindOptions is populated before the aggregate path throws.
+        }
+        catch (NullReferenceException)
+        {
+            // Aggregate call on an unmocked collection may NRE — same
+            // rationale: capture already happened on the prior FindAsync.
+        }
+
+        Assert.NotNull(capturedFindOptions);
+        Assert.Equal(configuredLimit, capturedFindOptions!.Limit);
+    }
+
+    [Fact]
     public async Task ReleaseDispatchedTimeout_IdOnly_FilterRequiresLockedByEmpty()
     {
         // M14 regression: same guard on the release path — id-only release

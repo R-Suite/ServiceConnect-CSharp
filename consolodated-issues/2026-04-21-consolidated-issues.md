@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 14/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 15/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -268,7 +268,7 @@ Severity bands:
 - **What:** Legacy two-arg overloads filter by `Id` + `Locked == true` but not by `LockedBy`. Any caller using them can act on another worker's leased row. Three-arg lockOwner overloads are correctly guarded.
 - **Fix:** Remove the legacy overloads or add `LockedBy` to their filter.
 
-### [ ] M15. Mongo timeout polling has no batch limit
+### [x] M15. Mongo timeout polling has no batch limit
 - **File:** [MongoDbTimeoutStore.cs:112-117](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L112-L117)
 - **What:** `UpdateManyAsync` claims every due unlocked row for the session, and the `Due` facet reads them all with no `.Limit(...)`. Under load a single poll can claim and return an unbounded set.
 - **Fix:** Cap per-poll batch size with `.Limit(...)`.

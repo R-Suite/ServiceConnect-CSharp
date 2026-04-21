@@ -21,6 +21,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
     private readonly IMongoClient _mongoClient;
     private readonly IMongoDatabase _mongoDatabase;
     private readonly TimeProvider _timeProvider;
+    private readonly int _batchSize;
     private int _timeoutIndexEnsuredFlag;
 
     private const string TimeoutsCollectionName = "Timeouts";
@@ -44,6 +45,11 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         ArgumentNullException.ThrowIfNull(logger);
         _mongoClient = mongoClient;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        if (options.TimeoutBatchSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options), options.TimeoutBatchSize,
+                $"{nameof(MongoDbPersistenceOptions.TimeoutBatchSize)} must be positive.");
+        _batchSize = options.TimeoutBatchSize;
 
         try
         {
@@ -108,10 +114,27 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
                 .Set(x => x.Locked, true)
                 .Set(x => x.LockedBy, sessionId)
                 .Set(x => x.LockExpiresAt, utcNow.Add(LockLeaseDuration));
-            if (session is not null)
-                await collection.UpdateManyAsync(session, dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
-            else
-                await collection.UpdateManyAsync(dueUnlockedFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            // Cap per-poll batch size. Two-step pattern because MongoDB
+            // UpdateMany has no .Limit(): first pull up to _batchSize
+            // candidate ids sorted by Time, then UpdateMany only those ids
+            // (still guarded by the due-unlocked filter so anything another
+            // worker claimed in between is silently skipped). The unclaimed
+            // remainder is picked up on the next poll.
+            var candidateIds = await FindAsync(collection, dueUnlockedFilter,
+                    Builders<TimeoutData>.Sort.Ascending(x => x.Time),
+                    _batchSize, session, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (candidateIds.Count > 0)
+            {
+                var batchFilter = dueUnlockedFilter &
+                                  Builders<TimeoutData>.Filter.In(x => x.Id, candidateIds);
+                if (session is not null)
+                    await collection.UpdateManyAsync(session, batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+                else
+                    await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
 
             var duePipeline = new EmptyPipelineDefinition<TimeoutData>()
                 .Match(t => t.LockedBy == sessionId && t.Locked);
@@ -269,6 +292,26 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         var expiredLease = Builders<TimeoutData>.Filter.Lte(x => x.LockExpiresAt, utcNow);
         var due = Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
         return due & (unlocked | expiredLease);
+    }
+
+    private static async Task<List<Guid>> FindAsync(
+        IMongoCollection<TimeoutData> collection,
+        FilterDefinition<TimeoutData> filter,
+        SortDefinition<TimeoutData> sort,
+        int limit,
+        MongoClientSessionHandle? session,
+        CancellationToken cancellationToken)
+    {
+        var options = new FindOptions<TimeoutData, Guid>
+        {
+            Sort = sort,
+            Limit = limit,
+            Projection = Builders<TimeoutData>.Projection.Expression(x => x.Id),
+        };
+        using var cursor = session is not null
+            ? await collection.FindAsync(session, filter, options, cancellationToken).ConfigureAwait(false)
+            : await collection.FindAsync(filter, options, cancellationToken).ConfigureAwait(false);
+        return await cursor.ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection)
