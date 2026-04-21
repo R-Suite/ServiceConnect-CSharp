@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 7/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 8/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -129,7 +129,7 @@ Severity bands:
 - **What:** Even without malicious callers, absence of reserved-header protection means a buggy caller can quietly break reply routing for the whole bus. With C1 + C9 both open the attack surface is full end-to-end.
 - **Fix:** Treat reserved headers as server-authoritative; lock reply routing to a verified producer identity.
 
-### [ ] H8. `Producer.SendBytesAsync` does not validate `endPoint`
+### [x] H8. `Producer.SendBytesAsync` does not validate `endPoint`
 - **File:** [Producer.cs:328-350](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L328-L350)
 - **What:** `SendAsync(string endPoint, ...)` validates `IsNullOrWhiteSpace(endPoint)` at line 296, but `SendBytesAsync` has no such check — blank endpoints publish to the default exchange with `mandatory:false` and are silently dropped.
 - **Fix:** Same validation as `SendAsync`.

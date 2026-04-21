@@ -134,6 +134,31 @@ public class ProducerSizeLimitTests
             "Size guard should not fire for a packet exactly at the limit.");
     }
 
+    // ─── Endpoint validation ────────────────────────────────────────────────
+    // Blank endpoints publish to the default exchange with mandatory:false and
+    // are silently dropped. SendAsync validates this; SendBytesAsync must too.
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    public async Task SendBytesAsync_BlankEndpoint_ThrowsArgumentException(string endpoint)
+    {
+        var producer = MakeProducer();
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => producer.SendBytesAsync(endpoint, typeof(byte[]), new byte[] { 1 }));
+
+        Assert.Contains("empty endpoint", ex.Message);
+    }
+
+    [Fact]
+    public async Task SendBytesAsync_NullEndpoint_ThrowsArgumentException()
+    {
+        var producer = MakeProducer();
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => producer.SendBytesAsync(null!, typeof(byte[]), new byte[] { 1 }));
+    }
+
     // ─── MaximumMessageSize property honours config ──────────────────────────
 
     [Fact]

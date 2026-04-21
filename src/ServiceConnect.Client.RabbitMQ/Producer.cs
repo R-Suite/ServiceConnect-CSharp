@@ -329,6 +329,8 @@ public sealed class Producer : IProducer
     public async Task SendBytesAsync(string endPoint, Type type, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(endPoint))
+            throw new ArgumentException($"Cannot send packet of type {type} to empty endpoint");
         if (packet.Length > MaximumMessageSize)
             throw new InvalidOperationException(
                 $"Message size {packet.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
