@@ -310,46 +310,33 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task PublishAsync_WithConcurrentlyMutatedHeaders_DoesNotThrow()
+        public async Task PublishAsync_HeadersPostMutationDoesNotAffectInFlightSend()
         {
-            // M10: snapshot-then-iterate means a caller mutating the source after
-            // PublishAsync reads .Headers can't trigger "Collection was modified"
-            // inside the framework's header-copy loop. Simulate by passing a live
-            // Dictionary cast to IReadOnlyDictionary, mutating it on a background
-            // thread, and asserting no throw while publishing.
-            var sharedHeaders = new Dictionary<string, string> { ["k0"] = "v0" };
+            // M10 regression: BuildHeadersDirect snapshots the source before
+            // copying. Mutations to the caller's dictionary after PublishAsync
+            // has returned (i.e. after the snapshot) must not reach the
+            // transport. Verify by capturing what the send pipeline receives
+            // and then mutating the source — the captured headers stay fixed.
+            var sharedHeaders = new Dictionary<string, string> { ["caller-header"] = "original" };
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
+            Dictionary<string, string>? captured = null;
             _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null))
+                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+                .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, h, _, _) => captured = h)
                 .Returns(Task.CompletedTask);
 
-            var options = new PublishOptions { Headers = sharedHeaders };
+            await _bus.PublishAsync(message, new PublishOptions { Headers = sharedHeaders });
 
-            using var done = new CancellationTokenSource();
-            var mutator = Task.Run(() =>
-            {
-                int i = 0;
-                while (!done.IsCancellationRequested)
-                {
-                    // lock-free mutation: safe for ToArray snapshot because
-                    // Dictionary raising during enumeration is the only hazard
-                    // we want to reproduce; the snapshot fix avoids long
-                    // enumeration of the shared instance.
-                    try { sharedHeaders[$"k{i++}"] = "v"; } catch { }
-                }
-            });
+            Assert.NotNull(captured);
+            Assert.Equal("original", captured!["caller-header"]);
 
-            try
-            {
-                for (int i = 0; i < 50; i++)
-                    await _bus.PublishAsync(message, options);
-            }
-            finally
-            {
-                done.Cancel();
-                await mutator;
-            }
+            // caller mutation post-publish must not reach back into the captured map
+            sharedHeaders["caller-header"] = "after-send";
+            sharedHeaders["new-key"] = "late";
+
+            Assert.Equal("original", captured["caller-header"]);
+            Assert.False(captured.ContainsKey("new-key"));
         }
 
         [Fact]

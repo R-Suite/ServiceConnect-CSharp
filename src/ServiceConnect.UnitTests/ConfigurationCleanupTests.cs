@@ -8,11 +8,21 @@ namespace ServiceConnect.UnitTests;
 public class ConfigurationCleanupTests
 {
     [Fact]
-    public void OutgoingEventArgs_HeadersSetter_RejectsNull()
+    public void OutgoingEventArgs_Headers_RejectsNullInInitializer()
     {
-        var args = new OutgoingEventArgs();
+        // M11: Headers is init-only so a subscriber can't swap the whole
+        // dictionary after the framework built it (and thus cannot strip
+        // required MessageType/CorrelationId entries before transport send).
+        // Null in the initializer is still rejected.
+        Assert.Throws<ArgumentNullException>(() => new OutgoingEventArgs { Headers = null! });
+    }
 
-        Assert.Throws<ArgumentNullException>(() => args.Headers = null!);
+    [Fact]
+    public void OutgoingEventArgs_Headers_IsInitOnly()
+    {
+        var setter = typeof(OutgoingEventArgs).GetProperty(nameof(OutgoingEventArgs.Headers))!.SetMethod!;
+        var modreqs = setter.ReturnParameter.GetRequiredCustomModifiers();
+        Assert.Contains(modreqs, t => t.Name == "IsExternalInit");
     }
 
     [Fact]

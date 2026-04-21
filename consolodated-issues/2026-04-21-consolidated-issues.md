@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 11/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 12/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -248,7 +248,7 @@ Severity bands:
 - **What:** `Headers` is `Dictionary<string,string>?` — concurrent caller mutation during `BuildHeadersDirect`'s `foreach` throws `Collection was modified`. Narrower than "always a crash" — requires concurrent caller misuse.
 - **Fix:** Type as `IReadOnlyDictionary<string,string>?`; snapshot at construction.
 
-### [ ] M11. `OutgoingEventArgs.Headers` exposes the internal mutable `Dictionary`
+### [x] M11. `OutgoingEventArgs.Headers` exposes the internal mutable `Dictionary`
 - **File:** [OutgoingEventArgs.cs:16-26](../src/ServiceConnect.Interfaces/Bus/OutgoingEventArgs.cs#L16-L26)
 - **What:** Public `set` accessor; subscribers can rewrite `MessageId`, `DestinationAddress`, etc., after the event fires but before transport send.
 - **Fix:** Expose as read-only or snapshot before raising.

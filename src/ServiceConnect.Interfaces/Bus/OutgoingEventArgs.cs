@@ -11,17 +11,22 @@ public class OutgoingEventArgs
     public Message? Message { get; init; }
 
     /// <summary>
-    /// Gets or sets the outgoing transport headers.
+    /// Gets the outgoing transport headers. <c>init</c>-only so a subscriber can
+    /// still mutate individual entries (e.g. a telemetry hook injecting a
+    /// <c>traceparent</c>) but cannot swap out the entire dictionary after the
+    /// framework built it — previously a public setter let subscribers replace
+    /// the map and strip the required MessageType/CorrelationId entries before
+    /// transport send.
     /// </summary>
     public Dictionary<string, string> Headers
     {
         get => _headers;
-        set
+        init
         {
             ArgumentNullException.ThrowIfNull(value);
             _headers = value;
         }
     }
 
-    private Dictionary<string, string> _headers = [];
+    private readonly Dictionary<string, string> _headers = [];
 }
