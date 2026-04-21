@@ -248,5 +248,19 @@ namespace ServiceConnect.UnitTests
             Assert.Single(result);
             Assert.Equal("buffered", ((AggregatorTestData)result[0]).Value);
         }
+
+        [Fact]
+        public void Persistor_ImplementsIDisposable_AndDisposeIsIdempotent()
+        {
+            // H17: the persistor owns a CacheProvider that registers ITimer handles with
+            // the TimeProvider. Without IDisposable on the persistor, every DI rebuild
+            // leaks those timers. Dispose must run exactly once even on repeat calls.
+            var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            Assert.IsAssignableFrom<IDisposable>(persistor);
+
+            persistor.Dispose();
+            var second = Record.Exception(() => persistor.Dispose());
+            Assert.Null(second);
+        }
     }
 }

@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 15/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 16/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -169,7 +169,7 @@ Severity bands:
 - **What:** On `ConcurrencyException`, the entire find/invoke/update cycle is retried — so handler code and any side-effects (HTTP calls, enqueued messages, log lines) run again. Comment at lines 28-32 explicitly acknowledges it.
 - **Fix:** Split side-effect-free state transitions from side-effecting work; retry only the state write.
 
-### [ ] H17. `InMemoryAggregatorPersistor` owns a `CacheProvider` but is not `IDisposable`
+### [x] H17. `InMemoryAggregatorPersistor` owns a `CacheProvider` but is not `IDisposable`
 - **File:** [InMemoryAggregatorPersistor.cs:8-21](../src/ServiceConnect.Persistence.InMemory/InMemoryAggregatorPersistor.cs#L8-L21)
 - **What:** `CacheProvider` owns `ITimer` registrations and implements `IDisposable`; persistor has no dispose. Every DI rebuild (integration tests, host reload) leaks timers/handles.
 - **Fix:** Implement `IAsyncDisposable` or accept `CacheProvider` via DI.

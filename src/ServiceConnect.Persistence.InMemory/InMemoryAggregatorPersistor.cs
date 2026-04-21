@@ -5,10 +5,11 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Stores aggregator messages and snapshots in the process memory of the current application.
 /// </summary>
-public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
+public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposable
 {
     private readonly TimeProvider _timeProvider;
     private readonly CacheProvider _provider;
+    private int _disposed;
 
     // Parameters required by IAggregatorPersistor factory convention but unused in InMemory implementation
     /// <summary>
@@ -159,6 +160,16 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor
             }
             return Task.FromResult(0);
         }
+    }
+
+    /// <summary>
+    /// Disposes the underlying <see cref="CacheProvider"/>, releasing any timers
+    /// it owns. Without this, every DI rebuild leaks timer registrations.
+    /// </summary>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _provider.Dispose();
     }
 
     private List<Entry> GetOrCreateEntries(string name)
