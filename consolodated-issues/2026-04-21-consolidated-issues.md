@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 13/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 14/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -263,7 +263,7 @@ Severity bands:
 - **What:** `GetTimeoutsBatchAsync` iterates the time-sorted index and breaks at the first future entry, skipping currently-leased due rows. `NextQueryTime` is computed from future unlocked entries, potentially delaying re-query past the lease expiry.
 - **Fix:** Include leased-due rows in `NextQueryTime` computation (or use `min(lock_expiry, next_future_row)`).
 
-### [ ] M14. Mongo timeout store id-only remove/release overloads ignore lock owner
+### [x] M14. Mongo timeout store id-only remove/release overloads ignore lock owner
 - **File:** [MongoDbTimeoutStore.cs:173-207](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L173-L207)
 - **What:** Legacy two-arg overloads filter by `Id` + `Locked == true` but not by `LockedBy`. Any caller using them can act on another worker's leased row. Three-arg lockOwner overloads are correctly guarded.
 - **Fix:** Remove the legacy overloads or add `LockedBy` to their filter.

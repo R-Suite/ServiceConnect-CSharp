@@ -325,4 +325,56 @@ public class MongoDbTimeoutStoreTests
         Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task RemoveDispatchedTimeout_IdOnly_FilterRequiresLockedByEmpty()
+    {
+        // M14 regression: the legacy id-only Remove overload previously filtered
+        // by Id + Locked=true, meaning any caller with the id could delete a row
+        // leased by another worker. The fix pins LockedBy to Guid.Empty so the
+        // id-only path can only act on rows no live worker holds.
+        var id = Guid.NewGuid();
+        FilterDefinition<TimeoutData>? capturedFilter = null;
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.DeleteOneAsync(It.IsAny<FilterDefinition<TimeoutData>>(), It.IsAny<CancellationToken>()))
+            .Callback<FilterDefinition<TimeoutData>, CancellationToken>((filter, _) => capturedFilter = filter)
+            .ReturnsAsync(BuildDeleteResult(0));
+
+        var store = BuildStore(collection);
+
+        await ((ITimeoutStore)store).RemoveDispatchedTimeoutAsync(id);
+
+        var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
+        Assert.Contains("\"_id\"", json);
+        Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"LockedBy\"", json);
+        Assert.Contains(Guid.Empty.ToString(), json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReleaseDispatchedTimeout_IdOnly_FilterRequiresLockedByEmpty()
+    {
+        // M14 regression: same guard on the release path — id-only release
+        // cannot clear lock fields on a row owned by another session.
+        var id = Guid.NewGuid();
+        FilterDefinition<TimeoutData>? capturedFilter = null;
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<FilterDefinition<TimeoutData>, UpdateDefinition<TimeoutData>, UpdateOptions?, CancellationToken>((filter, _, _, _) => capturedFilter = filter)
+            .ReturnsAsync(BuildUpdateResult(0, 0));
+
+        var store = BuildStore(collection);
+
+        await ((ITimeoutStore)store).ReleaseDispatchedTimeoutAsync(id);
+
+        var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
+        Assert.Contains("\"_id\"", json);
+        Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"LockedBy\"", json);
+        Assert.Contains(Guid.Empty.ToString(), json, StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -179,8 +179,12 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
 
+            // Id-only callers don't know which worker holds the lease. Require
+            // LockedBy == Guid.Empty so this path cannot delete a row leased
+            // by a live worker — only the lease-aware (id, lockOwner) overload
+            // can touch actively-leased rows.
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
+                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, Guid.Empty);
             await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
@@ -198,8 +202,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            // Same lock-owner guard as Remove: id-only callers cannot reach
+            // into another worker's leased row.
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
+                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, Guid.Empty);
             var update = Builders<TimeoutData>.Update
                 .Set(x => x.Locked, false)
                 .Set(x => x.LockedBy, Guid.Empty)
