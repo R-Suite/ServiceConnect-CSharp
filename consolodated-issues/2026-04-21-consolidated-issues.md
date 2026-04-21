@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 5/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 6/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -342,7 +342,7 @@ Severity bands:
 - **What:** Allocations for structured-field binding still occur when `Debug` is disabled.
 - **Fix:** Guard with `IsEnabled(LogLevel.Debug)` on hot paths.
 
-### [ ] L6. `MessageAuditPublisher` routing key hardcoded
+### [x] L6. `MessageAuditPublisher` routing key hardcoded
 - **File:** [MessageAuditPublisher.cs:39](../src/ServiceConnect.Client.RabbitMQ/MessageAuditPublisher.cs#L39)
 - **What:** Exchange name is configurable via `IQueueConfiguration.AuditQueueName`; routing key is hardcoded to `""`, no way to configure a non-default exchange type or binding key.
 - **Fix:** Options-bound routing/binding key.

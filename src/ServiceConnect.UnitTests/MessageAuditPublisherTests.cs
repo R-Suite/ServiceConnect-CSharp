@@ -16,11 +16,15 @@ public class MessageAuditPublisherTests
         return new BasicDeliverEventArgs("tag", 1, false, "", "q", props, new byte[] { 1, 2, 3 });
     }
 
-    private static Mock<IQueueConfiguration> MakeQueueCfg(bool auditingEnabled, string auditExchange = "audit")
+    private static Mock<IQueueConfiguration> MakeQueueCfg(
+        bool auditingEnabled,
+        string auditExchange = "audit",
+        string auditRoutingKey = "")
     {
         var cfg = new Mock<IQueueConfiguration>();
         cfg.SetupGet(c => c.AuditingEnabled).Returns(auditingEnabled);
         cfg.SetupGet(c => c.AuditQueueName).Returns(auditExchange);
+        cfg.SetupGet(c => c.AuditRoutingKey).Returns(auditRoutingKey);
         return cfg;
     }
 
@@ -72,6 +76,29 @@ public class MessageAuditPublisherTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishAuditIfEnabledAsync_UsesConfiguredRoutingKey()
+    {
+        // L6 regression: routing key used to be hardcoded to "", so non-fanout audit
+        // exchanges (direct/topic) could not bind.
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var publisher = new MessageAuditPublisher(MakeQueueCfg(true, auditRoutingKey: "audit.orders").Object);
+        var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "SomeMessage" };
+
+        await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
+
+        channel.Verify(c => c.BasicPublishAsync(
+            "audit", "audit.orders", false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

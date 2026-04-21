@@ -16,6 +16,8 @@ public sealed class QueueConfiguration : IQueueConfiguration
     /// <inheritdoc />
     public string AuditQueueName { get; set; } = "audit";
     /// <inheritdoc />
+    public string AuditRoutingKey { get; set; } = string.Empty;
+    /// <inheritdoc />
     public bool AuditingEnabled { get; set; }
     /// <inheritdoc />
     public bool DisableErrors { get; set; }

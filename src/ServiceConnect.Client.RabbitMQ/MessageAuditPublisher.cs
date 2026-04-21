@@ -36,6 +36,12 @@ internal sealed class MessageAuditPublisher
             return;
 
         var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
-        await channel.BasicPublishAsync(_queueConfiguration.AuditQueueName, string.Empty, mandatory: false, props, args.Body, cancellationToken).ConfigureAwait(false);
+        await channel.BasicPublishAsync(
+            _queueConfiguration.AuditQueueName,
+            _queueConfiguration.AuditRoutingKey ?? string.Empty,
+            mandatory: false,
+            props,
+            args.Body,
+            cancellationToken).ConfigureAwait(false);
     }
 }

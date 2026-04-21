@@ -21,6 +21,13 @@ public interface IQueueConfiguration
     string AuditQueueName { get; set; }
 
     /// <summary>
+    /// Gets or sets the routing key used when publishing audit copies. Defaults to an
+    /// empty string (fan-out / direct binding); set to target a specific binding key
+    /// on a topic or direct audit exchange.
+    /// </summary>
+    string AuditRoutingKey { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether message auditing is enabled.
     /// </summary>
     bool AuditingEnabled { get; set; }
