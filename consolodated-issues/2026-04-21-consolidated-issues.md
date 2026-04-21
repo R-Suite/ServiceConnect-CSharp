@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 14/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 15/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -164,7 +164,7 @@ Severity bands:
 - **What:** Non-parseable or out-of-range `RetryCount` values yield `candidate = -1`, fail the `>= 0` guard, and leave `retryCount = 0`. The handler then increments and republishes as if the message were on its first retry — a publisher or broker corruption can force infinite retries.
 - **Fix:** Treat parse failure as "route to error" (or preserve a sane counter); never silently reset to 0.
 
-### [ ] H16. Process-manager optimistic-concurrency retry replays handler side-effects
+### [x] H16. Process-manager optimistic-concurrency retry replays handler side-effects
 - **File:** [ProcessManagerProcessor.cs:74-94,126-158](../src/ServiceConnect/Services/Processors/ProcessManagerProcessor.cs#L74-L158)
 - **What:** On `ConcurrencyException`, the entire find/invoke/update cycle is retried — so handler code and any side-effects (HTTP calls, enqueued messages, log lines) run again. Comment at lines 28-32 explicitly acknowledges it.
 - **Fix:** Split side-effect-free state transitions from side-effecting work; retry only the state write.

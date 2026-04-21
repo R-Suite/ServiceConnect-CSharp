@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
-using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Services;
 
 namespace ServiceConnect.Services.Processors;
@@ -24,16 +23,6 @@ internal sealed class ProcessManagerProcessor(
     private static readonly ConcurrentDictionary<Type, IProcessManagerPropertyMapper> MapperCache = new();
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
-
-    // Bounded optimistic-concurrency retry schedule for find→invoke→update. Keep it small
-    // because the handler side-effects are re-run on each attempt — if contention is high
-    // enough to burn the budget, the message should be requeued at the transport layer.
-    private static readonly TimeSpan[] ConcurrencyBackoff =
-    [
-        TimeSpan.FromMilliseconds(10),
-        TimeSpan.FromMilliseconds(50),
-        TimeSpan.FromMilliseconds(200)
-    ];
 
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -71,27 +60,14 @@ internal sealed class ProcessManagerProcessor(
             return m;
         });
 
-        // Retry the find→invoke→update cycle on ConcurrencyException so two concurrent messages
-        // for the same saga converge instead of losing one to a lost-update. Side-effects inside
-        // the handler are re-run on each attempt — callers who can't tolerate that should
-        // externalise their side-effects or reduce saga concurrency at the transport layer.
-        for (int attempt = 0; ; attempt++)
-        {
-            try
-            {
-                await RunPipelineOnceAsync(finder, descriptor, mapper, handler, (Message)message, messageType, headers, cancellationToken).ConfigureAwait(false);
-                return ProcessResult.Handled;
-            }
-            catch (ConcurrencyException) when (attempt < ConcurrencyBackoff.Length)
-            {
-                var delay = ConcurrencyBackoff[attempt];
-                var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, (int)Math.Max(1, delay.TotalMilliseconds / 2)));
-                logger.LogDebug(
-                    "ConcurrencyException on attempt {Attempt} for {MessageType}; retrying after {Delay}",
-                    attempt + 1, messageType.Name, delay + jitter);
-                await Task.Delay(delay + jitter, cancellationToken).ConfigureAwait(false);
-            }
-        }
+        // Run the find→invoke→update cycle exactly once per delivery. A previous version
+        // looped on ConcurrencyException, but every retry re-invoked the user's handler —
+        // any HTTP call, bus.Send, or other side-effect inside HandleAsync fired again.
+        // Letting the ConcurrencyException propagate hands the decision to the configured
+        // transport-level retry policy instead, which users can size against their tolerance
+        // for side-effect replay.
+        await RunPipelineOnceAsync(finder, descriptor, mapper, handler, (Message)message, messageType, headers, cancellationToken).ConfigureAwait(false);
+        return ProcessResult.Handled;
     }
 
     private async Task RunPipelineOnceAsync(

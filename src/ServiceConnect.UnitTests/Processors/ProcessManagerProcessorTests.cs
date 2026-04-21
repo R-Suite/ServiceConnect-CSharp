@@ -170,6 +170,45 @@ public class ProcessManagerProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_OnConcurrencyException_HandlerInvokedOnceAndExceptionPropagates()
+    {
+        // Regression for H16: previously the processor looped on ConcurrencyException and
+        // re-invoked the handler up to 4 times, multiplying every side-effect
+        // (HTTP calls, bus.Send, log lines) in the handler. The fix collapses the loop —
+        // the exception bubbles to the transport so retry cadence is governed by the
+        // configured MessageRetryHandler, not a hardcoded in-process schedule.
+        var (services, _, mockFinder) = CreateBaseServices();
+        var handler = new PmTestHandler();
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+        });
+
+        var existingData = new PmTestData { CorrelationId = Guid.NewGuid(), Counter = 5 };
+        var persistence = new PmTestPersistenceData { Data = existingData };
+
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
+            It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(persistence);
+        mockFinder.Setup(f => f.UpdateDataAsync(It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ServiceConnect.Interfaces.Exceptions.ConcurrencyException("stale version"));
+
+        var provider = services.BuildServiceProvider();
+        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+
+        var msg = new PmTestMessage(existingData.CorrelationId) { Content = "update" };
+
+        await Assert.ThrowsAsync<ServiceConnect.Interfaces.Exceptions.ConcurrencyException>(() =>
+            processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
+                new Dictionary<string, object>(), new Envelope()));
+
+        Assert.Equal(1, handler.InvokeCount);
+        mockFinder.Verify(f => f.UpdateDataAsync(It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task ProcessAsync_CancelledToken_ThrowsOce()
     {
         var (services, _, _) = CreateBaseServices();
@@ -309,6 +348,7 @@ file class PmTestPersistenceData : IPersistenceData<PmTestData>
 file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
 {
     public bool Invoked { get; private set; }
+    public int InvokeCount { get; private set; }
     public IConsumeContext? Context { get; set; }
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
@@ -317,6 +357,7 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
     {
         data.Counter++;
         Invoked = true;
+        InvokeCount++;
         return Task.CompletedTask;
     }
 }
