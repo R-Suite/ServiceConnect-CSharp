@@ -431,8 +431,14 @@ public sealed class Bus : IBus
         return await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
     }
 
-    private static Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, Dictionary<string, string>? additionalHeaders = null)
+    private static Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
     {
+        // Snapshot once up front so a concurrent caller mutating the source
+        // dictionary can't throw "Collection was modified" inside the foreach
+        // below. The type parameter being IReadOnlyDictionary signals intent
+        // but doesn't prevent external mutation through the original reference.
+        var snapshot = additionalHeaders is null ? null : additionalHeaders.ToArray();
+
         var envelope = new Envelope
         {
             Body = body,
@@ -443,9 +449,9 @@ public sealed class Bus : IBus
             }
         };
 
-        if (additionalHeaders is not null)
+        if (snapshot is not null)
         {
-            foreach (var header in additionalHeaders)
+            foreach (var header in snapshot)
             {
                 envelope.Headers[header.Key] = header.Value;
             }
@@ -497,18 +503,23 @@ public sealed class Bus : IBus
     /// without allocating the intermediate <see cref="Envelope"/> or its
     /// <c>Dictionary&lt;string, object&gt;</c> headers map.
     /// </summary>
-    private static Dictionary<string, string> BuildHeadersDirect(Type messageType, Guid correlationId, Dictionary<string, string>? additionalHeaders)
+    private static Dictionary<string, string> BuildHeadersDirect(Type messageType, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders)
     {
-        var capacity = 2 + (additionalHeaders?.Count ?? 0);
+        // Snapshot-then-iterate: the caller still holds a reference to the
+        // underlying dictionary, so a concurrent mutation during the foreach
+        // below would throw "Collection was modified". ToArray grabs a stable
+        // copy with a single enumeration.
+        var snapshot = additionalHeaders is null ? null : additionalHeaders.ToArray();
+        var capacity = 2 + (snapshot?.Length ?? 0);
         var headers = new Dictionary<string, string>(capacity)
         {
             [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name,
             [HeaderKeys.CorrelationId] = correlationId.ToString()
         };
 
-        if (additionalHeaders is not null)
+        if (snapshot is not null)
         {
-            foreach (var kvp in additionalHeaders)
+            foreach (var kvp in snapshot)
                 headers[kvp.Key] = kvp.Value;
         }
 

@@ -9,9 +9,11 @@ namespace ServiceConnect.Interfaces.Options;
 public readonly record struct PublishOptions
 {
     /// <summary>
-    /// Gets the additional headers to attach to the published message.
+    /// Gets the additional headers to attach to the published message. Typed as
+    /// a read-only view so the framework does not invite concurrent-caller
+    /// mutation of a shared dictionary while the async pipeline is iterating it.
     /// </summary>
-    public Dictionary<string, string>? Headers { get; init; }
+    public IReadOnlyDictionary<string, string>? Headers { get; init; }
 
     /// <summary>
     /// Gets the routing key used by the transport, when applicable.

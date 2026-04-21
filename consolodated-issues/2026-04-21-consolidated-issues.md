@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 10/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 11/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -243,7 +243,7 @@ Severity bands:
 - **What:** Inconsistent with `SendOptions` (`readonly record struct`). Concurrent `PublishAsync` calls sharing an instance can mutate each other's state mid-flight.
 - **Fix:** Convert to `readonly record struct`.
 
-### [ ] M10. `SendOptions` / `PublishOptions` `Headers` reference a mutable `Dictionary`
+### [x] M10. `SendOptions` / `PublishOptions` `Headers` reference a mutable `Dictionary`
 - **File:** [SendOptions.cs:11](../src/ServiceConnect.Interfaces/Options/SendOptions.cs#L11), [PublishOptions.cs:11](../src/ServiceConnect.Interfaces/Options/PublishOptions.cs#L11)
 - **What:** `Headers` is `Dictionary<string,string>?` — concurrent caller mutation during `BuildHeadersDirect`'s `foreach` throws `Collection was modified`. Narrower than "always a crash" — requires concurrent caller misuse.
 - **Fix:** Type as `IReadOnlyDictionary<string,string>?`; snapshot at construction.

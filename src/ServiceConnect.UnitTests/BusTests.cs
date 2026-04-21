@@ -295,6 +295,64 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void SendAndPublishOptions_HeadersTypedAsReadOnlyDictionary()
+        {
+            // M10 regression: Headers used to be Dictionary<string,string>?, which
+            // invited callers to share a mutable instance — a concurrent mutation
+            // during BuildHeadersDirect's foreach would throw "Collection was
+            // modified". The contract is now IReadOnlyDictionary<string,string>?.
+            Assert.Equal(
+                typeof(IReadOnlyDictionary<string, string>),
+                typeof(SendOptions).GetProperty(nameof(SendOptions.Headers))!.PropertyType);
+            Assert.Equal(
+                typeof(IReadOnlyDictionary<string, string>),
+                typeof(PublishOptions).GetProperty(nameof(PublishOptions.Headers))!.PropertyType);
+        }
+
+        [Fact]
+        public async Task PublishAsync_WithConcurrentlyMutatedHeaders_DoesNotThrow()
+        {
+            // M10: snapshot-then-iterate means a caller mutating the source after
+            // PublishAsync reads .Headers can't trigger "Collection was modified"
+            // inside the framework's header-copy loop. Simulate by passing a live
+            // Dictionary cast to IReadOnlyDictionary, mutating it on a background
+            // thread, and asserting no throw while publishing.
+            var sharedHeaders = new Dictionary<string, string> { ["k0"] = "v0" };
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+            _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
+                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null))
+                .Returns(Task.CompletedTask);
+
+            var options = new PublishOptions { Headers = sharedHeaders };
+
+            using var done = new CancellationTokenSource();
+            var mutator = Task.Run(() =>
+            {
+                int i = 0;
+                while (!done.IsCancellationRequested)
+                {
+                    // lock-free mutation: safe for ToArray snapshot because
+                    // Dictionary raising during enumeration is the only hazard
+                    // we want to reproduce; the snapshot fix avoids long
+                    // enumeration of the shared instance.
+                    try { sharedHeaders[$"k{i++}"] = "v"; } catch { }
+                }
+            });
+
+            try
+            {
+                for (int i = 0; i < 50; i++)
+                    await _bus.PublishAsync(message, options);
+            }
+            finally
+            {
+                done.Cancel();
+                await mutator;
+            }
+        }
+
+        [Fact]
         public async Task PublishAsync_FastPath_StampsCorrelationIdHeader()
         {
             var correlationId = Guid.NewGuid();
