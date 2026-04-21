@@ -79,10 +79,20 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                         entry.Data.LockExpiresAt = utcNow + LockLeaseDuration;
                         retval.DueTimeouts.Add(Clone(entry.Data));
                     }
+                    else if (entry.Data.LockExpiresAt is { } leaseExpiry && leaseExpiry < nextQueryTime)
+                    {
+                        // Due row leased by another worker. Without this branch
+                        // we would skip it silently and rely solely on the first
+                        // future entry for NextQueryTime — which could push the
+                        // re-poll well past this lease's expiry, leaving the row
+                        // un-dispatched after the worker that held it crashed.
+                        nextQueryTime = leaseExpiry;
+                    }
                 }
                 else
                 {
-                    nextQueryTime = entry.Time;
+                    if (entry.Time < nextQueryTime)
+                        nextQueryTime = entry.Time;
                     break;
                 }
             }

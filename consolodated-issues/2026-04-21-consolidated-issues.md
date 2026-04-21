@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 12/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 13/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -258,7 +258,7 @@ Severity bands:
 - **What:** Only `ValidateSendMessageMiddlewareLifetimes` runs. Inbound middleware (H3) and filter (H4) lifetime misconfigurations silently slip through.
 - **Fix:** Extend validator; mirror the send-side checks for inbound.
 
-### [ ] M13. Timeout store in-memory: batch-poll skips leased due rows
+### [x] M13. Timeout store in-memory: batch-poll skips leased due rows
 - **File:** [InMemoryTimeoutStore.cs:71-99](../src/ServiceConnect.Persistence.InMemory/InMemoryTimeoutStore.cs#L71-L99)
 - **What:** `GetTimeoutsBatchAsync` iterates the time-sorted index and breaks at the first future entry, skipping currently-leased due rows. `NextQueryTime` is computed from future unlocked entries, potentially delaying re-query past the lease expiry.
 - **Fix:** Include leased-due rows in `NextQueryTime` computation (or use `min(lock_expiry, next_future_row)`).

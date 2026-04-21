@@ -148,6 +148,41 @@ public class InMemoryTimeoutStoreTests
     }
 
     [Fact]
+    public async Task GetTimeoutsBatch_NextQueryTime_RespectsLeaseExpiryOfDueButLeasedRow()
+    {
+        // M13 regression: previously the poll skipped leased-due rows silently
+        // and set NextQueryTime from the first unlocked future entry. If that
+        // future entry sat hours beyond the current lease expiry, the leased
+        // row stayed un-dispatched after its lease window closed. Now the
+        // leased row's LockExpiresAt is folded into NextQueryTime so the poll
+        // comes back in time to reclaim it.
+        var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore(timeProvider: time);
+
+        var leasedDueId = Guid.NewGuid();
+        var leaseExpiresAt = now.AddMinutes(2);
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = leasedDueId,
+            Time = now.AddMinutes(-1),
+            Locked = true,
+            LockedBy = Guid.NewGuid(),
+            LockExpiresAt = leaseExpiresAt,
+        });
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = Guid.NewGuid(),
+            Time = now.AddHours(1),
+        });
+
+        var batch = await store.GetTimeoutsBatchAsync();
+
+        Assert.Empty(batch.DueTimeouts);
+        Assert.Equal(leaseExpiresAt, batch.NextQueryTime);
+    }
+
+    [Fact]
     public async Task RemoveDispatchedTimeout_RemovesFromIndex_SoSubsequentPollSkipsIt()
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
