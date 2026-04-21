@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 19/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 20/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -293,7 +293,7 @@ Severity bands:
 - **What:** `UseTls` and `AllowInsecureTls` set unconditionally, but `EnabledSslProtocols` and `CheckCertificateRevocation` are applied only inside the `CertPath` block. TLS users without a client cert silently use driver defaults.
 - **Fix:** Apply protocol/revocation settings whenever TLS is enabled.
 
-### [ ] M20. Mongo process-manager collection naming uses simple short `Name`
+### [x] M20. Mongo process-manager collection naming uses simple short `Name`
 - **File:** [MongoDbProcessManagerFinder.cs:59,122,186,232,252,269-271](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs)
 - **What:** Reads use `typeof(T).Name`; writes/deletes use `data.GetType().Name`. Both use simple `Name`, not `FullName` — two types with the same short name from different namespaces collide. Secondary inconsistency: if `T` is an interface/base and `data` is a subtype, the two paths disagree on the collection.
 - **Fix:** Use `FullName` (or a namespace-qualified identifier) consistently.

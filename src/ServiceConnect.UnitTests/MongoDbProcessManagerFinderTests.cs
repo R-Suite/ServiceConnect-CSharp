@@ -51,10 +51,10 @@ public class MongoDbProcessManagerFinderTests
         var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
             .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(finder)!;
-        indexedCollections.TryAdd(nameof(TestProcessManagerData), true);
+        indexedCollections.TryAdd(typeof(TestProcessManagerData).FullName!, true);
 
         database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
-                nameof(TestProcessManagerData),
+                typeof(TestProcessManagerData).FullName,
                 It.IsAny<MongoCollectionSettings>()))
             .Returns(collection.Object);
 
@@ -91,10 +91,10 @@ public class MongoDbProcessManagerFinderTests
         var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
             .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(finder)!;
-        indexedCollections.TryAdd(nameof(TestProcessManagerData), true);
+        indexedCollections.TryAdd(typeof(TestProcessManagerData).FullName!, true);
 
         database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
-                nameof(TestProcessManagerData),
+                typeof(TestProcessManagerData).FullName,
                 It.IsAny<MongoCollectionSettings>()))
             .Returns(collection.Object);
 
@@ -126,10 +126,10 @@ public class MongoDbProcessManagerFinderTests
         var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
             .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(finder)!;
-        indexedCollections.TryAdd(nameof(TestProcessManagerData), true);
+        indexedCollections.TryAdd(typeof(TestProcessManagerData).FullName!, true);
 
         database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
-                nameof(TestProcessManagerData),
+                typeof(TestProcessManagerData).FullName,
                 It.IsAny<MongoCollectionSettings>()))
             .Returns(collection.Object);
 
@@ -155,10 +155,10 @@ public class MongoDbProcessManagerFinderTests
         var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
             .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(finder)!;
-        indexedCollections.TryAdd(nameof(TestProcessManagerData), true);
+        indexedCollections.TryAdd(typeof(TestProcessManagerData).FullName!, true);
 
         database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
-                nameof(TestProcessManagerData),
+                typeof(TestProcessManagerData).FullName,
                 It.IsAny<MongoCollectionSettings>()))
             .Returns(collection.Object);
 
@@ -181,7 +181,7 @@ public class MongoDbProcessManagerFinderTests
         CreateIndexModel<MongoDbData<TestProcessManagerData>>? capturedIndexModel = null;
 
         database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
-                nameof(TestProcessManagerData),
+                typeof(TestProcessManagerData).FullName,
                 It.IsAny<MongoCollectionSettings>()))
             .Returns(collection.Object);
 
@@ -206,6 +206,44 @@ public class MongoDbProcessManagerFinderTests
 
         Assert.NotNull(capturedIndexModel);
         Assert.True(capturedIndexModel!.Options?.Unique);
+    }
+
+    [Fact]
+    public async Task InsertDataAsync_UsesFullyQualifiedTypeNameForCollection()
+    {
+        var finder = CreateFinder(out var database, out _);
+        var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
+        var data = new TestProcessManagerData();
+        var expectedName = typeof(TestProcessManagerData).FullName!;
+
+        var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
+            .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(finder)!;
+        indexedCollections.TryAdd(expectedName, true);
+
+        // Short-name-only Setup must NOT match — the finder must ask for the full name.
+        database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
+                nameof(TestProcessManagerData),
+                It.IsAny<MongoCollectionSettings>()))
+            .Throws(new InvalidOperationException("collection resolution used short name"));
+
+        string? requestedName = null;
+        database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
+                It.IsAny<string>(),
+                It.IsAny<MongoCollectionSettings>()))
+            .Callback<string, MongoCollectionSettings>((name, _) => requestedName = name)
+            .Returns(collection.Object);
+
+        collection.Setup(c => c.InsertOneAsync(
+                It.IsAny<MongoDbData<TestProcessManagerData>>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        await finder.InsertDataAsync(data, CancellationToken.None);
+
+        Assert.Equal(expectedName, requestedName);
+        Assert.Contains('.', requestedName!);
     }
 
     private static MongoDbProcessManagerFinder CreateFinder(

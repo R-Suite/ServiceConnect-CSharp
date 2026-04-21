@@ -61,7 +61,7 @@ public class MongoDbProcessManagerFinderTests
     {
         return new MongoClient(connectionString)
             .GetDatabase(dbName)
-            .GetCollection<MongoDbData<TestData>>("TestData");
+            .GetCollection<MongoDbData<TestData>>(typeof(TestData).FullName);
     }
 
     private static TestProcessManagerPropertyMapper CreateMapper()

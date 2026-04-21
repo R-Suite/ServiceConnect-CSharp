@@ -56,9 +56,9 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             throw new InvalidOperationException(
                 $"No property mapping configured for message type '{message.GetType().FullName}' or the base Message type.");
 
-        var collectionName = typeof(T).Name;
+        var collectionName = GetCollectionName<T>();
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-        await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
+        await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
 
         object? msgPropValue;
 
@@ -166,7 +166,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private async Task InsertDataTypedAsync<T>(T data, string collectionName, CancellationToken cancellationToken) where T : class, IProcessManagerData
     {
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-        await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
+        await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
 
         var mongoDbData = new MongoDbData<T>
         {
@@ -183,7 +183,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var collectionName = GetCollectionName(persistenceData.Data);
+        var collectionName = GetCollectionName<T>();
         var versionData = (MongoDbData<T>)persistenceData;
         int currentVersion = versionData.Version;
 
@@ -202,7 +202,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-            await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
+            await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
 
             var filter = Builders<MongoDbData<T>>.Filter.And(
                 Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, versionData.Data.CorrelationId),
@@ -241,7 +241,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(persistenceData);
 
-        var collectionName = GetCollectionName(persistenceData.Data);
+        var collectionName = GetCollectionName<T>();
         var expectedVersion = ((MongoDbData<T>)persistenceData).Version;
         var correlationId = persistenceData.Data.CorrelationId;
 
@@ -249,7 +249,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-            await EnsureCorrelationIdIndexAsync(collection).ConfigureAwait(false);
+            await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
 
             // Match on {CorrelationId, Version} so a delete racing an in-flight update
             // cannot silently drop a saga mid-transition. Same contract as UpdateDataAsync.
@@ -271,9 +271,8 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
-    private async Task EnsureCorrelationIdIndexAsync<T>(IMongoCollection<MongoDbData<T>> collection) where T : class, IProcessManagerData
+    private async Task EnsureCorrelationIdIndexAsync<T>(IMongoCollection<MongoDbData<T>> collection, string collectionName) where T : class, IProcessManagerData
     {
-        var collectionName = typeof(T).Name;
         if (!_indexedCollections.TryAdd(collectionName, true)) return;
 
         var indexKeys = Builders<MongoDbData<T>>.IndexKeys.Ascending(x => x.Data.CorrelationId);
@@ -290,8 +289,15 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
+    // FullName avoids short-name collisions between two saga data types that share a
+    // class name across different namespaces. Name is a last-resort fallback for the
+    // rare types where FullName is null (e.g., open generics in reflection contexts).
+    private static string GetCollectionName<T>() where T : class, IProcessManagerData
+        => typeof(T).FullName ?? typeof(T).Name;
+
     private static string GetCollectionName(IProcessManagerData data)
     {
-        return data.GetType().Name;
+        var t = data.GetType();
+        return t.FullName ?? t.Name;
     }
 }
