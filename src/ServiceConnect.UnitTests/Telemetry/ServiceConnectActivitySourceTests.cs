@@ -217,6 +217,32 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     }
 
     [Fact]
+    public void Consume_ExtractsParentContext_WhenHeadersAreReadOnlyDictionary()
+    {
+        // M6 regression: ExtractTraceIdAndState previously switched only on
+        // the concrete Dictionary<string, object>, so ReadOnlyDictionary (used
+        // by ConsumeContext.Headers) silently dropped traceparent/tracestate
+        // and every consume span started a fresh trace.
+        var traceId = "0af7651916cd43dd8448eb211c80319c";
+        var spanId = "b7ad6b7169203331";
+        var inner = new Dictionary<string, object>
+        {
+            ["traceparent"] = Encoding.UTF8.GetBytes($"00-{traceId}-{spanId}-01"),
+        };
+
+        var args = new ConsumeEventArgs
+        {
+            Headers = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(inner),
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal(traceId, activity!.TraceId.ToString());
+        Assert.Equal(spanId, activity.ParentSpanId.ToString());
+    }
+
+    [Fact]
     public void Consume_WhenTelemetryDisabled_ReturnsNull()
     {
         ServiceConnectActivitySource.Options.EnableConsumeTelemetry = false;

@@ -198,14 +198,27 @@ public static class ServiceConnectActivitySource
     private static void ExtractTraceIdAndState(object? eventArgs, string name, out string? value, out IEnumerable<string>? values)
     {
         values = default;
+
+        // Iterate via the interface, not concrete Dictionary<,>. ConsumeContext
+        // wraps headers as ReadOnlyDictionary<string, object>, which the old
+        // concrete-type switch did not recognise — so every consume span arrived
+        // without its traceparent and restarted the trace. Check the object
+        // variant first (matches the raw header bag off the wire) then fall
+        // back to a string-keyed dictionary for already-decoded headers.
         switch (eventArgs)
         {
-            case Dictionary<string, object> objHeaders when objHeaders.TryGetValue(name, out object? objVal):
+            case IDictionary<string, object> objHeaders when objHeaders.TryGetValue(name, out object? objVal):
                 value = HeaderDecoder.Decode(objVal);
                 return;
+            case IReadOnlyDictionary<string, object> roObjHeaders when roObjHeaders.TryGetValue(name, out object? roObjVal):
+                value = HeaderDecoder.Decode(roObjVal);
+                return;
             // string branch: values are already decoded; HeaderDecoder.Decode is for byte[] RabbitMQ headers only.
-            case Dictionary<string, string> strHeaders when strHeaders.TryGetValue(name, out string? strVal):
+            case IDictionary<string, string> strHeaders when strHeaders.TryGetValue(name, out string? strVal):
                 value = strVal;
+                return;
+            case IReadOnlyDictionary<string, string> roStrHeaders when roStrHeaders.TryGetValue(name, out string? roStrVal):
+                value = roStrVal;
                 return;
             default:
                 value = default;
