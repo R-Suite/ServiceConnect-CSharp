@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 16/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 17/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -174,7 +174,7 @@ Severity bands:
 - **What:** `CacheProvider` owns `ITimer` registrations and implements `IDisposable`; persistor has no dispose. Every DI rebuild (integration tests, host reload) leaks timers/handles.
 - **Fix:** Implement `IAsyncDisposable` or accept `CacheProvider` via DI.
 
-### [ ] H18. `InMemoryPersistenceState.SyncRoot` (ReaderWriterLockSlim) is never disposed
+### [x] H18. `InMemoryPersistenceState.SyncRoot` (ReaderWriterLockSlim) is never disposed
 - **File:** [InMemoryPersistenceState.cs:11](../src/ServiceConnect.Persistence.InMemory/InMemoryPersistenceState.cs#L11)
 - **What:** RWSL holds kernel handles; no `Dispose`. Per-container leak on every DI rebuild.
 - **Fix:** Make the state `IDisposable`.

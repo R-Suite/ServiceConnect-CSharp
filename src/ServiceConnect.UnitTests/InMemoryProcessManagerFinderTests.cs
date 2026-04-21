@@ -515,6 +515,25 @@ namespace ServiceConnect.UnitTests
                 typeof(InMemoryPersistenceState).GetProperty(nameof(InMemoryPersistenceState.SyncRoot))!.PropertyType);
         }
 
+        [Fact]
+        public void InMemoryPersistenceState_Dispose_ReleasesSyncRoot_AndIsIdempotent()
+        {
+            // H18: SyncRoot is a ReaderWriterLockSlim holding kernel handles; without
+            // IDisposable on the state every DI rebuild leaks one RWSL per container.
+            // Dispose must release the lock and tolerate repeat calls.
+            var state = new InMemoryPersistenceState();
+            var syncRoot = state.SyncRoot;
+
+            state.Dispose();
+
+            // Re-entering a disposed RWSL throws ObjectDisposedException — observable
+            // proof that Dispose released the kernel resource.
+            Assert.Throws<ObjectDisposedException>(() => syncRoot.EnterReadLock());
+
+            var second = Record.Exception(() => state.Dispose());
+            Assert.Null(second);
+        }
+
         // --- Saga lifetime is caller-managed (C7): no background TTL ---
 
         [Fact]
