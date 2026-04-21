@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using RabbitMQ.Client;
@@ -104,5 +106,59 @@ public class ConsumerTests
 
         channel.Verify(c => c.CloseAsync(It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.Dispose(), Times.Once);
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_WhenHostStartupFails_RegistersHostBeforeStartForDisposeToReach()
+    {
+        var shutdownArgs = new ShutdownEventArgs(ShutdownInitiator.Library, 406, "PRECONDITION_FAILED", cause: null, cancellationToken: CancellationToken.None);
+
+        var setupChannel = new Mock<IChannel>();
+        setupChannel.Setup(c => c.IsOpen).Returns(true);
+        setupChannel.Setup(c => c.ExchangeDeclareAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<IDictionary<string, object?>?>(),
+                It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        setupChannel.Setup(c => c.QueueDeclareAsync(
+                It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<IDictionary<string, object?>?>(),
+                It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new QueueDeclareOk("q", 0, 0));
+        setupChannel.Setup(c => c.QueueBindAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<IDictionary<string, object?>?>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        setupChannel.Setup(c => c.CloseAsync(It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var connection = new Mock<IServiceConnectConnection>();
+        // First call — Consumer's setup channel — succeeds. Second call — host's
+        // consumer channel inside RabbitMqConsumerHost.StartConsumingAsync — throws.
+        // With the bug (host added to _clients only AFTER StartConsumingAsync succeeded),
+        // the partially-initialised host would leak. With the fix, _clients holds it.
+        connection.SetupSequence(c => c.CreateChannelAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(setupChannel.Object)
+            .ThrowsAsync(new OperationInterruptedException(shutdownArgs));
+
+        var transportCfg = MakeTransportCfg();
+        transportCfg.SetupGet(c => c.MaxRetries).Returns(0);
+        var queueCfg = MakeQueueCfg();
+
+        var consumer = new Consumer(
+            transportCfg.Object,
+            queueCfg.Object,
+            MakeBusCfg().Object,
+            NullLogger<Consumer>.Instance,
+            connection.Object);
+
+        await Assert.ThrowsAsync<OperationInterruptedException>(() =>
+            consumer.StartConsumingAsync("q", ["MessageType"], (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true })));
+
+        var clientsField = typeof(Consumer).GetField("_clients", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(clientsField);
+        var clients = (System.Collections.ICollection)clientsField!.GetValue(consumer)!;
+        Assert.Single(clients);
     }
 }

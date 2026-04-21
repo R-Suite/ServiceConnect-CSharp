@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 10/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 11/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -144,7 +144,7 @@ Severity bands:
 - **What:** The `cancellationToken` passed to `StartConsumingAsync` is captured by the `ReceivedAsync` lambda and reused for the lifetime of the consumer. A startup token cancelled post-startup (e.g. scoped to the startup phase) breaks every future delivery.
 - **Fix:** Use a consumer-lifetime token; do not capture the startup token.
 
-### [ ] H11. Partial consumer startup leaks already-started hosts
+### [x] H11. Partial consumer startup leaks already-started hosts
 - **File:** [Consumer.cs:142-160](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L142-L160)
 - **What:** Each host is started (line 155) before being added to `_clients` (line 160). If a later step throws, earlier hosts are running but untracked — `DisposeAsync` won't reach them.
 - **Fix:** Add to `_clients` before starting, or track running hosts independently so cleanup sees them.

@@ -152,12 +152,15 @@ public sealed class Consumer : IConsumer
                 retryHandler,
                 auditPublisher,
                 _logger);
+            // Register the host before starting so a failure in StartConsumingAsync or
+            // ConsumeMessageTypeAsync on a later iteration does not leak already-started
+            // hosts. DisposeAsync iterates _clients and tolerates half-started hosts.
+            _clients.Add(client);
             await client.StartConsumingAsync(eventHandler, queueName, cancellationToken: cancellationToken);
             foreach (string messageType in messageTypes)
             {
                 await client.ConsumeMessageTypeAsync(messageType);
             }
-            _clients.Add(client);
         }
     }
 
