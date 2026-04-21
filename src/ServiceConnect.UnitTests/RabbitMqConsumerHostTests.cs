@@ -53,12 +53,10 @@ public class RabbitMqConsumerHostTests
         var consumerChannel = CreateMockChannel();
         var publishChannel = CreateMockChannel();
         var conn = new Mock<IServiceConnectConnection>();
-        var callCount = 0;
-        conn.Setup(c => c.CreateChannelAsync()).Returns(() =>
-        {
-            var n = Interlocked.Increment(ref callCount);
-            return Task.FromResult(n == 1 ? consumerChannel.Object : publishChannel.Object);
-        });
+        // Consumer channel is opened via the parameterless overload; the helper publish
+        // channel is opened via the options overload so it can enable publisher confirms.
+        conn.Setup(c => c.CreateChannelAsync()).ReturnsAsync(consumerChannel.Object);
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>())).ReturnsAsync(publishChannel.Object);
         return (conn, consumerChannel, publishChannel);
     }
 
@@ -134,6 +132,31 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicQosAsync(
             It.IsAny<uint>(), It.IsAny<ushort>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_CreatesPublishChannel_WithPublisherConfirmsEnabled()
+    {
+        // The helper channel carries retry/audit/error publishes. Without publisher
+        // confirms + tracking, BasicPublishAsync returns before the broker acks, so a
+        // lost helper publish can be silently dropped while the original message is
+        // acked. Confirms must be enabled to match the main Producer channel.
+        var (conn, _, _) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        conn.Verify(c => c.CreateChannelAsync(It.Is<CreateChannelOptions?>(o =>
+                o != null
+                && o.PublisherConfirmationsEnabled
+                && o.PublisherConfirmationTrackingEnabled)),
+            Times.Once);
+        conn.Verify(c => c.CreateChannelAsync(), Times.Once);
     }
 
     [Fact]

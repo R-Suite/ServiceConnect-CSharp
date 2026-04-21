@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 6/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 7/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -94,7 +94,7 @@ Severity bands:
 
 ## High
 
-### [ ] H1. Retry, error, and audit helper publishes go through a channel with no publisher confirms
+### [x] H1. Retry, error, and audit helper publishes go through a channel with no publisher confirms
 - **File:** [RabbitMqConsumerHost.cs:102-106](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L102-L106), [MessageRetryHandler.cs:51-56,102-106](../src/ServiceConnect.Client.RabbitMQ/MessageRetryHandler.cs), [MessageAuditPublisher.cs:38-39](../src/ServiceConnect.Client.RabbitMQ/MessageAuditPublisher.cs#L38-L39)
 - **What:** `_publishChannel` is a dedicated helper channel created with defaults — `PublisherConfirmationsEnabled` not set. If the helper publish is lost mid-flight and is treated as complete, the retry/error/audit copy silently disappears. (Original message ack is sequenced after the publish await, so this is narrower than the "ack before confirm" framing but the publisher-confirm gap is real.)
 - **Fix:** Enable publisher confirms on the helper channel (matching the main producer channel) and await the confirm.

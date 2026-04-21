@@ -104,8 +104,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _model = await _connection.CreateChannelAsync().ConfigureAwait(false);
         // Dedicated publish channel for retry/audit/error; kept separate from the
         // consumer channel because RabbitMQ.Client is not safe to use concurrently on
-        // a single channel.
-        _publishChannel = await _connection.CreateChannelAsync().ConfigureAwait(false);
+        // a single channel. Publisher confirms ensure BasicPublishAsync awaits the
+        // broker ack before returning, so a lost retry/audit/error publish surfaces as
+        // an exception on the consumer path instead of silently disappearing.
+        var publishChannelOptions = new CreateChannelOptions(
+            publisherConfirmationsEnabled: true,
+            publisherConfirmationTrackingEnabled: true);
+        _publishChannel = await _connection.CreateChannelAsync(publishChannelOptions).ConfigureAwait(false);
         if (!_disablePrefetch)
             await _model.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
 

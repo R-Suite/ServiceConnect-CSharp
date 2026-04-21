@@ -62,7 +62,14 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// Creates a RabbitMQ channel, establishing the connection first if needed.
     /// </summary>
     /// <returns>A newly created channel.</returns>
-    public async Task<IChannel> CreateChannelAsync()
+    public Task<IChannel> CreateChannelAsync() => CreateChannelAsync(options: null);
+
+    /// <summary>
+    /// Creates a RabbitMQ channel with the supplied options, establishing the connection first if needed.
+    /// </summary>
+    /// <param name="options">Channel options applied to the underlying RabbitMQ channel, or <see langword="null"/> for defaults.</param>
+    /// <returns>A newly created channel.</returns>
+    public async Task<IChannel> CreateChannelAsync(CreateChannelOptions? options)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -74,7 +81,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
                 ?? throw new InvalidOperationException("Connection was not initialized.");
         }
 
-        return await conn.CreateChannelAsync().ConfigureAwait(false);
+        return await conn.CreateChannelAsync(options).ConfigureAwait(false);
     }
 
     /// <summary>
