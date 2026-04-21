@@ -38,9 +38,12 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
             // Overwrite a previous null (from a non-message-handler ref for the same type).
             builder[href.MessageType] = BuildDescriptor(href.MessageType, messageHandlerInterface);
 
-            _logger.LogDebug(
-                "Registered message-handler descriptor: message={MessageType}, handler={HandlerType}",
-                href.MessageType.Name, href.HandlerType.Name);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug(
+                    "Registered message-handler descriptor: message={MessageType}, handler={HandlerType}",
+                    href.MessageType.Name, href.HandlerType.Name);
+            }
         }
 
         _knownDescriptors = builder.ToFrozenDictionary();

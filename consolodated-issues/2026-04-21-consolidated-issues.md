@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 4/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 5/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -337,7 +337,7 @@ Severity bands:
 - **What:** Style/shape — violates CA1032. Library-internal impact.
 - **Fix:** Add the standard two-arg constructor.
 
-### [ ] L5. `LogDebug` calls in hot paths without `IsEnabled` guards
+### [x] L5. `LogDebug` calls in hot paths without `IsEnabled` guards
 - **File:** [ProcessManagerProcessor.cs:89](../src/ServiceConnect/Services/Processors/ProcessManagerProcessor.cs#L89), [AggregatorRegistry.cs:44](../src/ServiceConnect/Services/Processors/AggregatorRegistry.cs#L44), [StreamHandlerRegistry.cs:40](../src/ServiceConnect/Services/Processors/StreamHandlerRegistry.cs#L40), [MessageHandlerRegistry.cs:41](../src/ServiceConnect/Services/Processors/MessageHandlerRegistry.cs#L41)
 - **What:** Allocations for structured-field binding still occur when `Debug` is disabled.
 - **Fix:** Guard with `IsEnabled(LogLevel.Debug)` on hot paths.

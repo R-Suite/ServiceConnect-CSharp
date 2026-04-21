@@ -37,9 +37,12 @@ internal sealed class StreamHandlerRegistry : IHandlerRegistry
             var descriptor = BuildDescriptor(href.MessageType, streamInterface);
             builder[href.MessageType] = (descriptor, href.HandlerType);
 
-            logger.LogDebug(
-                "Registered stream-handler descriptor: message={MessageType}, handler={HandlerType}",
-                href.MessageType.Name, href.HandlerType.Name);
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug(
+                    "Registered stream-handler descriptor: message={MessageType}, handler={HandlerType}",
+                    href.MessageType.Name, href.HandlerType.Name);
+            }
         }
 
         _descriptors = builder.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Descriptor).ToFrozenDictionary();

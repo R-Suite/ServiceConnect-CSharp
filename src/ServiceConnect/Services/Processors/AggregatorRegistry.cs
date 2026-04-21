@@ -41,9 +41,12 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
             var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, serviceProvider);
             builder[href.MessageType] = (descriptor, href.HandlerType);
 
-            logger.LogDebug(
-                "Registered aggregator descriptor: message={MessageType}, aggregator={AggregatorType}, batchSize={BatchSize}, timeout={Timeout}",
-                href.MessageType.Name, href.HandlerType.Name, descriptor.BatchSize, descriptor.Timeout);
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug(
+                    "Registered aggregator descriptor: message={MessageType}, aggregator={AggregatorType}, batchSize={BatchSize}, timeout={Timeout}",
+                    href.MessageType.Name, href.HandlerType.Name, descriptor.BatchSize, descriptor.Timeout);
+            }
         }
 
         _descriptors = builder.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Descriptor).ToFrozenDictionary();

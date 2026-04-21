@@ -46,9 +46,12 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
                     $"Duplicate process-manager handler registration for message type '{href.MessageType.FullName}'. Only one IProcessHandler<TData,TMessage> may be registered per message type.");
             }
 
-            logger.LogDebug(
-                "Registered process-manager descriptor: message={MessageType}, data={DataType}, handler={HandlerType}",
-                href.MessageType.Name, dataType.Name, href.HandlerType.Name);
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug(
+                    "Registered process-manager descriptor: message={MessageType}, data={DataType}, handler={HandlerType}",
+                    href.MessageType.Name, dataType.Name, href.HandlerType.Name);
+            }
         }
 
         _descriptors = builder.ToFrozenDictionary();
