@@ -44,4 +44,24 @@ public class MessageTypeRegistryTests
         var result = registry.TryResolve(typeof(FakeMessage1).FullName!, out _);
         Assert.True(result);
     }
+
+    [Fact]
+    public void Register_CollidingType_Throws()
+    {
+        // M4 regression: previously a second Register call under the same FullName
+        // (e.g. two message types with the same namespace+name in different assemblies)
+        // overwrote the first entry silently, making dispatch non-deterministic.
+        //
+        // Simulate the collision by pre-seeding the internal dictionary under
+        // FakeMessage1's FullName with a different Type. The registry must reject
+        // the subsequent Register(FakeMessage1) call rather than overwrite.
+        var registry = new MessageTypeRegistry();
+        var field = typeof(MessageTypeRegistry).GetField(
+            "_registeredTypes",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var dict = (System.Collections.Concurrent.ConcurrentDictionary<string, Type>)field.GetValue(registry)!;
+        dict[typeof(FakeMessage1).FullName!] = typeof(object);
+
+        Assert.Throws<InvalidOperationException>(() => registry.Register(typeof(FakeMessage1)));
+    }
 }

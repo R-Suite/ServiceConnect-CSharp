@@ -29,11 +29,28 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
     /// <inheritdoc />
     public void Register(Type type)
     {
+        ArgumentNullException.ThrowIfNull(type);
+
+        // Reject a different Type under the same key. Previously we assigned
+        // unconditionally, so two types sharing a FullName (or, less commonly,
+        // an AQN) would overwrite each other with no signal — dispatch would
+        // then resolve to whichever registered last. Re-registering the exact
+        // same Type remains idempotent.
         if (type.AssemblyQualifiedName is not null)
-            _registeredTypes[type.AssemblyQualifiedName] = type;
+            AddOrReject(type.AssemblyQualifiedName, type);
         if (type.FullName is not null)
-            _registeredTypes[type.FullName] = type;
+            AddOrReject(type.FullName, type);
 
         Volatile.Write(ref _types, null);
+    }
+
+    private void AddOrReject(string key, Type type)
+    {
+        var existing = _registeredTypes.GetOrAdd(key, type);
+        if (existing != type)
+        {
+            throw new InvalidOperationException(
+                $"Message type registration collision on key '{key}': already registered as '{existing.AssemblyQualifiedName}', cannot re-register as '{type.AssemblyQualifiedName}'.");
+        }
     }
 }

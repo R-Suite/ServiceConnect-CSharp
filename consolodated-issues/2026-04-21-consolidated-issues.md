@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 4/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 5/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -213,7 +213,7 @@ Severity bands:
 - **What:** `_queueMappings` keyed by `messageType.FullName!`. Two types with the same namespace/name from different assemblies collide into one bucket.
 - **Fix:** Key by `AssemblyQualifiedName` or full `Type` identity.
 
-### [ ] M4. `MessageTypeRegistry` silently overwrites same-name registrations
+### [x] M4. `MessageTypeRegistry` silently overwrites same-name registrations
 - **File:** [MessageTypeRegistry.cs:30-36](../src/ServiceConnect/Services/MessageTypeRegistry.cs#L30-L36)
 - **What:** `Register(Type)` unconditionally assigns `_registeredTypes[AssemblyQualifiedName] = type` and `[FullName] = type`. Later registrations overwrite earlier entries with no warning.
 - **Fix:** Detect and fail (or at least log) collisions.
