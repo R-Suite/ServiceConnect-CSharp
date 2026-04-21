@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 21/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 22/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -303,7 +303,7 @@ Severity bands:
 - **What:** `_cache.TryAdd` keeps the original value on duplicate key, but `StartObserving` unconditionally installs a fresh timer. Re-add extends the TTL of the stale value.
 - **Fix:** Either refuse duplicate add, or replace-and-reset atomically.
 
-### [ ] M22. `CacheProvider.Remove` fires `KeyRemoved` when key was absent; `Clear`/`PurgeNormalPriorities` don't fire it
+### [x] M22. `CacheProvider.Remove` fires `KeyRemoved` when key was absent; `Clear`/`PurgeNormalPriorities` don't fire it
 - **File:** [CacheProvider.cs:68-77,83-93,125-140](../src/ServiceConnect.Persistence.InMemory/CacheProvider.cs)
 - **What:** `Remove` invokes `KeyRemoved` even when `TryRemove` returns false. `Clear` and `PurgeNormalPriorities` remove entries without invoking the event at all. Inconsistent semantics for subscribers.
 - **Fix:** Fire only on actual removal; fire consistently across all paths.

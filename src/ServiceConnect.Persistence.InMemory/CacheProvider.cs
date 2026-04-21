@@ -91,12 +91,16 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Remove<TKey>(TKey key)
     {
-        if (!Equals(key, null))
-        {
-            _cache.TryRemove(key!, out _);
-            _slidingTime.TryRemove(key!, out _);
-            DisposeTimer(key!);
+        if (Equals(key, null)) return;
 
+        var removed = _cache.TryRemove(key!, out _);
+        _slidingTime.TryRemove(key!, out _);
+        DisposeTimer(key!);
+
+        // Fire only when the key was actually present; previously subscribers received
+        // spurious KeyRemoved events for keys that never existed in the cache.
+        if (removed)
+        {
             KeyRemoved?.Invoke(key, EventArgs.Empty);
         }
     }
@@ -106,6 +110,11 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Clear()
     {
+        // Snapshot keys before clearing so subscribers see a KeyRemoved event for every
+        // entry that was present. Concurrent adds/removes across this window are
+        // best-effort — consistent with ConcurrentDictionary.Clear's own semantics.
+        var removedKeys = _cache.Keys.ToList();
+
         _cache.Clear();
         _slidingTime.Clear();
 
@@ -114,6 +123,12 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
             kvp.Value.Dispose();
         }
         _timers.Clear();
+
+        if (KeyRemoved is null) return;
+        foreach (var key in removedKeys)
+        {
+            KeyRemoved.Invoke(key, EventArgs.Empty);
+        }
     }
 
     /// <summary>
@@ -159,6 +174,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
                 _slidingTime.TryRemove(cacheItem.Key, out _);
                 DisposeTimer(cacheItem.Key);
                 removed++;
+                KeyRemoved?.Invoke(cacheItem.Key, EventArgs.Empty);
             }
         }
         return removed;

@@ -104,6 +104,57 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void Remove_WhenKeyAbsent_DoesNotFireKeyRemoved()
+        {
+            // M22 regression: Remove previously fired KeyRemoved even when TryRemove
+            // returned false, handing subscribers spurious events.
+            var cache = new CacheProvider();
+            int invocations = 0;
+            cache.KeyRemoved += (_, _) => invocations++;
+
+            cache.Remove("never-added");
+
+            Assert.Equal(0, invocations);
+        }
+
+        [Fact]
+        public void Clear_FiresKeyRemovedForEachEntry()
+        {
+            // M22 regression: Clear previously removed entries silently.
+            var cache = new CacheProvider();
+            cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
+            cache.Add("key2", "value2", DateTimeOffset.UtcNow.AddMinutes(5));
+            var removed = new List<object?>();
+            cache.KeyRemoved += (sender, _) => removed.Add(sender);
+
+            cache.Clear();
+
+            Assert.Equal(2, removed.Count);
+            Assert.Contains("key1", removed);
+            Assert.Contains("key2", removed);
+        }
+
+        [Fact]
+        public void PurgeNormalPriorities_FiresKeyRemovedForEachPurgedEntry()
+        {
+            // M22 regression: PurgeNormalPriorities previously removed entries silently.
+            var cache = new CacheProvider();
+            cache.Add("normal1", "v1", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
+            cache.Add("normal2", "v2", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
+            cache.Add("high1",   "v3", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.High);
+            var removed = new List<object?>();
+            cache.KeyRemoved += (sender, _) => removed.Add(sender);
+
+            var count = cache.PurgeNormalPriorities();
+
+            Assert.Equal(2, count);
+            Assert.Equal(2, removed.Count);
+            Assert.Contains("normal1", removed);
+            Assert.Contains("normal2", removed);
+            Assert.DoesNotContain("high1", removed);
+        }
+
+        [Fact]
         public void Contains_ExistingKey_ReturnsTrue()
         {
             var cache = new CacheProvider();
