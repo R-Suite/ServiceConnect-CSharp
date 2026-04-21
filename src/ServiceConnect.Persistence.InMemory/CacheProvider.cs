@@ -11,6 +11,11 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     private readonly ConcurrentDictionary<object, CacheItem> _cache = new();
     private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new();
     private readonly ConcurrentDictionary<object, ITimer> _timers = new();
+    // Serializes compound Add operations so the value swap, sliding window reset, and
+    // timer replacement are observed together. Without it, a re-Add after the original
+    // TryAdd retained the stale value but StartObserving installed a fresh timer —
+    // effectively extending the stale value's TTL.
+    private readonly object _addLock = new();
     private int _disposed;
 
     /// <summary>
@@ -57,7 +62,14 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Add<TKey, TValue>(TKey key, TValue value, CacheItemPriority priority = CacheItemPriority.Normal)
     {
-        _cache.TryAdd(key!, new CacheItem(value!, priority, null));
+        // Matches the timed Add overloads: a re-Add replaces the value and clears any
+        // sliding/timer state a prior timed Add left in place.
+        lock (_addLock)
+        {
+            _cache[key!] = new CacheItem(value!, priority, null);
+            _slidingTime.TryRemove(key!, out _);
+            DisposeTimer(key!);
+        }
     }
 
     /// <summary>
@@ -195,14 +207,24 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
 
     private void Add<TKey, TValue>(TKey key, TValue value, TimeSpan timeSpan, CacheItemPriority priority, bool isSliding)
     {
-        _cache.TryAdd(key!, new CacheItem(value!, priority, isSliding ? timeSpan : (TimeSpan?)null));
-
-        if (isSliding)
+        // Compound replace-and-reset: value, sliding window, and timer are all written
+        // together so a re-Add fully supersedes the prior entry instead of refreshing the
+        // stale value's TTL.
+        lock (_addLock)
         {
-            _slidingTime.TryAdd(key!, new SlidingDetails(timeSpan, _timeProvider));
-        }
+            _cache[key!] = new CacheItem(value!, priority, isSliding ? timeSpan : (TimeSpan?)null);
 
-        StartObserving(key!, timeSpan);
+            if (isSliding)
+            {
+                _slidingTime[key!] = new SlidingDetails(timeSpan, _timeProvider);
+            }
+            else
+            {
+                _slidingTime.TryRemove(key!, out _);
+            }
+
+            StartObserving(key!, timeSpan);
+        }
     }
 
     private void StartObserving<TKey>(TKey key, TimeSpan timeSpan)

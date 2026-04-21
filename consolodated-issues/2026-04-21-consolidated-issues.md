@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 20/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 21/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -298,7 +298,7 @@ Severity bands:
 - **What:** Reads use `typeof(T).Name`; writes/deletes use `data.GetType().Name`. Both use simple `Name`, not `FullName` — two types with the same short name from different namespaces collide. Secondary inconsistency: if `T` is an interface/base and `data` is a subtype, the two paths disagree on the collection.
 - **Fix:** Use `FullName` (or a namespace-qualified identifier) consistently.
 
-### [ ] M21. `CacheProvider.Add` refreshes TTL without replacing value
+### [x] M21. `CacheProvider.Add` refreshes TTL without replacing value
 - **File:** [CacheProvider.cs:184-208](../src/ServiceConnect.Persistence.InMemory/CacheProvider.cs#L184-L208)
 - **What:** `_cache.TryAdd` keeps the original value on duplicate key, but `StartObserving` unconditionally installs a fresh timer. Re-add extends the TTL of the stale value.
 - **Fix:** Either refuse duplicate add, or replace-and-reset atomically.

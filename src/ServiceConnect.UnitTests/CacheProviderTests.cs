@@ -217,15 +217,44 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void Add_SameKeyTwice_FirstValueIsKept()
+        public void Add_SameKeyTwice_ReplacesValueAndResetsExpiry()
         {
-            // ConcurrentDictionary.TryAdd does not overwrite existing keys
-            var cache = new CacheProvider();
-            cache.Add("key1", "first", DateTimeOffset.UtcNow.AddMinutes(5));
-            cache.Add("key1", "second", DateTimeOffset.UtcNow.AddMinutes(5));
+            // M21 regression: previously TryAdd kept the stale value but StartObserving
+            // installed a fresh timer, extending the stale value's effective TTL. Re-Add
+            // must now replace the value and reset the expiry window together.
+            var now = new DateTimeOffset(2026, 4, 14, 20, 0, 0, TimeSpan.Zero);
+            var timeProvider = new FakeTimeProvider(now);
+            var cache = new CacheProvider(timeProvider);
 
-            var result = cache.Get<string, string>("key1");
-            Assert.Equal("first", result);
+            // Absolute expiry so no sliding auto-refresh gets in the way of the assertion.
+            cache.Add("key1", "first", now.AddMilliseconds(200));
+
+            timeProvider.Advance(TimeSpan.FromMilliseconds(150));
+            cache.Add("key1", "second", now.AddMilliseconds(500));
+
+            // The bug returned "first" because TryAdd kept the stale entry.
+            Assert.Equal("second", cache.Get<string, string>("key1"));
+
+            // Original expiry would have fired at +200ms. With the fix the timer was
+            // replaced to fire at +500ms, so the entry is still present at +300ms.
+            timeProvider.Advance(TimeSpan.FromMilliseconds(150));
+            Assert.True(cache.Contains("key1"));
+
+            // ...and is gone once the new window elapses.
+            timeProvider.Advance(TimeSpan.FromMilliseconds(250));
+            Assert.False(cache.Contains("key1"));
+        }
+
+        [Fact]
+        public void Add_ThenReAddNoExpiry_ReplacesValueAndClearsExpiryState()
+        {
+            var cache = new CacheProvider();
+            cache.Add("key1", "first", TimeSpan.FromMinutes(5));
+
+            cache.Add("key1", "second");
+
+            Assert.Equal("second", cache.Get<string, string>("key1"));
+            Assert.True(cache.Contains("key1"));
         }
 
         [Fact]
