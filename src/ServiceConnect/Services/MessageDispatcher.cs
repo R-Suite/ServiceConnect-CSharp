@@ -64,11 +64,24 @@ public sealed class MessageDispatcher : IMessageDispatcher
         var beforeFiltersRan = false;
         try
         {
-            // 1. Extract FullTypeName header
-            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var fullTypeNameRaw))
-                throw new InvalidOperationException("Message is missing FullTypeName header.");
+            // 1. Collect candidate wire-type names, in priority order. The public
+            //    IMessageDispatcher contract passes messageType as a first-class parameter,
+            //    so it must be honoured — but a transport may pass a short/alias name that
+            //    doesn't resolve in the registry while also stamping the AQN header. Try
+            //    each candidate against the registry until one resolves.
+            string? fullTypeName = null;
+            string? primaryCandidate = string.IsNullOrWhiteSpace(messageType) ? null : messageType;
+            string? fullTypeNameCandidate = headers.TryGetValue(HeaderKeys.FullTypeName, out var fullTypeNameRaw)
+                ? HeaderDecoder.Decode(fullTypeNameRaw) : null;
+            string? typeNameCandidate = headers.TryGetValue(HeaderKeys.TypeName, out var typeNameRaw)
+                ? HeaderDecoder.Decode(typeNameRaw) : null;
 
-            var fullTypeName = HeaderDecoder.Decode(fullTypeNameRaw) ?? throw new InvalidOperationException("FullTypeName header is null.");
+            if (primaryCandidate is null && fullTypeNameCandidate is null && typeNameCandidate is null)
+                throw new InvalidOperationException("Message is missing type information: messageType parameter is empty and neither FullTypeName nor TypeName header is present.");
+
+            // fullTypeName is the name we use for error reporting if no candidate resolves.
+            // Prefer the most specific name we have for that purpose.
+            fullTypeName = primaryCandidate ?? fullTypeNameCandidate ?? typeNameCandidate!;
 
             // 2. Build envelope
             envelope = new Envelope { Headers = headers, Body = messageBytes };
@@ -91,9 +104,14 @@ public sealed class MessageDispatcher : IMessageDispatcher
                     return new ConsumeEventResult { Success = true };
             }
 
-            // 4. Resolve CLR type for handler dispatch. Reply traffic only needs a best-effort
-            // wire type because RequestReplyManager owns the actual reply deserialization.
-            var typeResolvedFromRegistry = _typeRegistry.TryResolve(fullTypeName, out var type);
+            // 4. Resolve CLR type for handler dispatch. Try each candidate in priority order;
+            //    the first resolving name wins. Reply traffic only needs a best-effort wire type
+            //    because RequestReplyManager owns the actual reply deserialization.
+            Type? type = null;
+            bool typeResolvedFromRegistry =
+                (primaryCandidate is not null && _typeRegistry.TryResolve(primaryCandidate, out type))
+                || (fullTypeNameCandidate is not null && _typeRegistry.TryResolve(fullTypeNameCandidate, out type))
+                || (typeNameCandidate is not null && _typeRegistry.TryResolve(typeNameCandidate, out type));
             if (!typeResolvedFromRegistry)
             {
                 if (!hasResponseMessageId)
@@ -115,7 +133,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
 
             if (replyProcessor != null && hasResponseMessageId)
             {
-                var replyResult = await replyProcessor.ProcessAsync(messageBytes, type, null, headers, envelope, cancellationToken).ConfigureAwait(false);
+                var replyResult = await replyProcessor.ProcessAsync(messageBytes, type!, null, headers, envelope, cancellationToken).ConfigureAwait(false);
                 if (replyResult == ProcessResult.Handled)
                     return new ConsumeEventResult { Success = true };
 
@@ -129,10 +147,10 @@ public sealed class MessageDispatcher : IMessageDispatcher
             if (!typeResolvedFromRegistry)
                 return new ConsumeEventResult { Success = false };
 
-            var message = _serializer.Deserialize(messageBytes, type);
+            var message = _serializer.Deserialize(messageBytes, type!);
 
             // 6. Run post-deserialization processors wrapped in the cached processing chain
-            return await _processingChain.Value(messageBytes, type, message, headers, envelope, cancellationToken);
+            return await _processingChain.Value(messageBytes, type!, message, headers, envelope, cancellationToken);
         }
         catch (Exception ex)
         {

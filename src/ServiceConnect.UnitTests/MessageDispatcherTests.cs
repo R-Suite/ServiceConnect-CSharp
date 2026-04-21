@@ -482,6 +482,98 @@ public class MessageDispatcherTests
         // Assert
         Assert.False(result.Success);
     }
+
+    // ---------------- H2: messageType parameter is authoritative ----------------
+
+    [Fact]
+    public async Task Dispatch_WithMessageTypeParameter_AndNoHeader_ResolvesFromParameter()
+    {
+        // Transport honours the IMessageDispatcher contract by passing the wire type
+        // name as the `messageType` parameter but does not stamp FullTypeName/TypeName.
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "FromParameter" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        FakeMessage1? receivedMessage = null;
+        var handler = new TestDispatchHandler(onHandle: m => receivedMessage = m);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = new Dictionary<string, object>(); // no FullTypeName, no TypeName
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, typeof(FakeMessage1).AssemblyQualifiedName!, headers);
+
+        Assert.True(result.Success);
+        Assert.Same(message, receivedMessage);
+    }
+
+    [Fact]
+    public async Task Dispatch_PrefersMessageTypeParameter_WhenBothProvided()
+    {
+        // Parameter = real registered type name. Header = bogus string.
+        // The parameter must win, so the handler is invoked.
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "ParameterWins" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        bool handlerCalled = false;
+        var handler = new TestDispatchHandler(onHandle: _ => handlerCalled = true);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes("Bogus.Type.That.Is.Not.Registered")
+        };
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, typeof(FakeMessage1).AssemblyQualifiedName!, headers);
+
+        Assert.True(result.Success);
+        Assert.True(handlerCalled);
+    }
+
+    [Fact]
+    public async Task Dispatch_FallsBackToHeader_WhenMessageTypeParameterEmpty()
+    {
+        // Existing RabbitMQ-host path: host has already pulled FullTypeName from the
+        // header and passed it as messageType. But if a caller passes an empty/whitespace
+        // messageType, fall back to the header (unchanged behaviour for legacy transports).
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "FallbackFromHeader" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        bool handlerCalled = false;
+        var handler = new TestDispatchHandler(onHandle: _ => handlerCalled = true);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders(); // has FullTypeName
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "", headers);
+
+        Assert.True(result.Success);
+        Assert.True(handlerCalled);
+    }
+
+    [Fact]
+    public async Task Dispatch_ReturnsFailure_WhenParameterAndHeadersBothMissing()
+    {
+        // No parameter, no FullTypeName header, no TypeName header — we log and return
+        // Success=false rather than throwing uncaught, so the broker can nack normally.
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+        var headers = new Dictionary<string, object>();
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "", headers);
+
+        Assert.False(result.Success);
+        Assert.IsType<InvalidOperationException>(result.Exception);
+    }
 }
 
 file class AlwaysHandledProcessor : IMessageProcessor

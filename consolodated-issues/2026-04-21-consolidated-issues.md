@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 2/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -99,7 +99,7 @@ Severity bands:
 - **What:** `_publishChannel` is a dedicated helper channel created with defaults — `PublisherConfirmationsEnabled` not set. If the helper publish is lost mid-flight and is treated as complete, the retry/error/audit copy silently disappears. (Original message ack is sequenced after the publish await, so this is narrower than the "ack before confirm" framing but the publisher-confirm gap is real.)
 - **Fix:** Enable publisher confirms on the helper channel (matching the main producer channel) and await the confirm.
 
-### [ ] H2. `MessageDispatcher.Dispatch` ignores its public `messageType` parameter and hard-requires `FullTypeName` header
+### [x] H2. `MessageDispatcher.Dispatch` ignores its public `messageType` parameter and hard-requires `FullTypeName` header
 - **File:** [MessageDispatcher.cs:61-138](../src/ServiceConnect/Services/MessageDispatcher.cs#L61-L138)
 - **What:** The public `IMessageDispatcher` contract takes `Type messageType` separately, but the implementation uses it only in the exception log path; all type resolution reads the `HeaderKeys.FullTypeName` header. A transport that honours the public contract still fails at runtime.
 - **Fix:** Use the supplied `messageType`; treat the header as tie-break.
