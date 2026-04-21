@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 19/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -189,7 +189,7 @@ Severity bands:
 - **What:** `Producer.CreateConnectionAsync` calls `Build(..., heartbeatInterval: null)`. Consumer-side connections correctly resolve `_heartbeatEnabled`/`_heartbeatTime`. Producer connections never honour configured heartbeat.
 - **Fix:** Pass the resolved heartbeat settings from `ClientSettings`.
 
-### [ ] H21. MongoDb optimistic-concurrency `Version` increment mutates caller object on some cancellation paths
+### [x] H21. MongoDb optimistic-concurrency `Version` increment mutates caller object on some cancellation paths
 - **File:** [MongoDbProcessManagerFinder.cs:188,199,205,221](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs)
 - **What:** `versionData.Version` is incremented to `currentVersion + 1` before `ReplaceOneAsync`. Restore paths exist for `ModifiedCount == 0` and `MongoException`, but other failure paths (out-of-band cancellation between the pre-cancellation guard and an infrastructure failure that surfaces as neither) can still leave the caller with a bumped `Version`. (Scope is narrower than originally claimed — most failure paths do restore.)
 - **Fix:** Use a local copy for the write; only update the caller's version on confirmed success.

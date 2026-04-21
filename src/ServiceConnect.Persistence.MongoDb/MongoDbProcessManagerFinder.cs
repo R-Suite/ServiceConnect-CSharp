@@ -187,6 +187,18 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         var versionData = (MongoDbData<T>)persistenceData;
         int currentVersion = versionData.Version;
 
+        // Build a separate write record so the caller's versionData is not mutated
+        // by the bump until we see a confirmed success. Any failure path (including
+        // OperationCanceledException, TaskCanceledException, or an unexpected
+        // exception type) therefore leaves the caller's Version intact — a retry
+        // re-sees the same current version and the concurrency filter still matches.
+        var writeRecord = new MongoDbData<T>
+        {
+            Id = versionData.Id,
+            Version = currentVersion + 1,
+            Data = versionData.Data,
+        };
+
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
@@ -196,16 +208,17 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
                 Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, versionData.Data.CorrelationId),
                 Builders<MongoDbData<T>>.Filter.Eq(x => x.Version, currentVersion)
             );
-            versionData.Version = currentVersion + 1;
-            var result = await collection.ReplaceOneAsync(filter, versionData, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var result = await collection.ReplaceOneAsync(filter, writeRecord, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             if (result.IsAcknowledged && result.ModifiedCount == 0)
             {
-                // Revert the version so the in-memory object stays consistent on failure
-                versionData.Version = currentVersion;
                 throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {versionData.Data.CorrelationId} and Version {currentVersion} could not be updated.");
             }
+
+            // Only reflect the bump on the caller's instance after the write is
+            // acknowledged and actually modified a row.
+            versionData.Version = currentVersion + 1;
         }
         catch (ConcurrencyException)
         {
@@ -217,8 +230,6 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
         catch (MongoException ex)
         {
-            // Revert the version so the in-memory object stays consistent on transport failure
-            versionData.Version = currentVersion;
             throw new PersistenceException(
                 $"Failed to update process manager data with CorrelationId '{persistenceData.Data.CorrelationId}'.", ex);
         }

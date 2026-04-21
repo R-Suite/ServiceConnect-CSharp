@@ -60,7 +60,7 @@ public class MongoDbProcessManagerFinderTests
 
         collection.Setup(c => c.ReplaceOneAsync(
                 It.IsAny<FilterDefinition<MongoDbData<TestProcessManagerData>>>(),
-                versionedData,
+                It.IsAny<MongoDbData<TestProcessManagerData>>(),
                 It.IsAny<ReplaceOptions>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TestMongoException("boom"));
@@ -68,6 +68,81 @@ public class MongoDbProcessManagerFinderTests
         await Assert.ThrowsAsync<PersistenceException>(() => finder.UpdateDataAsync(versionedData, CancellationToken.None));
 
         Assert.Equal(7, versionedData.Version);
+    }
+
+    [Fact]
+    public async Task UpdateDataAsync_WhenCancelled_DoesNotBumpCallerVersion()
+    {
+        // H21 regression: previously the code bumped versionData.Version before
+        // ReplaceOneAsync and only restored it on MongoException / ModifiedCount == 0.
+        // A cancellation surfacing as OperationCanceledException from inside
+        // ReplaceOneAsync would escape without hitting the restore, leaving the caller
+        // with a bumped version. The fix uses a separate write record and only mutates
+        // the caller's version on confirmed success, so cancellation is safe.
+        var finder = CreateFinder(out var database, out _);
+        var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
+        var versionedData = new MongoDbData<TestProcessManagerData>
+        {
+            Id = Guid.NewGuid(),
+            Version = 11,
+            Data = new TestProcessManagerData()
+        };
+
+        var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
+            .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(finder)!;
+        indexedCollections.TryAdd(nameof(TestProcessManagerData), true);
+
+        database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
+                nameof(TestProcessManagerData),
+                It.IsAny<MongoCollectionSettings>()))
+            .Returns(collection.Object);
+
+        collection.Setup(c => c.ReplaceOneAsync(
+                It.IsAny<FilterDefinition<MongoDbData<TestProcessManagerData>>>(),
+                It.IsAny<MongoDbData<TestProcessManagerData>>(),
+                It.IsAny<ReplaceOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException());
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => finder.UpdateDataAsync(versionedData, CancellationToken.None));
+
+        Assert.Equal(11, versionedData.Version);
+    }
+
+    [Fact]
+    public async Task UpdateDataAsync_OnSuccess_BumpsCallerVersion()
+    {
+        var finder = CreateFinder(out var database, out _);
+        var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
+        var versionedData = new MongoDbData<TestProcessManagerData>
+        {
+            Id = Guid.NewGuid(),
+            Version = 4,
+            Data = new TestProcessManagerData()
+        };
+
+        var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
+            .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(finder)!;
+        indexedCollections.TryAdd(nameof(TestProcessManagerData), true);
+
+        database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
+                nameof(TestProcessManagerData),
+                It.IsAny<MongoCollectionSettings>()))
+            .Returns(collection.Object);
+
+        collection.Setup(c => c.ReplaceOneAsync(
+                It.IsAny<FilterDefinition<MongoDbData<TestProcessManagerData>>>(),
+                It.IsAny<MongoDbData<TestProcessManagerData>>(),
+                It.IsAny<ReplaceOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ReplaceOneResult.Acknowledged(matchedCount: 1, modifiedCount: 1, upsertedId: null));
+
+        await finder.UpdateDataAsync(versionedData, CancellationToken.None);
+
+        Assert.Equal(5, versionedData.Version);
     }
 
     [Fact]
