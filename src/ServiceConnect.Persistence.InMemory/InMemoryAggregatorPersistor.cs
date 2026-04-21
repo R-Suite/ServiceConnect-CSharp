@@ -34,10 +34,14 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     public Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(data);
+        // Deep-clone before storing so later caller mutations do not bleed into the
+        // buffer. Retrieval does the same on the outbound side.
+        var stored = DeepClone.Clone(data);
         lock (_memoryCacheLock)
         {
             var list = GetOrCreateEntries(name);
-            list.Add(new Entry(Guid.NewGuid(), data));
+            list.Add(new Entry(Guid.NewGuid(), stored));
         }
         return Task.CompletedTask;
     }
@@ -56,7 +60,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             var source = (List<Entry>)_provider.Get<string, object>(name);
             var copy = new List<object>(source.Count);
             foreach (var entry in source)
-                copy.Add(entry.Data);
+                copy.Add(DeepClone.Clone(entry.Data));
             return Task.FromResult<IList<object>>(copy);
         }
     }
@@ -77,7 +81,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             var ids = new List<Guid>(source.Count);
             foreach (var entry in source)
             {
-                messages.Add(entry.Data);
+                messages.Add(DeepClone.Clone(entry.Data));
                 ids.Add(entry.Id);
             }
             return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, 0));

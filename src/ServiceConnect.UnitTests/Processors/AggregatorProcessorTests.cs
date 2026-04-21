@@ -394,7 +394,11 @@ public class AggregatorProcessorTests
 
         var remaining = await persistor.GetDataAsync(name);
         Assert.Single(remaining);
-        Assert.Same(late, remaining[0]);
+        // In-memory persistor deep-clones on insert/retrieve, so identity differs; compare
+        // by correlation id and payload instead.
+        var survivor = Assert.IsType<AggTestMessage>(remaining[0]);
+        Assert.Equal(late.CorrelationId, survivor.CorrelationId);
+        Assert.Equal(late.Value, survivor.Value);
     }
 
     [Fact]

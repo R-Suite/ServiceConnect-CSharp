@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 17/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 18/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -179,7 +179,7 @@ Severity bands:
 - **What:** RWSL holds kernel handles; no `Dispose`. Per-container leak on every DI rebuild.
 - **Fix:** Make the state `IDisposable`.
 
-### [ ] H19. In-memory persistence stores live references — mutation after persist corrupts state
+### [x] H19. In-memory persistence stores live references — mutation after persist corrupts state
 - **File:** [InMemoryProcessManagerFinder.cs:219,261-265](../src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs), [InMemoryAggregatorPersistor.cs:41,57-60,77-80](../src/ServiceConnect.Persistence.InMemory/InMemoryAggregatorPersistor.cs), [CacheProvider.cs:62](../src/ServiceConnect.Persistence.InMemory/CacheProvider.cs#L62)
 - **What:** Insert/update bind the caller's object directly. Process-manager reads do `MemberwiseClone()` with deep-copy only for `byte[]` properties — nested collections still alias. Aggregator reads return the raw stored reference with no cloning. `CacheProvider.Get()` returns the raw reference. Callers mutating nested collections mutate stored state.
 - **Fix:** Deep-clone via serializer, or document stored types must be immutable.

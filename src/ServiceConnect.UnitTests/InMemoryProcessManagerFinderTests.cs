@@ -515,6 +515,60 @@ namespace ServiceConnect.UnitTests
                 typeof(InMemoryPersistenceState).GetProperty(nameof(InMemoryPersistenceState.SyncRoot))!.PropertyType);
         }
 
+        /// <summary>
+        /// Saga data with a nested mutable collection, used to prove that the in-memory
+        /// finder deep-clones rather than aliasing caller state.
+        /// </summary>
+        public class SagaWithNested : IProcessManagerData
+        {
+            public Guid CorrelationId { get; set; }
+            public List<string> Tags { get; set; } = new();
+        }
+
+        [Fact]
+        public async Task InsertDataAsync_ThenMutateCallerObject_DoesNotCorruptStoredEntry()
+        {
+            // H19 regression: the finder previously bound the caller's reference on
+            // insert, so appending to a nested collection afterwards polluted the
+            // persisted saga. Deep-clone on write prevents that leakage.
+            var data = new SagaWithNested { CorrelationId = Guid.NewGuid(), Tags = { "original" } };
+            IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            await finder.InsertDataAsync(data, CancellationToken.None);
+
+            data.Tags.Add("after-insert-mutation");
+
+            var mapper = new TestProcessManagerPropertyMapper();
+            mapper.ConfigureMapping<SagaWithNested, Message>(d => d.CorrelationId, m => m.CorrelationId);
+            var found = await finder.FindDataAsync<SagaWithNested>(mapper, new Message(data.CorrelationId), CancellationToken.None);
+
+            Assert.NotNull(found);
+            Assert.Equal(new[] { "original" }, found.Data.Tags);
+        }
+
+        [Fact]
+        public async Task UpdateDataAsync_ThenMutateCallerObject_DoesNotCorruptStoredEntry()
+        {
+            // H19 regression: update must deep-clone so the caller's subsequent
+            // mutation of a nested collection does not bleed into the stored snapshot.
+            var initial = new SagaWithNested { CorrelationId = Guid.NewGuid(), Tags = { "first" } };
+            IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            await finder.InsertDataAsync(initial, CancellationToken.None);
+
+            var updated = new SagaWithNested { CorrelationId = initial.CorrelationId, Tags = { "second" } };
+            await finder.UpdateDataAsync(
+                new MemoryData<SagaWithNested> { Data = updated, Version = 1 },
+                CancellationToken.None);
+
+            updated.Tags.Add("post-update-mutation");
+
+            var mapper = new TestProcessManagerPropertyMapper();
+            mapper.ConfigureMapping<SagaWithNested, Message>(d => d.CorrelationId, m => m.CorrelationId);
+            var found = await finder.FindDataAsync<SagaWithNested>(mapper, new Message(initial.CorrelationId), CancellationToken.None);
+
+            Assert.NotNull(found);
+            Assert.Equal(new[] { "second" }, found.Data.Tags);
+        }
+
         [Fact]
         public void InMemoryPersistenceState_Dispose_ReleasesSyncRoot_AndIsIdempotent()
         {

@@ -249,6 +249,55 @@ namespace ServiceConnect.UnitTests
             Assert.Equal("buffered", ((AggregatorTestData)result[0]).Value);
         }
 
+        /// <summary>
+        /// Aggregator test data with a nested mutable collection, used to prove the
+        /// in-memory persistor deep-clones rather than aliasing caller state.
+        /// </summary>
+        public class AggWithNested : Message, IProcessManagerData
+        {
+            public AggWithNested(Guid correlationId) : base(correlationId) { }
+            public List<string> Tags { get; set; } = new();
+            Guid IProcessManagerData.CorrelationId
+            {
+                get => base.CorrelationId;
+                set { /* immutable */ }
+            }
+        }
+
+        [Fact]
+        public async Task InsertData_ThenMutateCallerObject_DoesNotCorruptStoredEntry()
+        {
+            // H19 regression: insert must deep-clone so the caller's subsequent
+            // mutation (including nested collections) does not leak into the buffer.
+            IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            var data = new AggWithNested(Guid.NewGuid());
+            data.Tags.Add("original");
+
+            await persistor.InsertDataAsync(data, "nested-key", CancellationToken.None);
+            data.Tags.Add("after-insert-mutation");
+
+            var result = await persistor.GetDataAsync("nested-key", CancellationToken.None);
+            var stored = Assert.IsType<AggWithNested>(Assert.Single(result));
+            Assert.Equal(new[] { "original" }, stored.Tags);
+        }
+
+        [Fact]
+        public async Task GetData_ThenMutateReturnedObject_DoesNotCorruptStoredEntry()
+        {
+            // H19 regression: retrieval must deep-clone so the caller mutating the
+            // returned instance does not corrupt the stored copy for the next read.
+            IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            var data = new AggWithNested(Guid.NewGuid());
+            data.Tags.Add("original");
+            await persistor.InsertDataAsync(data, "nested-key", CancellationToken.None);
+
+            var first = (AggWithNested)(await persistor.GetDataAsync("nested-key", CancellationToken.None))[0];
+            first.Tags.Add("mutated-by-caller");
+
+            var second = (AggWithNested)(await persistor.GetDataAsync("nested-key", CancellationToken.None))[0];
+            Assert.Equal(new[] { "original" }, second.Tags);
+        }
+
         [Fact]
         public void Persistor_ImplementsIDisposable_AndDisposeIsIdempotent()
         {

@@ -34,9 +34,6 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (Func<object, object?> Data, Func<object, object?> Version)>
         ReflectionAccessors = new();
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, PropertyInfo[]> CloneableProperties = new();
-    private static readonly MethodInfo MemberwiseCloneMethod = typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic)
-        ?? throw new InvalidOperationException("Could not locate object.MemberwiseClone.");
 
     /// <summary>
     /// Finds persisted process manager data that matches the supplied message mapping.
@@ -98,7 +95,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             var value = _state.Provider.Get<string, object>(key.ToString()!);
             if (value is MemoryData<T> typed)
             {
-                var candidate = new MemoryData<T> { Data = CloneData(typed.Data), Version = typed.Version };
+                var candidate = new MemoryData<T> { Data = DeepClone.Clone(typed.Data), Version = typed.Version };
                 if (predicate(candidate, msgPropValue)) return candidate;
             }
             else
@@ -115,36 +112,15 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                         dataProp == null ? _ => null : dataProp.GetValue,
                         versionProp == null ? _ => null : versionProp.GetValue);
                 });
-                
+
                 if (accessors.Data(value) is T typedData && accessors.Version(value) is int version)
                 {
-                    var candidate = new MemoryData<T> { Data = CloneData(typedData), Version = version };
+                    var candidate = new MemoryData<T> { Data = DeepClone.Clone(typedData), Version = version };
                     if (predicate(candidate, msgPropValue)) return candidate;
                 }
             }
         }
         return null;
-    }
-
-    private static T CloneData<T>(T data)
-        where T : class, IProcessManagerData
-    {
-        var runtimeType = data.GetType();
-        var clone = MemberwiseCloneMethod.Invoke(data, null)
-            ?? throw new PersistenceException($"Failed to clone process manager data of type '{runtimeType.FullName}'.");
-
-        var properties = CloneableProperties.GetOrAdd(runtimeType, static type =>
-            type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Where(property => property.CanRead && property.CanWrite)
-                .ToArray());
-
-        foreach (var property in properties)
-        {
-            var value = property.GetValue(data);
-            property.SetValue(clone, value is byte[] bytes ? (byte[])bytes.Clone() : value);
-        }
-
-        return (T)clone;
     }
 
     private Func<MemoryData<T>, object, bool> GetPredicate<T>(
@@ -181,7 +157,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         ArgumentNullException.ThrowIfNull(data);
 
         var factory = _cache.MemoryDataFactories.GetOrAdd(data.GetType(), BuildMemoryDataFactory);
-        var memoryData = factory(data);
+        // Deep-clone before storing so the caller's subsequent mutations (or a worker
+        // retrying with its in-memory snapshot) do not mutate state already persisted.
+        var memoryData = factory(DeepClone.Clone(data));
 
         _state.SyncRoot.EnterWriteLock();
         try
@@ -259,7 +237,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 
             _state.Provider.Update(key, new MemoryData<T>
             {
-                Data = data.Data,
+                // Deep-clone on update so the caller's subsequent mutations do not
+                // leak into the stored snapshot. Matches Insert semantics.
+                Data = DeepClone.Clone(data.Data),
                 Version = newData.Version + 1
             });
         }
