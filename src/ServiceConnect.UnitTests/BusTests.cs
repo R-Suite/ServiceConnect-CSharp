@@ -508,6 +508,26 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public async Task SendAsync_WhenBothEndPointAndEndPointsSet_ThrowsArgumentException()
+        {
+            // M1 regression: previously the EndPoints foreach branch was entered
+            // whenever the list was populated, silently discarding the single
+            // EndPoint the caller also set. Ambiguous routing is now rejected.
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            var options = new SendOptions
+            {
+                EndPoint = "single",
+                EndPoints = new List<string> { "many-1", "many-2" },
+            };
+
+            await Assert.ThrowsAsync<ArgumentException>(() => _bus.SendAsync(message, options));
+
+            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task SendAsync_ShouldNotSend_WhenFilterBlocksMessage()
         {
             // Arrange — must have outgoing filters registered so the filter pipeline is invoked

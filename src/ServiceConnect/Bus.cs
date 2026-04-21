@@ -106,6 +106,19 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Reject ambiguous routing up front. Previously the EndPoints branch was
+        // entered whenever the list was non-empty, silently discarding a single
+        // EndPoint the caller also set — no exception, no log — so a typo in the
+        // option name (or a merge of two config paths) could reroute traffic
+        // without any signal. Make the caller pick one.
+        if (options is { EndPoint.Length: > 0, EndPoints: { Count: > 0 } })
+        {
+            throw new ArgumentException(
+                "SendOptions.EndPoint and SendOptions.EndPoints cannot both be set. Provide one or the other.",
+                nameof(options));
+        }
+
         var messageBytes = _serializer.Serialize(message);
         Dictionary<string, string> headers;
 

@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 2/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -198,7 +198,7 @@ Severity bands:
 
 ## Medium
 
-### [ ] M1. `SendAsync` silently ignores `SendOptions.EndPoint` when `EndPoints` is also populated
+### [x] M1. `SendAsync` silently ignores `SendOptions.EndPoint` when `EndPoints` is also populated
 - **File:** [Bus.cs:117-127](../src/ServiceConnect/Bus.cs#L117-L127)
 - **What:** If caller sets both `EndPoint` and `EndPoints`, the `foreach` branch is entered and `EndPoint` is silently ignored — no exception, no log.
 - **Fix:** Validate-or-merge at the call site.
