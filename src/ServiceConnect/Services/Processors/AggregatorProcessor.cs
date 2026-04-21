@@ -166,11 +166,15 @@ internal sealed class AggregatorProcessor(
             var aggregator = serviceProvider.GetService(descriptor.AggregatorBaseType);
             if (aggregator == null) return;
 
-            descriptor.InvokeExecute(aggregator, typedList);
-
-            // Remove only the records we dispatched. Concurrent inserts and unresolved-type
-            // records are preserved; there is still no per-message remove loop.
+            // Remove BEFORE execute so a cancellation between the two cannot leave the
+            // snapshot persisted after the handler has run — that window caused the same
+            // batch to be re-fetched and re-dispatched on the next tick. Concurrent inserts
+            // and unresolved-type records are preserved; there is still no per-message
+            // remove loop. If RemoveSnapshotAsync throws, the (synchronous) InvokeExecute
+            // is skipped and the batch is retried on the next flush.
             await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
+
+            descriptor.InvokeExecute(aggregator, typedList);
 
             if (snapshot.UnresolvedCount > 0)
                 logger.LogWarning(

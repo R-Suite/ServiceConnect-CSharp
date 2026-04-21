@@ -150,6 +150,59 @@ public class AggregatorProcessorTests
     }
 
     [Fact]
+    public async Task FlushAggregator_RemovesSnapshotBeforeInvokingExecute()
+    {
+        // Regression for H13: if Execute ran before RemoveSnapshotAsync, a cancellation
+        // between the two left the snapshot persisted after the handler's side-effects
+        // had fired — the next timer tick would re-dispatch the same batch.
+        var messages = new List<AggTestMessage>
+        {
+            new(Guid.NewGuid()) { Value = "A" },
+            new(Guid.NewGuid()) { Value = "B" },
+            new(Guid.NewGuid()) { Value = "C" },
+        };
+
+        var callOrder = new List<string>();
+        var executed = new TaskCompletionSource<IList<AggTestMessage>>();
+        var aggregator = new OrderRecordingAggregator(callOrder, executed);
+
+        var insertCount = 0;
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ++insertCount);
+        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => SnapshotOf(messages));
+        persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Callback(() => callOrder.Add("remove"))
+            .Returns(Task.CompletedTask);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(AggTestMessage), HandlerType = typeof(OrderRecordingAggregator) }
+        };
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
+        services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
+        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        foreach (var msg in messages)
+            await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), msg, headers, envelope);
+
+        var waited = await Task.WhenAny(executed.Task, Task.Delay(2000));
+        Assert.Same(executed.Task, waited);
+        Assert.Equal(new[] { "remove", "execute" }, callOrder);
+    }
+
+    [Fact]
     public async Task FlushAggregator_WithUnresolvedRecords_DoesNotDispatchOrDeleteWhenNoResolved()
     {
         // Regression: if ALL records have unresolvable types,
@@ -498,6 +551,26 @@ file class AggTestAggregator : Aggregator<AggTestMessage>
 
     public override void Execute(IList<AggTestMessage> messages)
     {
+        _tcs.TrySetResult(messages);
+    }
+}
+
+file class OrderRecordingAggregator : Aggregator<AggTestMessage>
+{
+    private readonly List<string> _order;
+    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs;
+
+    public OrderRecordingAggregator(List<string> order, TaskCompletionSource<IList<AggTestMessage>> tcs)
+    {
+        _order = order;
+        _tcs = tcs;
+    }
+
+    public override int BatchSize() => 3;
+
+    public override void Execute(IList<AggTestMessage> messages)
+    {
+        _order.Add("execute");
         _tcs.TrySetResult(messages);
     }
 }

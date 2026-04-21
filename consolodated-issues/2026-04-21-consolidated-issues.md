@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 12/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 13/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -154,7 +154,7 @@ Severity bands:
 - **What:** Constructor accepts an optional shared connection but `DisposeAsync` unconditionally disposes whatever is in `_connection` — including caller-owned instances.
 - **Fix:** Track ownership; only dispose connections the Consumer created.
 
-### [ ] H13. Aggregator flush can double-dispatch after cancellation between Execute and RemoveSnapshot
+### [x] H13. Aggregator flush can double-dispatch after cancellation between Execute and RemoveSnapshot
 - **File:** [AggregatorProcessor.cs:169,173](../src/ServiceConnect/Services/Processors/AggregatorProcessor.cs#L169-L173)
 - **What:** `InvokeExecute(aggregator, typedList)` runs before `RemoveSnapshotAsync(...)`. If cancellation hits between them, the snapshot remains persisted and can be flushed again on the next timer tick — same batch delivered twice.
 - **Fix:** Remove-before-execute, or use a single atomic swap.

@@ -54,6 +54,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // than whatever startup CT the caller happened to pass — a startup-scoped token can be
     // cancelled post-startup and would break every later delivery if captured by the callback.
     private CancellationTokenSource _deliveryCts = new();
+    // Captured token value: the struct remains usable after _deliveryCts.Dispose(), whereas
+    // accessing _deliveryCts.Token would throw ObjectDisposedException. A late delivery
+    // fired after DisposeAsync has disposed the CTS must still be able to observe cancellation.
+    private CancellationToken _deliveryToken;
 
     public RabbitMqConsumerHost(
         IServiceConnectConnection connection,
@@ -122,10 +126,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         Volatile.Write(ref _shutdownTimedOut, 0);
         _shutdownPublishCts = new CancellationTokenSource();
         _deliveryCts = new CancellationTokenSource();
-        // The lambda captures _deliveryCts (not the startup token) so a startup-scoped
-        // CT cancelled after StartConsumingAsync returns does not cancel every delivery.
+        _deliveryToken = _deliveryCts.Token;
+        // The lambda captures the delivery *token* (not _deliveryCts.Token accessor) so a
+        // late delivery fired after DisposeAsync disposed the CTS can still run without
+        // throwing ObjectDisposedException from the Token property.
+        var deliveryToken = _deliveryToken;
         _consumer = new AsyncEventingBasicConsumer(_model);
-        _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, _deliveryCts.Token).ConfigureAwait(false);
+        _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, deliveryToken).ConfigureAwait(false);
 
         _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
