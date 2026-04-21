@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 11/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 12/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -149,7 +149,7 @@ Severity bands:
 - **What:** Each host is started (line 155) before being added to `_clients` (line 160). If a later step throws, earlier hosts are running but untracked — `DisposeAsync` won't reach them.
 - **Fix:** Add to `_clients` before starting, or track running hosts independently so cleanup sees them.
 
-### [ ] H12. `Consumer` unconditionally disposes an externally-supplied connection
+### [x] H12. `Consumer` unconditionally disposes an externally-supplied connection
 - **File:** [Consumer.cs:37-45,183-184](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L37-L184)
 - **What:** Constructor accepts an optional shared connection but `DisposeAsync` unconditionally disposes whatever is in `_connection` — including caller-owned instances.
 - **Fix:** Track ownership; only dispose connections the Consumer created.

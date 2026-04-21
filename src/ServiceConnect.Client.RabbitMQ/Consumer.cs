@@ -13,6 +13,10 @@ public sealed class Consumer : IConsumer
 {
     private IChannel? _model;
     private IServiceConnectConnection? _connection;
+    // True only when this Consumer created the connection. A connection supplied via
+    // the constructor is caller-owned and must NOT be disposed here — disposing it
+    // would tear down whatever else the caller is using it for (Producer, other Consumers).
+    private bool _ownsConnection;
     private readonly ILogger<Consumer> _logger;
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
@@ -43,6 +47,7 @@ public sealed class Consumer : IConsumer
         _busConfiguration = busConfiguration;
         _logger = logger;
         _connection = connection;
+        _ownsConnection = connection is null;
 
         // Move configuration extraction to the constructor, making fields readonly.
         var clientSettings = transportConfiguration.ClientSettings;
@@ -74,7 +79,11 @@ public sealed class Consumer : IConsumer
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        _connection ??= new Connection(_transportConfiguration, queueName, _logger);
+        if (_connection is null)
+        {
+            _connection = new Connection(_transportConfiguration, queueName, _logger);
+            _ownsConnection = true;
+        }
         IChannel? setupChannel = null;
         try
         {
@@ -183,7 +192,7 @@ public sealed class Consumer : IConsumer
         }
         _model?.Dispose();
         _model = null;
-        if (_connection != null)
+        if (_ownsConnection && _connection != null)
             await _connection.DisposeAsync().ConfigureAwait(false);
     }
 }

@@ -161,4 +161,23 @@ public class ConsumerTests
         var clients = (System.Collections.ICollection)clientsField!.GetValue(consumer)!;
         Assert.Single(clients);
     }
+
+    [Fact]
+    public async Task DisposeAsync_DoesNotDisposeCallerSuppliedConnection()
+    {
+        var connection = new Mock<IServiceConnectConnection>(MockBehavior.Strict);
+        // Strict mock: any call other than what we set up fails the test. DisposeAsync
+        // must not be invoked on a caller-owned connection.
+
+        var consumer = new Consumer(
+            MakeTransportCfg().Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            NullLogger<Consumer>.Instance,
+            connection.Object);
+
+        await consumer.DisposeAsync();
+
+        connection.Verify(c => c.DisposeAsync(), Times.Never);
+    }
 }
