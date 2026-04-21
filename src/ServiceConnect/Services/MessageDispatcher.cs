@@ -102,7 +102,8 @@ public sealed class MessageDispatcher : IMessageDispatcher
                     return new ConsumeEventResult { Success = false };
                 }
 
-                type = Type.GetType(fullTypeName, throwOnError: false) ?? typeof(Message);
+                // Reply with unregistered wire type: use Message; RequestReplyManager owns deserialization.
+                type = typeof(Message);
             }
 
             // 5. Run BeforeConsumingFilters. Once this returns, AfterConsumingFilters must run

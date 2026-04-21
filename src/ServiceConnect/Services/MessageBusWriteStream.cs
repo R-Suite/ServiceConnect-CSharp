@@ -9,6 +9,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 {
     private readonly IProducer _producer;
     private readonly string _endpoint;
+    private readonly Type _messageType;
     private readonly string _sequenceId;
     private readonly Dictionary<string, string> _baseHeaders;
     private long _packetNumber;
@@ -30,13 +31,14 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     {
         _producer = producer;
         _endpoint = endpoint;
+        _messageType = messageType;
         _sequenceId = FormatGuid(Guid.NewGuid());
+        // Type-reserved headers (FullTypeName / TypeName / MessageType) are stamped by
+        // the producer from _messageType — they must not be seeded here, since the
+        // producer treats them as server-authoritative and overwrites any caller value.
         _baseHeaders = new Dictionary<string, string>
         {
-            [HeaderKeys.SequenceId] = _sequenceId,
-            [HeaderKeys.FullTypeName] = messageType.AssemblyQualifiedName!,
-            [HeaderKeys.TypeName] = messageType.FullName!,
-            [HeaderKeys.MessageType] = HeaderKeys.ByteStream
+            [HeaderKeys.SequenceId] = _sequenceId
         };
     }
 
@@ -71,7 +73,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
             foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
             headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
 
-            await _producer.SendBytesAsync(_endpoint, packet, headers).ConfigureAwait(false);
+            await _producer.SendBytesAsync(_endpoint, _messageType, packet, headers).ConfigureAwait(false);
         }
         finally
         {
@@ -116,7 +118,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         headers[HeaderKeys.PacketNumber] = packetNumString;
         headers[HeaderKeys.LastPacketNumber] = packetNumString;
 
-        await _producer.SendBytesAsync(_endpoint, [], headers).ConfigureAwait(false);
+        await _producer.SendBytesAsync(_endpoint, _messageType, [], headers).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 0/12 · High 0/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 3/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -30,7 +30,7 @@ Severity bands:
 
 ## Critical
 
-### [ ] C1. Reserved transport headers are caller-overridable
+### [x] C1. Reserved transport headers are caller-overridable
 - **File:** [Producer.cs:466-483](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L466-L483)
 - **What:** `GetHeaders()` writes caller-supplied headers first via `result[kvp.Key] = kvp.Value`, then `TryAdd`s internal protocol headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`). A caller can pre-seed any reserved key and win — breaking dispatch, reply routing, audit, and type resolution.
 - **Fix:** Overwrite reserved keys unconditionally (or reject).
@@ -50,7 +50,7 @@ Severity bands:
 - **What:** After handler success, `PublishAuditIfEnabledAsync` runs before ack. If audit publish throws, `processed` stays false, the original message is nacked with `requeue:true`, and the already-committed handler runs again.
 - **Fix:** Swallow/log audit errors after successful handling; never fail delivery on an audit side-effect.
 
-### [ ] C5. `Type.GetType(String)` fallback on wire `FullTypeName` header (reply path)
+### [x] C5. `Type.GetType(String)` fallback on wire `FullTypeName` header (reply path)
 - **File:** [MessageDispatcher.cs:96-105](../src/ServiceConnect/Services/MessageDispatcher.cs#L96-L105)
 - **What:** Dispatcher resolves type via `_typeRegistry.TryResolve(fullTypeName)` first, but falls back to `Type.GetType(fullTypeName)` for reply traffic when not locally registered. Combined with C1 (header spoofing), this remains an untrusted-type-load path on replies.
 - **Fix:** Resolve via a registered-handlers whitelist for replies too; do not parse arbitrary assembly-qualified names from the wire.
@@ -70,7 +70,7 @@ Severity bands:
 - **What:** Same root cause as C7 for aggregators — absolute 2-day expiry set once; `InsertDataAsync` appends without refresh. Slow or long-lived aggregators lose in-flight messages after 48h.
 - **Fix:** Same — configurable / refresh-on-write.
 
-### [ ] C9. Reply trust can be forged from inbound headers
+### [x] C9. Reply trust can be forged from inbound headers
 - **File:** [ConsumeContext.cs:106-126,149-171](../src/ServiceConnect/Services/ConsumeContext.cs#L106-L171)
 - **What:** `IsTrustedRequestReplyEnvelope` derives trust from attacker-controlled inbound headers (`RequestMessageId`, `SourceAddress`, `DestinationAddress`, `MessageId`) and compares `destinationAddress == queueConfig.QueueName`. `ValidateReplyDestinations` (defaults true) narrows the blast radius but the trust decision still rests on caller-controlled values. Combined with C1, a malicious publisher can redirect replies.
 - **Fix:** Tie reply routing to a verified producer identity; reject reply headers that name queues the bus is not configured to talk to.
@@ -124,7 +124,7 @@ Severity bands:
 - **What:** Both processors set `RunBeforeDeserialization = true`; dispatcher runs the before-deser path before `ExecuteBeforeConsumingFiltersAsync`, and only post-deserialization dispatch is wrapped by `IMessageProcessingMiddleware`. Replies skip all middleware; completed stream messages skip filters + middleware.
 - **Fix:** Wrap reply and stream-complete dispatch in the same middleware/filter chain, or document the asymmetry.
 
-### [ ] H7. Composite: reserved-header / reply-address spoofing reaches the dispatcher as truth
+### [x] H7. Composite: reserved-header / reply-address spoofing reaches the dispatcher as truth
 - **File:** Producer header population (C1) + ConsumeContext reply trust (C9)
 - **What:** Even without malicious callers, absence of reserved-header protection means a buggy caller can quietly break reply routing for the whole bus. With C1 + C9 both open the attack surface is full end-to-end.
 - **Fix:** Treat reserved headers as server-authoritative; lock reply routing to a verified producer identity.

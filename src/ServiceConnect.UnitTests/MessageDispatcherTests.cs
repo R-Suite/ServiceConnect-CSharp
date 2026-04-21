@@ -292,8 +292,9 @@ public class MessageDispatcherTests
     }
 
     [Fact]
-    public async Task Dispatch_ResponseMessage_WithUnregisteredReplyType_RoutesToReplyManager()
+    public async Task Dispatch_ResponseMessage_WithUnregisteredReplyType_RoutesToReplyManagerAsMessage()
     {
+        // Unregistered but loadable type: reply traffic must resolve to typeof(Message), not the wire type.
         var replyId = Guid.NewGuid().ToString();
         var headers = new Dictionary<string, object>
         {
@@ -308,7 +309,7 @@ public class MessageDispatcherTests
         Assert.True(result.Success);
         var replyManager = Assert.IsType<TestDispatcherReplyManager>(_replyManager);
         Assert.Equal(replyId, replyManager.LastMessageId);
-        Assert.Equal(typeof(UnregisteredReplyMessage), replyManager.LastMessageType);
+        Assert.Equal(typeof(Message), replyManager.LastMessageType);
         _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
     }
 

@@ -14,7 +14,7 @@ The four send-shaped methods cover distinct routing patterns:
 - `PublishAsync` — pub/sub fan-out. The broker routes the message to every subscriber bound to the message type. Use this when `OrderService` publishes `OrderPlaced` and multiple downstream services each receive a copy.
 - `SendAsync(Type, ...)` — auto-routed point-to-point. The **producer** receives a `Type`, looks up `IQueueConfiguration.QueueMappings` itself to resolve the destination queue or queues, and sends to each. The caller does not need to know the destination — the producer owns the mapping lookup.
 - `SendAsync(string, Type, ...)` — explicit destination point-to-point. The **caller** has already resolved the endpoint and supplies it directly. The producer sends to that address without consulting any configuration.
-- `SendBytesAsync(string, byte[], ...)` — raw-bytes delivery to an explicit endpoint. Used by control-plane channels (request/reply correlation, timeout signals) when the caller has already framed the payload and does not need type routing.
+- `SendBytesAsync(string, Type, byte[], ...)` — raw-bytes delivery to an explicit endpoint. Used by control-plane channels (stream writers, reply-to envelopes) when the caller has already framed the payload. The `Type` parameter carries the logical message type for header stamping only.
 
 `MaximumMessageSize` lets the pipeline pre-check payload size before attempting a send, avoiding a roundtrip to the broker for a message that will be rejected.
 
@@ -96,18 +96,20 @@ Sends `message` to `endPoint` directly. The producer does not consult queue mapp
 ```csharp
 Task SendBytesAsync(
     string endPoint,
+    Type type,
     byte[] packet,
     Dictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
-Delivers a pre-framed byte packet to `endPoint` without any type-routing logic. Used by control-plane channels (for example, reply-to envelopes and timeout signals) where the caller has already composed the full payload.
+Delivers a pre-framed byte packet to `endPoint` without any type-routing logic. Used by control-plane channels (for example, stream writers and reply-to envelopes) where the caller has already composed the full payload.
 
 **Parameters**
 
 - `endPoint` — the queue name or address to deliver to.
-- `packet` — the raw bytes to send; the caller is responsible for framing and any type information.
-- `headers` — optional string-valued transport headers.
+- `type` — the logical message type the packet represents (for example, the element type of a stream). The implementation uses this to stamp the reserved type headers (`TypeName`, `FullTypeName`) authoritatively — callers cannot override them via `headers`.
+- `packet` — the raw bytes to send; the caller is responsible for framing.
+- `headers` — optional string-valued transport headers. Reserved transport headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`) are always overwritten by the implementation and must not be smuggled here.
 - `cancellationToken` — cancels the in-progress send.
 
 ---
@@ -200,10 +202,12 @@ public sealed class BrokerProducer : IProducer
 
     public Task SendBytesAsync(
         string endPoint,
+        Type type,
         byte[] packet,
         Dictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
+        // Stamp type headers from `type` (server-authoritative) then publish.
         return PublishToBrokerAsync(endPoint, packet, headers, cancellationToken);
     }
 
@@ -282,6 +286,7 @@ public sealed class KafkaProducer : IProducer
 
     public async Task SendBytesAsync(
         string endPoint,
+        Type type,
         byte[] packet,
         Dictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)

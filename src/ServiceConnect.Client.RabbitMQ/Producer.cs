@@ -322,10 +322,11 @@ public sealed class Producer : IProducer
     /// Sends raw bytes directly to the specified endpoint.
     /// </summary>
     /// <param name="endPoint">The destination queue name.</param>
+    /// <param name="type">The logical message type the packet represents; used to stamp the reserved type headers authoritatively.</param>
     /// <param name="packet">The raw payload to send.</param>
     /// <param name="headers">Optional custom headers to include with the packet.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task SendBytesAsync(string endPoint, Type type, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (packet.Length > MaximumMessageSize)
@@ -335,7 +336,7 @@ public sealed class Producer : IProducer
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var messageHeaders = GetHeaders(typeof(byte[]), headers, endPoint, HeaderKeys.ByteStream);
+            var messageHeaders = GetHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
             var basicProperties = CreateBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
                 () => _model!.BasicPublishAsync(
@@ -469,9 +470,9 @@ public sealed class Producer : IProducer
                 result[kvp.Key] = kvp.Value;
         }
 
-        result.TryAdd(HeaderKeys.DestinationAddress, queueName);
-        result.TryAdd(HeaderKeys.MessageId, Guid.NewGuid().ToString());
-        result.TryAdd(HeaderKeys.MessageType, messageType);
+        result[HeaderKeys.DestinationAddress] = queueName;
+        result[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+        result[HeaderKeys.MessageType] = messageType;
 
         result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
         result[HeaderKeys.TimeSent] = FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
@@ -479,8 +480,8 @@ public sealed class Producer : IProducer
             result[HeaderKeys.SourceMachine] = Environment.MachineName;
 
         var (fullName, aqn) = _typeNameCache.GetOrAdd(type, static t => (t.FullName!, t.AssemblyQualifiedName!));
-        result.TryAdd(HeaderKeys.TypeName, fullName);
-        result.TryAdd(HeaderKeys.FullTypeName, aqn);
+        result[HeaderKeys.TypeName] = fullName;
+        result[HeaderKeys.FullTypeName] = aqn;
 
         result[HeaderKeys.ConsumerType] = "RabbitMQ";
         result[HeaderKeys.Language] = "C#";

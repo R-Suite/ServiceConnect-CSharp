@@ -12,13 +12,16 @@ namespace ServiceConnect.EndToEndTests;
 
 file sealed class TestDeduplicationFilter : IFilter
 {
-    private readonly ConcurrentDictionary<string, byte> _seen = new(StringComparer.Ordinal);
+    // Business-level dedup key supplied by the caller. Not a reserved transport header —
+    // the transport's MessageId is server-authoritative and cannot be used here.
+    public const string BusinessIdHeader = "TestBusinessId";
 
+    private readonly ConcurrentDictionary<string, byte> _seen = new(StringComparer.Ordinal);
 
     public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        if (!envelope.Headers.TryGetValue(HeaderKeys.MessageId, out var rawId))
-            return Task.FromResult(true); // no MessageId header — let it through
+        if (!envelope.Headers.TryGetValue(BusinessIdHeader, out var rawId))
+            return Task.FromResult(true);
 
         var messageId = rawId is byte[] bytes
             ? Encoding.UTF8.GetString(bytes)
@@ -28,7 +31,7 @@ file sealed class TestDeduplicationFilter : IFilter
             return Task.FromResult(true);
 
         if (_seen.TryAdd(messageId, 0))
-            return Task.FromResult(true); // first time seeing this ID — allow processing
+            return Task.FromResult(true);
 
         // Already seen — block if this is a redelivery
         if (!envelope.Headers.TryGetValue(HeaderKeys.Redelivered, out var rawRedelivered))
@@ -60,7 +63,7 @@ public class MessageDeduplicationTests
         var receivedMessages = new ConcurrentBag<string>();
         var firstReceived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("dedup");
-        var sharedMessageId = Guid.NewGuid().ToString();
+        var sharedBusinessId = Guid.NewGuid().ToString();
         var dedupFilter = new TestDeduplicationFilter();
 
         var handlerReferences = new List<HandlerReference>
@@ -110,13 +113,13 @@ public class MessageDeduplicationTests
 
         try
         {
-            // Act — send the first message with a specific MessageId; handler should process it
+            // Act — send the first message with a specific business dedup id; handler should process it
             var firstMessage = new TestMessage(Guid.NewGuid()) { Content = "first-delivery" };
             await bus.PublishAsync(firstMessage, new PublishOptions
             {
                 Headers = new Dictionary<string, string>
                 {
-                    [HeaderKeys.MessageId] = sharedMessageId
+                    [TestDeduplicationFilter.BusinessIdHeader] = sharedBusinessId
                 }
             });
 
@@ -125,13 +128,13 @@ public class MessageDeduplicationTests
             cts1.Token.Register(() => firstReceived.TrySetCanceled());
             await firstReceived.Task;
 
-            // Send second message with same MessageId AND Redelivered = "True" — filter should block it
+            // Send second message with same business id AND Redelivered = "True" — filter should block it
             var secondMessage = new TestMessage(Guid.NewGuid()) { Content = "second-delivery-duplicate" };
             await bus.PublishAsync(secondMessage, new PublishOptions
             {
                 Headers = new Dictionary<string, string>
                 {
-                    [HeaderKeys.MessageId] = sharedMessageId,
+                    [TestDeduplicationFilter.BusinessIdHeader] = sharedBusinessId,
                     [HeaderKeys.Redelivered] = "True"
                 }
             });

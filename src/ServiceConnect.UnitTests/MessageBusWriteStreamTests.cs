@@ -9,33 +9,36 @@ namespace ServiceConnect.UnitTests;
 public class MessageBusWriteStreamTests
 {
     private readonly Mock<IProducer> _producer = new();
-    private readonly List<(string Endpoint, byte[] Payload, Dictionary<string, string>? Headers)> _sends = new();
+    private readonly List<(string Endpoint, Type Type, byte[] Payload, Dictionary<string, string>? Headers)> _sends = new();
 
     public MessageBusWriteStreamTests()
     {
         _producer
             .Setup(p => p.SendBytesAsync(
                 It.IsAny<string>(),
+                It.IsAny<Type>(),
                 It.IsAny<byte[]>(),
                 It.IsAny<Dictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, byte[], Dictionary<string, string>?, CancellationToken>((ep, bytes, headers, _) =>
-                _sends.Add((ep, bytes, headers)))
+            .Callback<string, Type, byte[], Dictionary<string, string>?, CancellationToken>((ep, type, bytes, headers, _) =>
+                _sends.Add((ep, type, bytes, headers)))
             .Returns(Task.CompletedTask);
     }
 
     [Fact]
-    public async Task WriteAsync_PopulatesBaseHeaders_WithSequenceIdTypeNameAndMessageType()
+    public async Task WriteAsync_SeedsSequenceIdHeader_AndPassesMessageTypeToProducer()
     {
         await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
 
         await stream.WriteAsync([1, 2, 3, 4], 0, 4);
 
-        var headers = _sends.Single().Headers!;
-        Assert.False(string.IsNullOrWhiteSpace(headers[HeaderKeys.SequenceId]));
-        Assert.Equal(typeof(FakeStreamMsg).AssemblyQualifiedName, headers[HeaderKeys.FullTypeName]);
-        Assert.Equal(typeof(FakeStreamMsg).FullName, headers[HeaderKeys.TypeName]);
-        Assert.Equal(HeaderKeys.ByteStream, headers[HeaderKeys.MessageType]);
+        var send = _sends.Single();
+        Assert.Equal(typeof(FakeStreamMsg), send.Type);
+        Assert.False(string.IsNullOrWhiteSpace(send.Headers![HeaderKeys.SequenceId]));
+        // Type-reserved headers are stamped server-side by the producer, not seeded by the stream.
+        Assert.False(send.Headers!.ContainsKey(HeaderKeys.FullTypeName));
+        Assert.False(send.Headers!.ContainsKey(HeaderKeys.TypeName));
+        Assert.False(send.Headers!.ContainsKey(HeaderKeys.MessageType));
     }
 
     [Fact]

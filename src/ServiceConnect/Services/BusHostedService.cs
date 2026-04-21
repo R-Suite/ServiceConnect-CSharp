@@ -16,6 +16,13 @@ public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger
     /// <param name="cancellationToken">A token used to cancel host startup.</param>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        if (!config.ValidateReplyDestinations)
+        {
+            logger.LogWarning(
+                "ValidateReplyDestinations is disabled. Replies will not be verified against known queue mappings, " +
+                "allowing spoofed SourceAddress headers to redirect replies. This is not recommended for production.");
+        }
+
         if (!config.AutoStartConsuming)
         {
             logger.LogInformation("AutoStartConsuming is disabled.");

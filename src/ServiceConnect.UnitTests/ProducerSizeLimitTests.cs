@@ -118,7 +118,7 @@ public class ProducerSizeLimitTests
     {
         var producer = MakeProducer();
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => producer.SendBytesAsync("some-queue", OversizedMessage(SmallLimit)));
+            () => producer.SendBytesAsync("some-queue", typeof(byte[]), OversizedMessage(SmallLimit)));
 
         Assert.Contains($"{SmallLimit + 1} bytes", ex.Message);
     }
@@ -128,7 +128,7 @@ public class ProducerSizeLimitTests
     {
         var producer = MakeProducer();
         var ex = await Record.ExceptionAsync(
-            () => producer.SendBytesAsync("some-queue", ExactSizeMessage(SmallLimit)));
+            () => producer.SendBytesAsync("some-queue", typeof(byte[]), ExactSizeMessage(SmallLimit)));
 
         Assert.False(ex is InvalidOperationException ioex && ioex.Message.Contains("exceeds maximum"),
             "Size guard should not fire for a packet exactly at the limit.");

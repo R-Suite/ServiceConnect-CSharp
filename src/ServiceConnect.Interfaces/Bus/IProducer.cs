@@ -21,9 +21,11 @@ public interface IProducer : IAsyncDisposable
     Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sends raw bytes to a specific endpoint without type-based routing.
+    /// Sends raw bytes to a specific endpoint without type-based routing. The <paramref name="type"/>
+    /// is the logical message type the packet represents (for example, the element type of a stream);
+    /// it is used to stamp transport-reserved type headers authoritatively.
     /// </summary>
-    Task SendBytesAsync(string endPoint, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+    Task SendBytesAsync(string endPoint, Type type, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the maximum message size in bytes supported by the broker.
