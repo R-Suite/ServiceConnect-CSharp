@@ -113,6 +113,44 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Null(activity);
     }
 
+    [Fact]
+    public void Publish_InjectsTraceparent_IntoOutgoingHeaders()
+    {
+        var args = new PublishEventArgs
+        {
+            RoutingKey = "orders",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.NotNull(activity);
+        Assert.True(args.Headers.TryGetValue("traceparent", out var traceparent));
+        // W3C traceparent: 00-<32 hex>-<16 hex>-<2 hex>
+        Assert.Matches("^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$", traceparent);
+        // The injected traceparent must carry the started activity's trace/span ids
+        // so downstream consumers link to this publish.
+        Assert.Contains(activity!.TraceId.ToString(), traceparent);
+        Assert.Contains(activity.SpanId.ToString(), traceparent);
+    }
+
+    [Fact]
+    public void Publish_WhenTelemetryDisabled_DoesNotTouchHeaders()
+    {
+        ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
+
+        var args = new PublishEventArgs
+        {
+            RoutingKey = "orders",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.Null(activity);
+        Assert.False(args.Headers.ContainsKey("traceparent"));
+    }
+
     // ---------------- Consume ----------------
 
     [Fact]
@@ -241,6 +279,41 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Send(args);
 
         Assert.Null(activity);
+    }
+
+    [Fact]
+    public void Send_InjectsTraceparent_IntoOutgoingHeaders()
+    {
+        var args = new SendEventArgs
+        {
+            EndPoint = "svc.queue",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        Assert.True(args.Headers.TryGetValue("traceparent", out var traceparent));
+        Assert.Matches("^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$", traceparent);
+        Assert.Contains(activity!.TraceId.ToString(), traceparent);
+        Assert.Contains(activity.SpanId.ToString(), traceparent);
+    }
+
+    [Fact]
+    public void Send_WithNullMessage_DoesNotInjectTraceparent()
+    {
+        // Send.Message can be null (caller-side path where telemetry is invoked with
+        // only endpoint info). Ensure no trace header is injected in that branch.
+        var args = new SendEventArgs
+        {
+            EndPoint = "svc.queue",
+            Message = null
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        Assert.False(args.Headers.ContainsKey("traceparent"));
     }
 
     // ---------------- TryGetExistingContext ----------------

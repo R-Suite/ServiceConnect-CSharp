@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 10/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -80,12 +80,12 @@ Severity bands:
 - **What:** Both `DeleteDataAsync` implementations filter by `CorrelationId` only, with no `Version` predicate, unlike `UpdateDataAsync` which ANDs `Version`. A concurrent delete racing with an update loses the optimistic-concurrency contract — the saga can vanish mid-update.
 - **Fix:** Delete with `{CorrelationId, Version}`; throw `ConcurrencyException` on 0-affected.
 
-### [ ] C11. `traceparent` is never injected into outgoing messages — distributed tracing is dark outbound
+### [x] C11. `traceparent` is never injected into outgoing messages — distributed tracing is dark outbound
 - **File:** [ServiceConnectActivitySource.cs:46-54,140-148](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs), [Producer.cs:466-483](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L466-L483)
 - **What:** `Publish()` and `Send()` start activities but never call `DistributedContextPropagator.Current.Inject` into outbound headers. Consumers call `ExtractTraceIdAndState` and find nothing — every consume span is a new root; trace graph broken end-to-end.
 - **Fix:** Inject on the outgoing telemetry subscriber (mirroring the extract on consume).
 
-### [ ] C12. Outbound paths do not stamp the `CorrelationId` header
+### [x] C12. Outbound paths do not stamp the `CorrelationId` header
 - **File:** [Bus.cs:468-483](../src/ServiceConnect/Bus.cs#L468-L483), [Producer.cs:466-483](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L466-L483), [ConsumeContext.cs:93-95](../src/ServiceConnect/Services/ConsumeContext.cs#L93-L95)
 - **What:** `BuildHeadersDirect` writes message-type headers but never `HeaderKeys.CorrelationId`. Consume side derives `Context.CorrelationId` from the header with `Guid.Empty` fallback. Handlers see `message.CorrelationId` in body but `Context.CorrelationId == Guid.Empty` — public-API contract mismatch.
 - **Fix:** Populate the header from `message.CorrelationId` at send time.

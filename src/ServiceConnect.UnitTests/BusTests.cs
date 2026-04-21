@@ -256,6 +256,92 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public async Task PublishAsync_FastPath_StampsCorrelationIdHeader()
+        {
+            var correlationId = Guid.NewGuid();
+            var message = new FakeMessage1(correlationId) { Username = "Tim" };
+
+            await _bus.PublishAsync(message);
+
+            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+                typeof(FakeMessage1),
+                It.IsAny<byte[]>(),
+                It.Is<Dictionary<string, string>>(h =>
+                    h.ContainsKey(HeaderKeys.CorrelationId) &&
+                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+                null), Times.Once);
+        }
+
+        [Fact]
+        public async Task PublishAsync_FilterPath_StampsCorrelationIdHeader()
+        {
+            var correlationId = Guid.NewGuid();
+            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
+            var busWithFilters = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                pipelineConfigWithFilter.Object);
+            var message = new FakeMessage1(correlationId) { Username = "Tim" };
+
+            await busWithFilters.PublishAsync(message);
+
+            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+                typeof(FakeMessage1),
+                It.IsAny<byte[]>(),
+                It.Is<Dictionary<string, string>>(h =>
+                    h.ContainsKey(HeaderKeys.CorrelationId) &&
+                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+                null), Times.Once);
+        }
+
+        [Fact]
+        public async Task SendAsync_StampsCorrelationIdHeader()
+        {
+            var correlationId = Guid.NewGuid();
+            var message = new FakeMessage1(correlationId) { Username = "Tim" };
+
+            await _bus.SendAsync(message);
+
+            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+                typeof(FakeMessage1),
+                It.IsAny<byte[]>(),
+                It.Is<Dictionary<string, string>>(h =>
+                    h.ContainsKey(HeaderKeys.CorrelationId) &&
+                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+                null), Times.Once);
+        }
+
+        [Fact]
+        public async Task SendRequestAsync_StampsCorrelationIdHeader()
+        {
+            var correlationId = Guid.NewGuid();
+            var message = new FakeMessage1(correlationId) { Username = "Tim" };
+            _mockRequestReplyManager.Setup(x => x.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                    It.IsAny<byte[]>(),
+                    It.IsAny<Dictionary<string, string>>(),
+                    It.IsAny<RequestOptions>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(message);
+
+            await _bus.SendRequestAsync<FakeMessage1, FakeMessage1>(message);
+
+            _mockRequestReplyManager.Verify(x => x.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                It.IsAny<byte[]>(),
+                It.Is<Dictionary<string, string>>(h =>
+                    h.ContainsKey(HeaderKeys.CorrelationId) &&
+                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+                It.IsAny<RequestOptions>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
         public async Task SendAsync_ShouldSerializeAndSend()
         {
             // Arrange

@@ -78,14 +78,14 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
+            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
             if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 return;
             headers = ExtractHeaders(envelope);
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), options?.Headers);
+            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, options?.Headers);
         }
 
         if (options?.RoutingKey is not null)
@@ -104,14 +104,14 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes, options?.Headers);
+            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
             if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 return;
             headers = ExtractHeaders(envelope);
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), options?.Headers);
+            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, options?.Headers);
         }
 
         if (options?.EndPoints is { Count: > 0 } endpoints)
@@ -139,14 +139,14 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
+            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), requestOptions.Headers);
+            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, requestOptions.Headers);
         }
 
         return await _requestReplyManager.SendRequestAsync<T, TReply>(
@@ -168,14 +168,14 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes, requestOptions.Headers);
+            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), requestOptions.Headers);
+            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, requestOptions.Headers);
         }
 
         return await _requestReplyManager.SendRequestMultiAsync<T, TReply>(
@@ -203,14 +203,14 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, requestOptions.Headers);
+            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(TRequest), requestOptions.Headers);
+            headers = BuildHeadersDirect(typeof(TRequest), message.CorrelationId, requestOptions.Headers);
         }
 
         await _requestReplyManager.PublishRequestAsync<TRequest, TReply>(
@@ -235,14 +235,14 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes);
+            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId);
             if (await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
                 return;
             headers = ExtractHeaders(envelope);
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), null);
+            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, null);
         }
 
         if (destinations.Count > 1)
@@ -400,14 +400,15 @@ public sealed class Bus : IBus
         ObjectDisposedException.ThrowIf(_disposed, this);
     }
 
-    private static Envelope CreateEnvelope(Type messageType, byte[] body, Dictionary<string, string>? additionalHeaders = null)
+    private static Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, Dictionary<string, string>? additionalHeaders = null)
     {
         var envelope = new Envelope
         {
             Body = body,
             Headers = new Dictionary<string, object>
             {
-                [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name
+                [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name,
+                [HeaderKeys.CorrelationId] = correlationId.ToString()
             }
         };
 
@@ -465,12 +466,13 @@ public sealed class Bus : IBus
     /// without allocating the intermediate <see cref="Envelope"/> or its
     /// <c>Dictionary&lt;string, object&gt;</c> headers map.
     /// </summary>
-    private static Dictionary<string, string> BuildHeadersDirect(Type messageType, Dictionary<string, string>? additionalHeaders)
+    private static Dictionary<string, string> BuildHeadersDirect(Type messageType, Guid correlationId, Dictionary<string, string>? additionalHeaders)
     {
-        var capacity = 1 + (additionalHeaders?.Count ?? 0);
+        var capacity = 2 + (additionalHeaders?.Count ?? 0);
         var headers = new Dictionary<string, string>(capacity)
         {
-            [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name
+            [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name,
+            [HeaderKeys.CorrelationId] = correlationId.ToString()
         };
 
         if (additionalHeaders is not null)

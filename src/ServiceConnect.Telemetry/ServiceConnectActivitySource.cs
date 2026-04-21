@@ -75,6 +75,8 @@ public static class ServiceConnectActivitySource
             activity.SetTag(MessagingAttributes.MessageId, messageId);
         }
 
+        InjectTraceContext(activity, eventArgs.Headers);
+
         TryEnrich(activity, eventArgs.Message);
 
         return activity;
@@ -166,6 +168,9 @@ public static class ServiceConnectActivitySource
         }
 
         activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
+
+        InjectTraceContext(activity, eventArgs.Headers);
+
         TryEnrich(activity, eventArgs.Message);
 
         return activity;
@@ -206,6 +211,24 @@ public static class ServiceConnectActivitySource
                 value = default;
                 return;
         }
+    }
+
+    /// <summary>
+    /// Writes the current activity's W3C trace context into the outgoing-headers dictionary
+    /// so downstream consumers can link their consume span to the originating publish. Mirrors
+    /// <see cref="Consume"/>'s extract side — without this, every consume span was a new root
+    /// and the end-to-end trace graph was broken outbound.
+    /// </summary>
+    private static void InjectTraceContext(Activity? activity, Dictionary<string, string> headers)
+    {
+        if (activity is null) return;
+        DistributedContextPropagator.Current.Inject(activity, headers, InjectHeader);
+    }
+
+    private static void InjectHeader(object? carrier, string fieldName, string fieldValue)
+    {
+        if (carrier is Dictionary<string, string> headers)
+            headers[fieldName] = fieldValue;
     }
 
     private static Activity? StartActivity(
