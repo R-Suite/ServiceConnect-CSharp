@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 18/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 19/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -288,7 +288,7 @@ Severity bands:
 - **What:** `LockLeaseDuration` (5 min) + `BuildDueTimeoutFilter` re-claims stale leases on the next `GetTimeoutsBatchAsync` poll. Works but entirely poll-driven — a crashed handler's lease is only recovered when the next poll fires.
 - **Fix:** Short TTL on lease + background reaper for liveness guarantees.
 
-### [ ] M19. Mongo TLS protocol and revocation settings skipped without cert path
+### [x] M19. Mongo TLS protocol and revocation settings skipped without cert path
 - **File:** [MongoClientFactory.cs:50-63](../src/ServiceConnect.Persistence.MongoDb/MongoClientFactory.cs#L50-L63)
 - **What:** `UseTls` and `AllowInsecureTls` set unconditionally, but `EnabledSslProtocols` and `CheckCertificateRevocation` are applied only inside the `CertPath` block. TLS users without a client cert silently use driver defaults.
 - **Fix:** Apply protocol/revocation settings whenever TLS is enabled.

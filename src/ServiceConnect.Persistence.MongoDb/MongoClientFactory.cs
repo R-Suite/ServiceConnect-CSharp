@@ -50,17 +50,26 @@ public static class MongoClientFactory
         settings.UseTls = true;
         settings.AllowInsecureTls = sslOptions.AllowInsecureTls;
 
+        // Protocol and revocation settings must apply to every TLS connection, not only
+        // when a client cert is configured — otherwise certless TLS users silently fall
+        // back to driver defaults for both.
+        // AllowInsecureTls and CheckCertificateRevocation=true are incompatible (driver
+        // rejects the combination), so revocation check is forced off when insecure TLS
+        // is explicitly requested.
+        var ssl = new SslSettings
+        {
+            CheckCertificateRevocation = !sslOptions.AllowInsecureTls && sslOptions.CheckCertificateRevocation,
+            EnabledSslProtocols = sslOptions.SslProtocol
+        };
+
         if (!string.IsNullOrEmpty(sslOptions.CertPath))
         {
             var cert = GetOrLoadCertificate(sslOptions.CertPath, sslOptions.CertPassphrase);
-            settings.SslSettings = new SslSettings
-            {
-                ClientCertificates = new[] { cert },
-                ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
-                CheckCertificateRevocation = sslOptions.CheckCertificateRevocation,
-                EnabledSslProtocols = sslOptions.SslProtocol
-            };
+            ssl.ClientCertificates = new[] { cert };
+            ssl.ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0];
         }
+
+        settings.SslSettings = ssl;
 
         return new MongoClient(settings);
     }

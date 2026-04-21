@@ -1,3 +1,4 @@
+using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using ServiceConnect.Persistence.MongoDb;
@@ -92,10 +93,47 @@ public class MongoClientFactoryTests : IDisposable
 
         var client = MongoClientFactory.Create(options);
 
-        // The factory doesn't touch SslSettings when CertPath is empty — the driver may
-        // still auto-initialize SslSettings with defaults when UseTls is enabled, but the
-        // factory's responsibility is to avoid injecting a client certificate.
+        // The factory does not inject a client certificate when CertPath is empty.
         Assert.Null(client.Settings.SslSettings?.ClientCertificates);
+    }
+
+    [Fact]
+    public void Create_WithoutCertPath_AppliesProtocolAndRevocationSettings()
+    {
+        var options = new MongoDbPersistenceOptions
+        {
+            ConnectionString = "mongodb://localhost:27017",
+            Ssl = new MongoDbSslOptions
+            {
+                SslProtocol = SslProtocols.Tls12,
+                CheckCertificateRevocation = false
+            }
+        };
+
+        var client = MongoClientFactory.Create(options);
+
+        Assert.NotNull(client.Settings.SslSettings);
+        Assert.Equal(SslProtocols.Tls12, client.Settings.SslSettings!.EnabledSslProtocols);
+        Assert.False(client.Settings.SslSettings.CheckCertificateRevocation);
+    }
+
+    [Fact]
+    public void Create_AllowInsecureTls_ForcesRevocationCheckOff()
+    {
+        var options = new MongoDbPersistenceOptions
+        {
+            ConnectionString = "mongodb://localhost:27017",
+            Ssl = new MongoDbSslOptions
+            {
+                AllowInsecureTls = true,
+                CheckCertificateRevocation = true
+            }
+        };
+
+        var client = MongoClientFactory.Create(options);
+
+        Assert.True(client.Settings.AllowInsecureTls);
+        Assert.False(client.Settings.SslSettings!.CheckCertificateRevocation);
     }
 
     [Fact]
