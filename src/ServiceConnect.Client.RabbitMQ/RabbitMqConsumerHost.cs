@@ -49,6 +49,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private int _shutdownTimedOut;
     private bool _shutdownStarted;
     private CancellationTokenSource _shutdownPublishCts = new();
+    // Consumer-lifetime token: created at StartConsumingAsync, cancelled on DisposeAsync.
+    // Delivery callbacks hand this to handlers so they observe *consumer* teardown rather
+    // than whatever startup CT the caller happened to pass — a startup-scoped token can be
+    // cancelled post-startup and would break every later delivery if captured by the callback.
+    private CancellationTokenSource _deliveryCts = new();
 
     public RabbitMqConsumerHost(
         IServiceConnectConnection connection,
@@ -114,10 +119,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         if (!_disablePrefetch)
             await _model.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
 
-        _consumer = new AsyncEventingBasicConsumer(_model);
-        _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, cancellationToken).ConfigureAwait(false);
         Volatile.Write(ref _shutdownTimedOut, 0);
         _shutdownPublishCts = new CancellationTokenSource();
+        _deliveryCts = new CancellationTokenSource();
+        // The lambda captures _deliveryCts (not the startup token) so a startup-scoped
+        // CT cancelled after StartConsumingAsync returns does not cancel every delivery.
+        _consumer = new AsyncEventingBasicConsumer(_model);
+        _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, _deliveryCts.Token).ConfigureAwait(false);
 
         _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
@@ -460,6 +468,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         await ClosePublishChannelAsync(deadline).ConfigureAwait(false);
         shutdownPublishCts.Cancel();
         shutdownPublishCts.Dispose();
+        var deliveryCts = _deliveryCts;
+        try { deliveryCts.Cancel(); } catch (ObjectDisposedException) { }
+        deliveryCts.Dispose();
     }
 
     private async Task CancelHelperPublishesAtDeadlineAsync(CancellationTokenSource shutdownPublishCts, DateTimeOffset deadline)

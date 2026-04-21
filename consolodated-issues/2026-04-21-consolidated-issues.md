@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 9/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 10/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -139,7 +139,7 @@ Severity bands:
 - **What:** `IServiceConnectConnection.CreateChannelAsync()` takes no `CancellationToken`; `StartConsumingAsync(CancellationToken)` passes no token. Broker/DNS/TCP stalls block the caller past the cancellation deadline.
 - **Fix:** Plumb the token through.
 
-### [ ] H10. Startup cancellation token is captured and reused for every later delivery callback
+### [x] H10. Startup cancellation token is captured and reused for every later delivery callback
 - **File:** [RabbitMqConsumerHost.cs:111](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L111)
 - **What:** The `cancellationToken` passed to `StartConsumingAsync` is captured by the `ReceivedAsync` lambda and reused for the lifetime of the consumer. A startup token cancelled post-startup (e.g. scoped to the startup phase) breaks every future delivery.
 - **Fix:** Use a consumer-lifetime token; do not capture the startup token.

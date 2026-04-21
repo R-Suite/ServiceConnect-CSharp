@@ -193,6 +193,43 @@ public class RabbitMqConsumerHostTests
     }
 
     [Fact]
+    public async Task EventAsync_DoesNotObserveStartupCancellation()
+    {
+        // Regression: the startup CT was captured by the delivery callback, so a caller
+        // that cancelled the startup CT after StartConsumingAsync returned would see
+        // every subsequent delivery hand its handler a cancelled token. Deliveries must
+        // observe the consumer-lifetime token, not the startup token.
+        var (conn, _, _) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        CancellationToken observed = new CancellationToken(canceled: true);
+        ConsumerEventHandler handler = (body, type, headers, ct) =>
+        {
+            observed = ct;
+            return Task.FromResult(new ConsumeEventResult { Success = true });
+        };
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+
+        using var startupCts = new CancellationTokenSource();
+        await host.StartConsumingAsync(handler, "q", cancellationToken: startupCts.Token);
+
+        // Simulate the startup scope ending — caller cancels its startup CT.
+        startupCts.Cancel();
+
+        await DeliverMessageAsync(host, new byte[] { 1 }, new Dictionary<string, object>
+        {
+            [HeaderKeys.TypeName] = System.Text.Encoding.UTF8.GetBytes(typeof(object).FullName!),
+        });
+
+        Assert.False(observed.IsCancellationRequested,
+            "Delivery callback must not observe the startup cancellation token.");
+    }
+
+    [Fact]
     public async Task ConsumeMessageTypeAsync_BindsQueueToExchange()
     {
         var (conn, channel, _) = MockConnection();
