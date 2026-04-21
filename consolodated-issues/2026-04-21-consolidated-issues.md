@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 3/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 4/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -332,7 +332,7 @@ Severity bands:
 - **What:** Violates `Stream` contract (`Length` should throw `NotSupportedException` unless `CanSeek`). Consumers branching on `CanSeek` then reading `Length` for progress reporting behave inconsistently.
 - **Fix:** Implement `Seek`/`Position`, or throw on `Length`.
 
-### [ ] L4. Sealed library exceptions missing `(string, Exception)` constructors
+### [x] L4. Sealed library exceptions missing `(string, Exception)` constructors
 - **File:** `ServiceConnect.Interfaces.Exceptions.*` (`ConcurrencyException`, `PersistenceException`, `TransportException`, `SerializationException`)
 - **What:** Style/shape — violates CA1032. Library-internal impact.
 - **Fix:** Add the standard two-arg constructor.
