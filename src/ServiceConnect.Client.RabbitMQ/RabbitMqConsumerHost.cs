@@ -30,6 +30,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly IDictionary<string, object?> _queueArguments;
     private readonly int _gracefulShutdownTimeoutMs;
     private readonly bool _includeMachineNameInHeaders;
+    private readonly bool _deadLetterUnhandledMessages;
     private readonly long _maxInboundMessageSize;
     private readonly object _callbackAdmissionGate = new();
 
@@ -70,6 +71,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
         // Extract configuration in the constructor and make the fields readonly.
         _includeMachineNameInHeaders = busConfiguration.IncludeMachineNameInHeaders;
+        _deadLetterUnhandledMessages = busConfiguration.DeadLetterUnhandledMessages;
 
         var settings = transportConfiguration.ClientSettings;
         _errorsDisabled = queueConfiguration.DisableErrors;
@@ -335,6 +337,24 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 args,
                 headers,
                 result.Exception,
+                GetShutdownPublishToken()).ConfigureAwait(false);
+        }
+        else if (result.NotHandled && _deadLetterUnhandledMessages && !_errorsDisabled)
+        {
+            if (Volatile.Read(ref _shutdownTimedOut) != 0)
+                return false;
+
+            // Route via the terminal-failure path (error exchange) — a message with no
+            // handler is not a retryable condition, so bypass the retry queue.
+            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw))
+                headers.TryGetValue(HeaderKeys.TypeName, out typeNameRaw);
+            var typeName = HeaderDecoder.Decode(typeNameRaw) ?? "<unknown>";
+
+            await _retryHandler.HandleTerminalFailureAsync(
+                publishChannel,
+                args,
+                headers,
+                new InvalidOperationException($"No processor handled message of type '{typeName}'."),
                 GetShutdownPublishToken()).ConfigureAwait(false);
         }
         else if (!_errorsDisabled)

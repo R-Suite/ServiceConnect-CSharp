@@ -174,7 +174,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         }
 
         _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
-        return new ConsumeEventResult { Success = true };
+        return new ConsumeEventResult { Success = true, NotHandled = true };
     }
 
     private MessageProcessingDelegate BuildProcessingChain()

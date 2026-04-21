@@ -1088,4 +1088,111 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), false, true, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task EventAsync_NotHandled_WithDeadLetterDisabled_DoesNotRouteToErrorExchange()
+    {
+        // Default behaviour: a handler-less message is acked as Success so the broker
+        // stops redelivering, and no terminal-failure publish is made. Audit still fires
+        // when enabled — this test locks in that historical behaviour.
+        var (conn, channel, publishChannel) = MockConnection();
+        var qcfg = MakeQueueCfg();
+        qcfg.SetupGet(c => c.AuditingEnabled).Returns(true);
+        var busCfg = MakeBusCfg();
+        busCfg.SetupGet(c => c.DeadLetterUnhandledMessages).Returns(false);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            qcfg.Object,
+            busCfg.Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(qcfg.Object),
+            NullLogger.Instance);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true, NotHandled = true }),
+            "q");
+
+        await DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        // Audit publish still runs — backward-compat invariant.
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "audit", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EventAsync_NotHandled_WithDeadLetterEnabled_RoutesToErrorExchange()
+    {
+        var (conn, channel, publishChannel) = MockConnection();
+        var qcfg = MakeQueueCfg();
+        var busCfg = MakeBusCfg();
+        busCfg.SetupGet(c => c.DeadLetterUnhandledMessages).Returns(true);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            qcfg.Object,
+            busCfg.Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(qcfg.Object),
+            NullLogger.Instance);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true, NotHandled = true }),
+            "q");
+
+        await DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+
+        // Terminal-failure publishes flow through the dedicated publish channel to
+        // the error exchange — no retry queue involvement.
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        // The original delivery is acked once its terminal publish is confirmed.
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task EventAsync_NotHandled_WithErrorsDisabled_DoesNotRouteToErrorExchange()
+    {
+        // DisableErrors short-circuits the error exchange regardless of
+        // DeadLetterUnhandledMessages — terminal routing must respect it.
+        var (conn, channel, publishChannel) = MockConnection();
+        var qcfg = MakeQueueCfg();
+        qcfg.SetupGet(c => c.DisableErrors).Returns(true);
+        var busCfg = MakeBusCfg();
+        busCfg.SetupGet(c => c.DeadLetterUnhandledMessages).Returns(true);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            qcfg.Object,
+            busCfg.Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(qcfg.Object),
+            NullLogger.Instance);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true, NotHandled = true }),
+            "q");
+
+        await DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

@@ -69,6 +69,47 @@ public class DefaultProcessManagerPropertyMapperTests
 
         Assert.Equal(expected, value);
     }
+
+    [Fact]
+    public void ConfigureMapping_NestedMemberChain_Throws()
+    {
+        // Pre-fix behaviour: the mapper silently produced an empty PropertiesHierarchy for
+        // chains like d => d.Inner.Id, causing sagas to load the wrong correlation slice.
+        var mapper = new DefaultProcessManagerPropertyMapper();
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            mapper.ConfigureMapping<FakePmDataWithNested, FakePmMsg>(d => d.Inner.Id, m => m.OrderId));
+
+        Assert.Contains("direct property access", ex.Message);
+    }
+
+    [Fact]
+    public void ConfigureMapping_MethodCallExpression_Throws()
+    {
+        var mapper = new DefaultProcessManagerPropertyMapper();
+
+        Assert.Throws<ArgumentException>(() =>
+            mapper.ConfigureMapping<FakePmData, FakePmMsg>(d => d.Customer.ToUpper(), m => m.Customer));
+    }
+
+    [Fact]
+    public void ConfigureMapping_ConstantExpression_Throws()
+    {
+        var mapper = new DefaultProcessManagerPropertyMapper();
+
+        Assert.Throws<ArgumentException>(() =>
+            mapper.ConfigureMapping<FakePmData, FakePmMsg>(_ => "const", m => m.Customer));
+    }
+
+    [Fact]
+    public void ConfigureMapping_FieldAccess_Throws()
+    {
+        // Field access on the parameter — Member is a FieldInfo, not PropertyInfo.
+        var mapper = new DefaultProcessManagerPropertyMapper();
+
+        Assert.Throws<ArgumentException>(() =>
+            mapper.ConfigureMapping<FakePmDataWithField, FakePmMsg>(d => d.FieldId, m => m.OrderId));
+    }
 }
 
 file class FakePmData : IProcessManagerData
@@ -83,4 +124,21 @@ file class FakePmMsg : Message
     public FakePmMsg(Guid c) : base(c) { }
     public Guid OrderId { get; set; }
     public string Customer { get; set; } = "";
+}
+
+file class FakePmInner
+{
+    public Guid Id { get; set; }
+}
+
+file class FakePmDataWithNested : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+    public FakePmInner Inner { get; set; } = new();
+}
+
+file class FakePmDataWithField : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+    public Guid FieldId = Guid.Empty;
 }

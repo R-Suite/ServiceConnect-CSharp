@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 5/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 7/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -40,7 +40,7 @@ Severity bands:
 - **What:** Exactly `byte[]` and `string` supported; anything else throws `ArgumentException`. Call sites do not catch; outer `RabbitMqConsumerHost` catch nacks with `requeue:true` → infinite redelivery from a single oddly-typed header (interop `long`, `IDictionary`, short-string).
 - **Fix:** Return null / `ToString()` fallback; log once.
 
-### [ ] C3. `DefaultProcessManagerPropertyMapper.ConfigureMapping` silently accepts unsupported expression shapes
+### [x] C3. `DefaultProcessManagerPropertyMapper.ConfigureMapping` silently accepts unsupported expression shapes
 - **File:** [DefaultProcessManagerPropertyMapper.cs:18-24](../src/ServiceConnect/Services/Processors/DefaultProcessManagerPropertyMapper.cs#L18-L24)
 - **What:** Only `UnaryExpression{MemberExpression}` and top-level `MemberExpression` are matched. Nested access (`x => x.Customer.Id`), method calls, coalescing fall through with `propertiesHierarchy` empty but the mapping is still stored. Predicate becomes reference-equality and never matches — saga silently re-initialises on every correlated message.
 - **Fix:** Throw `ArgumentException` at configuration time for unsupported shapes; support nested chains if intended.
@@ -55,7 +55,7 @@ Severity bands:
 - **What:** Dispatcher resolves type via `_typeRegistry.TryResolve(fullTypeName)` first, but falls back to `Type.GetType(fullTypeName)` for reply traffic when not locally registered. Combined with C1 (header spoofing), this remains an untrusted-type-load path on replies.
 - **Fix:** Resolve via a registered-handlers whitelist for replies too; do not parse arbitrary assembly-qualified names from the wire.
 
-### [ ] C6. `NotHandled` sets `Success = true` — dispatcher silently acks unhandled messages
+### [x] C6. `NotHandled` sets `Success = true` — dispatcher silently acks unhandled messages
 - **File:** [MessageDispatcher.cs:167-176](../src/ServiceConnect/Services/MessageDispatcher.cs#L167-L176)
 - **What:** `RunProcessors` logs "No processor handled message" but returns `new ConsumeEventResult { Success = true }`. A deliberately rejected / unhandled message is indistinguishable from a handled one — no audit trail, no DLQ, no retry.
 - **Fix:** Make `NotHandled` its own state; ack with explicit "skipped" trace or nack to DLQ based on config.

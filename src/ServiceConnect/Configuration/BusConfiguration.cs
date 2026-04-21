@@ -25,6 +25,8 @@ public sealed class BusConfiguration : IBusConfiguration
     public bool ValidateReplyDestinations { get; set; } = true;
     /// <inheritdoc />
     public bool EnableRoutingSlipProcessing { get; set; } = true;
+    /// <inheritdoc />
+    public bool DeadLetterUnhandledMessages { get; set; }
     /// <summary>
     /// Gets the transport configuration used to connect to the broker.
     /// </summary>

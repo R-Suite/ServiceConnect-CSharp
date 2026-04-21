@@ -415,6 +415,42 @@ public class MessageDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatch_NoProcessorHandlesMessage_ReturnsNotHandled()
+    {
+        // Registered type, serialised successfully, but no processor claims it. The dispatcher
+        // reports Success=true so the consumer acks the broker, but flags NotHandled so the
+        // host can DLQ it when DeadLetterUnhandledMessages is enabled.
+        _mockSerializer
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+            .Returns(new FakeMessage1(Guid.NewGuid()));
+
+        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor>());
+        var headers = MakeHeaders();
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        Assert.True(result.Success);
+        Assert.True(result.NotHandled);
+    }
+
+    [Fact]
+    public async Task Dispatch_ProcessorHandlesMessage_DoesNotSetNotHandled()
+    {
+        _mockSerializer
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+            .Returns(new FakeMessage1(Guid.NewGuid()));
+
+        var processor = new AlwaysHandledProcessor();
+        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { processor });
+        var headers = MakeHeaders();
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        Assert.True(result.Success);
+        Assert.False(result.NotHandled);
+    }
+
+    [Fact]
     public async Task Dispatch_UnregisteredType_ReturnsFailure()
     {
         // Arrange — empty registry, no types registered
@@ -446,6 +482,18 @@ public class MessageDispatcherTests
         // Assert
         Assert.False(result.Success);
     }
+}
+
+file class AlwaysHandledProcessor : IMessageProcessor
+{
+    public Task<ProcessResult> ProcessAsync(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object? message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(ProcessResult.Handled);
 }
 
 file class PolyBaseMessage : Message

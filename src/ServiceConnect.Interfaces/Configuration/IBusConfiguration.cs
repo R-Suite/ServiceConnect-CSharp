@@ -57,4 +57,13 @@ public interface IBusConfiguration
     /// known queues when enabled.
     /// </summary>
     bool EnableRoutingSlipProcessing { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, messages that the dispatcher runs to completion on but which no
+    /// processor claims (see <see cref="ConsumeEventResult.NotHandled"/>) are published to
+    /// the error exchange instead of silently acked. Defaults to <c>false</c> — unhandled
+    /// messages are logged and acked, preserving historical behaviour. Enable when a
+    /// handler-less message should be treated as a terminal failure for operator visibility.
+    /// </summary>
+    bool DeadLetterUnhandledMessages { get; set; }
 }
