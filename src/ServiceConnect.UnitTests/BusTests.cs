@@ -271,6 +271,30 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void PublishOptions_IsReadonlyRecordStruct()
+        {
+            // M9 regression: PublishOptions used to be a mutable sealed class, so a
+            // caller holding a reference could mutate Headers/RoutingKey on a shared
+            // instance while a concurrent PublishAsync was mid-flight reading them.
+            // Converting to a readonly record struct gives value-type semantics:
+            // each PublishAsync captures a copy, and there are no settable members
+            // to race on.
+            var type = typeof(PublishOptions);
+
+            Assert.True(type.IsValueType);
+            Assert.True(type.GetMethod("<Clone>$", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) is null
+                        || type.GetMethods().Any(m => m.Name == "Equals" && m.ReturnType == typeof(bool)),
+                "record semantics expected");
+            foreach (var prop in type.GetProperties())
+            {
+                var setter = prop.SetMethod;
+                Assert.NotNull(setter);
+                var modreqs = setter!.ReturnParameter.GetRequiredCustomModifiers();
+                Assert.Contains(modreqs, t => t.Name == "IsExternalInit");
+            }
+        }
+
+        [Fact]
         public async Task PublishAsync_FastPath_StampsCorrelationIdHeader()
         {
             var correlationId = Guid.NewGuid();

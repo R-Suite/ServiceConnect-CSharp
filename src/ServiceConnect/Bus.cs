@@ -95,8 +95,8 @@ public sealed class Bus : IBus
             headers = BuildHeadersDirect(typeof(T), message.CorrelationId, options?.Headers);
         }
 
-        if (options?.RoutingKey is not null)
-            headers[HeaderKeys.RoutingKey] = options.RoutingKey;
+        if (options?.RoutingKey is { } routingKey)
+            headers[HeaderKeys.RoutingKey] = routingKey;
 
         await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(T), messageBytes, headers, cancellationToken: cancellationToken).ConfigureAwait(false);
     }

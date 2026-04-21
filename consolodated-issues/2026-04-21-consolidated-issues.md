@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 9/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 10/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -238,7 +238,7 @@ Severity bands:
 - **What:** `IConsumeContext? Context { get; set; }` nullable in both interfaces with no framework null-guard before `HandleAsync` is invoked. NRT-aware handlers must sprinkle `!`.
 - **Fix:** Commit to non-nullable (with `= null!;` initialiser) or throw in the dispatcher if `Context` is null after `SetContext`.
 
-### [ ] M9. `PublishOptions` is a mutable sealed class
+### [x] M9. `PublishOptions` is a mutable sealed class
 - **File:** [PublishOptions.cs:6-17](../src/ServiceConnect.Interfaces/Options/PublishOptions.cs#L6-L17)
 - **What:** Inconsistent with `SendOptions` (`readonly record struct`). Concurrent `PublishAsync` calls sharing an instance can mutate each other's state mid-flight.
 - **Fix:** Convert to `readonly record struct`.
