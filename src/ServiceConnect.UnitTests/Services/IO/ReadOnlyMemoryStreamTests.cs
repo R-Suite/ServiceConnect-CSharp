@@ -48,9 +48,11 @@ public class ReadOnlyMemoryStreamTests
     }
 
     [Fact]
-    public void Length_ReturnsBufferLength()
+    public void Length_Throws_BecauseCanSeekIsFalse()
     {
+        // L3 regression: Length used to return the buffer length even though CanSeek
+        // was false, violating the Stream contract.
         using var stream = new ReadOnlyMemoryStream(new byte[] { 1, 2, 3 });
-        Assert.Equal(3, stream.Length);
+        Assert.Throws<NotSupportedException>(() => stream.Length);
     }
 }

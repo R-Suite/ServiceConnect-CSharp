@@ -5,18 +5,18 @@ namespace ServiceConnect.Services.IO;
 internal sealed class ReadOnlySequenceStream : Stream
 {
     private ReadOnlySequence<byte> _remaining;
-    private readonly long _totalLength;
 
     public ReadOnlySequenceStream(ReadOnlySequence<byte> sequence)
     {
         _remaining = sequence;
-        _totalLength = sequence.Length;
     }
 
     public override bool CanRead => true;
     public override bool CanSeek => false;
     public override bool CanWrite => false;
-    public override long Length => _totalLength;
+    // Stream contract: Length must throw when CanSeek is false. Callers that need the
+    // payload size already have it on the ReadOnlySequence<byte> they passed in.
+    public override long Length => throw new NotSupportedException();
     public override long Position
     {
         get => throw new NotSupportedException();

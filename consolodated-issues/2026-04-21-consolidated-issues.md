@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 2/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 3/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -327,7 +327,7 @@ Severity bands:
 - **What:** Static `Default` exposes settable properties; mutating it affects all callers using the fallback.
 - **Fix:** Immutable shape (`readonly record struct` or frozen getter).
 
-### [ ] L3. `ReadOnlySequenceStream` / `ReadOnlyMemoryStream` expose `Length` with `CanSeek=false`
+### [x] L3. `ReadOnlySequenceStream` / `ReadOnlyMemoryStream` expose `Length` with `CanSeek=false`
 - **File:** [ReadOnlyMemoryStream.cs:14-16](../src/ServiceConnect/Services/IO/ReadOnlyMemoryStream.cs), [ReadOnlySequenceStream.cs:17-19](../src/ServiceConnect/Services/IO/ReadOnlySequenceStream.cs)
 - **What:** Violates `Stream` contract (`Length` should throw `NotSupportedException` unless `CanSeek`). Consumers branching on `CanSeek` then reading `Length` for progress reporting behave inconsistently.
 - **Fix:** Implement `Seek`/`Position`, or throw on `Length`.

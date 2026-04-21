@@ -13,7 +13,9 @@ internal sealed class ReadOnlyMemoryStream : Stream
     public override bool CanRead => true;
     public override bool CanSeek => false;
     public override bool CanWrite => false;
-    public override long Length => _buffer.Length;
+    // Stream contract: Length must throw when CanSeek is false. Callers that need the
+    // payload size already have it at the ReadOnlyMemory<byte> they passed in.
+    public override long Length => throw new NotSupportedException();
     public override long Position
     {
         get => throw new NotSupportedException();
