@@ -223,7 +223,7 @@ public sealed class Producer : IProducer
 
             // Compute the exchange name once per type and cache it.
             // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
-            string exchangeName = _exchangeNameCache.GetOrAdd(type.FullName!, static fn => fn.Replace(".", string.Empty));
+            string exchangeName = _exchangeNameCache.GetOrAdd(type.AssemblyQualifiedName ?? type.FullName!, _ => ServiceConnect.Services.MessageTypeExchangeName.From(type));
 
             await ExecuteWithConnectionRetryAsync(async () =>
             {

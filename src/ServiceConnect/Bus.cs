@@ -308,7 +308,7 @@ public sealed class Bus : IBus
 
                 var typeNameSet = new HashSet<string>(_handlerReferences.Count);
                 foreach (var h in _handlerReferences)
-                    typeNameSet.Add(h.MessageType.FullName!.Replace(".", string.Empty));
+                    typeNameSet.Add(MessageTypeExchangeName.From(h.MessageType));
                 messageTypeNames = [.. typeNameSet];
 
                 localConsumer = _consumer;

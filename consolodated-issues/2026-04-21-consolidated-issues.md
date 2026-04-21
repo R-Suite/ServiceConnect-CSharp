@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 5/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 6/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -218,7 +218,7 @@ Severity bands:
 - **What:** `Register(Type)` unconditionally assigns `_registeredTypes[AssemblyQualifiedName] = type` and `[FullName] = type`. Later registrations overwrite earlier entries with no warning.
 - **Fix:** Detect and fail (or at least log) collisions.
 
-### [ ] M5. Flattened CLR type names can collide in RabbitMQ exchange/binding names
+### [x] M5. Flattened CLR type names can collide in RabbitMQ exchange/binding names
 - **File:** [Producer.cs:226](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L226), [Bus.cs](../src/ServiceConnect/Bus.cs) consumer binding helpers
 - **What:** Exchange/binding names are derived from `FullName.Replace(".", string.Empty)`. Two types whose names differ only in dot position collapse to the same transport name — cross-wired routing.
 - **Fix:** Use a stronger sanitizer (e.g. hash suffix) or reject collisions.
