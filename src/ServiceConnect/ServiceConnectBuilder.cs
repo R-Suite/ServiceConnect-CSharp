@@ -33,6 +33,11 @@ public sealed class ServiceConnectBuilder
     public ServiceConnectBuilder ScanAssemblies(params Assembly[] assemblies)
     {
         ArgumentNullException.ThrowIfNull(assemblies);
+        for (int i = 0; i < assemblies.Length; i++)
+        {
+            if (assemblies[i] is null)
+                throw new ArgumentNullException($"{nameof(assemblies)}[{i}]", "Assembly array element is null.");
+        }
         ScanAssembliesList.AddRange(assemblies);
         return this;
     }

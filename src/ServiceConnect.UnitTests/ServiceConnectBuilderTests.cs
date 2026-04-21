@@ -1,3 +1,4 @@
+using System.Reflection;
 using ServiceConnect;
 using ServiceConnect.Interfaces;
 using Xunit;
@@ -69,6 +70,27 @@ public class ServiceConnectBuilderTests
         builder.AddAfterConsumingFilter<TestFilter>();
 
         Assert.Contains(typeof(TestFilter), builder.BusConfig.Pipeline.AfterConsumingFilters);
+    }
+
+    [Fact]
+    public void ScanAssemblies_NullArray_Throws()
+    {
+        var builder = new ServiceConnectBuilder();
+
+        Assert.Throws<ArgumentNullException>(() => builder.ScanAssemblies((Assembly[])null!));
+    }
+
+    [Fact]
+    public void ScanAssemblies_NullElement_Throws()
+    {
+        // L1 regression: a null element used to slip through the array check and
+        // surface later as a NullReferenceException inside HandlerScanner.
+        var builder = new ServiceConnectBuilder();
+
+        var ex = Assert.Throws<ArgumentNullException>(
+            () => builder.ScanAssemblies(typeof(TestFilter).Assembly, null!));
+
+        Assert.Contains("assemblies[1]", ex.Message);
     }
 
     [Fact]

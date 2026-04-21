@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 1/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -317,7 +317,7 @@ Severity bands:
 
 ## Low
 
-### [ ] L1. `ServiceConnectBuilder.ScanAssemblies` doesn't validate per-element nullability
+### [x] L1. `ServiceConnectBuilder.ScanAssemblies` doesn't validate per-element nullability
 - **File:** [ServiceConnectBuilder.cs:33-37](../src/ServiceConnect/ServiceConnectBuilder.cs#L33-L37)
 - **What:** Array null is guarded; a `null` element inside the array slips through and later NREs in `HandlerScanner`.
 - **Fix:** Per-element `ArgumentNullException.ThrowIfNull`.
