@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 3/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 5/12 · High 1/20 · Medium 0/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -35,7 +35,7 @@ Severity bands:
 - **What:** `GetHeaders()` writes caller-supplied headers first via `result[kvp.Key] = kvp.Value`, then `TryAdd`s internal protocol headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`). A caller can pre-seed any reserved key and win — breaking dispatch, reply routing, audit, and type resolution.
 - **Fix:** Overwrite reserved keys unconditionally (or reject).
 
-### [ ] C2. `HeaderDecoder.Decode` throws on unexpected AMQP header types → infinite redelivery loop
+### [x] C2. `HeaderDecoder.Decode` throws on unexpected AMQP header types → infinite redelivery loop
 - **File:** [HeaderDecoder.cs:22-24](../src/ServiceConnect.Interfaces/Headers/HeaderDecoder.cs#L22-L24), callers at [ReplyProcessor.cs:22](../src/ServiceConnect/Services/Processors/ReplyProcessor.cs#L22), [StreamProcessor.cs:68,92,105](../src/ServiceConnect/Services/Processors/StreamProcessor.cs)
 - **What:** Exactly `byte[]` and `string` supported; anything else throws `ArgumentException`. Call sites do not catch; outer `RabbitMqConsumerHost` catch nacks with `requeue:true` → infinite redelivery from a single oddly-typed header (interop `long`, `IDictionary`, short-string).
 - **Fix:** Return null / `ToString()` fallback; log once.
@@ -45,7 +45,7 @@ Severity bands:
 - **What:** Only `UnaryExpression{MemberExpression}` and top-level `MemberExpression` are matched. Nested access (`x => x.Customer.Id`), method calls, coalescing fall through with `propertiesHierarchy` empty but the mapping is still stored. Predicate becomes reference-equality and never matches — saga silently re-initialises on every correlated message.
 - **Fix:** Throw `ArgumentException` at configuration time for unsupported shapes; support nested chains if intended.
 
-### [ ] C4. Audit publish failure turns a successful handler into a redelivery
+### [x] C4. Audit publish failure turns a successful handler into a redelivery
 - **File:** [RabbitMqConsumerHost.cs:340-348](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L340-L348), [MessageAuditPublisher.cs:39](../src/ServiceConnect.Client.RabbitMQ/MessageAuditPublisher.cs#L39)
 - **What:** After handler success, `PublishAuditIfEnabledAsync` runs before ack. If audit publish throws, `processed` stays false, the original message is nacked with `requeue:true`, and the already-committed handler runs again.
 - **Fix:** Swallow/log audit errors after successful handling; never fail delivery on an audit side-effect.

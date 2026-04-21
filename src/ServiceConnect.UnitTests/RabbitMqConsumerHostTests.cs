@@ -809,6 +809,57 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task EventAsync_WhenAuditPublishThrows_MessageIsAcked_AndHandlerNotRedelivered()
+    {
+        // C4: after the handler succeeds, an audit-publish failure must not fail delivery —
+        // audit is observability, not part of the business transaction. The original message
+        // must be ack'd and the handler must not run a second time.
+        var (conn, channel, publishChannel) = MockConnection();
+        var qcfg = MakeQueueCfg();
+        qcfg.SetupGet(c => c.AuditingEnabled).Returns(true);
+
+        publishChannel.Setup(c => c.BasicPublishAsync(
+                "audit",
+                string.Empty,
+                false,
+                It.IsAny<BasicProperties>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("simulated audit publish failure"));
+
+        var handlerInvocations = 0;
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            qcfg.Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(qcfg.Object),
+            NullLogger.Instance);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) =>
+            {
+                Interlocked.Increment(ref handlerInvocations);
+                return Task.FromResult(new ConsumeEventResult { Success = true });
+            },
+            "q");
+
+        await DeliverMessageAsync(
+            host,
+            new byte[1],
+            new Dictionary<string, object>
+            {
+                [HeaderKeys.TypeName] = "SomeType",
+                [HeaderKeys.MessageType] = "SomeMessage"
+            });
+
+        Assert.Equal(1, handlerInvocations);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // Inbound message-size enforcement.
 
     private static Mock<ITransportConfiguration> MakeTransportCfgWithMaxSize(long maxSize)

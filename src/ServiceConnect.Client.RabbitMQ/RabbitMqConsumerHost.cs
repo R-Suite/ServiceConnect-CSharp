@@ -342,7 +342,19 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             if (Volatile.Read(ref _shutdownTimedOut) != 0)
                 return false;
 
-            await _auditPublisher.PublishAuditIfEnabledAsync(publishChannel, args, headers, GetShutdownPublishToken()).ConfigureAwait(false);
+            // Audit publish failures must not fail message delivery — audit is an
+            // observability side-effect, not part of the business transaction. A
+            // throw here would bubble out of ProcessMessageAsync, leave `processed`
+            // false in the caller (EventAsync), and the already-handled message would
+            // be nacked with requeue:true → duplicate handler invocation.
+            try
+            {
+                await _auditPublisher.PublishAuditIfEnabledAsync(publishChannel, args, headers, GetShutdownPublishToken()).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to publish audit message for delivery {DeliveryTag}; continuing to ack the original message", args.DeliveryTag);
+            }
         }
 
         return Volatile.Read(ref _shutdownTimedOut) == 0;
