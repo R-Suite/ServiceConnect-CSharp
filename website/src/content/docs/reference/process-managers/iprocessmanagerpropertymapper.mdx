@@ -50,7 +50,7 @@ Adds a mapping between a process-manager property and a message property. The fr
 public sealed class ShippingSaga :
     IProcessHandler<ShippingSagaData, OrderPlaced>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(OrderPlaced message, ShippingSagaData data)
     {

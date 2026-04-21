@@ -6,7 +6,7 @@ namespace ServiceConnect.Examples.RoutingSlip.InventoryStep;
 
 public sealed class RoutingSlipOrderHandler : IMessageHandler<RoutingSlipOrder>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(RoutingSlipOrder message)
     {

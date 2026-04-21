@@ -275,7 +275,7 @@ file class TestHpMsg : Message
 file class TestHpHandler : IMessageHandler<TestHpMsg>
 {
     public bool Invoked { get; private set; }
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     // Capture context state during handler execution — Context is released afterwards
     // and raw property access would throw the escape-guard InvalidOperationException.
     public IBus? ObservedBus { get; private set; }
@@ -297,7 +297,7 @@ file class TestHpHandler : IMessageHandler<TestHpMsg>
 
 file sealed class TimeoutRequestingHandler(IBus bus) : IMessageHandler<TestHpMsg>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(TestHpMsg message)
         => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));

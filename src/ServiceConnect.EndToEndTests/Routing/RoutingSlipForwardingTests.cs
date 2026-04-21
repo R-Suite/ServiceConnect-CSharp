@@ -134,7 +134,7 @@ public class RoutingSlipForwardingTests
 file class Step1Handler : IMessageHandler<StepMessage>
 {
     private readonly Action _onHandled;
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Step1Handler(Action onHandled) => _onHandled = onHandled;
 
@@ -149,7 +149,7 @@ file class Step1Handler : IMessageHandler<StepMessage>
 file class Step2Handler : IMessageHandler<StepMessage>
 {
     private readonly Action<string> _onHandled;
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Step2Handler(Action<string> onHandled) => _onHandled = onHandled;
 

@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 8/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 20/20 · Medium 9/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -233,7 +233,7 @@ Severity bands:
 - **What:** `Send()` starts the activity with operation `"publish"` and display name `"<endpoint> publish"`. OTel messaging semconv distinguishes `publish` (pub/sub) from `send` (point-to-point); backend dashboards mis-aggregate.
 - **Fix:** `publish` for `PublishAsync`; `send` for `SendAsync`.
 
-### [ ] M8. `IMessageHandler<T>.Context` typed nullable despite documented non-null
+### [x] M8. `IMessageHandler<T>.Context` typed nullable despite documented non-null
 - **File:** [IMessageHandler.cs:15](../src/ServiceConnect.Interfaces/Handlers/IMessageHandler.cs#L15), [IProcessHandler.cs:18](../src/ServiceConnect.Interfaces/ProcessManagers/IProcessHandler.cs#L18)
 - **What:** `IConsumeContext? Context { get; set; }` nullable in both interfaces with no framework null-guard before `HandleAsync` is invoked. NRT-aware handlers must sprinkle `!`.
 - **Fix:** Commit to non-nullable (with `= null!;` initialiser) or throw in the dispatcher if `Context` is null after `SetContext`.

@@ -109,7 +109,7 @@ file class ConsumerCountHandler : IMessageHandler<TestMessage>
 {
     private readonly ConsumerCountHandlerState _state;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public ConsumerCountHandler(ConsumerCountHandlerState state)
     {

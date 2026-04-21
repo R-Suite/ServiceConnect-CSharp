@@ -6,7 +6,7 @@ namespace ServiceConnect.Examples.CompetingConsumers.WorkerB;
 
 public sealed class JobQueuedHandler : IMessageHandler<JobQueued>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(JobQueued message)
     {

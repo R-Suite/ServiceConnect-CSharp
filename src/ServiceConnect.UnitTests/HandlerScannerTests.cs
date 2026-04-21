@@ -17,13 +17,13 @@ namespace ServiceConnect.UnitTests
 
     public class TestScannerHandler : IMessageHandler<TestScannerMessage>
     {
-        public IConsumeContext? Context { get; set; }
+        public IConsumeContext Context { get; set; } = null!;
         public Task HandleAsync(TestScannerMessage message) => Task.CompletedTask;
     }
 
     public abstract class AbstractTestHandler : IMessageHandler<TestScannerMessage>
     {
-        public IConsumeContext? Context { get; set; }
+        public IConsumeContext Context { get; set; } = null!;
         public abstract Task HandleAsync(TestScannerMessage message);
     }
 

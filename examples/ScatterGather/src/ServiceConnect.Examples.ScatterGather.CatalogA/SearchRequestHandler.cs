@@ -6,7 +6,7 @@ namespace ServiceConnect.Examples.ScatterGather.CatalogA;
 
 public sealed class SearchRequestHandler : IMessageHandler<SearchRequest>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(SearchRequest message)
     {

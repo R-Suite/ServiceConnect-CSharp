@@ -126,7 +126,7 @@ public class MiddlewarePipelineE2ETests
 
 file sealed class NoOpMessageHandler : IMessageHandler<TestMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(TestMessage message) => Task.CompletedTask;
 }

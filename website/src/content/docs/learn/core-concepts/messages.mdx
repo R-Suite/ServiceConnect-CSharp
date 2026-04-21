@@ -100,7 +100,7 @@ When you produce a message **in response to** another, pass the incoming correla
 ```csharp
 public sealed class PlaceOrderHandler(IBus bus) : IMessageHandler<PlaceOrder>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(PlaceOrder message)
     {

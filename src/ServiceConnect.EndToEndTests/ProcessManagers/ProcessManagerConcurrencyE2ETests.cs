@@ -133,7 +133,7 @@ file class ConcurrentIncrementHandler : IProcessHandler<ConcurrentCounterData, T
         _gate = gate;
     }
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(TestMessage message, ConcurrentCounterData data)
     {

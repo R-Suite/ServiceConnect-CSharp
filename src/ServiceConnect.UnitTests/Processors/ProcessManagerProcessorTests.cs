@@ -349,7 +349,7 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
 {
     public bool Invoked { get; private set; }
     public int InvokeCount { get; private set; }
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
@@ -364,7 +364,7 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
 
 file class PmThrowingHandler : IProcessHandler<PmTestData, PmTestMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
@@ -385,7 +385,7 @@ file class PmMutableData : IProcessManagerData
 
 file class PmMutatingThrowingHandler : IProcessHandler<PmMutableData, PmMutableMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
         => mapper.ConfigureMapping<PmMutableData, PmMutableMessage>(d => d.CorrelationId, m => m.CorrelationId);
@@ -399,7 +399,7 @@ file class PmMutatingThrowingHandler : IProcessHandler<PmMutableData, PmMutableM
 
 file sealed class PmTimeoutRequestingHandler(IBus bus) : IProcessHandler<PmTestData, PmTestMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 

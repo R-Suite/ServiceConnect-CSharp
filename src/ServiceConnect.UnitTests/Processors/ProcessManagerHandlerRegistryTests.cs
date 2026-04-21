@@ -235,7 +235,7 @@ file class FooPersistenceData : IPersistenceData<FooData>
 
 file class FooHandler : IProcessHandler<FooData, FooMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public FooMessage? ReceivedMessage { get; private set; }
     public FooData? ReceivedData { get; private set; }
 
@@ -249,13 +249,13 @@ file class FooHandler : IProcessHandler<FooData, FooMessage>
 
 file class SecondFooHandler : IProcessHandler<FooData, FooMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public Task HandleAsync(FooMessage message, FooData data) => Task.CompletedTask;
 }
 
 file class PlainFooHandler : IMessageHandler<FooMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public Task HandleAsync(FooMessage message) => Task.CompletedTask;
 }
 

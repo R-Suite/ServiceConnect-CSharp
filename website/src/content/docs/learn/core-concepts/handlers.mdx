@@ -12,7 +12,7 @@ Handlers are the simplest unit of work in a ServiceConnect application — and t
 ```csharp
 public interface IMessageHandler<in TMessage> where TMessage : Message
 {
-    IConsumeContext? Context { get; set; }
+    IConsumeContext Context { get; set; }
     Task HandleAsync(TMessage message);
 }
 ```
@@ -24,7 +24,7 @@ using ServiceConnect.Interfaces;
 
 public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(WorkSubmitted message)
     {
@@ -68,7 +68,7 @@ A typical request/reply handler:
 ```csharp
 public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(QuoteRequest message)
     {
@@ -154,7 +154,7 @@ If you need shared state across handlers — a cache, a database connection pool
 public sealed class WorkSubmittedHandler(IWorkItemStore store, ILogger<WorkSubmittedHandler> log)
     : IMessageHandler<WorkSubmitted>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(WorkSubmitted message)
     {

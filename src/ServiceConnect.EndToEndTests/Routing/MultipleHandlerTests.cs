@@ -100,7 +100,7 @@ file class TaggedHandlerA : IMessageHandler<TestMessage>
     private readonly ConcurrentBag<string> _bag;
     private readonly TaskCompletionSource<bool> _tcs;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public TaggedHandlerA(ConcurrentBag<string> bag, TaskCompletionSource<bool> tcs)
     {
@@ -122,7 +122,7 @@ file class TaggedHandlerB : IMessageHandler<TestMessage>
     private readonly ConcurrentBag<string> _bag;
     private readonly TaskCompletionSource<bool> _tcs;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public TaggedHandlerB(ConcurrentBag<string> bag, TaskCompletionSource<bool> tcs)
     {

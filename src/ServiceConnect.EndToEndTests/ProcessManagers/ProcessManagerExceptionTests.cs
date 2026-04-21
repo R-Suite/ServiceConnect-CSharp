@@ -118,7 +118,7 @@ public class ProcessManagerExceptionTests
 
 file class ThrowingProcessHandler : IProcessHandler<TestProcessData, TestMessage>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(TestMessage message, TestProcessData data)
     {

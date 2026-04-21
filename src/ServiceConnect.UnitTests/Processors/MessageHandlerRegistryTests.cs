@@ -136,20 +136,20 @@ file class MhrBarData : IProcessManagerData { public Guid CorrelationId { get; s
 
 file class MhrFooHandler : IMessageHandler<MhrFooMsg>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public MhrFooMsg? Received { get; private set; }
     public Task HandleAsync(MhrFooMsg message) { Received = message; return Task.CompletedTask; }
 }
 
 file class MhrSecondFooHandler : IMessageHandler<MhrFooMsg>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public Task HandleAsync(MhrFooMsg message) => Task.CompletedTask;
 }
 
 file class MhrProcessHandler : IProcessHandler<MhrBarData, MhrFooMsg>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public Task HandleAsync(MhrFooMsg message, MhrBarData data) => Task.CompletedTask;
 }
 

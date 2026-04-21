@@ -13,9 +13,11 @@ public interface IProcessHandler<TData, TMessage>
 {
     /// <summary>
     /// The per-message consume context (bus handle, correlation id, reply helper).
-    /// Populated by the dispatch pipeline before <see cref="HandleAsync"/> is called.
+    /// Populated by the dispatch pipeline before <see cref="HandleAsync"/> is called,
+    /// so implementations may treat it as non-null. Initialise with
+    /// <c>= null!;</c> to satisfy the nullable-reference-type analyser.
     /// </summary>
-    IConsumeContext? Context { get; set; }
+    IConsumeContext Context { get; set; }
 
     /// <summary>
     /// Invoked with the deserialized message and the correlated persisted state.

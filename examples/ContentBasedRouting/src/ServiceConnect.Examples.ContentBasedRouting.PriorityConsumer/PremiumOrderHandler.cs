@@ -6,7 +6,7 @@ namespace ServiceConnect.Examples.ContentBasedRouting.PriorityConsumer;
 
 public sealed class PremiumOrderHandler : IMessageHandler<PremiumOrderPlaced>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(PremiumOrderPlaced message)
     {

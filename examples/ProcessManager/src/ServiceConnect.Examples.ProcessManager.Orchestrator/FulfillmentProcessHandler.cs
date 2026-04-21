@@ -16,7 +16,7 @@ public sealed class FulfillmentProcessHandler :
 
     public FulfillmentProcessHandler(WorkflowQueues queues) => _queues = queues;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(OrderSubmitted message, FulfillmentState data)
     {

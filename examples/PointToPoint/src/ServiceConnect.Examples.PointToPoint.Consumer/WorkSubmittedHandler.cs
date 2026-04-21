@@ -6,7 +6,7 @@ namespace ServiceConnect.Examples.PointToPoint.Consumer;
 
 public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(WorkSubmitted message)
     {

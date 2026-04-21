@@ -6,7 +6,7 @@ namespace ServiceConnect.Examples.PublishSubscribe.BillingSubscriber;
 
 public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(OrderPlaced message)
     {

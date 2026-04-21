@@ -6,7 +6,7 @@ namespace ServiceConnect.Examples.RequestReply.Responder;
 
 public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(QuoteRequest message)
     {

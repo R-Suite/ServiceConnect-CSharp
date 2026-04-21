@@ -17,7 +17,7 @@ namespace ServiceConnect.UnitTests;
 
 file class TestDispatchHandler : IMessageHandler<FakeMessage1>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     private readonly Action<FakeMessage1>? _onHandle;
     private readonly Action<IConsumeContext?>? _onContextSet;
@@ -770,7 +770,7 @@ file class PolyDerivedMessage : PolyBaseMessage
 file class PolyBaseHandler : IMessageHandler<PolyBaseMessage>
 {
     public bool Invoked { get; private set; }
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public Task HandleAsync(PolyBaseMessage message) { Invoked = true; return Task.CompletedTask; }
 }
 

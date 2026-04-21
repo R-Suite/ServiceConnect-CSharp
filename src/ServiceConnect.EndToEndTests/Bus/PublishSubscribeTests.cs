@@ -11,7 +11,7 @@ public class CallbackHandler<T> : IMessageHandler<T> where T : Message
 {
     private readonly Action<T> _callback;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public CallbackHandler(Action<T> callback) => _callback = callback;
 

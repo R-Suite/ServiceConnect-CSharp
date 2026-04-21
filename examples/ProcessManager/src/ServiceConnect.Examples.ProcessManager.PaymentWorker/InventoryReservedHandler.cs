@@ -9,7 +9,7 @@ public sealed record WorkflowQueue(string Name);
 
 public sealed class InventoryReservedHandler(WorkflowQueue workflowQueue) : IMessageHandler<InventoryReserved>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(InventoryReserved message)
     {

@@ -109,7 +109,7 @@ file class CounterProcessHandler : IProcessHandler<TestProcessData, TestMessage>
     public CounterProcessHandler(TaskCompletionSource<bool> secondHandled) =>
         _secondHandled = secondHandled;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(TestMessage message, TestProcessData data)
     {

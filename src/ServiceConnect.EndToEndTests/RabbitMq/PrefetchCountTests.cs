@@ -113,7 +113,7 @@ file class SlowHandler : IMessageHandler<TestMessage>
 {
     private readonly SlowHandlerState _state;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public SlowHandler(SlowHandlerState state)
     {

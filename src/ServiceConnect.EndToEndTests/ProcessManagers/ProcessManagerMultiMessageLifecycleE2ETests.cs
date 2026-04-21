@@ -139,7 +139,7 @@ file class LifecycleProcessHandler :
 
     public LifecycleProcessHandler(TaskCompletionSource<bool> finished) => _finished = finished;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(ProcessStartedMessage message, LifecycleProcessData data)
     {

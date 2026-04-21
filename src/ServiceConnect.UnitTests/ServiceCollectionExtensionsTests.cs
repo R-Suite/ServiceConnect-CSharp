@@ -329,7 +329,7 @@ public sealed class H5Msg : Message
 
 public sealed class H5Handler : IMessageHandler<H5Msg>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
     public Task HandleAsync(H5Msg message) => Task.CompletedTask;
 }
 

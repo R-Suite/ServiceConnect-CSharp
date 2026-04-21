@@ -22,7 +22,7 @@ public interface IMessageHandler<in TMessage> where TMessage : Message
 ### `Context`
 
 ```csharp
-IConsumeContext? Context { get; set; }
+IConsumeContext Context { get; set; }
 ```
 
 Gets or sets the per-message consume context (bus handle, correlation id, reply helper). The dispatch pipeline assigns this property before `HandleAsync` runs, so your handler can read it without additional plumbing.
@@ -55,7 +55,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 
     public OrderPlacedHandler(IOrderRepository orders) => _orders = orders;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(OrderPlaced message)
     {
@@ -95,7 +95,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
         _payments = payments;
     }
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(OrderPlaced message)
     {

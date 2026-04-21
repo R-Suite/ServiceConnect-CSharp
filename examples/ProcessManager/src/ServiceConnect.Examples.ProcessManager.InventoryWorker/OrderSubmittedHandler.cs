@@ -9,7 +9,7 @@ public sealed record WorkflowQueue(string Name);
 
 public sealed class OrderSubmittedHandler(WorkflowQueue workflowQueue) : IMessageHandler<OrderSubmitted>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(OrderSubmitted message)
     {

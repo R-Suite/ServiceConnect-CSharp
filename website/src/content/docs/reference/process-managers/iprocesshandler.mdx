@@ -26,7 +26,7 @@ The `new()` constraint lets the framework construct a fresh state object the fir
 ### `Context`
 
 ```csharp
-IConsumeContext? Context { get; set; }
+IConsumeContext Context { get; set; }
 ```
 
 Gets or sets the per-message consume context (bus handle, correlation id, reply helper). The dispatch pipeline assigns this property before `HandleAsync` runs, so the handler can read it without additional plumbing.
@@ -79,7 +79,7 @@ public sealed class ShippingSaga :
 
     public ShippingSaga(IBus bus) => _bus = bus;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(OrderPlaced message, ShippingSagaData data)
     {

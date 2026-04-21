@@ -192,7 +192,7 @@ file class HeaderCaptureHandler : IMessageHandler<TestMessage>
 {
     private readonly Action<IReadOnlyDictionary<string, object>> _callback;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public HeaderCaptureHandler(Action<IReadOnlyDictionary<string, object>> callback) => _callback = callback;
 
@@ -205,7 +205,7 @@ file class HeaderCaptureHandler : IMessageHandler<TestMessage>
 
 file class HeaderEchoReplyHandler : IMessageHandler<TestRequest>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(TestRequest message)
     {

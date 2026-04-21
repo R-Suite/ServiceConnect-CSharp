@@ -158,7 +158,7 @@ public class PublishRequestAsyncTests
 
 file class PubReqReplyHandler : IMessageHandler<TestRequest>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(TestRequest message)
     {

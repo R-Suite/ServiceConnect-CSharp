@@ -40,7 +40,7 @@ Two subscribers, one per type. A priority consumer:
 ```csharp
 public sealed class PremiumOrderHandler : IMessageHandler<PremiumOrderPlaced>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(PremiumOrderPlaced message)
     {
@@ -69,7 +69,7 @@ In that case, keep one message type and branch inside the handler:
 ```csharp
 public sealed class OrderRoutingHandler(IWorkQueues queues) : IMessageHandler<OrderPlaced>
 {
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(OrderPlaced message)
     {

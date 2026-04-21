@@ -163,7 +163,7 @@ file class ScatterReplyHandler : IMessageHandler<TestRequest>
 
     public ScatterReplyHandler(string prefix) => _prefix = prefix;
 
-    public IConsumeContext? Context { get; set; }
+    public IConsumeContext Context { get; set; } = null!;
 
     public async Task HandleAsync(TestRequest message)
     {
