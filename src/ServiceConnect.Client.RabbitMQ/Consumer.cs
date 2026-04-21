@@ -78,7 +78,7 @@ public sealed class Consumer : IConsumer
         IChannel? setupChannel = null;
         try
         {
-            setupChannel = await _connection.CreateChannelAsync();
+            setupChannel = await _connection.CreateChannelAsync(cancellationToken);
             _model = setupChannel;
 
             // Mark as initial setup for re-throwing on first topology setup.

@@ -20,16 +20,16 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private readonly TimeSpan _heartbeatTime = transportSettings.ClientSettings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var hbTime) ? new TimeSpan(0, 0, (int)hbTime) : new TimeSpan(0, 0, 120);
     private readonly string[] _hosts = transportSettings.Host.Split(',');
 
-    private async Task ConnectAsync()
+    private async Task ConnectAsync(CancellationToken cancellationToken)
     {
         if (Volatile.Read(ref _connection) != null) return;
 
-        await _connectionLock.WaitAsync().ConfigureAwait(false);
+        await _connectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (Volatile.Read(ref _connection) == null)
-                await CreateConnectionCoreAsync().ConfigureAwait(false);
+                await CreateConnectionCoreAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -37,11 +37,11 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         }
     }
 
-    private async Task CreateConnectionCoreAsync()
+    private async Task CreateConnectionCoreAsync(CancellationToken cancellationToken)
     {
         logger.LogDebug("Creating connection to queue {QueueName}", queueName);
         var connectionFactory = BuildConnectionFactory();
-        _connection = await connectionFactory.CreateConnectionAsync(_hosts, queueName).ConfigureAwait(false);
+        _connection = await connectionFactory.CreateConnectionAsync(_hosts, queueName, cancellationToken).ConfigureAwait(false);
     }
 
     private ConnectionFactory BuildConnectionFactory() =>
@@ -62,26 +62,28 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// Creates a RabbitMQ channel, establishing the connection first if needed.
     /// </summary>
     /// <returns>A newly created channel.</returns>
-    public Task<IChannel> CreateChannelAsync() => CreateChannelAsync(options: null);
+    public Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
+        => CreateChannelAsync(options: null, cancellationToken);
 
     /// <summary>
     /// Creates a RabbitMQ channel with the supplied options, establishing the connection first if needed.
     /// </summary>
     /// <param name="options">Channel options applied to the underlying RabbitMQ channel, or <see langword="null"/> for defaults.</param>
+    /// <param name="cancellationToken">A token used to cancel connection-establishment and channel-open operations.</param>
     /// <returns>A newly created channel.</returns>
-    public async Task<IChannel> CreateChannelAsync(CreateChannelOptions? options)
+    public async Task<IChannel> CreateChannelAsync(CreateChannelOptions? options, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var conn = Volatile.Read(ref _connection);
         if (conn == null)
         {
-            await ConnectAsync().ConfigureAwait(false);
+            await ConnectAsync(cancellationToken).ConfigureAwait(false);
             conn = Volatile.Read(ref _connection)
                 ?? throw new InvalidOperationException("Connection was not initialized.");
         }
 
-        return await conn.CreateChannelAsync(options).ConfigureAwait(false);
+        return await conn.CreateChannelAsync(options, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

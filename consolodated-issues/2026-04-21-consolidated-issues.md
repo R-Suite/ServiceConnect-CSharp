@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 8/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 9/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -134,7 +134,7 @@ Severity bands:
 - **What:** `SendAsync(string endPoint, ...)` validates `IsNullOrWhiteSpace(endPoint)` at line 296, but `SendBytesAsync` has no such check — blank endpoints publish to the default exchange with `mandatory:false` and are silently dropped.
 - **Fix:** Same validation as `SendAsync`.
 
-### [ ] H9. Consumer startup cancellation doesn't flow into channel/connection create
+### [x] H9. Consumer startup cancellation doesn't flow into channel/connection create
 - **File:** [Consumer.cs:81,155-158](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs), [Connection.cs:65-77](../src/ServiceConnect.Client.RabbitMQ/Connection.cs#L65-L77)
 - **What:** `IServiceConnectConnection.CreateChannelAsync()` takes no `CancellationToken`; `StartConsumingAsync(CancellationToken)` passes no token. Broker/DNS/TCP stalls block the caller past the cancellation deadline.
 - **Fix:** Plumb the token through.

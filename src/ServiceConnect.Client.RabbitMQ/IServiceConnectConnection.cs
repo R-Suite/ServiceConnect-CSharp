@@ -10,16 +10,18 @@ public interface IServiceConnectConnection : IAsyncDisposable
     /// <summary>
     /// Creates a new channel on the underlying RabbitMQ connection.
     /// </summary>
+    /// <param name="cancellationToken">A token used to cancel connection-establishment and channel-open operations.</param>
     /// <returns>A channel that can be used for RabbitMQ operations.</returns>
-    Task<IChannel> CreateChannelAsync();
+    Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Creates a new channel on the underlying RabbitMQ connection with the specified options
     /// (for example, to enable publisher confirms).
     /// </summary>
     /// <param name="options">Channel options applied to the underlying RabbitMQ channel, or <see langword="null"/> for defaults.</param>
+    /// <param name="cancellationToken">A token used to cancel connection-establishment and channel-open operations.</param>
     /// <returns>A channel that can be used for RabbitMQ operations.</returns>
-    Task<IChannel> CreateChannelAsync(CreateChannelOptions? options);
+    Task<IChannel> CreateChannelAsync(CreateChannelOptions? options, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Determines whether the underlying RabbitMQ connection is currently open.

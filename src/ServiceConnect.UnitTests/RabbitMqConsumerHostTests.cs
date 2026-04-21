@@ -55,8 +55,8 @@ public class RabbitMqConsumerHostTests
         var conn = new Mock<IServiceConnectConnection>();
         // Consumer channel is opened via the parameterless overload; the helper publish
         // channel is opened via the options overload so it can enable publisher confirms.
-        conn.Setup(c => c.CreateChannelAsync()).ReturnsAsync(consumerChannel.Object);
-        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>())).ReturnsAsync(publishChannel.Object);
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CancellationToken>())).ReturnsAsync(consumerChannel.Object);
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>())).ReturnsAsync(publishChannel.Object);
         return (conn, consumerChannel, publishChannel);
     }
 
@@ -151,12 +151,45 @@ public class RabbitMqConsumerHostTests
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
-        conn.Verify(c => c.CreateChannelAsync(It.Is<CreateChannelOptions?>(o =>
-                o != null
-                && o.PublisherConfirmationsEnabled
-                && o.PublisherConfirmationTrackingEnabled)),
+        conn.Verify(c => c.CreateChannelAsync(
+                It.Is<CreateChannelOptions?>(o =>
+                    o != null
+                    && o.PublisherConfirmationsEnabled
+                    && o.PublisherConfirmationTrackingEnabled),
+                It.IsAny<CancellationToken>()),
             Times.Once);
-        conn.Verify(c => c.CreateChannelAsync(), Times.Once);
+        conn.Verify(c => c.CreateChannelAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_CancellationToken_FlowsToConnectionCreateChannel()
+    {
+        // Broker/DNS/TCP stalls during channel open must honor the startup CT —
+        // a cancelled StartConsumingAsync must not block on connection setup.
+        CancellationToken consumerToken = default;
+        CancellationToken publishToken = default;
+        var consumerChannel = CreateMockChannel();
+        var publishChannel = CreateMockChannel();
+        var conn = new Mock<IServiceConnectConnection>();
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CancellationToken>()))
+            .Callback<CancellationToken>(ct => consumerToken = ct)
+            .ReturnsAsync(consumerChannel.Object);
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .Callback<CreateChannelOptions?, CancellationToken>((_, ct) => publishToken = ct)
+            .ReturnsAsync(publishChannel.Object);
+
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+
+        using var cts = new CancellationTokenSource();
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q", cancellationToken: cts.Token);
+
+        Assert.Equal(cts.Token, consumerToken);
+        Assert.Equal(cts.Token, publishToken);
     }
 
     [Fact]
