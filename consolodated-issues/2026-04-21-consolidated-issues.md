@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 4/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
+**Progress:** Critical 12/12 · High 5/20 · Medium 1/23 · Low 0/7  (updated 2026-04-21)
 
 # Consolidated `src` Issues (final)
 
@@ -114,7 +114,7 @@ Severity bands:
 - **What:** `FilterPipeline` registered as singleton; `ExecuteFiltersAsync` calls `serviceProvider.GetRequiredService(filterType)` against the root-captured provider. Scoped filters or filters depending on scoped services silently behave as root-scoped. No startup guard.
 - **Fix:** Scope-aware resolution + startup validation.
 
-### [ ] H5. Handler double-registration on pre-existing transient/scoped handlers
+### [x] H5. Handler double-registration on pre-existing transient/scoped handlers
 - **File:** [ServiceCollectionExtensions.cs:208-231](../src/ServiceConnect/ServiceCollectionExtensions.cs#L208-L231), [HandlerProcessor.cs:39-44](../src/ServiceConnect/Services/Processors/HandlerProcessor.cs#L39-L44)
 - **What:** `RegisterHandlerType` guards only against existing singleton registrations. If the app pre-registered the handler transient or scoped, `AddTransient` adds a second registration and `HandlerProcessor.GetServices(...)` resolves + invokes both — one message handled twice.
 - **Fix:** Skip if *any* registration exists for the closed handler interface, or use `TryAddEnumerable` with descriptor equality.

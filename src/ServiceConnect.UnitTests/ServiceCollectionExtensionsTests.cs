@@ -227,6 +227,85 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void RegisterHandlerType_PreRegisteredTransient_DoesNotAddDuplicate()
+    {
+        // If the caller pre-registered the handler transient, auto-registration must
+        // not add a second descriptor — duplicates cause HandlerProcessor to dispatch
+        // the same message twice because GetServices(...) yields both instances.
+        var services = new ServiceCollection();
+        services.AddTransient<IMessageHandler<H5Msg>, H5Handler>();
+
+        InvokeRegisterHandlerType(services, typeof(H5Handler), typeof(H5Msg));
+
+        Assert.Single(services, d => d.ServiceType == typeof(IMessageHandler<H5Msg>));
+    }
+
+    [Fact]
+    public void RegisterHandlerType_PreRegisteredScoped_DoesNotAddDuplicate()
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<IMessageHandler<H5Msg>, H5Handler>();
+
+        InvokeRegisterHandlerType(services, typeof(H5Handler), typeof(H5Msg));
+
+        Assert.Single(services, d => d.ServiceType == typeof(IMessageHandler<H5Msg>));
+    }
+
+    [Fact]
+    public void RegisterHandlerType_NoPreRegistration_AddsAsTransient()
+    {
+        var services = new ServiceCollection();
+
+        InvokeRegisterHandlerType(services, typeof(H5Handler), typeof(H5Msg));
+
+        var descriptor = Assert.Single(services, d => d.ServiceType == typeof(IMessageHandler<H5Msg>));
+        Assert.Equal(ServiceLifetime.Transient, descriptor.Lifetime);
+        Assert.Equal(typeof(H5Handler), descriptor.ImplementationType);
+    }
+
+    [Fact]
+    public void RegisterHandlerType_PreRegisteredAggregator_DoesNotAddDuplicate()
+    {
+        // Aggregators register against the base Aggregator<TMsg> generic — the same
+        // dedup rule applies there.
+        var services = new ServiceCollection();
+        services.AddScoped<Aggregator<H5Msg>, H5Aggregator>();
+
+        InvokeRegisterHandlerType(services, typeof(H5Aggregator), typeof(H5Msg));
+
+        Assert.Single(services, d => d.ServiceType == typeof(Aggregator<H5Msg>));
+    }
+
+    [Fact]
+    public void AddServiceConnect_WithPreRegisteredHandler_ResolvesSingleInstance()
+    {
+        // End-to-end guard: scanning finds H5Handler, caller also pre-registered it —
+        // after AddServiceConnect the container must resolve exactly one instance for
+        // IMessageHandler<H5Msg>, otherwise the dispatcher would invoke the handler twice.
+        var services = CreateServices();
+        services.AddTransient<IMessageHandler<H5Msg>, H5Handler>();
+
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ScanAssemblies(typeof(H5Handler).Assembly));
+
+        using var provider = services.BuildServiceProvider();
+        var handlers = provider.GetServices<IMessageHandler<H5Msg>>().ToList();
+        Assert.Single(handlers);
+        Assert.IsType<H5Handler>(handlers[0]);
+    }
+
+    private static void InvokeRegisterHandlerType(IServiceCollection services, Type handlerType, Type messageType)
+    {
+        var method = typeof(ServiceCollectionExtensions).GetMethod(
+            "RegisterHandlerType",
+            BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var handlerRef = new HandlerReference { MessageType = messageType, HandlerType = handlerType };
+        method!.Invoke(null, new object[] { services, handlerRef });
+    }
+
+    [Fact]
     public void AddServiceConnect_ThrowsWhenSendMiddlewareIsNotSingleton()
     {
         var services = CreateServices();
@@ -241,6 +320,22 @@ public class ServiceCollectionExtensionsTests
         Assert.Contains(nameof(TestSendMiddleware), exception.Message);
         Assert.Contains("singleton", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+}
+
+public sealed class H5Msg : Message
+{
+    public H5Msg() : base(Guid.NewGuid()) { }
+}
+
+public sealed class H5Handler : IMessageHandler<H5Msg>
+{
+    public IConsumeContext? Context { get; set; }
+    public Task HandleAsync(H5Msg message) => Task.CompletedTask;
+}
+
+public sealed class H5Aggregator : Aggregator<H5Msg>
+{
+    public override void Execute(IList<H5Msg> messages) { }
 }
 
 file sealed class TestInboundMiddleware : IMessageProcessingMiddleware

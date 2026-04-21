@@ -253,13 +253,18 @@ public static class ServiceCollectionExtensions
                     + "Remove the singleton registration and let AddServiceConnect register the handler as transient.");
         }
 
+        // TryAddEnumerable dedupes on (ServiceType, ImplementationType) regardless of
+        // lifetime, so a caller who pre-registered the handler as transient or scoped
+        // is honored instead of producing a second descriptor. HandlerProcessor resolves
+        // via GetServices(...), so a duplicate descriptor translates directly into the
+        // same message being dispatched to two separately-constructed handler instances.
         var messageHandlerInterface = handlerType.GetInterfaces()
             .FirstOrDefault(i => i.IsGenericType
                 && i.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
                 && i.GetGenericArguments()[0] == handlerRef.MessageType);
         if (messageHandlerInterface != null)
         {
-            services.AddTransient(messageHandlerInterface, handlerType);
+            services.TryAddEnumerable(ServiceDescriptor.Transient(messageHandlerInterface, handlerType));
             return;
         }
 
@@ -269,7 +274,7 @@ public static class ServiceCollectionExtensions
                 && i.GetGenericArguments()[1] == handlerRef.MessageType);
         if (processHandlerInterface != null)
         {
-            services.AddTransient(processHandlerInterface, handlerType);
+            services.TryAddEnumerable(ServiceDescriptor.Transient(processHandlerInterface, handlerType));
             return;
         }
 
@@ -279,14 +284,14 @@ public static class ServiceCollectionExtensions
                 && i.GetGenericArguments()[0] == handlerRef.MessageType);
         if (streamHandlerInterface != null)
         {
-            services.AddTransient(streamHandlerInterface, handlerType);
+            services.TryAddEnumerable(ServiceDescriptor.Transient(streamHandlerInterface, handlerType));
             return;
         }
 
         if (handlerType.BaseType is { IsGenericType: true } baseType
             && baseType.GetGenericTypeDefinition() == typeof(Aggregator<>))
         {
-            services.AddTransient(baseType, handlerType);
+            services.TryAddEnumerable(ServiceDescriptor.Transient(baseType, handlerType));
         }
     }
 }
