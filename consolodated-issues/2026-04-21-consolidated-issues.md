@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 22/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -308,7 +308,7 @@ Severity bands:
 - **What:** `Remove` invokes `KeyRemoved` even when `TryRemove` returns false. `Clear` and `PurgeNormalPriorities` remove entries without invoking the event at all. Inconsistent semantics for subscribers.
 - **Fix:** Fire only on actual removal; fire consistently across all paths.
 
-### [ ] M23. Prefetch value cast assumes boxed `int`
+### [x] M23. Prefetch value cast assumes boxed `int`
 - **File:** [RabbitMqConsumerHost.cs:77-79](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L77-L79)
 - **What:** `Convert.ToUInt16((int)prefetchVal)` — direct `(int)` unbox cast. Boxed `long`, `ushort`, `string` etc. throw `InvalidCastException`.
 - **Fix:** `Convert.ToUInt16(prefetchVal)` (which handles any numeric/string), or gate by type.

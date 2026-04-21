@@ -116,6 +116,37 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicQosAsync(0, 7, false, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Theory]
+    [InlineData((ushort)5, (ushort)5)]
+    [InlineData((long)7L, (ushort)7)]
+    [InlineData("9", (ushort)9)]
+    public async Task StartConsumingAsync_AcceptsNonIntPrefetchSettingOverride(object settingValue, ushort expected)
+    {
+        // M23 regression: the prefetch override previously cast to (int) before
+        // Convert.ToUInt16, which threw InvalidCastException for boxed long / ushort /
+        // string settings coming from configuration providers.
+        var (conn, channel, _) = MockConnection();
+        var tcfg = new Mock<ITransportConfiguration>();
+        tcfg.SetupGet(c => c.MaxRetries).Returns(3);
+        tcfg.SetupGet(c => c.PrefetchCount).Returns((ushort)1);
+        tcfg.SetupProperty(c => c.GracefulShutdownTimeoutMilliseconds, 5000);
+        var settings = new Dictionary<string, object>
+        {
+            [RabbitMQSettingKeys.PrefetchCount] = settingValue
+        };
+        tcfg.SetupGet(c => c.ClientSettings).Returns(settings);
+
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        channel.Verify(c => c.BasicQosAsync(0, expected, false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task StartConsumingAsync_SkipsBasicQos_WhenPrefetchDisabled()
     {

@@ -86,7 +86,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _errorsDisabled = queueConfiguration.DisableErrors;
         _autoDelete = settings.TryGetValue(RabbitMQSettingKeys.AutoDelete, out var autoDeleteVal) && (bool)autoDeleteVal;
         _prefetchCount = settings.TryGetValue(RabbitMQSettingKeys.PrefetchCount, out var prefetchVal)
-            ? Convert.ToUInt16((int)prefetchVal)
+            ? Convert.ToUInt16(prefetchVal)
             : transportConfiguration.PrefetchCount;
         _disablePrefetch = settings.TryGetValue(RabbitMQSettingKeys.DisablePrefetch, out var disablePrefetchVal) && (bool)disablePrefetchVal;
         _queueArguments = settings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal)
