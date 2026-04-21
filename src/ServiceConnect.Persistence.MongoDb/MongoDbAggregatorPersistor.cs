@@ -16,6 +16,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     private readonly IMongoCollection<AggregatorDocument> _collection;
     private readonly ILogger<MongoDbAggregatorPersistor> _logger;
     private readonly IMessageTypeRegistry _typeRegistry;
+    private readonly TimeProvider _timeProvider;
     private volatile bool _indexesEnsured;
 
     /// <summary>
@@ -25,8 +26,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// <param name="options">The persistence options used to select the database.</param>
     /// <param name="logger">The logger used for unresolved message types.</param>
     /// <param name="typeRegistry">The registry used to resolve stored message types.</param>
-    public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
-        : this(mongoClient, options, "Aggregator", logger, typeRegistry)
+    /// <param name="timeProvider">Time source used to stamp aggregator inserts.</param>
+    public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry, TimeProvider? timeProvider = null)
+        : this(mongoClient, options, "Aggregator", logger, typeRegistry, timeProvider)
     {
     }
 
@@ -38,11 +40,13 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// <param name="collectionName">The collection that stores aggregator records.</param>
     /// <param name="logger">The logger used for unresolved message types.</param>
     /// <param name="typeRegistry">The registry used to resolve stored message types.</param>
-    public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry)
+    /// <param name="timeProvider">Time source used to stamp aggregator inserts.</param>
+    public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
         try
         {
@@ -73,7 +77,8 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 // Store FullName rather than AssemblyQualifiedName so an assembly-version
                 // bump between store and read doesn't invalidate the lookup.
                 DataTypeName = dataType.FullName!,
-                Version = 1
+                Version = 1,
+                InsertedAtTicks = _timeProvider.GetUtcNow().UtcTicks,
             }, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
@@ -97,7 +102,14 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         {
             await EnsureIndexesAsync().ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
-            var docs = await _collection.Find(filter).ToListAsync(cancellationToken).ConfigureAwait(false);
+            // Sort by InsertedAtTicks (insertion-order) with Id as a stable
+            // tie-break — without an explicit sort MongoDB returns documents
+            // in cursor order, which is not guaranteed to match insertion
+            // order (and differs between wire protocol versions).
+            var sort = Builders<AggregatorDocument>.Sort
+                .Ascending(x => x.InsertedAtTicks)
+                .Ascending(x => x.Id);
+            var docs = await _collection.Find(filter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false);
 
             var messages = new List<object>(docs.Count);
             var ids = new List<Guid>(docs.Count);
@@ -238,5 +250,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         public BsonDocument DataBson { get; set; } = default!;
         public string DataTypeName { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        // Stored as ticks so the field is comparable without Mongo-side
+        // date handling and so legacy documents (missing the field) deserialize
+        // to 0 rather than throw — 0 sorts first, preserving sensible order.
+        public long InsertedAtTicks { get; set; }
     }
 }

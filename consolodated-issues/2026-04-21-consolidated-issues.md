@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 16/23 · Low 0/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 17/23 · Low 0/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -278,7 +278,7 @@ Severity bands:
 - **What:** The `Id` index is created without `Unique = true`.
 - **Fix:** Make it unique.
 
-### [ ] M17. Mongo aggregator snapshots returned in non-deterministic order
+### [x] M17. Mongo aggregator snapshots returned in non-deterministic order
 - **File:** [MongoDbAggregatorPersistor.cs:100](../src/ServiceConnect.Persistence.MongoDb/MongoDbAggregatorPersistor.cs#L100)
 - **What:** Snapshot reads use `Find(filter).ToListAsync(cancellationToken)` with no explicit sort before projecting messages — insertion order not guaranteed stable.
 - **Fix:** Sort by a deterministic key (e.g. insertion timestamp / sequence).

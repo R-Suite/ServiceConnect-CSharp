@@ -31,5 +31,6 @@
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
         <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.0.0" />
     </ItemGroup>
 </Project>

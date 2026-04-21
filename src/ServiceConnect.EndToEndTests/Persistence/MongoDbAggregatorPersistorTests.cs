@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.Persistence.MongoDb;
 using ServiceConnect.Services;
@@ -92,5 +93,42 @@ public class MongoDbAggregatorPersistorTests
         var result = await persistor.GetDataAsync("nonexistent");
 
         Assert.Empty(result);
+    }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task GetData_ReturnsMessagesInInsertionOrder()
+    {
+        // M17 regression: snapshots now sort by InsertedAtTicks so the
+        // aggregator handler sees messages in the order they were written,
+        // not whatever order the Mongo cursor returns. We drive a fake
+        // TimeProvider forward between inserts so each row has a distinct
+        // monotonic tick value.
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 4, 22, 9, 0, 0, TimeSpan.Zero));
+        var dbName = _fixture.GetUniqueDatabaseName();
+        var options = new MongoDbPersistenceOptions
+        {
+            ConnectionString = _fixture.MongoDbConnectionString,
+            DatabaseName = dbName,
+        };
+        var client = MongoClientFactory.Create(options);
+        var registry = new MessageTypeRegistry();
+        var persistor = new MongoDbAggregatorPersistor(
+            client, options, "OrderedAggregator",
+            NullLogger<MongoDbAggregatorPersistor>.Instance, registry, time);
+
+        var names = new[] { "first", "second", "third", "fourth", "fifth" };
+        foreach (var name in names)
+        {
+            var item = new { CorrelationId = Guid.NewGuid(), Label = name };
+            registry.Register(item.GetType());
+            await persistor.InsertDataAsync(item, "ordered");
+            time.Advance(TimeSpan.FromMilliseconds(25));
+        }
+
+        var result = await persistor.GetDataAsync("ordered");
+
+        var labels = result.Select(o => (string)o.GetType().GetProperty("Label")!.GetValue(o)!).ToArray();
+        Assert.Equal(names, labels);
     }
 }
