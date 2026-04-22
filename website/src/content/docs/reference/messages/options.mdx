@@ -15,27 +15,27 @@ See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for 
 
 ## `PublishOptions`
 
-Passed to `IBus.PublishAsync`. A mutable `sealed class` with object-initialiser syntax.
+Passed to `IBus.PublishAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. The struct shape matches `SendOptions` so concurrent `PublishAsync` callers cannot share a mutable instance and clobber each other's headers between construction and the async pipeline's read.
 
 ### `Headers`
 
 ```csharp
-public Dictionary<string, string>? Headers { get; set; }
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
 ```
 
-Gets or sets additional headers to attach to the published message.
+Gets additional headers to attach to the published message.
 
-**Remarks.** Default is `null`. Keys and values are both strings; transports serialise them verbatim.
+**Remarks.** Default is `null`. Keys and values are both strings; transports serialise them verbatim. The read-only interface type prevents the framework from iterating a dictionary another thread might be mutating — pass any `Dictionary<string, string>` or `ImmutableDictionary<string, string>` and the caller's own reference retains its concrete type.
 
 ---
 
 ### `RoutingKey`
 
 ```csharp
-public string? RoutingKey { get; set; }
+public string? RoutingKey { get; init; }
 ```
 
-Gets or sets the routing key used by the transport, when applicable.
+Gets the routing key used by the transport, when applicable.
 
 **Remarks.** Default is `null`. Only transports that support routing keys (e.g., RabbitMQ topic exchanges) consult this value; others ignore it.
 
@@ -46,12 +46,12 @@ Passed to `IBus.SendAsync`. A `readonly record struct` — construct with object
 ### `Headers`
 
 ```csharp
-public Dictionary<string, string>? Headers { get; init; }
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
 ```
 
 Gets the additional headers to attach to the message.
 
-**Remarks.** Default is `null`.
+**Remarks.** Default is `null`. See the `PublishOptions.Headers` note above for why the read-only interface is used.
 
 ---
 
@@ -94,12 +94,12 @@ The default request timeout, in milliseconds (10 seconds).
 ### `Default`
 
 ```csharp
-public static RequestOptions Default { get; } = new();
+public static RequestOptions Default => new();
 ```
 
-Gets the default request options instance.
+Gets a fresh `RequestOptions` populated with default values.
 
-**Returns.** A shared `RequestOptions` with all properties at their default values. Handy when you want to pass defaults explicitly rather than `null`.
+**Returns.** A new `RequestOptions` instance per access, so mutating the returned object does not leak into other callers using the fallback. Handy when you want to pass defaults explicitly rather than `null`.
 
 ---
 

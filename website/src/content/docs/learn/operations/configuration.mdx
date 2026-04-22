@@ -75,6 +75,7 @@ builder.ConfigureQueues(queues =>
     queues.QueueName = "orders-service";
     queues.ErrorQueueName = "orders-service.errors";
     queues.AuditQueueName = "orders-service.audit";
+    queues.AuditRoutingKey = "";                    // set when audit target is a topic exchange
     queues.AuditingEnabled = true;
     queues.DisableErrors = false;
     queues.PurgeQueueOnStartup = false;

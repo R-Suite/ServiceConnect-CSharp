@@ -90,10 +90,10 @@ Gets the outgoing message instance, when the pipeline supplied it. May be null f
 ### `Headers`
 
 ```csharp
-public Dictionary<string, string> Headers { get; set; }
+public Dictionary<string, string> Headers { get; init; }
 ```
 
-Gets or sets the outgoing transport headers. Unlike the consume side, outgoing headers are a plain `string`-valued dictionary — the setter rejects null with `ArgumentNullException`.
+Gets the outgoing transport headers. Unlike the consume side, outgoing headers are a plain `string`-valued dictionary. `init`-only so a subscriber can mutate individual entries — e.g. a telemetry hook stamping `traceparent` — without being able to swap the entire dictionary out and strip the framework's required `MessageType`/`CorrelationId` entries before transport send. The initialiser rejects null with `ArgumentNullException`.
 
 ---
 

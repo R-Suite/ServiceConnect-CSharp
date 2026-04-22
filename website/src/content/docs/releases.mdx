@@ -22,6 +22,47 @@ Match the major versions of the packages you reference. `ServiceConnect` 6.x exp
 
 For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
 
+## v7 highlights
+
+Version 7 is a reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. If you are upgrading from v6, read the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
+
+### Trust boundary on inbound headers
+
+Caller-supplied headers can no longer override the framework's reserved keys. `DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, and `FullTypeName` are now server-authoritative on outbound, and the reply-routing path resolves types through the registered handlers only — the previous fallback to `Type.GetType` on an assembly-qualified wire header is gone. A malicious or buggy publisher can no longer redirect replies or force type loads on consumers.
+
+### End-to-end distributed tracing
+
+`ServiceConnect.Telemetry` now injects the W3C `traceparent`/`tracestate` onto outgoing messages (it already extracted on consume). Spans are tagged with the correct OTel messaging semconv — `publish` for pub/sub and `send` for point-to-point — so dashboards aggregate each traffic shape separately. Trace-context extraction now iterates via the dictionary interface, so header bags wrapped as `ReadOnlyDictionary` no longer silently lose the trace context. See [Observability](/ServiceConnect-CSharp/learn/operations/observability/).
+
+### Correlation ID reliably on the wire
+
+Outbound paths now stamp `HeaderKeys.CorrelationId` from `message.CorrelationId`. Previously the body-level correlation id was present but the header wasn't, so `IConsumeContext.CorrelationId` defaulted to `Guid.Empty` on the consume side.
+
+### Delivery semantics: audit failures no longer cause redelivery
+
+When auditing was enabled, an audit-publish failure after a successful handler would flip the message into the retry loop and re-run the handler. Audit is now a side-effect on the success path — audit failures are swallowed and logged, never fed back as delivery failures. Malformed `RetryCount` headers route to the error queue instead of silently resetting the retry budget. `HeaderDecoder` tolerates unexpected AMQP header types (interop `long`, `IDictionary`, short-string) instead of throwing and triggering an infinite redelivery loop.
+
+### In-memory persistence no longer drops long-running state at 2 days
+
+The in-memory process-manager and aggregator stores previously set an absolute 2-day expiry on every entry — long-running sagas and slow aggregators silently vanished. The TTL is removed; state lives for the bus lifetime. In-memory persistence now also deep-clones on read to stop caller mutation from corrupting stored state, and the `InMemoryAggregatorPersistor`/`InMemoryPersistenceState` types are disposable so DI rebuilds do not leak timers.
+
+### Process-manager correctness
+
+`DeleteDataAsync` on both the in-memory and MongoDB providers now enforces optimistic concurrency via the `Version` predicate — a concurrent delete racing an update no longer silently wins. The process-manager retry path no longer replays handler side-effects on `ConcurrencyException` — only the state write is retried. MongoDB process-manager collections are keyed on fully-qualified type names; short-name collisions between types in different namespaces no longer share a collection.
+
+### Pipeline lifetimes
+
+Inbound middleware and filters are now resolved per-message from a scoped `IServiceProvider` rather than pinning a transient or scoped instance for the bus lifetime. Startup validation mirrors this on the inbound side — lifetime misconfigurations fail fast instead of manifesting as stale dependencies at runtime.
+
+### API-shape changes
+
+- **`PublishOptions`** is now a `readonly record struct` matching `SendOptions`. Concurrent `PublishAsync` callers can no longer mutate a shared instance between construction and the async read.
+- **`SendOptions.Headers`** and **`PublishOptions.Headers`** are typed as `IReadOnlyDictionary<string, string>?`. Pass any `Dictionary<string, string>`; the framework will not iterate a dictionary another thread might be mutating.
+- **`IMessageHandler<T>.Context`** and **`IProcessHandler<T>.Context`** are declared non-nullable. Initialise with `= null!;` to satisfy the nullable-reference analyser — the framework guarantees `Context` is populated before `HandleAsync`.
+- **`OutgoingEventArgs.Headers`** is `init`-only — subscribers can mutate individual entries (e.g. stamp a `traceparent`) but cannot swap the whole dictionary out.
+- **`IQueueConfiguration`** gains **`AuditRoutingKey`** for routing audit publishes into a topic/direct exchange.
+- **`RequestOptions.Default`** returns a fresh instance per access; the previous singleton was mutable and leaked between callers.
+
 ## Source and tags
 
 Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.

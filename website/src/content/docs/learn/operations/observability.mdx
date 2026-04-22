@@ -71,11 +71,39 @@ There are also two opt-in headers:
 
 - **`SourceMachine`** and **`DestinationMachine`** — sender and receiver hostnames. Off by default: `IncludeMachineNameInHeaders = true` on the bus config turns them on. Useful for multi-tenant brokers where you need to identify the sender host, but be aware that exposing internal hostnames to every audit consumer is an information-disclosure risk.
 
-## Tracing (as a filter)
+## Tracing (OpenTelemetry)
 
-There is no built-in OpenTelemetry integration. The point where one belongs is the [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) API: write an outgoing filter that reads the current `Activity` and stamps `traceparent`/`tracestate` headers, and a before-consuming filter that restores them on the receiving side. A few dozen lines — and then your handlers' `ActivitySource.StartActivity(...)` calls participate in the same trace as the caller that published the message.
+The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbing for distributed tracing. It exposes three sources — `ServiceConnect.Bus.Publish`, `ServiceConnect.Bus.Send`, and `ServiceConnect.Bus.Consume` — independently sampleable, each emitting spans tagged with the OTel messaging semantic conventions (`messaging.system`, `messaging.destination`, `messaging.message.id`, `messaging.message.conversation_id`). Pub/sub and point-to-point traffic are distinguished by the `messaging.operation` tag (`publish` vs `send`) so backends aggregate each shape separately.
 
-This is the right split: tracing is a cross-cutting concern, and filters are the cross-cutting hook. Putting it in the handler would duplicate the setup across every handler you write.
+```bash
+dotnet add package ServiceConnect.Telemetry
+```
+
+```csharp
+using OpenTelemetry.Trace;
+using ServiceConnect.Telemetry;
+
+services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing
+        .AddSource(ServiceConnectActivitySource.PublishActivitySourceName)
+        .AddSource(ServiceConnectActivitySource.SendActivitySourceName)
+        .AddSource(ServiceConnectActivitySource.ConsumeActivitySourceName)
+        .AddOtlpExporter());
+```
+
+End-to-end correlation across the broker is automatic: `ServiceConnectActivitySource.Publish` and `Send` inject the W3C `traceparent`/`tracestate` onto the outgoing headers, and `Consume` extracts them on the way in. A consume span on the far side of the broker is a direct child of the publish span, not a new root.
+
+Wire the package into your bus by calling the `Publish`, `Send`, and `Consume` helpers from a filter or custom outgoing hook and passing the event-args exposed by the pipeline — see [`event-args`](/ServiceConnect-CSharp/reference/handlers/event-args/) for the DTO shapes. To enrich spans with decoded-message data or toggle a source, configure the static `ServiceConnectActivitySource.Options`:
+
+```csharp
+ServiceConnectActivitySource.Options.EnableSendTelemetry = true;
+ServiceConnectActivitySource.Options.EnrichWithMessage = (activity, message) =>
+    activity.SetTag("app.correlation_id", message.CorrelationId);
+```
+
+> **Security note.** Do not attach raw payload fields (or raw bytes) as span tags without review — messages may contain PII or regulated data that would then flow to every observability backend.
+
+For bespoke headers that aren't tracing — redaction, a tenant stamp — the [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) API remains the right hook. Filters and telemetry compose; they don't compete.
 
 ## No health checks
 

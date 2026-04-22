@@ -43,7 +43,19 @@ string AuditQueueName { get; set; }
 
 Gets or sets the queue name used for audit copies.
 
-**Remarks.** Only populated when [`AuditingEnabled`](#auditingenabled) is true.
+**Remarks.** Only populated when [`AuditingEnabled`](#auditingenabled) is true. Interpreted by RabbitMQ as the target exchange — pair with [`AuditRoutingKey`](#auditroutingkey) when routing into a topic or direct exchange.
+
+---
+
+### `AuditRoutingKey`
+
+```csharp
+string AuditRoutingKey { get; set; }
+```
+
+Gets or sets the routing key stamped on audit-queue publishes.
+
+**Remarks.** Defaults to empty string, which is correct for a fanout exchange or a bound queue acting as the audit sink. Set this when [`AuditQueueName`](#auditqueuename) names a topic/direct exchange and you need a specific binding key — for example, `"orders.audit"` into a shared `app.audit` topic exchange.
 
 ---
 

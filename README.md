@@ -22,7 +22,7 @@ Optional extensions:
 dotnet add package ServiceConnect.Persistence.InMemory
 dotnet add package ServiceConnect.Persistence.MongoDb
 
-# OpenTelemetry
+# Distributed tracing (W3C traceparent injection, OTel messaging semconv)
 dotnet add package ServiceConnect.Telemetry
 
 # Built-in filters
