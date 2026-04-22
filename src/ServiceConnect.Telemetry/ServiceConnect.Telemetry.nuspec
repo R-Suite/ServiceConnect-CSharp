@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package>
+  <metadata>
+    <id>ServiceConnect.Telemetry</id>
+    <version>7.0.0</version>
+    <title>ServiceConnect.Telemetry</title>
+    <authors>Jakub Pachansky,Tim Watson</authors>
+    <owners>Jakub Pachansky,Tim Watson</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="expression">MIT</license>
+    <description>OpenTelemetry-compatible ActivitySource instrumentation for ServiceConnect. Emits publish, send, and consume spans tagged with the OTel messaging semantic conventions, and injects/extracts W3C traceparent headers so traces propagate end-to-end across the broker.</description>
+    <language>en-GB</language>
+    <projectUrl>https://github.com/R-Suite/ServiceConnect-CSharp</projectUrl>
+    <copyright>Copyright 2026 ServiceConnect. All rights reserved</copyright>
+    <tags>ServiceConnect,Telemetry,OpenTelemetry,Tracing,MessageBus,Messaging,Message,Bus,Service</tags>
+    <dependencies>
+      <group targetFramework="net8.0">
+        <dependency id="ServiceConnect.Interfaces" version="7.0.0" />
+      </group>
+      <group targetFramework="net10.0">
+        <dependency id="ServiceConnect.Interfaces" version="7.0.0" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\net8.0\ServiceConnect.Telemetry.dll" target="lib\net8.0" />
+    <file src="bin\Release\net8.0\ServiceConnect.Telemetry.pdb" target="lib\net8.0" />
+    <file src="bin\Release\net8.0\ServiceConnect.Telemetry.xml" target="lib\net8.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Telemetry.dll" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Telemetry.pdb" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Telemetry.xml" target="lib\net10.0" />
+  </files>
+</package>
