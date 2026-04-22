@@ -1,0 +1,184 @@
+---
+title: Polymorphic Messages
+description: Publish derived events and let a base-type handler catch the whole category. One handler, many concrete types, clean categorisation across subscribers.
+---
+
+**Polymorphic messages** let you categorise events in code and have one handler catch the whole category. A publisher emits a concrete event — `OrderPlaced`, `OrderShipped` — and a subscriber that handles the shared base type receives every one of them. A second subscriber can still bind a handler to one specific type for focused processing. Same publish, two handlers, different specificities.
+
+This page walks through the shape with a runnable example: one base type, two concrete events, two subscribers — one cross-cutting, one specific.
+
+## When to reach for it
+
+Polymorphism pays off when you have **cross-cutting subscribers that care about a category of events rather than specific ones**:
+
+- **Audit / outbox / archival.** "Record every domain event that happens." One handler, grows automatically as new event subtypes appear.
+- **Metrics.** "Emit a counter for every `OrderEvent`." Type-specific labels come from `message.GetType().Name`.
+- **Replay and debugging harnesses.** Tail a whole category of events into a dev console without enumerating subtypes.
+
+If your subscribers all care about specific event types, skip polymorphism — flat contracts give you the most predictable wire shape and the cleanest handler interfaces. Polymorphism is useful when categorisation is actually there in the domain, not because it happens to be a language feature.
+
+## The contract hierarchy
+
+Shared by publisher and every subscriber:
+
+```csharp
+// Contracts/DomainEvent.cs
+using ServiceConnect.Interfaces;
+
+public abstract class DomainEvent(Guid correlationId) : Message(correlationId)
+{
+    public DateTime OccurredAt { get; init; } = DateTime.UtcNow;
+}
+```
+
+```csharp
+// Contracts/OrderPlaced.cs
+public sealed class OrderPlaced(Guid correlationId) : DomainEvent(correlationId)
+{
+    public string OrderId { get; init; } = string.Empty;
+    public decimal Total { get; init; }
+}
+```
+
+```csharp
+// Contracts/OrderShipped.cs
+public sealed class OrderShipped(Guid correlationId) : DomainEvent(correlationId)
+{
+    public string OrderId { get; init; } = string.Empty;
+    public string Carrier { get; init; } = string.Empty;
+}
+```
+
+A few conventions that matter:
+
+- **`abstract` on the base.** `DomainEvent` is not a thing you publish; it's a category. Abstract makes "can't be published by itself" a compile-time guarantee.
+- **`sealed` on the leaves.** Concrete events are the contract. Sealing them stops accidental second-level hierarchies and keeps the serialised shape predictable.
+- **One level of inheritance.** `OrderPlaced : DomainEvent : Message` is two hops; that's deliberate. Deeper hierarchies make the JSON shape harder to reason about, especially for polyglot consumers.
+
+## The cross-cutting handler
+
+The audit subscriber handles the base type. It uses `GetType()` on the incoming message to find out which concrete event it received:
+
+```csharp
+// AuditSubscriber/DomainEventHandler.cs
+using ServiceConnect.Interfaces;
+
+public sealed class DomainEventHandler : IMessageHandler<DomainEvent>
+{
+    public IConsumeContext Context { get; set; } = null!;
+
+    public Task HandleAsync(DomainEvent message)
+    {
+        var concreteTypeName = message.GetType().Name;
+        var orderId = message switch
+        {
+            OrderPlaced placed => placed.OrderId,
+            OrderShipped shipped => shipped.OrderId,
+            _ => throw new InvalidOperationException(
+                $"Unhandled DomainEvent subtype: {message.GetType().Name}"),
+        };
+        Console.WriteLine($"Audit: {concreteTypeName} {orderId}");
+        return Task.CompletedTask;
+    }
+}
+```
+
+The type switch is optional — `GetType().Name` and `ServiceConnect.Interfaces.Message.CorrelationId` alone are often enough for an audit log. Use a `switch` when the handler actually needs the specifics.
+
+## The specific handler
+
+The shipping subscriber is a plain single-type handler — exactly what you'd write without polymorphism:
+
+```csharp
+// ShippingSubscriber/OrderShippedHandler.cs
+public sealed class OrderShippedHandler : IMessageHandler<OrderShipped>
+{
+    public IConsumeContext Context { get; set; } = null!;
+
+    public Task HandleAsync(OrderShipped message)
+    {
+        Console.WriteLine($"Shipping: {message.OrderId} via {message.Carrier}");
+        return Task.CompletedTask;
+    }
+}
+```
+
+Both subscribers receive the `OrderShipped` publish. The polymorphic one receives it **because its handler is registered for an ancestor type**; the specific one receives it because its handler is registered for the exact type. Nothing weird happens — the publish produces one message, two queues copy it, each queue's handler runs.
+
+## Wiring the cross-cutting subscriber
+
+Here's where the pattern has its one genuine subtlety. The audit subscriber has one handler class, and needs three `HandlerReference` entries:
+
+```csharp
+// AuditSubscriber/Program.cs
+using ServiceConnect.Interfaces;
+
+var handlerReferences = new List<HandlerReference>
+{
+    new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(DomainEvent) },
+    new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(OrderPlaced) },
+    new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(OrderShipped) },
+};
+
+var services = new ServiceCollection();
+services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+services.AddTransient<IMessageHandler<DomainEvent>, DomainEventHandler>();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(/* … */);
+    builder.ConfigureQueues(q => q.QueueName = "audit-subscriber");
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);
+});
+```
+
+The three references look redundant — the DI registration only mentions `IMessageHandler<DomainEvent>`, so why list the derived types? Because:
+
+## Dispatch versus subscription
+
+- **Dispatch walks the type hierarchy.** When a message arrives, the bus finds every handler whose registered message type is an ancestor of the concrete message type. That's what makes one handler receive both `OrderPlaced` and `OrderShipped`.
+- **Subscription does not walk the hierarchy.** Each `HandlerReference` binds the subscriber's queue to exactly one RabbitMQ exchange — the one named after that `MessageType`. The publisher emits `OrderPlaced` to the `OrderPlaced` exchange; if nothing bound the audit queue to that exchange, the message never arrives.
+
+So the three `HandlerReference` entries aren't redundant — they do two different jobs. The `DomainEvent` entry is what the runtime dispatcher matches when resolving the handler. The `OrderPlaced` and `OrderShipped` entries are what binds the audit queue to each concrete exchange at startup. You need both.
+
+This is deliberate, not a rough edge. Auto-subscribing a base-type handler to every possible subtype would surprise consumers who don't want the base class treated as "subscribe to everything below it." Making the subtypes explicit keeps the subscription surface visible in the bootstrap code.
+
+## The publisher
+
+The publisher has nothing special to do:
+
+```csharp
+// Publisher/Program.cs
+var correlationId = Guid.NewGuid();
+
+await bus.PublishAsync(new OrderPlaced(correlationId)
+{
+    OrderId = "order-42",
+    Total = 129.99m,
+});
+
+await bus.PublishAsync(new OrderShipped(correlationId)
+{
+    OrderId = "order-42",
+    Carrier = "UPS",
+});
+```
+
+Two publishes, one correlation id — downstream logs can tie them together. See [Messages / correlation id in practice](/ServiceConnect-CSharp/learn/core-concepts/messages/#correlation-id-in-practice).
+
+## Trade-offs worth knowing
+
+- **Serialised shape is coupled across levels.** Every derived type's JSON payload carries the base type's fields. Renaming or changing a base field is a wire-format change for every subtype simultaneously. Prefer adding fields on the base, never changing them — the same rule as any contract.
+- **Polyglot consumers.** If a non-.NET service deserialises these messages, a flat contract is easier to reason about than an inherited one. For mixed-language systems, consider duplicating shared fields across flat message types instead of a shared base class. Composition over inheritance buys you wire predictability at the cost of some local duplication.
+- **Keep the hierarchy shallow.** One level of inheritance is the documented sweet spot. Deeper trees multiply the above trade-offs without adding much value.
+
+## Reference
+
+- [`IBus.PublishAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#publishasynct) — the publish method; unchanged for polymorphic types.
+- [`HandlerReference`](/ServiceConnect-CSharp/reference/handlers/imessagehandler/) — the type that binds a queue to a message type's exchange.
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — the base-class and correlation-id conventions this page builds on.
+
+## What comes next
+
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — the base fan-out pattern polymorphic dispatch rides on top of.
+- [Content-Based Routing](/ServiceConnect-CSharp/learn/messaging-patterns/content-based-routing/) — the other answer to "which subscriber sees which message", based on message type rather than inheritance.
+- [Samples → Polymorphic Messages](/ServiceConnect-CSharp/samples/#polymorphic-messages) — the runnable example this page walks through.
