@@ -48,6 +48,7 @@ export default defineConfig({
                 { label: 'Request/Reply', link: '/learn/messaging-patterns/request-reply/' },
                 { label: 'Competing Consumers', link: '/learn/messaging-patterns/competing-consumers/' },
                 { label: 'Content-Based Routing', link: '/learn/messaging-patterns/content-based-routing/' },
+                { label: 'Polymorphic Messages', link: '/learn/messaging-patterns/polymorphic-messages/' },
                 { label: 'Routing Slip', link: '/learn/messaging-patterns/routing-slip/' },
                 { label: 'Scatter-Gather', link: '/learn/messaging-patterns/scatter-gather/' },
                 { label: 'Process Manager', link: '/learn/messaging-patterns/process-manager/' },
