@@ -13,11 +13,12 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     settings.RabbitMqPassword,
     CancellationToken.None);
 
-// One handler class, three handler references. Registering HandlerReference for
-// each derived type is what binds the audit queue to each derived type's
-// exchange in RabbitMQ. Without the OrderPlaced and OrderShipped entries below,
-// the queue would only be bound to the DomainEvent exchange and would never
-// receive the concrete events that the publisher emits.
+// One handler class, three handler references. The DomainEvent entry registers
+// the handler with the dispatcher for the base type; the OrderPlaced and
+// OrderShipped entries bind the audit queue to those two concrete exchanges in
+// RabbitMQ. Without the concrete entries the queue would only bind to the
+// DomainEvent exchange — which is never published to, because DomainEvent is
+// abstract — and the concrete events the publisher emits would never arrive.
 var handlerReferences = new List<HandlerReference>
 {
     new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(DomainEvent) },

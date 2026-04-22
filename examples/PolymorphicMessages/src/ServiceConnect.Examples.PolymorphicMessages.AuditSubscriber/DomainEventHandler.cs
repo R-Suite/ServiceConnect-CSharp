@@ -20,7 +20,8 @@ public sealed class DomainEventHandler : IMessageHandler<DomainEvent>
         {
             OrderPlaced placed => placed.OrderId,
             OrderShipped shipped => shipped.OrderId,
-            _ => "unknown",
+            _ => throw new InvalidOperationException(
+                $"Unhandled DomainEvent subtype: {message.GetType().Name}"),
         };
         ConsoleStatus.Success("audit-subscriber", $"audited {concreteTypeName} {orderId}");
         return Task.CompletedTask;
