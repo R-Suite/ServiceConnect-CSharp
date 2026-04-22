@@ -1,0 +1,97 @@
+---
+title: IRegistryInitializer
+description: Bootstrap hook called during bus construction that eagerly initializes handler registries, failing fast on misconfigured handlers.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IRegistryInitializer` is the bootstrap hook the framework calls during `Bus` construction to eagerly initialise all registered [`IHandlerRegistry`](./ihandlerregistry/) implementations. The default implementation (internal to the framework) resolves every `IHandlerRegistry` registered in the DI container; because DI resolution runs each registry's constructor, any validation logic inside those constructors executes at startup and surfaces misconfigured handlers as a hard failure — before the bus connects to the broker and before the service accepts any traffic.
+
+Most applications never need to implement this interface. It is documented here for teams that have unusual startup requirements, such as custom assembly scanning, handler filtering, or startup metrics.
+
+## Reference
+
+```csharp
+namespace ServiceConnect.Interfaces;
+
+/// <summary>
+/// Eagerly initializes internal handler registries at startup to validate
+/// handler configurations before the bus processes any messages.
+/// Implementations perform registry resolution to trigger construction and validation.
+/// </summary>
+public interface IRegistryInitializer
+{
+    /// <summary>
+    /// Initializes all handler registries, triggering eager validation of handler configurations.
+    /// Called automatically during Bus construction to fail fast on misconfigured handlers.
+    /// </summary>
+    void Initialize();
+}
+```
+
+The interface exposes a single method, `Initialize()`, with no parameters and no return value. The framework calls it once, synchronously, during bus construction. There is no expectation about idempotency — the framework does not call `Initialize()` more than once per bus lifetime.
+
+## When to implement
+
+The default implementation covers the common case: it iterates every `IHandlerRegistry` resolved from DI, which forces their constructors to run and therefore executes any validation logic they contain. You only need a custom `IRegistryInitializer` when you want behaviour beyond that, for example:
+
+- **Custom assembly scanning** — discovering and registering handler types at startup from assemblies that were not wired at composition root time.
+- **Handler filtering** — selectively initialising a subset of registries based on feature flags or environment variables.
+- **Startup metrics** — recording how many handler types were resolved, or how long initialisation took, before the bus begins consuming messages.
+
+If your only goal is to validate handler configuration at startup, you do not need a custom implementation. Register your validation logic in an `IHandlerRegistry` constructor and let the default `IRegistryInitializer` trigger it.
+
+## Usage
+
+Register your implementation as a singleton before the bus is built:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
+    builder.AddRegistration(svc =>
+        svc.AddSingleton<IRegistryInitializer, YourRegistryInitializer>());
+});
+```
+
+<Aside type="caution">
+Registering a custom `IRegistryInitializer` replaces the default implementation entirely. If you still want the default eager-resolution behaviour — iterating all `IHandlerRegistry` implementations to trigger their constructors — inject `IEnumerable<IHandlerRegistry>` and enumerate it inside your `Initialize()` method before or after your custom logic.
+</Aside>
+
+The following example wraps the default behaviour and adds a startup log entry for each registry resolved:
+
+```csharp
+using Microsoft.Extensions.Logging;
+using ServiceConnect.Interfaces;
+
+public sealed class LoggingRegistryInitializer : IRegistryInitializer
+{
+    private readonly IEnumerable<IHandlerRegistry> _registries;
+    private readonly ILogger<LoggingRegistryInitializer> _logger;
+
+    public LoggingRegistryInitializer(
+        IEnumerable<IHandlerRegistry> registries,
+        ILogger<LoggingRegistryInitializer> logger)
+    {
+        _registries = registries ?? throw new ArgumentNullException(nameof(registries));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
+
+    public void Initialize()
+    {
+        var count = 0;
+        foreach (var registry in _registries)
+        {
+            count++;
+            _logger.LogDebug("Initialised handler registry {RegistryType}", registry.GetType().Name);
+        }
+        _logger.LogInformation("Handler registry initialisation complete. {Count} registries resolved.", count);
+    }
+}
+```
+
+## See also
+
+- [`IHandlerRegistry`](./ihandlerregistry/) — the marker interface whose implementations are resolved by `IRegistryInitializer`

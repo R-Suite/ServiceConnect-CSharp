@@ -132,10 +132,17 @@ export default defineConfig({
           items: [
             { label: 'Overview', link: '/reference/extension-points/' },
             {
+              label: 'Bus',
+              items: [
+                { label: 'IRequestReplyManager', link: '/reference/extension-points/bus/irequestreplymanager/' },
+              ],
+            },
+            {
               label: 'Persistence',
               items: [
                 { label: 'IAggregatorPersistor', link: '/reference/extension-points/persistence/iaggregatorpersistor/' },
                 { label: 'IProcessManagerFinder', link: '/reference/extension-points/persistence/iprocessmanagerfinder/' },
+                { label: 'ITimeoutStore', link: '/reference/extension-points/persistence/itimeoutstore/' },
                 { label: 'ILeaseAwareTimeoutStore', link: '/reference/extension-points/persistence/ileaseawaretimeoutstore/' },
               ],
             },
@@ -158,6 +165,7 @@ export default defineConfig({
               label: 'Registry',
               items: [
                 { label: 'IHandlerRegistry', link: '/reference/extension-points/registry/ihandlerregistry/' },
+                { label: 'IRegistryInitializer', link: '/reference/extension-points/registry/iregistryinitializer/' },
                 { label: 'IMessageDispatcher', link: '/reference/extension-points/registry/imessagedispatcher/' },
                 { label: 'IMessageProcessor', link: '/reference/extension-points/registry/imessageprocessor/' },
               ],
