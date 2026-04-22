@@ -136,7 +136,7 @@ The three references look redundant — the DI registration only mentions `IMess
 ## Dispatch versus subscription
 
 - **Dispatch walks the type hierarchy.** When a message arrives, the bus finds every handler whose registered message type is an ancestor of the concrete message type. That's what makes one handler receive both `OrderPlaced` and `OrderShipped`.
-- **Subscription does not walk the hierarchy.** Each `HandlerReference` binds the subscriber's queue to exactly one RabbitMQ exchange — the one named after that `MessageType`. The publisher emits `OrderPlaced` to the `OrderPlaced` exchange; if nothing bound the audit queue to that exchange, the message never arrives.
+- **Subscription does not walk the hierarchy.** Each `HandlerReference` binds the subscriber's queue to exactly one RabbitMQ exchange — the one named after that `MessageType`'s full type name ([as described on the Pub/Sub page](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/#how-the-fan-out-works)). The publisher emits `OrderPlaced` to the `OrderPlaced` exchange; if nothing bound the audit queue to that exchange, the message never arrives.
 
 So the three `HandlerReference` entries aren't redundant — they do two different jobs. The `DomainEvent` entry is what the runtime dispatcher matches when resolving the handler. The `OrderPlaced` and `OrderShipped` entries are what binds the audit queue to each concrete exchange at startup. You need both.
 
