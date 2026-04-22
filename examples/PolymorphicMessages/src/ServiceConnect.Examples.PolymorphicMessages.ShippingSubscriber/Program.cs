@@ -27,4 +27,5 @@ await using var provider = services.BuildServiceProvider();
 var bus = provider.GetRequiredService<IBus>();
 await bus.StartConsumingAsync();
 ConsoleStatus.Ready("shipping-subscriber");
+await Console.Out.FlushAsync();
 await Task.Delay(Timeout.InfiniteTimeSpan);

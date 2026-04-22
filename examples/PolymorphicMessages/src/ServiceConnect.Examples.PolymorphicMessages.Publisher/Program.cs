@@ -38,3 +38,4 @@ await bus.PublishAsync(new OrderShipped(correlationId)
     Carrier = "UPS",
 });
 ConsoleStatus.Success("polymorphic-messages-publisher", $"published order-shipped {orderId}");
+await Console.Out.FlushAsync();
