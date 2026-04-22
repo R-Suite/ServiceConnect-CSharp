@@ -219,10 +219,10 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Consume_ExtractsParentContext_WhenHeadersAreReadOnlyDictionary()
     {
-        // M6 regression: ExtractTraceIdAndState previously switched only on
-        // the concrete Dictionary<string, object>, so ReadOnlyDictionary (used
-        // by ConsumeContext.Headers) silently dropped traceparent/tracestate
-        // and every consume span started a fresh trace.
+        // ExtractTraceIdAndState must accept any IReadOnlyDictionary shape so
+        // traceparent/tracestate are picked up even when ConsumeContext.Headers
+        // is wrapped as a ReadOnlyDictionary. Otherwise consumes would orphan
+        // each span as a new trace root instead of continuing the caller's trace.
         var traceId = "0af7651916cd43dd8448eb211c80319c";
         var spanId = "b7ad6b7169203331";
         var inner = new Dictionary<string, object>
@@ -271,8 +271,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Send(args);
 
         Assert.NotNull(activity);
-        // M7: Send spans use "send" per OTel messaging semconv, distinguishing
-        // point-to-point traffic from fanout publish.
+        // Send spans use the "send" operation name per OTel messaging semconv,
+        // distinguishing point-to-point traffic from fanout publish spans.
         Assert.Equal("svc.queue send", activity!.DisplayName);
         Assert.Equal("send", activity.GetTagItem(MessagingOperation));
         Assert.Equal("svc.queue", activity.GetTagItem(MessagingDestination));

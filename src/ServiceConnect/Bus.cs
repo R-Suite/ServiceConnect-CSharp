@@ -107,11 +107,11 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Reject ambiguous routing up front. Previously the EndPoints branch was
-        // entered whenever the list was non-empty, silently discarding a single
-        // EndPoint the caller also set — no exception, no log — so a typo in the
-        // option name (or a merge of two config paths) could reroute traffic
-        // without any signal. Make the caller pick one.
+        // Reject ambiguous routing up front. Setting both EndPoint and EndPoints
+        // expresses two different routing intents; picking one silently could
+        // reroute traffic (for example, after a typo in the option name or a
+        // merge of two config paths) with no exception and no log. Require the
+        // caller to pick one.
         if (options is { EndPoint.Length: > 0, EndPoints: { Count: > 0 } })
         {
             throw new ArgumentException(

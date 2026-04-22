@@ -87,11 +87,10 @@ public sealed class MessageDispatcher : IMessageDispatcher
             var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
 
             // Before-consuming filters run first so they gate every dispatch path —
-            // including pre-deserialization processors like StreamProcessor. A processor
-            // that previously returned Handled prior to this call would have bypassed
-            // both pre- and post-consume filters (after-filters only fire once
-            // beforeFiltersRan is set). Filters now see stream packets and replies the
-            // same way they see any other message.
+            // including pre-deserialization processors like StreamProcessor. Running
+            // filters here guarantees stream packets and replies traverse the same
+            // pre- and post-consume filter stages as any other message
+            // (after-filters only fire once beforeFiltersRan is set).
             bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
             beforeFiltersRan = true;
             if (blocked)

@@ -11,8 +11,7 @@ internal static class ConnectionFactoryBuilder
 {
     /// <summary>
     /// Default heartbeat interval applied when the caller hasn't configured one.
-    /// Matches Connection.cs' previous hard-coded 120-second fallback so the behaviour
-    /// is identical whether the builder is invoked from a producer or a consumer.
+    /// Shared between producer and consumer so both paths use the same fallback.
     /// </summary>
     private static readonly TimeSpan DefaultHeartbeat = TimeSpan.FromSeconds(120);
 
@@ -20,8 +19,7 @@ internal static class ConnectionFactoryBuilder
     /// Builds a <see cref="ConnectionFactory"/> from the transport configuration.
     /// Heartbeat is resolved from <see cref="RabbitMQSettingKeys.HeartbeatEnabled"/> and
     /// <see cref="RabbitMQSettingKeys.HeartbeatTime"/> so producer and consumer code paths
-    /// honour the same configured values — previously Producer passed a null interval and
-    /// silently fell back to RabbitMQ defaults.
+    /// honour the same configured values.
     /// </summary>
     /// <param name="transport">Transport settings including SSL, credentials, and hosts.</param>
     public static ConnectionFactory Build(ITransportConfiguration transport)

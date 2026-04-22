@@ -273,12 +273,10 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void PublishOptions_IsReadonlyRecordStruct()
         {
-            // M9 regression: PublishOptions used to be a mutable sealed class, so a
-            // caller holding a reference could mutate Headers/RoutingKey on a shared
-            // instance while a concurrent PublishAsync was mid-flight reading them.
-            // Converting to a readonly record struct gives value-type semantics:
-            // each PublishAsync captures a copy, and there are no settable members
-            // to race on.
+            // PublishOptions is a readonly record struct so each PublishAsync call
+            // captures a snapshot by value. A mutable sealed class would let a
+            // caller mutate Headers/RoutingKey on a shared instance while a
+            // concurrent PublishAsync was reading them mid-flight.
             var type = typeof(PublishOptions);
 
             Assert.True(type.IsValueType);
@@ -297,10 +295,10 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void SendAndPublishOptions_HeadersTypedAsReadOnlyDictionary()
         {
-            // M10 regression: Headers used to be Dictionary<string,string>?, which
-            // invited callers to share a mutable instance — a concurrent mutation
-            // during BuildHeadersDirect's foreach would throw "Collection was
-            // modified". The contract is now IReadOnlyDictionary<string,string>?.
+            // The Headers contract is IReadOnlyDictionary<string,string>? so the
+            // type system prevents callers from sharing a mutable instance and
+            // concurrently mutating it during BuildHeadersDirect's foreach, which
+            // would throw "Collection was modified" from inside the send path.
             Assert.Equal(
                 typeof(IReadOnlyDictionary<string, string>),
                 typeof(SendOptions).GetProperty(nameof(SendOptions.Headers))!.PropertyType);
@@ -312,11 +310,11 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task PublishAsync_HeadersPostMutationDoesNotAffectInFlightSend()
         {
-            // M10 regression: BuildHeadersDirect snapshots the source before
-            // copying. Mutations to the caller's dictionary after PublishAsync
-            // has returned (i.e. after the snapshot) must not reach the
-            // transport. Verify by capturing what the send pipeline receives
-            // and then mutating the source — the captured headers stay fixed.
+            // BuildHeadersDirect must snapshot the caller's headers before handing
+            // them to the send pipeline. Mutations to the caller's dictionary after
+            // PublishAsync returns must not reach the transport. Verify by capturing
+            // the dictionary the pipeline receives, then mutating the source and
+            // asserting the captured view is unchanged.
             var sharedHeaders = new Dictionary<string, string> { ["caller-header"] = "original" };
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
@@ -579,9 +577,9 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task SendAsync_WhenBothEndPointAndEndPointsSet_ThrowsArgumentException()
         {
-            // M1 regression: previously the EndPoints foreach branch was entered
-            // whenever the list was populated, silently discarding the single
-            // EndPoint the caller also set. Ambiguous routing is now rejected.
+            // Setting both EndPoint and EndPoints is ambiguous — the caller has
+            // expressed two different routing intents. The bus must reject the
+            // call up front rather than pick one and silently discard the other.
             var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
             var options = new SendOptions
             {

@@ -18,9 +18,9 @@ public class ConnectionFactoryBuilderTests
     [Fact]
     public void Build_WhenHeartbeatTimeConfigured_HonoursConfiguredInterval()
     {
-        // H20 regression: Producer previously passed null heartbeat and got RabbitMQ
-        // defaults regardless of configuration. Heartbeat resolution now lives in the
-        // builder so every caller honours the same settings.
+        // Heartbeat resolution lives in ConnectionFactoryBuilder so producer and
+        // consumer both honour the configured HeartbeatTime. The built factory must
+        // carry the caller's value rather than falling back to the RabbitMQ default.
         var transport = Transport(new Dictionary<string, object>
         {
             [RabbitMQSettingKeys.HeartbeatTime] = 45,

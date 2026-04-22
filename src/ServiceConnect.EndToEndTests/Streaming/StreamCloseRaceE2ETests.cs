@@ -8,10 +8,10 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// Regression guard: writing ~1000 4KB packets concurrently from 4 tasks then calling
-/// CloseAsync while some writes are still in-flight must not lose packets that returned
-/// successfully (write returned without throwing) and must produce a consistent
-/// LastPacketNumber on the read side.
+/// End-to-end guard for the stream close / write race. Writing ~1000 4KB packets
+/// concurrently from four tasks and then calling CloseAsync while some writes are
+/// still in flight must preserve every packet whose write returned without
+/// throwing, and the reader must observe a consistent LastPacketNumber.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
 public class StreamCloseRaceE2ETests

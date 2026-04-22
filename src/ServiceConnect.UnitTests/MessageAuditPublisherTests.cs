@@ -81,8 +81,9 @@ public class MessageAuditPublisherTests
     [Fact]
     public async Task PublishAuditIfEnabledAsync_UsesConfiguredRoutingKey()
     {
-        // L6 regression: routing key used to be hardcoded to "", so non-fanout audit
-        // exchanges (direct/topic) could not bind.
+        // Audit publish must honour the configured routing key so direct/topic
+        // audit exchanges can bind on it. Hardcoding an empty routing key would
+        // restrict audit to fanout exchanges only.
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),

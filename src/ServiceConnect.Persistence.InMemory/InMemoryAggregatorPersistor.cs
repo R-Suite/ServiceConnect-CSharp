@@ -183,8 +183,8 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
 
         var list = new List<Entry>();
         // Aggregator buffers have no TTL: flush is caller-driven via RemoveSnapshot /
-        // RemoveAll. A background expiry silently dropping buffered messages mid-aggregation
-        // is a data-loss bug, not a feature.
+        // RemoveAll. Background expiry must never silently drop buffered messages
+        // mid-aggregation.
         _provider.Add(name, list);
         return list;
     }

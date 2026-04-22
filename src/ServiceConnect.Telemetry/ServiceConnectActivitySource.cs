@@ -233,8 +233,8 @@ public static class ServiceConnectActivitySource
     /// <summary>
     /// Writes the current activity's W3C trace context into the outgoing-headers dictionary
     /// so downstream consumers can link their consume span to the originating publish. Mirrors
-    /// <see cref="Consume"/>'s extract side — without this, every consume span was a new root
-    /// and the end-to-end trace graph was broken outbound.
+    /// <see cref="Consume"/>'s extract side; without injection, each consume span becomes a
+    /// new trace root and the end-to-end graph cannot be stitched across the broker.
     /// </summary>
     private static void InjectTraceContext(Activity? activity, Dictionary<string, string> headers)
     {

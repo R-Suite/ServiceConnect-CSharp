@@ -11,9 +11,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// Regression guard: two concurrent messages dispatched to the same saga correlation id
-/// must both converge via the optimistic-concurrency retry path. Neither increment may
-/// be silently lost to a version conflict.
+/// End-to-end guard that two concurrent messages for the same saga correlation id
+/// both converge via the optimistic-concurrency retry path. Neither increment may be
+/// silently lost to a version conflict — the loser must reload, re-apply, and commit.
 /// </summary>
 [Collection(nameof(PersistenceCollection))]
 public class ProcessManagerConcurrencyE2ETests

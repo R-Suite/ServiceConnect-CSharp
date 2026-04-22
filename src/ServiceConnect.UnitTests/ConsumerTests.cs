@@ -136,8 +136,9 @@ public class ConsumerTests
         var connection = new Mock<IServiceConnectConnection>();
         // First call — Consumer's setup channel — succeeds. Second call — host's
         // consumer channel inside RabbitMqConsumerHost.StartConsumingAsync — throws.
-        // With the bug (host added to _clients only AFTER StartConsumingAsync succeeded),
-        // the partially-initialised host would leak. With the fix, _clients holds it.
+        // The host must be registered in _clients before StartConsumingAsync runs
+        // so a mid-startup failure still leaves it trackable for shutdown/disposal
+        // rather than leaking the partially-initialised instance.
         connection.SetupSequence(c => c.CreateChannelAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(setupChannel.Object)
             .ThrowsAsync(new OperationInterruptedException(shutdownArgs));

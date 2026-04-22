@@ -11,8 +11,10 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// Regression guard: concurrent inserts during an aggregator flush must not silently
-/// wipe messages that arrived while the Execute callback was in progress.
+/// End-to-end guard that inserts arriving while an aggregator flush is in progress
+/// survive the flush. Messages that land between snapshot capture and flush completion
+/// must remain in the buffer for the next flush rather than being wiped with the
+/// ones the first Execute callback actually saw.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
 public class AggregatorFlushRaceE2ETests
@@ -93,9 +95,9 @@ public class AggregatorFlushRaceE2ETests
                 await bus.SendAsync(new TestMessage(Guid.NewGuid()) { Content = $"second-{i}" },
                     new SendOptions { EndPoint = queueName });
 
-            // Release the handler. The first flush completes and removes the 3 original
-            // snapshot ids (the 1.1 fix — not all-documents). The 3 late messages then
-            // flow through the consumer and trigger the second batch flush.
+            // Release the handler. The first flush completes and deletes only the
+            // three snapshot ids it saw (not every document in the buffer), so the
+            // three late messages remain and then trigger the second batch flush.
             gate.Mre.Set();
 
             // Assert: second Execute fires and contains the late messages (not silently wiped).

@@ -27,10 +27,10 @@ public class MessageTypeExchangeNameTests
     [Fact]
     public void From_SharedPrefixAfterDotStripping_StillProducesUniqueNames()
     {
-        // M5 regression: the old helper was FullName.Replace(".", "") which meant
-        // two types whose names differed only by dot position collapsed onto the
-        // same exchange/binding name, cross-wiring routing. Hash suffix restores
-        // uniqueness.
+        // Types whose FullName differs only by dot position (e.g. "A.BC" vs "AB.C")
+        // must map to distinct exchange/binding names. A naive dot-stripping scheme
+        // would collapse them and cross-wire routing; the hash suffix keeps the
+        // mapping injective so publishers and consumers don't share a binding.
         var a = MessageTypeExchangeName.From(typeof(SampleA.BC.X));
         var b = MessageTypeExchangeName.From(typeof(SampleB.B.CX));
 

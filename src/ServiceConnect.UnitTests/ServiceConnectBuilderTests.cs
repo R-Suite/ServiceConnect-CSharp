@@ -83,8 +83,9 @@ public class ServiceConnectBuilderTests
     [Fact]
     public void ScanAssemblies_NullElement_Throws()
     {
-        // L1 regression: a null element used to slip through the array check and
-        // surface later as a NullReferenceException inside HandlerScanner.
+        // A null assembly element must be caught at the boundary (with the
+        // offending index named) rather than surfacing later as an NRE inside
+        // HandlerScanner, where the failure mode is obscure.
         var builder = new ServiceConnectBuilder();
 
         var ex = Assert.Throws<ArgumentNullException>(

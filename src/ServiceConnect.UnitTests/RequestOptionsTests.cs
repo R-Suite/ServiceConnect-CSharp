@@ -8,9 +8,9 @@ public class RequestOptionsTests
     [Fact]
     public void Default_IsFreshInstance_MutationsDoNotLeakAcrossCallers()
     {
-        // L2 regression: Default used to be a shared mutable singleton, so one caller
-        // poisoning it (e.g., setting a custom Timeout) bled into every other caller
-        // that relied on the default.
+        // Each access to Default must return a fresh instance so one caller
+        // mutating the returned options (e.g. setting Timeout) cannot leak into
+        // another caller that relies on the out-of-the-box defaults.
         var first = RequestOptions.Default;
         first.Timeout = 123;
         first.EndPoint = "leaked";

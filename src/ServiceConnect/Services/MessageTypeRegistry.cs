@@ -31,11 +31,11 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
     {
         ArgumentNullException.ThrowIfNull(type);
 
-        // Reject a different Type under the same key. Previously we assigned
-        // unconditionally, so two types sharing a FullName (or, less commonly,
-        // an AQN) would overwrite each other with no signal — dispatch would
-        // then resolve to whichever registered last. Re-registering the exact
-        // same Type remains idempotent.
+        // Two types sharing a FullName (or, less commonly, an AssemblyQualifiedName)
+        // must not silently overwrite each other — dispatch would then resolve to
+        // whichever was registered last, which is load-order dependent. Reject the
+        // collision with a clear signal. Re-registering the exact same Type is
+        // idempotent.
         if (type.AssemblyQualifiedName is not null)
             AddOrReject(type.AssemblyQualifiedName, type);
         if (type.FullName is not null)

@@ -60,9 +60,8 @@ public sealed class QueueConfiguration : IQueueConfiguration
         ArgumentNullException.ThrowIfNull(messageType);
         ArgumentNullException.ThrowIfNull(queues);
 
-        // Match the single-queue overload: reject null/empty/whitespace entries up front.
-        // Previously the list form accepted any element and silently stored garbage
-        // (e.g. a "" bucket inside the mapping), while the single overload guarded it.
+        // Match the single-queue overload: reject null/empty/whitespace entries up
+        // front so no empty-string or whitespace queue can be stored in the mapping.
         for (int i = 0; i < queues.Count; i++)
         {
             if (string.IsNullOrWhiteSpace(queues[i]))

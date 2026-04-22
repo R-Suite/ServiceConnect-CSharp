@@ -528,9 +528,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task InsertDataAsync_ThenMutateCallerObject_DoesNotCorruptStoredEntry()
         {
-            // H19 regression: the finder previously bound the caller's reference on
-            // insert, so appending to a nested collection afterwards polluted the
-            // persisted saga. Deep-clone on write prevents that leakage.
+            // Insert must deep-clone so that post-insert mutation of a nested
+            // collection on the caller's instance does not leak into the stored saga.
             var data = new SagaWithNested { CorrelationId = Guid.NewGuid(), Tags = { "original" } };
             IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             await finder.InsertDataAsync(data, CancellationToken.None);
@@ -548,8 +547,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task UpdateDataAsync_ThenMutateCallerObject_DoesNotCorruptStoredEntry()
         {
-            // H19 regression: update must deep-clone so the caller's subsequent
-            // mutation of a nested collection does not bleed into the stored snapshot.
+            // Update must deep-clone so the caller's subsequent mutation of a
+            // nested collection does not bleed into the stored snapshot.
             var initial = new SagaWithNested { CorrelationId = Guid.NewGuid(), Tags = { "first" } };
             IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
             await finder.InsertDataAsync(initial, CancellationToken.None);
@@ -572,9 +571,9 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void InMemoryPersistenceState_Dispose_ReleasesSyncRoot_AndIsIdempotent()
         {
-            // H18: SyncRoot is a ReaderWriterLockSlim holding kernel handles; without
-            // IDisposable on the state every DI rebuild leaks one RWSL per container.
-            // Dispose must release the lock and tolerate repeat calls.
+            // SyncRoot is a ReaderWriterLockSlim that holds kernel handles. Dispose
+            // must release it exactly once so rebuilding the DI container does not
+            // leak one RWSL per container, and repeat Dispose calls must be a no-op.
             var state = new InMemoryPersistenceState();
             var syncRoot = state.SyncRoot;
 
@@ -588,13 +587,13 @@ namespace ServiceConnect.UnitTests
             Assert.Null(second);
         }
 
-        // --- Saga lifetime is caller-managed (C7): no background TTL ---
+        // --- Saga lifetime is caller-managed: no background TTL ---
 
         [Fact]
         public async Task Inserted_SagaStillResolvable_After3Days()
         {
-            // Saga state must persist until Delete. A background 2-day expiry
-            // silently dropping live sagas is a data-loss bug.
+            // Saga state must persist until Delete regardless of elapsed time.
+            // Background expiry must never silently drop a live saga.
             var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
             var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), timeProvider);
             var data = new TestData { CorrelationId = _correlationId, Name = "LongLivedSaga" };

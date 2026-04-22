@@ -8,10 +8,11 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// Regression guard: concurrent publish loops followed by DisposeAsync must not
-/// produce SemaphoreFullException, unhandled task exceptions, or crash the test process.
-/// ObjectDisposedException and OperationCanceledException on in-flight publishes are
-/// acceptable but must be collected — not allowed to escape unobserved.
+/// End-to-end guard that DisposeAsync is safe to call while concurrent publish loops
+/// are still in flight. Dispose must not produce SemaphoreFullException, unhandled
+/// task exceptions, or crash the process. ObjectDisposedException and
+/// OperationCanceledException on in-flight publishes are acceptable but must be
+/// collected rather than escape unobserved.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
 public class ProducerDisposeConcurrencyE2ETests

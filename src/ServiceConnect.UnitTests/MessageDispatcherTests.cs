@@ -276,7 +276,7 @@ public class MessageDispatcherTests
         Assert.Equal(0, Assert.IsType<TestDispatcherReplyManager>(_replyManager).CallCount);
     }
 
-    // ---------------- H6: pre-deserialization processor filter coverage ----------------
+    // ---------------- Pre-deserialization processor filter coverage ----------------
 
     [Fact]
     public async Task Dispatch_PreDeserProcessor_RunsAfterBeforeFilter()
@@ -306,7 +306,8 @@ public class MessageDispatcherTests
     public async Task Dispatch_PreDeserProcessor_BlockedByBeforeFilter_DoesNotRun()
     {
         // A blocking before-filter must prevent pre-deserialization processors
-        // from running at all — they used to run first and silently bypass filters.
+        // from running at all, so no processor can slip past the filter gate
+        // and observe or handle a message the filter rejected.
         _mockFilterPipeline
             .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
@@ -564,7 +565,7 @@ public class MessageDispatcherTests
         Assert.False(result.Success);
     }
 
-    // ---------------- H2: messageType parameter is authoritative ----------------
+    // ---------------- messageType parameter is authoritative ----------------
 
     [Fact]
     public async Task Dispatch_WithMessageTypeParameter_AndNoHeader_ResolvesFromParameter()
@@ -656,7 +657,7 @@ public class MessageDispatcherTests
         Assert.IsType<InvalidOperationException>(result.Exception);
     }
 
-    // ---------------- H3/H4/M12: per-dispatch DI scope ----------------
+    // ---------------- Per-dispatch DI scope ----------------
 
     [Fact]
     public async Task Dispatch_CreatesFreshScope_AndDisposesAfterHandler()

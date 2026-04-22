@@ -99,11 +99,10 @@ public class MongoDbAggregatorPersistorTests
     [Trait("Category", "Docker")]
     public async Task GetData_ReturnsMessagesInInsertionOrder()
     {
-        // M17 regression: snapshots now sort by InsertedAtTicks so the
-        // aggregator handler sees messages in the order they were written,
-        // not whatever order the Mongo cursor returns. We drive a fake
-        // TimeProvider forward between inserts so each row has a distinct
-        // monotonic tick value.
+        // Snapshots must sort by InsertedAtTicks so the aggregator handler sees
+        // messages in the order they were written rather than whatever order the
+        // Mongo cursor happens to return. The fake TimeProvider is advanced
+        // between inserts so each row carries a distinct monotonic tick value.
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 4, 22, 9, 0, 0, TimeSpan.Zero));
         var dbName = _fixture.GetUniqueDatabaseName();
         var options = new MongoDbPersistenceOptions

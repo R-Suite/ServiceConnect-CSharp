@@ -106,8 +106,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Remove_WhenKeyAbsent_DoesNotFireKeyRemoved()
         {
-            // M22 regression: Remove previously fired KeyRemoved even when TryRemove
-            // returned false, handing subscribers spurious events.
+            // Remove must not raise KeyRemoved when the key was not actually present,
+            // otherwise subscribers would observe spurious removal events.
             var cache = new CacheProvider();
             int invocations = 0;
             cache.KeyRemoved += (_, _) => invocations++;
@@ -120,7 +120,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Clear_FiresKeyRemovedForEachEntry()
         {
-            // M22 regression: Clear previously removed entries silently.
+            // Clear must raise KeyRemoved for every evicted entry so subscribers can
+            // unhook per-key state; bulk removal is not allowed to be silent.
             var cache = new CacheProvider();
             cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
             cache.Add("key2", "value2", DateTimeOffset.UtcNow.AddMinutes(5));
@@ -137,7 +138,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void PurgeNormalPriorities_FiresKeyRemovedForEachPurgedEntry()
         {
-            // M22 regression: PurgeNormalPriorities previously removed entries silently.
+            // PurgeNormalPriorities must raise KeyRemoved for each purged entry,
+            // and only for normal-priority entries.
             var cache = new CacheProvider();
             cache.Add("normal1", "v1", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
             cache.Add("normal2", "v2", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
@@ -270,9 +272,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Add_SameKeyTwice_ReplacesValueAndResetsExpiry()
         {
-            // M21 regression: previously TryAdd kept the stale value but StartObserving
-            // installed a fresh timer, extending the stale value's effective TTL. Re-Add
-            // must now replace the value and reset the expiry window together.
+            // Re-Add on an existing key must atomically replace the value and reset
+            // the expiry timer so the newer window fully supersedes the previous one.
             var now = new DateTimeOffset(2026, 4, 14, 20, 0, 0, TimeSpan.Zero);
             var timeProvider = new FakeTimeProvider(now);
             var cache = new CacheProvider(timeProvider);
@@ -283,11 +284,11 @@ namespace ServiceConnect.UnitTests
             timeProvider.Advance(TimeSpan.FromMilliseconds(150));
             cache.Add("key1", "second", now.AddMilliseconds(500));
 
-            // The bug returned "first" because TryAdd kept the stale entry.
+            // Get returns the newer value, confirming the replacement semantics.
             Assert.Equal("second", cache.Get<string, string>("key1"));
 
-            // Original expiry would have fired at +200ms. With the fix the timer was
-            // replaced to fire at +500ms, so the entry is still present at +300ms.
+            // The first Add's +200ms timer must have been cancelled in favour of the
+            // new +500ms window, so the entry survives at +300ms from t0.
             timeProvider.Advance(TimeSpan.FromMilliseconds(150));
             Assert.True(cache.Contains("key1"));
 

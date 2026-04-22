@@ -73,8 +73,9 @@ public class DefaultProcessManagerPropertyMapperTests
     [Fact]
     public void ConfigureMapping_NestedMemberChain_Throws()
     {
-        // Pre-fix behaviour: the mapper silently produced an empty PropertiesHierarchy for
-        // chains like d => d.Inner.Id, causing sagas to load the wrong correlation slice.
+        // Chained member access (d => d.Inner.Id) must be rejected. Accepting it
+        // silently would produce an empty PropertiesHierarchy and the saga would
+        // later load the wrong correlation slice at dispatch time.
         var mapper = new DefaultProcessManagerPropertyMapper();
 
         var ex = Assert.Throws<ArgumentException>(() =>

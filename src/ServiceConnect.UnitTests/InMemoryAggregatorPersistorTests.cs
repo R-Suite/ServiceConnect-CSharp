@@ -230,14 +230,14 @@ namespace ServiceConnect.UnitTests
                 () => persistor.CountAsync("test", cts.Token));
         }
 
-        // --- Aggregator buffer is caller-managed (C8): no background TTL ---
+        // --- Aggregator buffer is caller-managed: no background TTL ---
 
         [Fact]
         public async Task Inserted_AggregatorBuffer_StillResolvable_After3Days()
         {
-            // Aggregator buffers flush via RemoveSnapshot/RemoveAll. A background
-            // 2-day expiry silently dropping buffered messages mid-aggregation
-            // is a data-loss bug.
+            // Aggregator buffers flush via RemoveSnapshot/RemoveAll only. Background
+            // expiry must never drop buffered messages mid-aggregation, regardless
+            // of how long the window stays open.
             var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty, timeProvider);
             await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "buffered" }, "slow-stream", CancellationToken.None);
@@ -267,8 +267,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task InsertData_ThenMutateCallerObject_DoesNotCorruptStoredEntry()
         {
-            // H19 regression: insert must deep-clone so the caller's subsequent
-            // mutation (including nested collections) does not leak into the buffer.
+            // Insert must deep-clone so the caller's subsequent mutation
+            // (including nested collections) does not leak into the buffer.
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             var data = new AggWithNested(Guid.NewGuid());
             data.Tags.Add("original");
@@ -284,8 +284,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task GetData_ThenMutateReturnedObject_DoesNotCorruptStoredEntry()
         {
-            // H19 regression: retrieval must deep-clone so the caller mutating the
-            // returned instance does not corrupt the stored copy for the next read.
+            // Retrieval must deep-clone so the caller mutating the returned instance
+            // does not corrupt the stored copy seen by the next read.
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             var data = new AggWithNested(Guid.NewGuid());
             data.Tags.Add("original");
@@ -301,9 +301,9 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public void Persistor_ImplementsIDisposable_AndDisposeIsIdempotent()
         {
-            // H17: the persistor owns a CacheProvider that registers ITimer handles with
-            // the TimeProvider. Without IDisposable on the persistor, every DI rebuild
-            // leaks those timers. Dispose must run exactly once even on repeat calls.
+            // The persistor owns a CacheProvider that registers ITimer handles with the
+            // TimeProvider. Dispose must release them exactly once so rebuilds of the
+            // DI container do not leak timers, even when Dispose is called repeatedly.
             var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
             Assert.IsAssignableFrom<IDisposable>(persistor);
 

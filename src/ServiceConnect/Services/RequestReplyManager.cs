@@ -199,9 +199,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 }
 
                 // If the caller asked for a specific number of replies but the timeout
-                // fired before we got them all, treat it as a timeout. Previously this
-                // path succeeded silently, masking under-delivery. A zero/negative
-                // expected count means "no explicit expectation" — keep success.
+                // fired before we got them all, surface a RequestTimeoutException so
+                // under-delivery is visible to the caller. A zero/negative expected
+                // count means "no explicit expectation" — keep success in that case.
                 if (expectedCount > 0 && !state.HasReceivedAllExpectedReplies)
                 {
                     tcs.TrySetException(new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout)));

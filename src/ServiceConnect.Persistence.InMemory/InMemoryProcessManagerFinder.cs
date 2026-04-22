@@ -45,7 +45,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         ArgumentNullException.ThrowIfNull(message);
 
         // Single-pass scan: prefer an exact message-type match, fall back to the base
-        // Message wildcard. Previously this used two separate FirstOrDefault calls.
+        // Message wildcard in one iteration of the mapping list.
         var exactMessageType = message.GetType();
         ProcessManagerToMessageMap? mapping = null;
         ProcessManagerToMessageMap? fallback = null;
@@ -168,8 +168,8 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             if (_state.Provider.Contains(key))
                 throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
 
-            // Saga state has no TTL: lifetime is managed explicitly via Delete. A background
-            // expiry silently dropping a live saga at the 2-day mark is a data-loss bug.
+            // Saga state has no TTL: lifetime is managed explicitly via Delete.
+            // Background expiry must never silently drop a live saga.
             _state.Provider.Add(key, memoryData);
         }
         finally
@@ -180,8 +180,8 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         return Task.CompletedTask;
     }
 
-    // One-time compiled factory per concrete data type. Replaces the previous
-    // GetType().GetMethods().First(...) + MakeGenericMethod + Invoke per call.
+    // One-time compiled factory per concrete data type, avoiding per-call reflection
+    // (GetMethods + MakeGenericMethod + Invoke) on the hot persistence path.
     private static Func<IProcessManagerData, object> BuildMemoryDataFactory(Type dataType)
     {
         var memoryDataType = typeof(MemoryData<>).MakeGenericType(dataType);

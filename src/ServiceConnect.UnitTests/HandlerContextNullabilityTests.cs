@@ -6,12 +6,11 @@ namespace ServiceConnect.UnitTests;
 
 public class HandlerContextNullabilityTests
 {
-    // Before M8, both interfaces declared `Context` as `IConsumeContext?`. The
-    // dispatch pipeline *always* sets Context before HandleAsync, so the null
-    // annotation forced every NRT-aware handler to sprinkle `!` or defensive
-    // null checks. These tests lock in the non-nullable contract via the
-    // runtime NullabilityInfoContext — a signature regression (someone
-    // re-adding `?`) would flip Nullable from NotNull to Nullable and fail.
+    // Context is a public part of the handler contract and the dispatch pipeline
+    // always assigns it before HandleAsync runs. These tests pin the non-nullable
+    // annotation via the runtime NullabilityInfoContext so handlers can rely on
+    // Context without defensive `!` or null checks, and any change that flips
+    // the annotation back to nullable will fail here.
 
     [Fact]
     public void IMessageHandler_Context_IsNonNullable()

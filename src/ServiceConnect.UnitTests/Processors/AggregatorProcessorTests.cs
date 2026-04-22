@@ -152,9 +152,10 @@ public class AggregatorProcessorTests
     [Fact]
     public async Task FlushAggregator_RemovesSnapshotBeforeInvokingExecute()
     {
-        // Regression for H13: if Execute ran before RemoveSnapshotAsync, a cancellation
-        // between the two left the snapshot persisted after the handler's side-effects
-        // had fired — the next timer tick would re-dispatch the same batch.
+        // RemoveSnapshotAsync must run before Execute. If Execute ran first, a
+        // cancellation between the two would leave the snapshot persisted after
+        // the handler's side-effects had fired, and the next timer tick would
+        // re-dispatch the same batch — duplicating every side-effect.
         var messages = new List<AggTestMessage>
         {
             new(Guid.NewGuid()) { Value = "A" },
@@ -205,8 +206,9 @@ public class AggregatorProcessorTests
     [Fact]
     public async Task FlushAggregator_WithUnresolvedRecords_DoesNotDispatchOrDeleteWhenNoResolved()
     {
-        // Regression: if ALL records have unresolvable types,
-        // nothing is dispatched AND nothing is deleted — the unresolved records must survive.
+        // When every buffered record has an unresolvable type, nothing is
+        // dispatched AND nothing is deleted — the unresolved records must
+        // survive for a later attempt once the types become resolvable.
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -244,8 +246,9 @@ public class AggregatorProcessorTests
     [Fact]
     public async Task FlushAggregator_WithResolvedAndUnresolved_DispatchesResolvedAndPreservesUnresolved()
     {
-        // Regression: a flush with resolved + unresolved items must dispatch
-        // resolved ones and call RemoveSnapshotAsync (which only deletes the resolved ids).
+        // A flush containing both resolved and unresolved items must dispatch
+        // the resolved ones and call RemoveSnapshotAsync, which only deletes the
+        // ids captured in the snapshot so the unresolved records remain buffered.
         var messages = new List<AggTestMessage>
         {
             new(Guid.NewGuid()) { Value = "A" },
@@ -368,9 +371,10 @@ public class AggregatorProcessorTests
     [Fact]
     public async Task InsertDuringFlush_LateMessageNotWiped()
     {
-        // Regression: a message inserted between GetSnapshotAsync and
-        // RemoveSnapshotAsync must not be deleted, because RemoveSnapshotAsync only
-        // removes the specific ids captured in the snapshot.
+        // A message inserted after the snapshot is captured but before
+        // RemoveSnapshotAsync runs must survive the flush: RemoveSnapshotAsync
+        // only deletes the specific ids captured in the snapshot, not the
+        // whole aggregator buffer.
         var persistor = new ServiceConnect.Persistence.InMemory.InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
         const string name = "agg-race";
 

@@ -14,8 +14,8 @@ public class OutgoingEventArgs
     /// Gets the outgoing transport headers. <c>init</c>-only so a subscriber can
     /// still mutate individual entries (e.g. a telemetry hook injecting a
     /// <c>traceparent</c>) but cannot swap out the entire dictionary after the
-    /// framework built it — previously a public setter let subscribers replace
-    /// the map and strip the required MessageType/CorrelationId entries before
+    /// framework has built it. A public setter would let subscribers replace the
+    /// map and strip required MessageType/CorrelationId entries before the
     /// transport send.
     /// </summary>
     public Dictionary<string, string> Headers

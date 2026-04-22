@@ -196,9 +196,9 @@ public class MessageRetryHandlerTests
     [Fact]
     public async Task HandleFailureAsync_MalformedRetryCount_RoutesToErrorExchange()
     {
-        // Regression for H14: a malformed RetryCount header must not silently reset the
-        // retry budget to 0 — that would let a corrupt or attacker-controlled header loop
-        // the message forever. Route straight to the error exchange instead.
+        // A malformed RetryCount header must not silently reset the retry budget
+        // to zero — a corrupt or attacker-controlled header could otherwise loop
+        // the message forever. Route the message straight to the error exchange.
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),

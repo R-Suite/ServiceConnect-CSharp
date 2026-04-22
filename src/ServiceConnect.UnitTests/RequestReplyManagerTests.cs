@@ -1206,10 +1206,9 @@ namespace ServiceConnect.UnitTests
 
         /// <summary>
         /// Verifies that a ProcessReply call arriving after the timeout fires does NOT
-        /// appear in the result set. Before the fix, the entry remained in
-        /// _pendingRequests between TrySetResult and the finally-block TryRemove, so a
-        /// concurrently-arriving reply could still append to the response list and end
-        /// up in the snapshot returned to the caller.
+        /// appear in the result set. The pending request must be removed atomically
+        /// with TrySetResult so a late reply has no entry to append to and cannot
+        /// smuggle itself into the snapshot returned to the caller.
         /// </summary>
         [Fact]
         public async Task SendRequestMultiAsync_LateReplyAfterTimeout_IsNotIncludedInResults()

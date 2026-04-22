@@ -48,13 +48,13 @@ public class MessageTypeRegistryTests
     [Fact]
     public void Register_CollidingType_Throws()
     {
-        // M4 regression: previously a second Register call under the same FullName
-        // (e.g. two message types with the same namespace+name in different assemblies)
-        // overwrote the first entry silently, making dispatch non-deterministic.
+        // Two message types sharing the same FullName (same namespace+name across
+        // different assemblies) would otherwise make dispatch non-deterministic.
+        // Register must throw on the second entry instead of silently overwriting.
         //
         // Simulate the collision by pre-seeding the internal dictionary under
-        // FakeMessage1's FullName with a different Type. The registry must reject
-        // the subsequent Register(FakeMessage1) call rather than overwrite.
+        // FakeMessage1's FullName with a different Type, then assert the subsequent
+        // Register(FakeMessage1) call is rejected.
         var registry = new MessageTypeRegistry();
         var field = typeof(MessageTypeRegistry).GetField(
             "_registeredTypes",

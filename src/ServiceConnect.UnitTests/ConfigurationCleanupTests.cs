@@ -10,10 +10,10 @@ public class ConfigurationCleanupTests
     [Fact]
     public void OutgoingEventArgs_Headers_RejectsNullInInitializer()
     {
-        // M11: Headers is init-only so a subscriber can't swap the whole
-        // dictionary after the framework built it (and thus cannot strip
-        // required MessageType/CorrelationId entries before transport send).
-        // Null in the initializer is still rejected.
+        // Headers is init-only so a subscriber cannot swap the whole dictionary
+        // after the framework has built it (which would let a subscriber strip
+        // required MessageType/CorrelationId entries before the transport send).
+        // A null value supplied in the initializer must still be rejected up front.
         Assert.Throws<ArgumentNullException>(() => new OutgoingEventArgs { Headers = null! });
     }
 

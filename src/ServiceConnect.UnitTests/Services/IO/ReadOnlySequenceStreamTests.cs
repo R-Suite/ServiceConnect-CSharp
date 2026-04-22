@@ -39,8 +39,9 @@ public class ReadOnlySequenceStreamTests
     [Fact]
     public void Length_Throws_BecauseCanSeekIsFalse()
     {
-        // L3 regression: Length used to return the sequence length even though CanSeek
-        // was false, violating the Stream contract.
+        // Per the Stream contract, a non-seekable stream must throw on Length.
+        // Returning the sequence length here would mislead callers into performing
+        // random access on a forward-only stream.
         var seq = BuildMultiSegment([1, 2], [3, 4, 5]);
         using var stream = new ReadOnlySequenceStream(seq);
         Assert.Throws<NotSupportedException>(() => stream.Length);

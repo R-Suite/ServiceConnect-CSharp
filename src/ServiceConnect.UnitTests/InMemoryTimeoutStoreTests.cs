@@ -150,12 +150,10 @@ public class InMemoryTimeoutStoreTests
     [Fact]
     public async Task GetTimeoutsBatch_NextQueryTime_RespectsLeaseExpiryOfDueButLeasedRow()
     {
-        // M13 regression: previously the poll skipped leased-due rows silently
-        // and set NextQueryTime from the first unlocked future entry. If that
-        // future entry sat hours beyond the current lease expiry, the leased
-        // row stayed un-dispatched after its lease window closed. Now the
-        // leased row's LockExpiresAt is folded into NextQueryTime so the poll
-        // comes back in time to reclaim it.
+        // NextQueryTime must be bounded by the earliest lease expiry of any due-but-
+        // leased row, not just by the next unlocked future entry. Otherwise a leased
+        // row whose lease expires before the next unlocked entry would sit idle
+        // until the later poll fires and could miss its reclaim window entirely.
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
         var store = new InMemoryTimeoutStore(timeProvider: time);

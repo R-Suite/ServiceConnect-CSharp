@@ -11,12 +11,11 @@ namespace ServiceConnect.Services;
 /// </summary>
 internal static class MessageTypeExchangeName
 {
-    // Previously the name was FullName.Replace(".", "") which collapsed two
-    // types whose names differed only by dot position onto the same exchange
-    // (e.g. "A.BC" and "AB.C" both became "ABC"), cross-wiring routing. The
-    // eight-char hash suffix, drawn from the full assembly-qualified name,
-    // restores uniqueness across colliding flattened names while staying short
-    // enough for AMQP identifiers.
+    // FullName.Replace(".", "") alone is not injective — "A.BC" and "AB.C" both
+    // flatten to "ABC" and would share an exchange, cross-wiring routing. The
+    // eight-char hash suffix, drawn from the assembly-qualified name, keeps the
+    // mapping unique across colliding flattened names while staying short enough
+    // to fit inside AMQP identifier length limits.
     public static string From(Type type)
     {
         ArgumentNullException.ThrowIfNull(type);

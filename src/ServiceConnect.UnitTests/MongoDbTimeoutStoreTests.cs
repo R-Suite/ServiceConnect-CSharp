@@ -329,10 +329,10 @@ public class MongoDbTimeoutStoreTests
     [Fact]
     public async Task RemoveDispatchedTimeout_IdOnly_FilterRequiresLockedByEmpty()
     {
-        // M14 regression: the legacy id-only Remove overload previously filtered
-        // by Id + Locked=true, meaning any caller with the id could delete a row
-        // leased by another worker. The fix pins LockedBy to Guid.Empty so the
-        // id-only path can only act on rows no live worker holds.
+        // The id-only Remove overload must pin LockedBy to Guid.Empty so it can
+        // only delete rows that no live worker currently holds. Filtering by id
+        // alone (or id + Locked=true) would let one worker delete a timeout that
+        // another worker has leased.
         var id = Guid.NewGuid();
         FilterDefinition<TimeoutData>? capturedFilter = null;
         var collection = new Mock<IMongoCollection<TimeoutData>>();
@@ -354,9 +354,9 @@ public class MongoDbTimeoutStoreTests
     [Fact]
     public async Task EnsureTimeoutIndex_IdIndex_IsCreatedWithUniqueConstraint()
     {
-        // M16 regression: duplicate-insert collisions on the same timeout Id
-        // were previously possible because the Id index was non-unique. Mongo
-        // InsertOne does not reject duplicates without a unique index.
+        // The Id index must be unique so Mongo rejects duplicate inserts for
+        // the same timeout Id. Without uniqueness, InsertOne silently allows
+        // duplicates and downstream claim/remove logic operates on two rows.
         List<CreateIndexModel<TimeoutData>>? capturedModels = null;
 
         var indexes = new Mock<IMongoIndexManager<TimeoutData>>();
@@ -402,9 +402,9 @@ public class MongoDbTimeoutStoreTests
     [Fact]
     public void Ctor_RejectsNonPositiveTimeoutLockLeaseDuration()
     {
-        // M18 regression: lease duration must be strictly positive — a
-        // zero or negative lease would either claim rows forever (no TTL)
-        // or immediately reap every claim before dispatch can complete.
+        // Lease duration must be strictly positive. Zero or negative values
+        // would either mean claims never expire (no recovery path for a
+        // crashed worker) or every claim is reaped before dispatch finishes.
         var client = new Mock<IMongoClient>();
         client.Setup(c => c.GetDatabase("test", null)).Returns(Mock.Of<IMongoDatabase>());
 
@@ -417,9 +417,9 @@ public class MongoDbTimeoutStoreTests
     [Fact]
     public async Task ReapStaleLeases_FiltersOnLockedAndExpiredLease_AndClearsLockFields()
     {
-        // M18 regression: the reaper must target only rows where the lease
-        // has expired (Locked=true AND LockExpiresAt <= now) and must clear
-        // Locked/LockedBy/LockExpiresAt so the next poll can reclaim them.
+        // The reaper must target only rows where a lease exists and has expired
+        // (Locked=true AND LockExpiresAt <= now) and must clear every lease
+        // field (Locked, LockedBy, LockExpiresAt) so the next poll can reclaim them.
         var now = new DateTimeOffset(2026, 4, 22, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
 
@@ -476,9 +476,9 @@ public class MongoDbTimeoutStoreTests
     [Fact]
     public void Ctor_RejectsNonPositiveTimeoutBatchSize()
     {
-        // M15 regression: the per-poll cap must be positive — a zero or
-        // negative batch size would produce an unbounded (or vacuous) claim
-        // pass, which is exactly the problem the cap exists to prevent.
+        // Batch size must be strictly positive. Zero or negative values would
+        // either disable the per-poll cap (claiming the entire backlog at once)
+        // or make the claim pass vacuous — defeating the purpose of the limit.
         var client = new Mock<IMongoClient>();
         client.Setup(c => c.GetDatabase("test", null)).Returns(Mock.Of<IMongoDatabase>());
 
@@ -491,10 +491,9 @@ public class MongoDbTimeoutStoreTests
     [Fact]
     public async Task GetTimeoutsBatch_PassesConfiguredLimitToFindCandidates()
     {
-        // M15 regression: the poll must cap the claim pass at TimeoutBatchSize
-        // by threading the value into FindOptions.Limit. Before the fix
-        // UpdateMany had no bound and a single poll could claim the entire
-        // due backlog.
+        // The poll must cap the claim pass at TimeoutBatchSize by threading the
+        // value into FindOptions.Limit. Without the bound, a single poll could
+        // claim the entire due backlog in one pass and starve other workers.
         const int configuredLimit = 37;
 
         FindOptions<TimeoutData, Guid>? capturedFindOptions = null;
@@ -561,8 +560,9 @@ public class MongoDbTimeoutStoreTests
     [Fact]
     public async Task ReleaseDispatchedTimeout_IdOnly_FilterRequiresLockedByEmpty()
     {
-        // M14 regression: same guard on the release path — id-only release
-        // cannot clear lock fields on a row owned by another session.
+        // Same guard as the id-only Remove: release by id alone must pin
+        // LockedBy to Guid.Empty so it cannot clear lock fields on a row owned
+        // by another session.
         var id = Guid.NewGuid();
         FilterDefinition<TimeoutData>? capturedFilter = null;
         var collection = new Mock<IMongoCollection<TimeoutData>>();

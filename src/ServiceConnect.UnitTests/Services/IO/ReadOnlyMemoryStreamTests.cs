@@ -50,8 +50,9 @@ public class ReadOnlyMemoryStreamTests
     [Fact]
     public void Length_Throws_BecauseCanSeekIsFalse()
     {
-        // L3 regression: Length used to return the buffer length even though CanSeek
-        // was false, violating the Stream contract.
+        // Per the Stream contract, a non-seekable stream must throw on Length.
+        // Returning the buffer length here would mislead callers into performing
+        // random access on a forward-only stream.
         using var stream = new ReadOnlyMemoryStream(new byte[] { 1, 2, 3 });
         Assert.Throws<NotSupportedException>(() => stream.Length);
     }

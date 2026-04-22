@@ -73,12 +73,10 @@ public class MongoDbProcessManagerFinderTests
     [Fact]
     public async Task UpdateDataAsync_WhenCancelled_DoesNotBumpCallerVersion()
     {
-        // H21 regression: previously the code bumped versionData.Version before
-        // ReplaceOneAsync and only restored it on MongoException / ModifiedCount == 0.
-        // A cancellation surfacing as OperationCanceledException from inside
-        // ReplaceOneAsync would escape without hitting the restore, leaving the caller
-        // with a bumped version. The fix uses a separate write record and only mutates
-        // the caller's version on confirmed success, so cancellation is safe.
+        // The caller's version must only advance on a confirmed successful write.
+        // If ReplaceOneAsync is cancelled (OperationCanceledException), the caller's
+        // instance must still carry the original version so a retry targets the
+        // right row and does not see itself as ahead of the stored document.
         var finder = CreateFinder(out var database, out _);
         var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
         var versionedData = new MongoDbData<TestProcessManagerData>

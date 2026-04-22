@@ -114,9 +114,9 @@ namespace ServiceConnect.UnitTests
         [InlineData("  ")]
         public void AddQueueMappingListOfQueues_RejectsInvalidElement(string? badQueue)
         {
-            // M2 regression: previously only the list reference was validated, so null/
-            // empty/whitespace entries were silently stored — the single-queue overload
-            // already guarded this, leaving the list form inconsistent.
+            // The list overload must reject null/empty/whitespace entries up-front,
+            // matching the single-queue overload's guard so the mapping never stores
+            // an invalid queue name regardless of which API the caller uses.
             var config = new QueueConfiguration();
             Assert.Throws<ArgumentException>(
                 () => config.AddQueueMapping(typeof(int), new List<string> { "ok", badQueue! }));

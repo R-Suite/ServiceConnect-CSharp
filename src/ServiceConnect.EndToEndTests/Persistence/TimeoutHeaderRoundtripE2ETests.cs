@@ -13,10 +13,10 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// Regression guard: custom headers carried on the initial process-manager message are
-/// captured, persisted with the timeout, and re-delivered on the TimeoutMessage. Values
-/// that arrive as byte[] from RabbitMQ must be re-emitted as "base64:..." so receivers
-/// can decode them back to the original UTF-8 content.
+/// End-to-end guard that custom headers carried on the initial process-manager message
+/// are captured, persisted alongside the timeout, and re-delivered on the scheduled
+/// TimeoutMessage. Header values that arrive from RabbitMQ as byte[] are re-emitted
+/// as "base64:..." so receivers can decode them back to the original UTF-8 content.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
 public class TimeoutHeaderRoundtripE2ETests

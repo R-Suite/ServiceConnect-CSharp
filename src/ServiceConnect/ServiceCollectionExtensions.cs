@@ -63,9 +63,9 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<RequestReplyManager>();
         services.TryAddSingleton<IRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
         // Resolve the concrete RequestReplyManager directly rather than casting via
-        // IRequestReplyManager. A caller who replaces IRequestReplyManager with a
-        // non-IReplyStatusRequestReplyManager type previously got a silent null here;
-        // resolving the concrete singleton fails fast with a clear DI error instead.
+        // IRequestReplyManager. If a caller replaces IRequestReplyManager with a type
+        // that does not also implement IReplyStatusRequestReplyManager, DI fails fast
+        // with a clear error here instead of returning null at the callsite.
         services.TryAddSingleton<IReplyStatusRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
         services.TryAddSingleton<ConsumeContextPool>();

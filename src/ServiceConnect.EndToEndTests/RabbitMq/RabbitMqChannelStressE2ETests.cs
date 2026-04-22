@@ -10,8 +10,10 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// Regression guard: publishing 20 poison messages concurrently must not produce
-/// CHANNEL_ERROR or AlreadyClosedException. All messages must land in the error queue.
+/// End-to-end guard that bursts of concurrent poison messages stay within the
+/// channel's concurrency discipline. Publishing 20 poison messages at once must not
+/// surface CHANNEL_ERROR or AlreadyClosedException, and every message must land in
+/// the error queue.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
 public class RabbitMqChannelStressE2ETests

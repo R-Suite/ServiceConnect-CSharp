@@ -5,11 +5,9 @@ namespace ServiceConnect.UnitTests;
 
 public class ExceptionShapeTests
 {
-    // L4 regression: the sealed library exceptions used to rely on primary constructors
-    // with optional parameters, which does not satisfy CA1032 and (for TransportException
-    // / SerializationException) left `new X(message, innerException)` uncompilable because
-    // the middle parameter was a string/Type, not an Exception. These tests pin the
-    // standard CA1032 constructor shapes.
+    // Each sealed library exception must expose the full CA1032 constructor shape
+    // (parameterless, message, message+innerException) so callers can wrap inner
+    // causes with `new X(message, inner)` uniformly across the exception surface.
 
     [Fact]
     public void ConcurrencyException_SupportsStandardConstructors()

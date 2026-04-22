@@ -122,9 +122,9 @@ public class RabbitMqConsumerHostTests
     [InlineData("9", (ushort)9)]
     public async Task StartConsumingAsync_AcceptsNonIntPrefetchSettingOverride(object settingValue, ushort expected)
     {
-        // M23 regression: the prefetch override previously cast to (int) before
-        // Convert.ToUInt16, which threw InvalidCastException for boxed long / ushort /
-        // string settings coming from configuration providers.
+        // The prefetch override must accept every boxed shape that configuration
+        // providers emit (ushort, long, numeric string, etc.). A hard cast to int
+        // before Convert.ToUInt16 would throw InvalidCastException on valid input.
         var (conn, channel, _) = MockConnection();
         var tcfg = new Mock<ITransportConfiguration>();
         tcfg.SetupGet(c => c.MaxRetries).Returns(3);
@@ -226,10 +226,10 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_DoesNotObserveStartupCancellation()
     {
-        // Regression: the startup CT was captured by the delivery callback, so a caller
-        // that cancelled the startup CT after StartConsumingAsync returned would see
-        // every subsequent delivery hand its handler a cancelled token. Deliveries must
-        // observe the consumer-lifetime token, not the startup token.
+        // Delivery callbacks must observe the consumer-lifetime token, not the
+        // startup token. Otherwise a caller cancelling the startup CT after
+        // StartConsumingAsync returns would hand every subsequent delivery a
+        // pre-cancelled token and the handler would never run.
         var (conn, _, _) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();

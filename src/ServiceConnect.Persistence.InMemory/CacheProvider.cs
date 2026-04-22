@@ -97,8 +97,8 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
         _slidingTime.TryRemove(key!, out _);
         DisposeTimer(key!);
 
-        // Fire only when the key was actually present; previously subscribers received
-        // spurious KeyRemoved events for keys that never existed in the cache.
+        // Fire KeyRemoved only when the key was actually present so subscribers
+        // never observe removal events for keys that were never in the cache.
         if (removed)
         {
             KeyRemoved?.Invoke(key, EventArgs.Empty);

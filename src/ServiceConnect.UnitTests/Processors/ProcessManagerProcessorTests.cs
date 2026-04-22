@@ -172,11 +172,11 @@ public class ProcessManagerProcessorTests
     [Fact]
     public async Task ProcessAsync_OnConcurrencyException_HandlerInvokedOnceAndExceptionPropagates()
     {
-        // Regression for H16: previously the processor looped on ConcurrencyException and
-        // re-invoked the handler up to 4 times, multiplying every side-effect
-        // (HTTP calls, bus.Send, log lines) in the handler. The fix collapses the loop —
-        // the exception bubbles to the transport so retry cadence is governed by the
-        // configured MessageRetryHandler, not a hardcoded in-process schedule.
+        // On ConcurrencyException the handler must be invoked exactly once and
+        // the exception must bubble up to the transport. Retrying inside the
+        // processor would multiply every handler side-effect (HTTP calls,
+        // bus.Send, logs), and retry cadence belongs to MessageRetryHandler —
+        // not a hardcoded in-process schedule.
         var (services, _, mockFinder) = CreateBaseServices();
         var handler = new PmTestHandler();
         services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);

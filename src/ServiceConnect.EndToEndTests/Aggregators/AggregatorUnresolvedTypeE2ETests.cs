@@ -15,9 +15,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// Regression guard: an unresolvable document in the aggregator Mongo collection must
-/// not prevent the resolvable batch from flushing, and must survive (not be deleted)
-/// after the flush completes.
+/// End-to-end guard that an unresolvable document in the aggregator Mongo collection
+/// does not block a flush of its resolvable siblings and is not deleted when the
+/// flush completes, so a later release that adds the missing type can still process it.
 /// </summary>
 [Collection(nameof(PersistenceCollection))]
 public class AggregatorUnresolvedTypeE2ETests
