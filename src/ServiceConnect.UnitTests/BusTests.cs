@@ -827,6 +827,135 @@ namespace ServiceConnect.UnitTests
             Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, null!));
         }
 
+        // --- MessageId authority tests ---
+
+        [Fact]
+        public async Task SendAsync_FastPath_StampsMessageIdHeader()
+        {
+            // Bus is Bus-authoritative for MessageId; the fast path (no outgoing filters)
+            // must stamp a non-empty MessageId even when the caller does not supply one.
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+            await _bus.SendAsync(message);
+
+            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+                typeof(FakeMessage1),
+                It.IsAny<byte[]>(),
+                It.Is<Dictionary<string, string>>(h =>
+                    h.ContainsKey(HeaderKeys.MessageId) &&
+                    !string.IsNullOrEmpty(h[HeaderKeys.MessageId])),
+                null), Times.Once);
+        }
+
+        [Fact]
+        public async Task SendAsync_FastPath_CallerCannotOverride_MessageId()
+        {
+            // Bus stamps MessageId last, so a caller-supplied value in options.Headers
+            // must be replaced by the Bus-minted GUID.
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            var hostile = "00000000-0000-0000-0000-000000000000";
+            var options = new SendOptions
+            {
+                Headers = new Dictionary<string, string> { [HeaderKeys.MessageId] = hostile }
+            };
+
+            await _bus.SendAsync(message, options);
+
+            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+                typeof(FakeMessage1),
+                It.IsAny<byte[]>(),
+                It.Is<Dictionary<string, string>>(h =>
+                    h.ContainsKey(HeaderKeys.MessageId) &&
+                    h[HeaderKeys.MessageId] != hostile),
+                null), Times.Once);
+        }
+
+        [Fact]
+        public async Task PublishAsync_FilterPath_OutgoingFilterSeesNonEmptyMessageId()
+        {
+            // Regression guard for the original bug: outgoing filters must be able to
+            // read envelope.Headers["MessageId"] without a KeyNotFoundException.
+            Envelope? capturedEnvelope = null;
+
+            _mockFilterPipeline
+                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Envelope env, CancellationToken _) =>
+                {
+                    capturedEnvelope = env;
+                    return false;
+                });
+
+            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
+
+            var busWithFilters = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                pipelineConfigWithFilter.Object,
+                _scopeFactory,
+                _scopeAccessor);
+
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+            await busWithFilters.PublishAsync(message);
+
+            Assert.NotNull(capturedEnvelope);
+            Assert.True(capturedEnvelope!.Headers.ContainsKey(HeaderKeys.MessageId));
+            var messageId = capturedEnvelope.Headers[HeaderKeys.MessageId]?.ToString();
+            Assert.NotNull(messageId);
+            Assert.NotEmpty(messageId!);
+        }
+
+        [Fact]
+        public async Task PublishAsync_FilterPath_CallerCannotOverride_MessageId()
+        {
+            // Even on the filter path, the Bus must stamp MessageId last so a caller
+            // cannot spoof it via options.Headers.
+            var hostile = "00000000-0000-0000-0000-000000000000";
+            string? seenMessageId = null;
+
+            _mockFilterPipeline
+                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Envelope env, CancellationToken _) =>
+                {
+                    seenMessageId = env.Headers[HeaderKeys.MessageId]?.ToString();
+                    return false;
+                });
+
+            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
+
+            var busWithFilters = new Bus(
+                _mockSerializer.Object,
+                _mockFilterPipeline.Object,
+                _mockSendPipeline.Object,
+                _mockRequestReplyManager.Object,
+                _mockLogger.Object,
+                _mockQueueConfig.Object,
+                _mockDispatcher.Object,
+                _handlerReferences,
+                pipelineConfigWithFilter.Object,
+                _scopeFactory,
+                _scopeAccessor);
+
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            var options = new PublishOptions
+            {
+                Headers = new Dictionary<string, string> { [HeaderKeys.MessageId] = hostile }
+            };
+
+            await busWithFilters.PublishAsync(message, options);
+
+            Assert.NotNull(seenMessageId);
+            Assert.NotEqual(hostile, seenMessageId);
+        }
+
         // --- Helper ---
 
         private Bus CreateBusWithConsumer(IConsumer consumer) =>

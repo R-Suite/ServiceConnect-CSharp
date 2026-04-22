@@ -473,7 +473,10 @@ public sealed class Producer : IProducer
         }
 
         result[HeaderKeys.DestinationAddress] = queueName;
-        result[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+        // MessageId is now Bus-authoritative; preserve the Bus-minted value.
+        // Only mint one here for callers that invoke the Producer directly (bypassing Bus).
+        if (!result.ContainsKey(HeaderKeys.MessageId))
+            result[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
         result[HeaderKeys.MessageType] = messageType;
 
         result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;

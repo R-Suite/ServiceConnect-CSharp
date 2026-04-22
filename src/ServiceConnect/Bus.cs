@@ -457,6 +457,10 @@ public sealed class Bus : IBus
             }
         }
 
+        // Bus-authoritative: stamp MessageId last so callers cannot spoof via options.Headers.
+        // Outgoing filters (e.g. OutgoingDeduplicationFilter) rely on this header being present.
+        envelope.Headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+
         return envelope;
     }
 
@@ -510,7 +514,7 @@ public sealed class Bus : IBus
         // below would throw "Collection was modified". ToArray grabs a stable
         // copy with a single enumeration.
         var snapshot = additionalHeaders is null ? null : additionalHeaders.ToArray();
-        var capacity = 2 + (snapshot?.Length ?? 0);
+        var capacity = 3 + (snapshot?.Length ?? 0);   // +1 for MessageId
         var headers = new Dictionary<string, string>(capacity)
         {
             [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name,
@@ -522,6 +526,9 @@ public sealed class Bus : IBus
             foreach (var kvp in snapshot)
                 headers[kvp.Key] = kvp.Value;
         }
+
+        // Bus-authoritative: stamp MessageId last so callers cannot spoof via options.Headers.
+        headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
 
         return headers;
     }

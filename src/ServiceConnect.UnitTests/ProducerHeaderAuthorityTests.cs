@@ -11,7 +11,10 @@ namespace ServiceConnect.UnitTests;
 
 /// <summary>
 /// Verifies that reserved transport headers are server-authoritative: caller-supplied values
-/// must be silently overwritten by the producer for the five security-relevant keys.
+/// must be silently overwritten by the producer for the four security-relevant keys.
+/// MessageId is authoritative at the Bus layer instead (see BusTests) so outgoing filters
+/// can observe it before the send pipeline runs; direct Producer callers are trusted to
+/// preserve it.
 /// </summary>
 public class ProducerHeaderAuthorityTests
 {
@@ -79,7 +82,6 @@ public class ProducerHeaderAuthorityTests
 
     [Theory]
     [InlineData(HeaderKeys.DestinationAddress, "spoofed-queue")]
-    [InlineData(HeaderKeys.MessageId, "00000000-0000-0000-0000-000000000000")]
     [InlineData(HeaderKeys.MessageType, "Spoofed")]
     [InlineData(HeaderKeys.TypeName, "Spoofed.Type")]
     [InlineData(HeaderKeys.FullTypeName, "Spoofed.Type, SpoofedAssembly")]
@@ -128,7 +130,6 @@ public class ProducerHeaderAuthorityTests
 
     [Theory]
     [InlineData(HeaderKeys.DestinationAddress, "spoofed-queue")]
-    [InlineData(HeaderKeys.MessageId, "00000000-0000-0000-0000-000000000000")]
     [InlineData(HeaderKeys.MessageType, "Spoofed")]
     [InlineData(HeaderKeys.TypeName, "Spoofed.Type")]
     [InlineData(HeaderKeys.FullTypeName, "Spoofed.Type, SpoofedAssembly")]
