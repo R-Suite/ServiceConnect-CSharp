@@ -1,0 +1,151 @@
+---
+title: Message Deduplication
+description: Filter package that blocks redelivered messages whose MessageId has already been processed, using an in-memory or MongoDB persistor.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`ServiceConnect.Filters.MessageDeduplication` is an opt-in filter package that
+drops broker redeliveries whose `MessageId` has already been processed. It
+ships two filters, two persistors, and a cleanup hosted service, all wired up
+via a single DI extension.
+
+Pair this page with the operational guidance on
+[Idempotency](/learn/operations/idempotency/) and the runnable
+[sample](https://github.com/ruffer/ServiceConnect-CSharp/tree/master/examples/MessageDeduplication).
+
+## When to use it
+
+You have a ServiceConnect consumer that does non-idempotent work — sending
+email, taking payment, inserting rows without a natural upsert key — and the
+broker occasionally redelivers. Handler-side idempotency is the first line of
+defence; this filter is the infrastructure-level belt-and-braces.
+
+<Aside type="caution">
+  The filter only blocks messages whose `Redelivered` header is `true`. A first
+  delivery with a new `MessageId` always passes through. The filter does not
+  prevent the same message from being sent twice by application code — for that,
+  design idempotent producers or use the `OutgoingDeduplicationFilter` on the
+  sender side to short-circuit duplicate *outbound* sends.
+</Aside>
+
+## Install
+
+```bash
+dotnet add package ServiceConnect.Filters.MessageDeduplication
+```
+
+## Register
+
+```csharp
+services.AddMessageDeduplicationFilter(options =>
+{
+    options.PersistorType = PersistorType.MongoDb;
+    options.ConnectionStringMongoDb = "mongodb://localhost:27017";
+    options.DatabaseNameMongoDb    = "service-dedup";
+    options.CollectionNameMongoDb  = "ProcessedMessages";
+    options.MsgExpiryHours         = 24;
+});
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { /* ... */ });
+    builder.AddBeforeConsumingFilter<IncomingDeduplicationFilter>();
+    builder.AddOutgoingFilter<OutgoingDeduplicationFilter>();
+});
+```
+
+`AddMessageDeduplicationFilter` registers the configured persistor (singleton),
+both filter types (transient), and the [`DeduplicationCleanupHostedService`](#cleanup)
+background worker. It does *not* wire the filters into the bus pipeline — do
+that explicitly on the `ServiceConnectBuilder` so you pick which side (sender,
+receiver, or both) runs which filter.
+
+## Settings
+
+Every field on [`DeduplicationFilterSettings`](https://github.com/ruffer/ServiceConnect-CSharp/blob/master/filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/DeduplicationFilterSettings.cs):
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `PersistorType` | `PersistorType` | `InMemory` | `InMemory` or `MongoDb`. See [Choosing a persistor](#choosing-a-persistor). |
+| `MsgExpiryHours` | `int` | `24` | Retention — how far back the filter remembers `MessageId`s. Must be ≥ broker redelivery window. |
+| `MsgCleanupIntervalMinutes` | `int` | `60` | How often the cleanup worker sweeps expired entries. |
+| `DisableMsgExpiry` | `bool` | `false` | When `true`, entries never expire and the cleanup worker no-ops. Useful for tests. |
+| `ConnectionStringMongoDb` | `string?` | `mongodb://localhost` | MongoDB persistor only. |
+| `DatabaseNameMongoDb` | `string?` | `ServiceConnect-Filters-MessageDeduplication` | MongoDB persistor only. |
+| `CollectionNameMongoDb` | `string?` | `ProcessedMessages` | MongoDB persistor only. |
+| `MongoDbCertPath` | `string?` | `null` | Path to an X509 client certificate. Enables TLS when set. |
+| `MongoDbCertBase64` | `string?` | `null` | Base64 X509 client certificate, alternative to `MongoDbCertPath`. |
+| `MongoDbCertPassphrase` | `string?` | `null` | Passphrase for either cert source. |
+
+## Filters
+
+### `IncomingDeduplicationFilter`
+
+Wire with `builder.AddBeforeConsumingFilter<IncomingDeduplicationFilter>()`.
+
+- Fast-path returns `true` (pass through) when the `Redelivered` header is
+  missing or `false`.
+- Parses `MessageId` as a `Guid` from the envelope headers. A missing or
+  malformed id is tolerated — the message passes through rather than failing,
+  because deduplication cannot apply without a valid key.
+- Queries the configured persistor; returns `false` (block) when the id is
+  already recorded.
+
+### `OutgoingDeduplicationFilter`
+
+Wire with `builder.AddOutgoingFilter<OutgoingDeduplicationFilter>()`.
+
+- Records every outgoing `MessageId` in the persistor with an expiry of
+  `UtcNow + MsgExpiryHours`.
+- Fail-closed: no try/catch. If the persistor throws, the send fails. This
+  preserves the dedup guarantee at the cost of send availability when the
+  backing store is down.
+
+## Choosing a persistor
+
+`PersistorType.InMemory` uses a per-process `ConcurrentDictionary`. It is
+appropriate when the sender and receiver run in the same process (in-process
+tests, self-publishing, or a single-tenant worker that deduplicates its own
+redeliveries). Across processes or replicas it is effectively a no-op —
+each process has its own dictionary.
+
+`PersistorType.MongoDb` uses a single collection keyed by `MessageId`, shared
+across every process that points at the same database. Use this when the
+sender and receiver are separate services, or when the receiver runs as
+multiple replicas behind a shared queue.
+
+Implement `IMessageDeduplicationPersistor` for other backends (Redis, Postgres,
+etc.):
+
+```csharp
+public interface IMessageDeduplicationPersistor
+{
+    Task<bool> GetMessageExistsAsync(Guid messageId, CancellationToken cancellationToken = default);
+    Task InsertAsync(Guid messageId, DateTime messageExpiry, CancellationToken cancellationToken = default);
+    Task RemoveExpiredMessagesAsync(DateTime messageExpiry, CancellationToken cancellationToken = default);
+}
+```
+
+Register your implementation *before* calling `AddMessageDeduplicationFilter` —
+the extension's default registration uses `TryAdd`-like semantics, so the first
+registration wins. (Verify this against the extension source if your DI
+container behaves differently.)
+
+## Cleanup
+
+`DeduplicationCleanupHostedService` is registered automatically by
+`AddMessageDeduplicationFilter`. On a cadence of `MsgCleanupIntervalMinutes`
+it calls `IMessageDeduplicationPersistor.RemoveExpiredMessagesAsync` with a
+cutoff of `UtcNow`. Entries inserted with `messageExpiry < UtcNow` are
+removed, keeping the store bounded.
+
+Set `DisableMsgExpiry = true` to turn this off — entries will remain in the
+store indefinitely. Only do this when you know the volume is bounded by
+external means (a test fixture, for example).
+
+## See also
+
+- [`IFilter`](/reference/filters/ifilter/) — the base interface the filters implement
+- [Idempotency](/learn/operations/idempotency/) — operational guidance and handler-side patterns
+- [MessageDeduplication sample](https://github.com/ruffer/ServiceConnect-CSharp/tree/master/examples/MessageDeduplication)

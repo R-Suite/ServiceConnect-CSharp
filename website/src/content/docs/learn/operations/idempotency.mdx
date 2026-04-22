@@ -1,0 +1,76 @@
+---
+title: Idempotency
+description: Why duplicates happen in ServiceConnect, how to design handlers that tolerate them, and when to add infrastructure-level deduplication.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+ServiceConnect delivers messages at least once. Most of the time you receive
+a message exactly once, but occasionally you will see the same message twice
+— the broker redelivers when a consumer NACKs or disconnects before
+acknowledging. If the handler's side effects are not idempotent, the second
+delivery corrupts state.
+
+There are two places to defend against this, and they are not exclusive.
+
+## Handler-side idempotency (preferred)
+
+Design the handler so that processing the same message twice produces the same
+end state as processing it once. This is the most reliable defence because it
+survives every kind of duplicate — broker redelivery, publisher retries, manual
+requeues.
+
+Common patterns:
+
+- **Natural keys and upserts.** `INSERT ... ON CONFLICT DO NOTHING` against a
+  table with a unique index on the message's business id. The second delivery
+  does nothing.
+- **Domain-specific dedup tables.** Record the `MessageId` in the same
+  transaction as the side effect, keyed and indexed. Before doing work, check
+  the table.
+- **Outbox / inbox pattern.** The handler writes the processed-id alongside
+  the outgoing events in a single transaction. Subsequent deliveries find the
+  inbox row and skip.
+
+The common thread: the dedup check lives inside the same consistency boundary
+as the side effect.
+
+## Infrastructure-level deduplication
+
+When the side effect lives outside your consistency boundary (calling a
+third-party API, sending an email, charging a card), you cannot always make
+the handler idempotent. For these cases ServiceConnect provides the
+`ServiceConnect.Filters.MessageDeduplication` filter package.
+
+The filter records outgoing `MessageId`s in a shared persistor (MongoDB is the
+cross-process option) and blocks incoming messages whose `Redelivered` header
+is `true` and whose `MessageId` is already recorded. The handler never sees
+the redelivery.
+
+See the [filter reference](/reference/filters/messagededuplication/) for
+configuration, persistor selection, and wiring, and the runnable
+[sample](https://github.com/ruffer/ServiceConnect-CSharp/tree/master/examples/MessageDeduplication)
+for an end-to-end demonstration.
+
+<Aside type="note">
+  The filter only blocks *broker redeliveries*. It does not protect against a
+  misbehaving publisher that sends two messages with different `MessageId`s
+  for the same logical event — for that, use handler-side idempotency or
+  enforce dedup at the publisher.
+</Aside>
+
+## Combining the two
+
+In practice, production services use both. Handler-side idempotency is
+correctness; infrastructure dedup is a performance optimisation (skip the
+work entirely) and a backstop for the cases where the handler's own check
+is expensive.
+
+Rough rule:
+
+- Small, idempotent handlers → handler-side only.
+- Expensive or externally-visible side effects with cheap `MessageId` lookup
+  → both.
+- Purely external side effects with no natural idempotency key (e.g. sending
+  an SMS) → infrastructure filter is your only option short of redesigning
+  the downstream API.

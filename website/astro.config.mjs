@@ -63,6 +63,7 @@ export default defineConfig({
                 { label: 'Configuration', link: '/learn/operations/configuration/' },
                 { label: 'Hosting & Lifecycle', link: '/learn/operations/hosting/' },
                 { label: 'Error Handling', link: '/learn/operations/error-handling/' },
+                { label: 'Idempotency', link: '/learn/operations/idempotency/' },
                 { label: 'Observability', link: '/learn/operations/observability/' },
               ],
             },
@@ -119,6 +120,7 @@ export default defineConfig({
               label: 'Filters & Middleware',
               items: [
                 { label: 'IFilter', link: '/reference/filters/ifilter/' },
+                { label: 'Message Deduplication', link: '/reference/filters/messagededuplication/' },
                 { label: 'IMessageProcessingMiddleware', link: '/reference/filters/imessageprocessingmiddleware/' },
                 { label: 'ISendMessageMiddleware', link: '/reference/filters/isendmessagemiddleware/' },
               ],
