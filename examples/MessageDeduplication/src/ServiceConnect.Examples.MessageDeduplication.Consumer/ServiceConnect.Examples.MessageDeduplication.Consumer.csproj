@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ServiceConnect.Examples.MessageDeduplication.Contracts/ServiceConnect.Examples.MessageDeduplication.Contracts.csproj" />
+    <ProjectReference Include="../../../ExampleSupport/ServiceConnect.Examples.Support.csproj" />
+    <ProjectReference Include="../../../../src/ServiceConnect/ServiceConnect.csproj" />
+    <ProjectReference Include="../../../../src/ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.csproj" />
+    <ProjectReference Include="../../../../filters/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.csproj" />
+  </ItemGroup>
+</Project>
