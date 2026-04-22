@@ -32,6 +32,14 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Publishes a request and invokes a callback for each reply received.
     /// </summary>
+    /// <remarks>
+    /// Parameter order differs from <see cref="PublishAsync"/>/<see cref="SendAsync"/>
+    /// (which put <c>options</c> second): <paramref name="onReply"/> is required and C#
+    /// does not allow an optional parameter (<c>options</c>) to precede a required one,
+    /// so the callback must come second. The alternative — making <c>options</c>
+    /// required — would force every caller to pass <see cref="RequestOptions.Default"/>
+    /// explicitly, which is worse ergonomics than the position asymmetry.
+    /// </remarks>
     Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where TRequest : Message where TReply : Message;
 

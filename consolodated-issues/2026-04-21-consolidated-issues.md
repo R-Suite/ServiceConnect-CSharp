@@ -4,7 +4,7 @@ description: Final list of real issues after re-verifying both prior verified-is
 type: review
 ---
 
-**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 6/7  (updated 2026-04-22)
+**Progress:** Critical 12/12 · High 20/20 · Medium 23/23 · Low 7/7  (updated 2026-04-22)
 
 # Consolidated `src` Issues (final)
 
@@ -347,10 +347,10 @@ Severity bands:
 - **What:** Exchange name is configurable via `IQueueConfiguration.AuditQueueName`; routing key is hardcoded to `""`, no way to configure a non-default exchange type or binding key.
 - **Fix:** Options-bound routing/binding key.
 
-### [ ] L7. `IBus` API inconsistency: `PublishRequestAsync` parameter order
+### [x] L7. `IBus` API inconsistency: `PublishRequestAsync` parameter order  _(wontfix — C# constraint)_
 - **File:** [IBus.cs:13-41](../src/ServiceConnect.Interfaces/Bus/IBus.cs#L13-L41)
 - **What:** `PublishAsync`/`SendAsync` use `options` as second param; `PublishRequestAsync` places `onReply` callback second, `options` third. Minor ergonomic inconsistency.
-- **Fix:** Align on next major.
+- **Resolution:** Documented as a deliberate deviation on `IBus.PublishRequestAsync`. Alignment would require making `options` required (since `onReply` is required and C# forbids optional-before-required), which trades one ergonomic problem for a worse one. Kept current signature; rationale inlined in the XML doc comment.
 
 ---
 
