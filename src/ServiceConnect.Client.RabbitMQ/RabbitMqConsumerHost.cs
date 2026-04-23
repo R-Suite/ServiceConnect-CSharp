@@ -351,13 +351,27 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             if (Volatile.Read(ref _shutdownTimedOut) != 0)
                 return false;
 
-            await _retryHandler.HandleFailureAsync(
-                publishChannel,
-                _retryQueueName,
-                args,
-                headers,
-                result.Exception,
-                GetShutdownPublishToken()).ConfigureAwait(false);
+            try
+            {
+                await _retryHandler.HandleFailureAsync(
+                    publishChannel,
+                    _retryQueueName,
+                    args,
+                    headers,
+                    result.Exception,
+                    GetShutdownPublishToken()).ConfigureAwait(false);
+            }
+            catch (Exception retryEx)
+            {
+                _logger.LogError(retryEx,
+                    "Retry publish failed for delivery {DeliveryTag}; dropping to prevent unbounded redelivery loop.",
+                    args.DeliveryTag);
+                // Intentionally swallow: the message is already failed and we cannot retry-publish it.
+                // Acking now (processed = true, returned below) prevents the broker from redelivering it
+                // into the same failed path. Without this, the exception propagates to the outer catch in
+                // EventAsync, sets processed=false, and the finally block nacks with requeue:true →
+                // hot-loop (measured at 73,462 invocations/10s in Phase 0 Task 4).
+            }
         }
         else if (result.NotHandled && _deadLetterUnhandledMessages && !_errorsDisabled)
         {
@@ -370,12 +384,22 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 headers.TryGetValue(HeaderKeys.TypeName, out typeNameRaw);
             var typeName = HeaderDecoder.Decode(typeNameRaw) ?? "<unknown>";
 
-            await _retryHandler.HandleTerminalFailureAsync(
-                publishChannel,
-                args,
-                headers,
-                new InvalidOperationException($"No processor handled message of type '{typeName}'."),
-                GetShutdownPublishToken()).ConfigureAwait(false);
+            try
+            {
+                await _retryHandler.HandleTerminalFailureAsync(
+                    publishChannel,
+                    args,
+                    headers,
+                    new InvalidOperationException($"No processor handled message of type '{typeName}'."),
+                    GetShutdownPublishToken()).ConfigureAwait(false);
+            }
+            catch (Exception terminalEx)
+            {
+                _logger.LogError(terminalEx,
+                    "Terminal-failure publish failed for delivery {DeliveryTag}; dropping to prevent unbounded redelivery loop.",
+                    args.DeliveryTag);
+                // Intentionally swallow — same rationale as the HandleFailureAsync catch above.
+            }
         }
         else if (!_errorsDisabled)
         {

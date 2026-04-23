@@ -18,20 +18,19 @@ public class PoisonMessageRedeliveryTests
         _fixture = fixture;
     }
 
-    [Fact(Skip = "Regression guard for confirmed Critical bug — unbounded redelivery when retry/error publish throws. Unskip once the Phase 1 fix wraps HandleFailureAsync/HandleTerminalFailureAsync. Last measured: 73,462 invocations in 10s against ceiling of 100.")]
+    [Fact]
     [Trait("Category", "Docker")]
     public async Task RetryPublishFailure_DoesNotCauseUnboundedRedelivery()
     {
-        // Investigation for the "Uncertain" item at consolodated-issues/2026-04-22-consolidated-issues.md:
-        // if HandleFailureAsync / HandleTerminalFailureAsync throws (e.g., broker nacks the publish
-        // under publisher confirms), the outer catch leaves processed=false and the finally block
-        // nacks the original with requeue:true → redelivery loop. This test arranges a handler that
-        // always throws with MaxRetries=0 and an error queue that rejects all publishes, forcing the
-        // terminal-failure publish to fail. It then counts handler invocations over a fixed window.
+        // Regression guard for Critical bug — unbounded redelivery when retry/error publish throws.
+        // Passes after the Phase 1 wrapping of HandleFailureAsync/HandleTerminalFailureAsync in
+        // RabbitMqConsumerHost.ProcessMessageAsync (each call site now catches publish exceptions,
+        // logs at Error, and allows the method to return true so EventAsync acks the message).
         //
-        // PASS (redelivery bounded below ceiling) = disconfirmed; broker RTT self-throttles enough.
-        // FAIL (redelivery count >= ceiling) = confirmed; needs a try/catch around the retry/terminal
-        // publishes to bound the loop explicitly.
+        // Setup: a handler that always throws with MaxRetries=0 and an error queue pre-declared with
+        // x-overflow=reject-publish so broker nacks the terminal-failure publish under publisher
+        // confirms. Without the fix the outer catch in EventAsync left processed=false → NACK+requeue
+        // → hot-loop (73,462 invocations/10s measured in Phase 0 Task 4).
         //
         // NOTE: RabbitMqConsumerHost's _publishChannel is ALWAYS created with publisher confirms
         // enabled (hardcoded in StartConsumingAsync — CreateChannelOptions(publisherConfirmationsEnabled:true)).
@@ -128,10 +127,12 @@ public class PoisonMessageRedeliveryTests
             // Observe for 10 seconds. Redelivery loop symptom: attemptCount grows rapidly.
             await Task.Delay(TimeSpan.FromSeconds(10));
 
-            const int ceiling = 100;
-            Assert.True(attemptCount < ceiling,
-                $"Handler invoked {attemptCount} times within 10 seconds — expected < {ceiling}. " +
-                $"Issue CONFIRMED: retry-publish failure causes unbounded redelivery.");
+            // After the Phase 1 fix, HandleTerminalFailureAsync throws (broker rejects publish),
+            // the inner catch swallows it, ProcessMessageAsync returns true, and EventAsync acks
+            // the message — so the handler is called exactly once and there is no redelivery.
+            Assert.True(attemptCount <= 1,
+                $"After the fix, expected the first terminal-failure publish failure to drop the message (attemptCount <= 1). " +
+                $"attemptCount={attemptCount}. Unbounded redelivery loop may have regressed.");
         }
         finally
         {
