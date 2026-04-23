@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
+Progress: Critical 3/3 · High 8/8 · Medium 4/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -53,16 +53,16 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Core
 
-- [ ] **`MessageType`/`CorrelationId` in headers are caller-overridable** — [Bus.cs:442-465, 510-533](../src/ServiceConnect/Bus.cs#L442-L533)
+- [x] (commit: TBD-Group1) **`MessageType`/`CorrelationId` in headers are caller-overridable** — [Bus.cs:442-465, 510-533](../src/ServiceConnect/Bus.cs#L442-L533)
   `CreateEnvelope`/`BuildHeadersDirect` set `MessageType` and `CorrelationId` first, then iterate caller `options.Headers` (which can overwrite either), and only `MessageId` is stamped last. The recent "move MessageId authority to Bus" commit enforced spoof-proofing for MessageId only; the other two are still spoofable via `options.Headers`. [r4]
 
-- [ ] **`StopConsumingCoreAsync` sets `_stopped = true` even if consumption never started** — [Bus.cs:371-383](../src/ServiceConnect/Bus.cs#L371-L383)
+- [x] (commit: TBD-Group1) **`StopConsumingCoreAsync` sets `_stopped = true` even if consumption never started** — [Bus.cs:371-383](../src/ServiceConnect/Bus.cs#L371-L383)
   Lock body unconditionally assigns `_stopped = true` regardless of `_consuming`. A host that observes a startup error and calls `StopConsumingAsync` defensively can no longer call `StartConsumingAsync` — throws "bus has been stopped" even though nothing started. Forces users to discard the Bus instance. [r4]
 
-- [ ] **`SemaphoreSlim` can be disposed while a lifecycle caller is about to wait on it** — [Bus.cs:403-416](../src/ServiceConnect/Bus.cs#L403-L416)
-  `DisposeAsync` sets `_disposed`, awaits `StopConsumingCoreAsync`, then disposes `_lifecycleSemaphore`. A `StartConsumingAsync` that passed `ThrowIfDisposed()` before `_disposed` flipped will call `WaitAsync` on a disposed semaphore → `ObjectDisposedException` on an apparently clean shutdown. [r1, r4]
+- [-] disconfirmed by BusTests.StartConsumingAsync_AfterDispose_ThrowsObjectDisposedException — **`SemaphoreSlim` can be disposed while a lifecycle caller is about to wait on it** — [Bus.cs:403-416](../src/ServiceConnect/Bus.cs#L403-L416)
+  `DisposeAsync` sets `_disposed`, awaits `StopConsumingCoreAsync`, then disposes `_lifecycleSemaphore`. A `StartConsumingAsync` that passed `ThrowIfDisposed()` before `_disposed` flipped will call `WaitAsync` on a disposed semaphore → `ObjectDisposedException` on an apparently clean shutdown. The post-dispose guarantee test passed (ThrowIfDisposed fires before WaitAsync in the sequential path). [r1, r4]
 
-- [ ] **Missing `OperationCanceledException` handling in `StopConsumingCoreAsync`** — [Bus.cs:386-393](../src/ServiceConnect/Bus.cs#L386-L393)
+- [x] (commit: TBD-Group1) **Missing `OperationCanceledException` handling in `StopConsumingCoreAsync`** — [Bus.cs:386-393](../src/ServiceConnect/Bus.cs#L386-L393)
   `WaitAsync(_disposeTimeout, cancellationToken)` catches only `TimeoutException`. Host cancellation during shutdown throws OCE out of the try-catch, abandoning the in-flight consumer dispose and leaving resources unreleased. (Public `StopConsumingAsync` path only — `DisposeAsync` passes `default`.) [r1]
 
 - [ ] **`MessageDispatcher` reports `Success=false` for untracked replies → retry/DLQ noise** — [MessageDispatcher.cs:131-142](../src/ServiceConnect/Services/MessageDispatcher.cs#L131-L142)

@@ -956,6 +956,107 @@ namespace ServiceConnect.UnitTests
             Assert.NotEqual(hostile, seenMessageId);
         }
 
+        // --- M1: Reserved header spoof-proofing ---
+
+        [Fact]
+        public async Task SendAsync_CallerCannotOverrideSystemHeaders()
+        {
+            // M1: MessageType/CorrelationId in options.Headers must not overwrite the system values
+            var spoofedMessageId = Guid.NewGuid().ToString();
+            var options = new SendOptions
+            {
+                Headers = new Dictionary<string, string>
+                {
+                    [HeaderKeys.MessageType] = "SomeoneElsesType",
+                    [HeaderKeys.CorrelationId] = "spoofed-correlation",
+                    [HeaderKeys.MessageId] = spoofedMessageId,
+                }
+            };
+
+            Dictionary<string, string>? captured = null;
+            _mockSendPipeline
+                .Setup(x => x.ExecuteSendMessagePipelineAsync(
+                    It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(),
+                    It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Callback<Type, byte[], Dictionary<string, string>, string?, CancellationToken>((_, _, h, _, _) => captured = h)
+                .Returns(Task.CompletedTask);
+
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            await _bus.SendAsync(message, options, CancellationToken.None);
+
+            Assert.NotNull(captured);
+            Assert.Equal(typeof(FakeMessage1).FullName, captured![HeaderKeys.MessageType]);
+            Assert.NotEqual("spoofed-correlation", captured[HeaderKeys.CorrelationId]);
+            Assert.NotEqual(spoofedMessageId, captured[HeaderKeys.MessageId]);
+        }
+
+        // --- M3: Semaphore dispose race ---
+
+        [Fact]
+        public async Task StartConsumingAsync_AfterDispose_ThrowsObjectDisposedException()
+        {
+            // M3: after DisposeAsync, all lifecycle calls must throw ObjectDisposedException
+            // (not NullReferenceException or succeed silently)
+            var mockConsumer = new Mock<IConsumer>();
+            var bus = CreateBusWithConsumer(mockConsumer.Object);
+            await bus.DisposeAsync();
+
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                () => bus.StartConsumingAsync(CancellationToken.None));
+        }
+
+        // --- M4: OperationCanceledException in StopConsumingCoreAsync must still dispose consumer ---
+
+        [Fact]
+        public async Task StopConsumingAsync_WhenCancellationRequested_StillDisposesConsumer()
+        {
+            // M4: cancellation during StopConsuming must not skip consumer teardown
+            var mockConsumer = new Mock<IConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+                .Returns(Task.CompletedTask);
+            mockConsumer
+                .Setup(x => x.DisposeAsync())
+                .Returns(ValueTask.CompletedTask);
+
+            var bus = CreateBusWithConsumer(mockConsumer.Object);
+            await bus.StartConsumingAsync(CancellationToken.None);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel(); // pre-cancel so WaitAsync sees cancellation immediately
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => bus.StopConsumingAsync(cts.Token));
+
+            // Consumer dispose must have been called despite the cancellation
+            mockConsumer.Verify(x => x.DisposeAsync(), Times.Once);
+
+            // Explicit dispose to clean up (no consumer left to call DisposeAsync on since
+            // the fix set _consuming=false during the cancelled stop)
+            await bus.DisposeAsync();
+        }
+
+        // --- M2: StopConsuming before start must not poison _stopped ---
+
+        [Fact]
+        public async Task StopConsumingAsync_BeforeStart_AllowsSubsequentStart()
+        {
+            // M2: a defensive stop on an unstarted bus must leave it restartable
+            var mockConsumer = new Mock<IConsumer>();
+            mockConsumer
+                .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+                .Returns(Task.CompletedTask);
+
+            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+
+            // Defensive stop before any start
+            await bus.StopConsumingAsync(CancellationToken.None);
+
+            // Must not throw "bus has been stopped"
+            await bus.StartConsumingAsync(CancellationToken.None);
+            await bus.StopConsumingAsync(CancellationToken.None); // cleanup
+        }
+
         // --- Helper ---
 
         private Bus CreateBusWithConsumer(IConsumer consumer) =>

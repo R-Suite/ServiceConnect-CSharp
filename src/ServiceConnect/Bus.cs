@@ -364,10 +364,25 @@ public sealed class Bus : IBus
     /// </summary>
     private async Task StopConsumingCoreAsync(CancellationToken cancellationToken = default)
     {
-        await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        // Acquire the lifecycle semaphore — this may throw OperationCanceledException if
+        // the caller cancels before the wait completes. In that case we fall through to the
+        // catch below to still tear down any in-flight consumer before rethrowing.
+        bool semaphoreAcquired = false;
+        IConsumer? localConsumer = null;
+        OperationCanceledException? pendingCancellation = null;
+
         try
         {
-            IConsumer? localConsumer = null;
+            await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            semaphoreAcquired = true;
+        }
+        catch (OperationCanceledException oce)
+        {
+            pendingCancellation = oce;
+        }
+
+        try
+        {
             lock (_stateLock)
             {
                 _logger.LogInformation("Bus stopping message consumption.");
@@ -375,28 +390,56 @@ public sealed class Bus : IBus
                 {
                     _consuming = false;
                     localConsumer = _consumer;
+                    // Stop is terminal only when consumption actually ran: the shared
+                    // consumer is disposed and cannot be restarted. Mark the bus stopped
+                    // so attempted restarts throw a clear error instead of silently failing.
+                    // A defensive stop on a bus that never started must leave it restartable.
+                    _stopped = true;
                 }
-                // Stop is terminal: the shared consumer is disposed and not recreated on
-                // restart, so a subsequent StartConsumingAsync would fail. Mark the bus
-                // stopped so that attempted restart throws a clear error instead.
-                _stopped = true;
             }
+
             if (localConsumer != null)
             {
-                try
+                if (pendingCancellation != null)
                 {
-                    await localConsumer.DisposeAsync().AsTask().WaitAsync(_disposeTimeout, cancellationToken).ConfigureAwait(false);
+                    // Cancellation already signalled — dispose immediately without a grace-period wait.
+                    try
+                    {
+                        await localConsumer.DisposeAsync().ConfigureAwait(false);
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        _logger.LogWarning(disposeEx, "Consumer dispose failed during cancellation.");
+                    }
                 }
-                catch (TimeoutException)
+                else
                 {
-                    _logger.LogWarning("Timed out waiting {Timeout} for consumer disposal.", _disposeTimeout);
+                    try
+                    {
+                        await localConsumer.DisposeAsync().AsTask().WaitAsync(_disposeTimeout, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Cancellation arrived after we acquired the semaphore — still dispose.
+                        try { await localConsumer.DisposeAsync().ConfigureAwait(false); }
+                        catch (Exception disposeEx) { _logger.LogWarning(disposeEx, "Consumer dispose failed during cancellation."); }
+                        throw;
+                    }
+                    catch (TimeoutException)
+                    {
+                        _logger.LogWarning("Timed out waiting {Timeout} for consumer disposal.", _disposeTimeout);
+                    }
                 }
             }
         }
         finally
         {
-            _lifecycleSemaphore.Release();
+            if (semaphoreAcquired)
+                _lifecycleSemaphore.Release();
         }
+
+        if (pendingCancellation != null)
+            throw pendingCancellation;
     }
 
     /// <inheritdoc />
@@ -431,6 +474,18 @@ public sealed class Bus : IBus
         return await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Header keys that the Bus stamps authoritatively. Caller-supplied values for
+    /// any of these keys are silently ignored so the bus remains the single source
+    /// of truth for message identity and type.
+    /// </summary>
+    private static readonly HashSet<string> ReservedHeaders = new(StringComparer.Ordinal)
+    {
+        HeaderKeys.MessageType,
+        HeaderKeys.CorrelationId,
+        HeaderKeys.MessageId,
+    };
+
     private static Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
     {
         // Snapshot once up front so a concurrent caller mutating the source
@@ -442,23 +497,22 @@ public sealed class Bus : IBus
         var envelope = new Envelope
         {
             Body = body,
-            Headers = new Dictionary<string, object>
-            {
-                [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name,
-                [HeaderKeys.CorrelationId] = correlationId.ToString()
-            }
+            Headers = new Dictionary<string, object>()
         };
 
         if (snapshot is not null)
         {
             foreach (var header in snapshot)
             {
-                envelope.Headers[header.Key] = header.Value;
+                if (!ReservedHeaders.Contains(header.Key))
+                    envelope.Headers[header.Key] = header.Value;
             }
         }
 
-        // Bus-authoritative: stamp MessageId last so callers cannot spoof via options.Headers.
-        // Outgoing filters (e.g. OutgoingDeduplicationFilter) rely on this header being present.
+        // Bus-authoritative: stamp system headers last so callers cannot spoof via options.Headers.
+        // Outgoing filters (e.g. OutgoingDeduplicationFilter) rely on MessageId being present.
+        envelope.Headers[HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name;
+        envelope.Headers[HeaderKeys.CorrelationId] = correlationId.ToString();
         envelope.Headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
 
         return envelope;
@@ -514,20 +568,22 @@ public sealed class Bus : IBus
         // below would throw "Collection was modified". ToArray grabs a stable
         // copy with a single enumeration.
         var snapshot = additionalHeaders is null ? null : additionalHeaders.ToArray();
-        var capacity = 3 + (snapshot?.Length ?? 0);   // +1 for MessageId
-        var headers = new Dictionary<string, string>(capacity)
-        {
-            [HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name,
-            [HeaderKeys.CorrelationId] = correlationId.ToString()
-        };
+        var capacity = 3 + (snapshot?.Length ?? 0);
+        var headers = new Dictionary<string, string>(capacity);
 
         if (snapshot is not null)
         {
             foreach (var kvp in snapshot)
-                headers[kvp.Key] = kvp.Value;
+            {
+                // Skip reserved keys — the bus stamps these authoritatively below.
+                if (!ReservedHeaders.Contains(kvp.Key))
+                    headers[kvp.Key] = kvp.Value;
+            }
         }
 
-        // Bus-authoritative: stamp MessageId last so callers cannot spoof via options.Headers.
+        // Bus-authoritative: stamp system headers last so callers cannot spoof via options.Headers.
+        headers[HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name;
+        headers[HeaderKeys.CorrelationId] = correlationId.ToString();
         headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
 
         return headers;
