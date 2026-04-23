@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ServiceConnect.Interfaces;
 
 /// <summary>
@@ -11,7 +13,7 @@ public interface IMessageTypeRegistry
     /// Attempts to resolve a previously registered type by its name.
     /// Returns <c>true</c> if the type was found; otherwise <c>false</c>.
     /// </summary>
-    bool TryResolve(string typeName, out Type type);
+    bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type);
 
     /// <summary>
     /// Registers a type so it can later be resolved by name.

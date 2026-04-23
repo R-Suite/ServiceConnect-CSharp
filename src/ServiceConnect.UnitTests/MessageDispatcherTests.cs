@@ -354,8 +354,11 @@ public class MessageDispatcherTests
     }
 
     [Fact]
-    public async Task Dispatch_ResponseMessage_WithUnknownReplyId_ReturnsFailure()
+    public async Task Dispatch_ResponseMessage_WithUnknownReplyId_ReturnsSuccess()
     {
+        // [-] disconfirmed by M5 fix: untracked replies now return Success=true (regression guard).
+        // Old behaviour was Success=false; the fix silently acks stale/duplicate replies to
+        // avoid spurious retry/DLQ churn. After-consuming filters must still run.
         var replyId = Guid.NewGuid().ToString();
         var headers = MakeHeaders(responseMessageId: replyId);
         Assert.IsType<TestDispatcherReplyManager>(_replyManager).ShouldHandleReplies = false;
@@ -367,7 +370,7 @@ public class MessageDispatcherTests
 
         var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
-        Assert.False(result.Success);
+        Assert.True(result.Success);
         _mockFilterPipeline.Verify(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -391,6 +394,24 @@ public class MessageDispatcherTests
         Assert.Equal(replyId, replyManager.LastMessageId);
         Assert.Equal(typeof(Message), replyManager.LastMessageType);
         _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Dispatch_UntrackedReply_ReturnsSuccess_NotError()
+    {
+        // M5: a reply that arrives after the caller has timed out (or is a duplicate)
+        // should be silently discarded — returning Success=false would drive nack/requeue
+        // and cause spurious retry/DLQ churn.
+        var replyId = Guid.NewGuid().ToString();
+        var headers = MakeHeaders(responseMessageId: replyId);
+        Assert.IsType<TestDispatcherReplyManager>(_replyManager).ShouldHandleReplies = false;
+
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+
+        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        Assert.True(result.Success);
+        Assert.Null(result.Exception);
     }
 
     [Fact]

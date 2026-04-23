@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
@@ -13,7 +14,7 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
     private FrozenDictionary<string, Type>? _types;
 
     /// <inheritdoc />
-    public bool TryResolve(string typeName, out Type type)
+    public bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type)
     {
         var types = Volatile.Read(ref _types);
         if (types == null)
@@ -23,7 +24,7 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
             types = _types!;
         }
 
-        return types.TryGetValue(typeName, out type!);
+        return types.TryGetValue(typeName, out type);
     }
 
     /// <inheritdoc />

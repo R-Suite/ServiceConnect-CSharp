@@ -314,6 +314,39 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddServiceConnect_ScansExplicitAssembliesEvenWhenDiscoveryDisabled()
+    {
+        // M6: ScanAssemblies(...) must be honoured even when ScanForMessageHandlers=false.
+        // The explicit list represents "scan exactly these assemblies"; the global flag
+        // must not silently override it.
+        var services = new ServiceCollection();
+        services.AddServiceConnect(b =>
+        {
+            b.ConfigureBus(c => c.ScanForMessageHandlers = false);
+            b.ScanAssemblies(typeof(TestHandlerFixture).Assembly);
+        });
+
+        using var provider = services.BuildServiceProvider();
+        var handler = provider.GetService<IMessageHandler<TestHandlerFixture.SampleMessage>>();
+        Assert.NotNull(handler);
+    }
+
+    [Fact]
+    public void AddServiceConnect_DetectsFactoryRegisteredSingletonHandlers()
+    {
+        // M7: pre-registering a handler via a factory singleton must prevent the scanner
+        // from adding a second transient descriptor via TryAddEnumerable.
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHandlerFixture.SampleMessage>>(
+            _ => new TestHandlerFixture.SampleHandler());
+        services.AddServiceConnect(b => b.ScanAssemblies(typeof(TestHandlerFixture).Assembly));
+
+        using var provider = services.BuildServiceProvider();
+        var handlers = provider.GetServices<IMessageHandler<TestHandlerFixture.SampleMessage>>().ToList();
+        Assert.Single(handlers);
+    }
+
+    [Fact]
     public void AddServiceConnect_ThrowsWhenSendMiddlewareIsNotSingleton()
     {
         var services = CreateServices();
@@ -344,6 +377,24 @@ public sealed class H5Handler : IMessageHandler<H5Msg>
 public sealed class H5Aggregator : Aggregator<H5Msg>
 {
     public override Task ExecuteAsync(IList<H5Msg> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Shared fixture providing <see cref="SampleMessage"/> and <see cref="SampleHandler"/> for
+/// ServiceCollectionExtensions tests that scan the unit-test assembly.
+/// </summary>
+public static class TestHandlerFixture
+{
+    public sealed class SampleMessage : Message
+    {
+        public SampleMessage() : base(Guid.NewGuid()) { }
+    }
+
+    public sealed class SampleHandler : IMessageHandler<SampleMessage>
+    {
+        public IConsumeContext Context { get; set; } = null!;
+        public Task HandleAsync(SampleMessage message) => Task.CompletedTask;
+    }
 }
 
 file sealed class TestInboundMiddleware : IMessageProcessingMiddleware

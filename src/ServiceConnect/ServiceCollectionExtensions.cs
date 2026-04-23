@@ -300,13 +300,18 @@ public static class ServiceCollectionExtensions
 
     private static IList<HandlerReference> GetHandlerReferences(ServiceConnectBuilder builder)
     {
+        // Explicit ScanAssemblies(...) list takes precedence — it represents
+        // "scan exactly these assemblies" and must not be overridden by the
+        // global ScanForMessageHandlers=false flag.
+        // When ScanForMessageHandlers=false, assemblies supplied via ScanAssemblies(...)
+        // are still scanned; only the fallback AppDomain scan is suppressed.
+        if (builder.ScanAssembliesList.Count > 0)
+            return HandlerScanner.ScanForHandlers(builder.ScanAssembliesList.ToArray());
+
         if (!builder.BusConfig.ScanForMessageHandlers)
             return [];
 
-        var assemblies = builder.ScanAssembliesList.Count > 0
-            ? builder.ScanAssembliesList.ToArray()
-            : AppDomain.CurrentDomain.GetAssemblies();
-        return HandlerScanner.ScanForHandlers(assemblies);
+        return HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies());
     }
 
     private static void RegisterHandlerType(IServiceCollection services, HandlerReference handlerRef)
@@ -331,12 +336,19 @@ public static class ServiceCollectionExtensions
         // is honored instead of producing a second descriptor. HandlerProcessor resolves
         // via GetServices(...), so a duplicate descriptor translates directly into the
         // same message being dispatched to two separately-constructed handler instances.
+        //
+        // The stricter guard below also covers factory-registered singletons (where
+        // ImplementationType==null so TryAddEnumerable would not deduplicate): if ANY
+        // descriptor already answers the handler interface, the user's registration is
+        // authoritative and we skip the scan-registered transient entirely.
         var messageHandlerInterface = handlerType.GetInterfaces()
             .FirstOrDefault(i => i.IsGenericType
                 && i.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
                 && i.GetGenericArguments()[0] == handlerRef.MessageType);
         if (messageHandlerInterface != null)
         {
+            if (services.Any(d => d.ServiceType == messageHandlerInterface))
+                return; // user-registered handler exists; respect their registration
             services.TryAddEnumerable(ServiceDescriptor.Transient(messageHandlerInterface, handlerType));
             return;
         }

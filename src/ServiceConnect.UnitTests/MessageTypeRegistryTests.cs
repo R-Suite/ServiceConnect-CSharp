@@ -46,6 +46,19 @@ public class MessageTypeRegistryTests
     }
 
     [Fact]
+    public void TryResolve_Unknown_SetsOutParameterToNull()
+    {
+        // M21: IMessageTypeRegistry.TryResolve should carry [MaybeNullWhen(false)] so that
+        // callers get correct nullable flow analysis when the type is not found.
+        var registry = new MessageTypeRegistry();
+
+        var success = registry.TryResolve("Unknown.TypeName", out Type? resolved);
+
+        Assert.False(success);
+        Assert.Null(resolved);
+    }
+
+    [Fact]
     public void Register_CollidingType_Throws()
     {
         // Two message types sharing the same FullName (same namespace+name across
