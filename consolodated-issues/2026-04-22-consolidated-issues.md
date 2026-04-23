@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 10/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 12/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -85,11 +85,11 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 - [ ] **RetryCount header not decoded before parsing → retries broken for interop** — [MessageRetryHandler.cs:39-55](../src/ServiceConnect.Client.RabbitMQ/MessageRetryHandler.cs#L39-L55)
   If the header arrives as `byte[]` (any sender stamping it as an AMQP string, e.g. non-.NET clients), `raw.ToString()` returns `"System.Byte[]"`, `int.TryParse` fails, `candidate=-1`, message routes straight to error with no retry. Native C# producers stamp `int`, so the issue is interop-only. Fix: run `HeaderDecoder.Decode` on `raw` before parsing. [r3]
 
-- [ ] **`Consumer.DisposeAsync` only swallows `ObjectDisposedException`** — [Consumer.cs:181-185](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L181-L185)
-  Any other exception (timeout, `OperationInterruptedException`, broker errors) aborts the `foreach` and leaks the remaining consumer hosts and the setup-channel cleanup below. [r4]
+- [x] (commit: d42217b1) **`Consumer.DisposeAsync` only swallows `ObjectDisposedException`** — [Consumer.cs:181-185](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L181-L185)
+  Any other exception (timeout, `OperationInterruptedException`, broker errors) aborts the `foreach` and leaks the remaining consumer hosts and the setup-channel cleanup below. Fixed: `OperationCanceledException` still propagates; all other exceptions are swallowed and logged as Warning. `_clients` widened to `ConcurrentBag<IAsyncDisposable>` to enable seam for testing. [r4]
 
-- [ ] **`Consumer.StartConsumingAsync` is not idempotent — `_clients` bag never cleared** — [Consumer.cs:78-174](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L78-L174)
-  Public API: a second direct call doubles consumers on the same queue, multiplies prefetch, and leaks the original hosts until process exit. `Bus`-level callers are gated by `_consuming`/`_stopped`, so the risk is to direct `IConsumer` consumers only. [r3]
+- [x] (commit: d42217b1) **`Consumer.StartConsumingAsync` is not idempotent — `_clients` bag never cleared** — [Consumer.cs:78-174](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L78-L174)
+  Public API: a second direct call doubles consumers on the same queue, multiplies prefetch, and leaks the original hosts until process exit. `Bus`-level callers are gated by `_consuming`/`_stopped`, so the risk is to direct `IConsumer` consumers only. Fixed: Option A — `_started` int field gated via `Interlocked.CompareExchange`; throws `InvalidOperationException` on double-start. `DisposeAsync` resets via `Interlocked.Exchange(ref _started, 0)`. [r3]
 
 - [ ] **No subscription to broker-initiated `basic.cancel` / connection events** — [RabbitMqConsumerHost.cs:134-137](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L134-L137)
   `AsyncEventingBasicConsumer` exposes cancel-notification events and `IConnection` exposes `ConnectionBlockedAsync` / `ConnectionShutdownAsync` / `ChannelShutdownAsync`; none are subscribed. Broker deletes the queue or applies a memory-pressure block and consumption silently stalls while the connection still reports "open". [r3, r4]
