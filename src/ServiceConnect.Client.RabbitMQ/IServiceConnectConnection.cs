@@ -28,4 +28,11 @@ public interface IServiceConnectConnection : IAsyncDisposable
     /// </summary>
     /// <returns><see langword="true"/> when the connection is open; otherwise, <see langword="false"/>.</returns>
     bool IsConnected();
+
+    /// <summary>
+    /// Returns the underlying <see cref="IConnection"/>, or <see langword="null"/> if the connection
+    /// has not been established yet or has been disposed. Used by <see cref="RabbitMqConsumerHost"/>
+    /// to subscribe to connection-level events (shutdown, blocked, unblocked) for observability.
+    /// </summary>
+    IConnection? UnderlyingConnection { get; }
 }

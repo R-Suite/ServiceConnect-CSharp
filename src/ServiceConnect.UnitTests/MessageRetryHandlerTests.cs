@@ -250,4 +250,63 @@ public class MessageRetryHandlerTests
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    // M10 — byte[] wire encoding from non-.NET producers
+
+    [Fact]
+    public async Task HandleFailureAsync_WhenRetryCountHeaderIsByteArray_DecodesAndRetries()
+    {
+        // Non-.NET producers stamp the RetryCount header as an AMQP string → byte[] on the wire.
+        // raw.ToString() returns "System.Byte[]", int.TryParse fails, candidate=-1 → routes to error.
+        // Fix: HeaderDecoder.Decode(raw) must be used instead.
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", NullLogger.Instance);
+        var args = MakeArgs();
+        // Simulate an AMQP string-typed header arriving as UTF-8 bytes (non-.NET producer).
+        var utf8 = System.Text.Encoding.UTF8.GetBytes("3");
+        var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = utf8 };
+
+        await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
+
+        // Should increment to 4 and publish to retry queue, NOT to error exchange.
+        Assert.Equal(4, (int)headers[HeaderKeys.RetryCount]);
+        channel.Verify(c => c.BasicPublishAsync(
+            string.Empty, "q.Retries", false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleFailureAsync_WhenRetryCountHeaderIsInt_ReturnsInt()
+    {
+        // Regression guard: native C# producers stamp int — must still work after the fix.
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", NullLogger.Instance);
+        var args = MakeArgs();
+        var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 5 };
+
+        // At max retries → routes to error.
+        await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
+
+        channel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }

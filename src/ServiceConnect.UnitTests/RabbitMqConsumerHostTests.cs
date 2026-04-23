@@ -1319,4 +1319,206 @@ public class RabbitMqConsumerHostTests
             It.IsAny<CancellationToken>()), Times.Never);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    // M14 — null-valued TypeName header survives ContainsKey but crashes dispatch
+
+    [Fact]
+    public async Task EventAsync_NullValuedTypeNameHeader_RejectsAtAdmission_WithoutBurningRetryBudget()
+    {
+        // Admission check used ContainsKey which admits a key whose value is null.
+        // CopyInboundHeaders skips null values → dispatch-site indexer throws KeyNotFoundException.
+        // The message burns a retry cycle instead of being terminated at admission.
+        // Fix: admission must check TryGetValue+non-null instead of ContainsKey.
+        var (conn, channel, publishChannel) = MockConnection();
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance);
+
+        bool handlerInvoked = false;
+        await host.StartConsumingAsync(
+            (_, _, _, _) =>
+            {
+                handlerInvoked = true;
+                return Task.FromResult(new ConsumeEventResult { Success = true });
+            },
+            "q");
+
+        // TypeName key is present but value is null — simulates non-.NET client omitting the value.
+        await DeliverMessageAsync(host, new byte[] { 1, 2, 3 },
+            new Dictionary<string, object> { [HeaderKeys.TypeName] = null! });
+
+        Assert.False(handlerInvoked, "Handler must not be invoked when TypeName value is null.");
+        // Must route to error (terminal rejection), NOT to retry queue.
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            string.Empty, "q.Retries", false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task EventAsync_NullValuedFullTypeNameHeader_AlsoRejectsAtAdmission()
+    {
+        // Same bug applies to FullTypeName key.
+        var (conn, channel, publishChannel) = MockConnection();
+        var host = new RabbitMqConsumerHost(
+            conn.Object,
+            MakeTransportCfg().Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            new MessageRetryHandler(3, "err", NullLogger.Instance),
+            new MessageAuditPublisher(MakeQueueCfg().Object),
+            NullLogger.Instance);
+
+        bool handlerInvoked = false;
+        await host.StartConsumingAsync(
+            (_, _, _, _) =>
+            {
+                handlerInvoked = true;
+                return Task.FromResult(new ConsumeEventResult { Success = true });
+            },
+            "q");
+
+        await DeliverMessageAsync(host, new byte[] { 1, 2, 3 },
+            new Dictionary<string, object> { [HeaderKeys.FullTypeName] = null! });
+
+        Assert.False(handlerInvoked, "Handler must not be invoked when FullTypeName value is null.");
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, false,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // M13 — broker-initiated shutdown event subscriptions
+
+    [Fact]
+    public async Task StartConsumingAsync_ConsumerShutdownAsync_IsSubscribed_AndLogsWarning()
+    {
+        // After the fix: ShutdownAsync on the consumer must be subscribed.
+        // Fire the consumer's HandleChannelShutdownAsync (which raises ShutdownAsync)
+        // and assert the host logs a Warning containing "shutdown".
+        var (conn, _, _) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var logMessages = new System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)>();
+        var testLogger = new CapturingLogger(logMessages);
+        var retry = new MessageRetryHandler(3, "err", testLogger);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, testLogger);
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        // Retrieve the private _consumer via reflection and fire HandleChannelShutdownAsync.
+        var consumerField = typeof(RabbitMqConsumerHost)
+            .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var consumer = consumerField?.GetValue(host) as RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
+        Assert.NotNull(consumer);
+
+        var shutdownArgs = new RabbitMQ.Client.Events.ShutdownEventArgs(
+            RabbitMQ.Client.ShutdownInitiator.Peer, 320, "Queue deleted by broker");
+        await consumer.HandleChannelShutdownAsync(consumer, shutdownArgs);
+
+        // The handler must have logged a Warning containing "shutdown".
+        var shutdownLog = logMessages.FirstOrDefault(m =>
+            m.Level >= Microsoft.Extensions.Logging.LogLevel.Warning
+            && m.Message.Contains("shutdown", StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(shutdownLog == default,
+            "Expected a Warning-level log mentioning 'shutdown' after consumer ShutdownAsync fired. " +
+            "This confirms M13: ShutdownAsync event is not subscribed.");
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_ConsumerUnregisteredAsync_IsSubscribed_AndLogsWarning()
+    {
+        // After the fix: UnregisteredAsync on the consumer must be subscribed.
+        // This event fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
+        // Fire it via HandleBasicCancelAsync and verify the Warning is logged.
+        var (conn, _, _) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var logMessages = new System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)>();
+        var testLogger = new CapturingLogger(logMessages);
+        var retry = new MessageRetryHandler(3, "err", testLogger);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, testLogger);
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        var consumerField = typeof(RabbitMqConsumerHost)
+            .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var consumer = consumerField?.GetValue(host) as RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
+        Assert.NotNull(consumer);
+
+        // HandleBasicCancelAsync triggers UnregisteredAsync (broker-initiated cancel).
+        await consumer.HandleBasicCancelAsync("tag");
+
+        // Give the async handler a moment to run.
+        await Task.Delay(50);
+
+        var unregisteredLog = logMessages.FirstOrDefault(m =>
+            m.Level >= Microsoft.Extensions.Logging.LogLevel.Warning
+            && m.Message.Contains("shutdown", StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(unregisteredLog == default,
+            "Expected a Warning-level log mentioning 'shutdown' after consumer UnregisteredAsync fired. " +
+            "This confirms M13: UnregisteredAsync event is not subscribed.");
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_ChannelShutdownAsync_IsSubscribed_AndLogsWarning()
+    {
+        // IChannel.ChannelShutdownAsync must also be subscribed.
+        // We set up the channel mock to raise the event and verify the logger received a warning.
+        var (conn, consumerChannel, _) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var logMessages = new System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)>();
+        var testLogger = new CapturingLogger(logMessages);
+        var retry = new MessageRetryHandler(3, "err", testLogger);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, testLogger);
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
+
+        // Raise the ChannelShutdownAsync event on the consumer channel mock.
+        var shutdownArgs = new RabbitMQ.Client.Events.ShutdownEventArgs(
+            RabbitMQ.Client.ShutdownInitiator.Peer, 320, "Channel closed by broker");
+        consumerChannel.Raise(c => c.ChannelShutdownAsync += null, consumerChannel.Object, shutdownArgs);
+
+        // Give the async handler a moment to run.
+        await Task.Yield();
+        await Task.Delay(50);
+
+        var channelShutdownLog = logMessages.FirstOrDefault(m =>
+            m.Level >= Microsoft.Extensions.Logging.LogLevel.Warning
+            && m.Message.Contains("shutdown", StringComparison.OrdinalIgnoreCase));
+
+        Assert.False(channelShutdownLog == default,
+            "Expected a Warning-level log mentioning 'shutdown' after ChannelShutdownAsync fired. " +
+            "This confirms M13: ChannelShutdownAsync event is not subscribed.");
+    }
+
+    /// <summary>
+    /// Minimal ILogger that captures log messages for assertion.
+    /// </summary>
+    private sealed class CapturingLogger(System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> bag) : Microsoft.Extensions.Logging.ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            bag.Add((logLevel, formatter(state, exception)));
+        }
+    }
 }

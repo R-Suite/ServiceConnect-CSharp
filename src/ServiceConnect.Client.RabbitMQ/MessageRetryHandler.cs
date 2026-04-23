@@ -38,8 +38,20 @@ internal sealed class MessageRetryHandler
         int retryCount = 0;
         if (headers.TryGetValue(HeaderKeys.RetryCount, out var raw))
         {
-            int candidate = raw is int i ? i
-                : (raw is not null && int.TryParse(raw.ToString(), out var parsed) ? parsed : -1);
+            // int fast-path preserved for performance (native C# producers stamp int).
+            // Non-.NET clients stamp an AMQP string which arrives as UTF-8 byte[]; use
+            // HeaderDecoder.Decode so that "3" encoded as byte[] parses correctly.
+            int candidate;
+            if (raw is int i)
+            {
+                candidate = i;
+            }
+            else
+            {
+                var decoded = HeaderDecoder.Decode(raw);
+                candidate = decoded is not null && int.TryParse(decoded, out var parsed) ? parsed : -1;
+            }
+
             if (candidate < 0 || candidate > _maxRetries + 1)
             {
                 // Never silently reset to 0 here — a corrupt or attacker-controlled header

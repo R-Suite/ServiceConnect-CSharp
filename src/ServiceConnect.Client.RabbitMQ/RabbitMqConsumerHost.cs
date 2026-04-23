@@ -133,6 +133,20 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         var deliveryToken = _deliveryToken;
         _consumer = new AsyncEventingBasicConsumer(_model);
         _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, deliveryToken).ConfigureAwait(false);
+        // M13: subscribe broker-initiated shutdown events so a queue deletion, channel close,
+        // or connection-level event is observed and logged rather than silently stalling consumption.
+        // ShutdownAsync fires on channel shutdown (both client- and server-initiated).
+        // UnregisteredAsync fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
+        _consumer.ShutdownAsync += OnConsumerShutdownAsync;
+        _consumer.UnregisteredAsync += OnConsumerUnregisteredAsync;
+        _model.ChannelShutdownAsync += OnChannelShutdownAsync;
+        var underlying = _connection.UnderlyingConnection;
+        if (underlying is not null)
+        {
+            underlying.ConnectionShutdownAsync += OnConnectionShutdownAsync;
+            underlying.ConnectionBlockedAsync += OnConnectionBlockedAsync;
+            underlying.ConnectionUnblockedAsync += OnConnectionUnblockedAsync;
+        }
 
         _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
@@ -163,9 +177,16 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 callbackAdmitted = true;
             }
 
+            // M14: ContainsKey admits a key whose value is null; use TryGetValue+non-null instead.
+            // A null-valued TypeName passes ContainsKey but CopyInboundHeaders skips null values,
+            // so the dispatch-site indexer would throw KeyNotFoundException and burn a retry cycle
+            // on a guaranteed-fail dispatch. Reject at admission instead.
+            static bool HasNonNullValue(IDictionary<string, object?> h, string key)
+                => h.TryGetValue(key, out var v) && v is not null;
+
             if (args.BasicProperties.Headers == null ||
-                (!args.BasicProperties.Headers.ContainsKey(HeaderKeys.TypeName) &&
-                 !args.BasicProperties.Headers.ContainsKey(HeaderKeys.FullTypeName)))
+                (!HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.TypeName) &&
+                 !HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.FullTypeName)))
             {
                 await _retryHandler.HandleTerminalFailureAsync(
                     publishChannel!,
@@ -324,9 +345,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
             HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
 
-            // Use a single TryGetValue lookup instead of ContainsKey + indexer.
-            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw))
-                typeNameRaw = headers[HeaderKeys.TypeName];
+            // Prefer FullTypeName; fall back to TypeName. Use TryGetValue to avoid KeyNotFoundException.
+            // Admission already guarantees at least one is present with a non-null value, but
+            // FullTypeName could be null-valued while TypeName is valid — check the value.
+            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw) || typeNameRaw is null)
+                headers.TryGetValue(HeaderKeys.TypeName, out typeNameRaw);
             string typeName = HeaderDecoder.Decode(typeNameRaw) ?? "";
 
             if (_consumerEventHandler == null)
@@ -441,6 +464,57 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         return _shutdownPublishCts.Token;
     }
 
+    // M13: broker-initiated shutdown event handlers.
+
+    private Task OnConsumerShutdownAsync(object? sender, ShutdownEventArgs args)
+    {
+        _logger.LogWarning(
+            "AMQP consumer '{ConsumerTag}' shutdown: {ReplyCode} {ReplyText}",
+            _consumerTag, args.ReplyCode, args.ReplyText);
+        return Task.CompletedTask;
+    }
+
+    private Task OnConsumerUnregisteredAsync(object? sender, ConsumerEventArgs args)
+    {
+        // Fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
+        _logger.LogWarning(
+            "AMQP consumer '{ConsumerTag}' unregistered by broker (broker-initiated shutdown) on queue '{Queue}'",
+            _consumerTag, _queueName);
+        return Task.CompletedTask;
+    }
+
+    private Task OnChannelShutdownAsync(object? sender, ShutdownEventArgs args)
+    {
+        _logger.LogWarning(
+            "AMQP channel shutdown for queue '{Queue}': {ReplyCode} {ReplyText}",
+            _queueName, args.ReplyCode, args.ReplyText);
+        return Task.CompletedTask;
+    }
+
+    private Task OnConnectionShutdownAsync(object? sender, ShutdownEventArgs args)
+    {
+        _logger.LogWarning(
+            "AMQP connection shutdown for queue '{Queue}': {ReplyCode} {ReplyText}",
+            _queueName, args.ReplyCode, args.ReplyText);
+        return Task.CompletedTask;
+    }
+
+    private Task OnConnectionBlockedAsync(object? sender, ConnectionBlockedEventArgs args)
+    {
+        _logger.LogWarning(
+            "AMQP connection blocked for queue '{Queue}': {Reason}",
+            _queueName, args.Reason);
+        return Task.CompletedTask;
+    }
+
+    private Task OnConnectionUnblockedAsync(object? sender, AsyncEventArgs args)
+    {
+        _logger.LogInformation(
+            "AMQP connection unblocked for queue '{Queue}'",
+            _queueName);
+        return Task.CompletedTask;
+    }
+
     public async ValueTask DisposeAsync()
     {
         lock (_callbackAdmissionGate)
@@ -505,6 +579,22 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             {
                 _logger.LogWarning(ex, "Error deleting retry queue");
             }
+        }
+
+        // M13: unsubscribe broker-initiated shutdown handlers to prevent leaks on restart.
+        if (_consumer is not null)
+        {
+            _consumer.ShutdownAsync -= OnConsumerShutdownAsync;
+            _consumer.UnregisteredAsync -= OnConsumerUnregisteredAsync;
+        }
+        if (_model is not null)
+            _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
+        var underlyingConn = _connection.UnderlyingConnection;
+        if (underlyingConn is not null)
+        {
+            underlyingConn.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
+            underlyingConn.ConnectionBlockedAsync -= OnConnectionBlockedAsync;
+            underlyingConn.ConnectionUnblockedAsync -= OnConnectionUnblockedAsync;
         }
 
         await CloseChannelAsync(deadline).ConfigureAwait(false);

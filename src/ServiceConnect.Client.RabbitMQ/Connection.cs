@@ -55,6 +55,11 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     }
 
     /// <summary>
+    /// Returns the underlying <see cref="IConnection"/>, or <see langword="null"/> if not yet established or already disposed.
+    /// </summary>
+    public IConnection? UnderlyingConnection => Volatile.Read(ref _connection);
+
+    /// <summary>
     /// Creates a RabbitMQ channel, establishing the connection first if needed.
     /// </summary>
     /// <returns>A newly created channel.</returns>
