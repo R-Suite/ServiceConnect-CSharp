@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Configuration;
@@ -96,7 +97,7 @@ public class MessageDispatcherTests
         return new MessageHandlerRegistry(refs, NullLogger<MessageHandlerRegistry>.Instance);
     }
 
-    private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider)
+    private MessageDispatcher CreateDispatcher(IServiceProvider serviceProvider, ILogger<MessageDispatcher>? logger = null)
     {
         var scopeAccessor = new ConsumeScopeAccessor();
         var handlerRegistry = BuildHandlerRegistry(
@@ -114,7 +115,7 @@ public class MessageDispatcherTests
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
             processors,
-            NullLogger<MessageDispatcher>.Instance,
+            logger ?? NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -401,17 +402,27 @@ public class MessageDispatcherTests
     {
         // M5: a reply that arrives after the caller has timed out (or is a duplicate)
         // should be silently discarded — returning Success=false would drive nack/requeue
-        // and cause spurious retry/DLQ churn.
+        // and cause spurious retry/DLQ churn. The Debug log must carry the correlation id
+        // so operators can diagnose which request timed out.
         var replyId = Guid.NewGuid().ToString();
         var headers = MakeHeaders(responseMessageId: replyId);
         Assert.IsType<TestDispatcherReplyManager>(_replyManager).ShouldHandleReplies = false;
+        var mockLogger = new Mock<ILogger<MessageDispatcher>>();
 
-        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider(), mockLogger.Object);
 
         var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         Assert.True(result.Success);
         Assert.Null(result.Exception);
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(replyId)),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     [Fact]

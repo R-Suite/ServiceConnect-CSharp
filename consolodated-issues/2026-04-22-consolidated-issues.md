@@ -126,7 +126,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Interfaces
 
-- [x] (commit: 89329aa9) **`IMessageTypeRegistry.TryResolve` has non-nullable `out Type`** — [IMessageTypeRegistry.cs:14](../src/ServiceConnect.Interfaces/Messages/IMessageTypeRegistry.cs#L14)
+- [x] (commit: 89329aa9 — annotation fix applied; RED test could not be made to fail because the C# compiler accepts `out Type?` as a widening target for non-annotated `out Type`, so `MessageTypeRegistryTests.TryResolve_Unknown_SetsOutParameterToNull` is committed as a regression guard) **`IMessageTypeRegistry.TryResolve` has non-nullable `out Type`** — [IMessageTypeRegistry.cs:14](../src/ServiceConnect.Interfaces/Messages/IMessageTypeRegistry.cs#L14)
   Implementation uses `types.TryGetValue(out type!)`, so `type` is actually `null` on `false`. Core callers pre-declare `Type? type = null` and happen to be safe; any external consumer trusting the declared signature will NRE. Fix with `[MaybeNullWhen(false)] out Type? type`. [r3]
 
 ## Low
