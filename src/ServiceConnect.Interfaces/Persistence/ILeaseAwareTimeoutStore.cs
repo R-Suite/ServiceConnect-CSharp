@@ -17,6 +17,7 @@ public interface ILeaseAwareTimeoutStore
     /// <param name="id">The timeout identifier.</param>
     /// <param name="lockOwner">The lock owner that must match.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <exception cref="Exceptions.ConcurrencyException">Thrown when the lease identified by <paramref name="lockOwner"/> is no longer the active holder of the timeout.</exception>
     Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -25,5 +26,6 @@ public interface ILeaseAwareTimeoutStore
     /// <param name="id">The timeout identifier.</param>
     /// <param name="lockOwner">The lock owner that must match.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <exception cref="Exceptions.ConcurrencyException">Thrown when the lease identified by <paramref name="lockOwner"/> is no longer the active holder of the timeout.</exception>
     Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default);
 }

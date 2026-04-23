@@ -8,9 +8,10 @@ public sealed class DocumentUploadedHandler : IStreamHandler<DocumentUploaded>
 {
     public IMessageBusReadStream Stream { get; set; } = null!;
 
-    public void Execute(DocumentUploaded message)
+    public Task ExecuteAsync(DocumentUploaded message, CancellationToken cancellationToken = default)
     {
         var bytes = Stream.Read();
         ConsoleStatus.Success("streaming-receiver", $"received {message.FileName} with {bytes.Length} bytes");
+        return Task.CompletedTask;
     }
 }
