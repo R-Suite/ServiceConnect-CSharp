@@ -1,4 +1,4 @@
-Progress: Critical 1/3 · High 0/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
+Progress: Critical 2/3 · High 0/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -12,8 +12,8 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 - [ ] **Poison-message unbounded redelivery when retry/error publish throws** — [RabbitMqConsumerHost.cs:166-227, 229, 252, 353-360](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs)
   CONFIRMED by `PoisonMessageRedeliveryTests.RetryPublishFailure_DoesNotCauseUnboundedRedelivery` — 73,462 handler invocations in 10s against a ceiling of 100; promoted from Uncertain to Critical on 2026-04-23. If `HandleFailureAsync` / `HandleTerminalFailureAsync` throws (broker outage, publish-channel closed, queue length/overflow policy), the outer catch leaves `processed=false` and the `finally` block nacks with `requeue:true` → hot-loop with no broker-RTT throttling because the nack fires before any network round-trip completes. Under any partial broker degradation this pegs a CPU core per consumer. Fix: wrap the retry and terminal-failure publish calls so an exception drops the message (log + ack, or route to a separate dead-letter path) instead of nacking-with-requeue. Regression test `[Skip]`-attributed until the Phase 1 fix lands. [r4, Phase 0 Task 4]
 
-- [ ] **`ConsumeContextPool` self-referential `EnsureActive` guard permits cross-message data leak** — [ConsumeContextPool.cs:52-123](../src/ServiceConnect/Services/ConsumeContextPool.cs#L52-L123)
-  `_activeToken` lives on the pooled instance itself rather than being captured by callers. After `Release → Rent → Initialize`, the pooled instance's `_rentToken` and `_activeToken` match again, so a stale caller holding the old `IConsumeContext` reference still passes the guard and reads the *next* message's headers, bus, and cancellation token. Silent, no exception. Fix: capture the token value in a struct wrapper returned to the caller, or invalidate the live reference on `Release`. [r3]
+- [x] (commit: pending) **`ConsumeContextPool` self-referential `EnsureActive` guard permits cross-message data leak** — [ConsumeContextPool.cs:52-123](../src/ServiceConnect/Services/ConsumeContextPool.cs#L52-L123)
+  CONFIRMED by `ConsumeContextPoolTests.EnsureActive_RejectsAccessAfterReleaseAndReuse`. `_activeToken` lived on the pooled instance and was reset by `Initialize()`, so a stale reference passed the guard after Release → Rent → Initialize. Fix: `Rent()` now returns a `RentalHandle` struct that captures the token at rent time; `EnsureActive(expectedToken)` on the pooled instance compares against that snapshot. The stale handle's old token never matches the re-incremented `_rentToken`. [r3]
 
 ## High
 
