@@ -152,7 +152,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             var assembledSequence = state.Stream.ReadSequence();
             var originalMessage = _serializer.Deserialize(in assembledSequence, resolvedType);
 
-            return InvokeHandlerAsync(descriptor, handler, originalMessage!, cancellationToken);
+            return InvokeHandlerAsync(descriptor, handler, originalMessage!, sequenceId, cancellationToken);
         }
 
         return HandledTask;
@@ -175,10 +175,25 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         StreamHandlerDescriptor descriptor,
         object handler,
         object originalMessage,
+        string sequenceId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await descriptor.InvokeExecuteAsync(handler, originalMessage, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await descriptor.InvokeExecuteAsync(handler, originalMessage, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Stream handler {HandlerType} threw an unhandled exception for stream {SequenceId}",
+                handler.GetType().FullName, sequenceId);
+            throw;
+        }
         return ProcessResult.Handled;
     }
 

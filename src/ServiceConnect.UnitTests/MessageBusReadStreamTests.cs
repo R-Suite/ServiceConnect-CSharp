@@ -102,6 +102,32 @@ public class MessageBusReadStreamTests
     }
 
     [Fact]
+    public void SetLastPacketNumber_AfterValidPacket_HappyPath()
+    {
+        // Packet 0 arrives, then the close-packet declares LastPacketNumber=0 — consistent.
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1 }, 0);
+
+        var ex = Record.Exception(() => stream.SetLastPacketNumber(0));
+
+        Assert.Null(ex);
+        Assert.True(stream.IsComplete());
+    }
+
+    [Fact]
+    public void SetLastPacketNumber_WhenAlreadyReceivedPacketExceedsIt_Throws()
+    {
+        // Packet 5 arrives before the close-packet declares LastPacketNumber=2 — inconsistent.
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 9 }, 5);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => stream.SetLastPacketNumber(2));
+
+        Assert.Contains("5", ex.Message);
+        Assert.Contains("2", ex.Message);
+    }
+
+    [Fact]
     public void IsComplete_ReturnsFalse_WhenPacketSetIsNonContiguous()
     {
         // Write packets 0, 1, and 999 with LastPacketNumber=2. _receivedCount == 3 and

@@ -62,6 +62,24 @@ public class RequestReplyManagerRegistrationTests
         Assert.Contains(nameof(IReplyStatusRequestReplyManager), exception.Message);
     }
 
+    // Case C (reverse split-brain): user pre-registers ONLY IReplyStatusRequestReplyManager
+    // without also pre-registering IRequestReplyManager.  The stock RequestReplyManager would
+    // be used for outgoing requests while the custom impl handles incoming reply correlation —
+    // the two instances are unrelated and replies are silently dropped.
+    // Post-fix desired: AddServiceConnect throws InvalidOperationException at configuration
+    // time with a symmetric diagnostic message.
+    [Fact]
+    public void AddServiceConnect_FailsFast_WhenUserRegistersReplyStatusWithoutRequestReplyManager()
+    {
+        var services = CreateMinimalServices();
+        services.AddSingleton<IReplyStatusRequestReplyManager>(new ReplyStatusOnlyManager());
+
+        var exception = Assert.Throws<InvalidOperationException>(() => services.AddServiceConnect(ConfigureMinimal));
+
+        Assert.Contains(nameof(IReplyStatusRequestReplyManager), exception.Message);
+        Assert.Contains(nameof(IRequestReplyManager), exception.Message);
+    }
+
     private sealed class CustomManager : IRequestReplyManager, IReplyStatusRequestReplyManager
     {
         public Task<TReply> SendRequestAsync<TRequest, TReply>(
@@ -133,6 +151,16 @@ public class RequestReplyManagerRegistrationTests
             throw new NotImplementedException();
 
         public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type) =>
+            throw new NotImplementedException();
+    }
+
+    // Only implements the internal half — used to test the reverse split-brain guard.
+    private sealed class ReplyStatusOnlyManager : IReplyStatusRequestReplyManager
+    {
+        public bool TryProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type) =>
+            throw new NotImplementedException();
+
+        public bool IsTrackedRequest(string messageId) =>
             throw new NotImplementedException();
     }
 }

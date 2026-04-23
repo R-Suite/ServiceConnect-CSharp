@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
@@ -201,5 +202,91 @@ public class StreamProcessorTests
             await ((IAsyncDisposable)processor).DisposeAsync();
         });
         Assert.Null(ex);
+    }
+
+    // A handler that throws must propagate the exception out of InvokeHandlerAsync
+    // and the error must be logged at Error level including handler type and sequence id.
+    [Fact]
+    public async Task InvokeHandlerAsync_ThrowingHandler_LogsErrorAndRethrows()
+    {
+        var capturingLogger = new SptCapturingLogger();
+
+        var sequenceId = Guid.NewGuid().ToString();
+        var msgType = typeof(SptMsg);
+
+        var typeRegistry = new MessageTypeRegistry();
+        typeRegistry.Register(msgType);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = msgType, HandlerType = typeof(SptThrowingHandler) }
+        };
+        var streamHandlerRegistry = new StreamHandlerRegistry(handlerRefs, NullLogger<StreamHandlerRegistry>.Instance);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IStreamHandler<SptMsg>>(new SptThrowingHandler());
+        var provider = services.BuildServiceProvider();
+
+        // The serializer just needs to return a valid SptMsg.
+        var msg = new SptMsg(Guid.NewGuid());
+        var serializerMock = new Mock<IMessageSerializer>();
+        serializerMock
+            .Setup(s => s.Deserialize(It.IsAny<System.Buffers.ReadOnlySequence<byte>>(), msgType))
+            .Returns(msg);
+
+        var processor = new StreamProcessor(
+            provider,
+            capturingLogger,
+            typeRegistry,
+            streamHandlerRegistry,
+            serializerMock.Object,
+            TimeProvider.System);
+
+        // Build a single-packet complete stream.
+        var payload = new byte[] { 0x01 };
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+            [HeaderKeys.LastPacketNumber] = "0",
+            [HeaderKeys.FullTypeName] = msgType.FullName!
+        };
+        var envelope = new Envelope { Headers = headers, Body = payload };
+
+        // The exception from the handler must propagate out.
+        var thrownEx = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => processor.ProcessAsync(payload, msgType, null, headers, envelope));
+
+        Assert.Equal(SptThrowingHandler.ErrorMessage, thrownEx.Message);
+
+        // The error must have been logged at Error level containing the sequenceId.
+        Assert.Contains(capturingLogger.Entries, e =>
+            e.Level == LogLevel.Error && e.Message.Contains(sequenceId));
+    }
+}
+
+file class SptMsg : Message { public SptMsg(Guid c) : base(c) { } }
+
+file class SptThrowingHandler : IStreamHandler<SptMsg>
+{
+    public const string ErrorMessage = "handler-boom";
+    public IMessageBusReadStream Stream { get; set; } = null!;
+    public Task ExecuteAsync(SptMsg stream, CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException(ErrorMessage);
+}
+
+file sealed class SptCapturingLogger : ILogger<StreamProcessor>
+{
+    public sealed record LogEntry(LogLevel Level, string Message, Exception? Exception);
+    public List<LogEntry> Entries { get; } = [];
+
+    IDisposable? ILogger.BeginScope<TState>(TState state) => null;
+    bool ILogger.IsEnabled(LogLevel logLevel) => true;
+
+    void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
     }
 }

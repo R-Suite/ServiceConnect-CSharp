@@ -74,9 +74,25 @@ public static class ServiceCollectionExtensions
     {
         // Check whether the caller has pre-registered a custom IRequestReplyManager.
         var existingRrmDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IRequestReplyManager));
+        var existingRsrrmDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IReplyStatusRequestReplyManager));
 
         if (existingRrmDescriptor is null)
         {
+            // Reverse split-brain guard: if the caller pre-registered a custom
+            // IReplyStatusRequestReplyManager without also pre-registering IRequestReplyManager,
+            // the two interfaces would resolve to different instances — reply tracking would
+            // use the custom impl but outgoing-request dispatch would use the stock one.
+            if (existingRsrrmDescriptor is not null)
+            {
+                throw new InvalidOperationException(
+                    $"A custom '{nameof(IReplyStatusRequestReplyManager)}' has been registered "
+                    + $"but '{nameof(IRequestReplyManager)}' has not been registered. "
+                    + "Both interfaces must resolve to the same instance so that outgoing requests and "
+                    + "incoming reply tracking are in sync. Register IRequestReplyManager as "
+                    + "a forwarding factory before calling AddServiceConnect, e.g.: "
+                    + "services.AddSingleton<IRequestReplyManager>(sp => (IRequestReplyManager)sp.GetRequiredService<IReplyStatusRequestReplyManager>());");
+            }
+
             // No custom registration — use the stock concrete type for both interfaces.
             services.TryAddSingleton<RequestReplyManager>();
             services.TryAddSingleton<IRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());

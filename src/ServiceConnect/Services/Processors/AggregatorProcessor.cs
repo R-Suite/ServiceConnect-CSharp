@@ -170,8 +170,8 @@ internal sealed class AggregatorProcessor(
             // snapshot persisted after the handler has run — that window caused the same
             // batch to be re-fetched and re-dispatched on the next tick. Concurrent inserts
             // and unresolved-type records are preserved; there is still no per-message
-            // remove loop. If RemoveSnapshotAsync throws, the (synchronous) InvokeExecute
-            // is skipped and the batch is retried on the next flush.
+            // remove loop. If RemoveSnapshotAsync throws, the awaited InvokeExecuteAsync
+            // call is skipped and the batch is retried on the next flush.
             await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
 
             await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);

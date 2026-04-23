@@ -41,6 +41,44 @@ public class ConsumeContextPoolTests
 
         // The stale reference contextA must NOT be allowed to read headers — otherwise it
         // leaks message B's headers to a caller that thinks it's still looking at A.
-        Assert.ThrowsAny<Exception>(() => _ = contextA.Headers);
+        Assert.Throws<InvalidOperationException>(() => _ = contextA.Headers);
+    }
+
+    [Fact]
+    public void Rent_InitializesAndAllowsAccessBeforeRelease()
+    {
+        // Verify that a freshly rented context exposes its initialisation data without
+        // throwing — i.e. EnsureActive does not fire for the original holder.
+
+        var pool = new ConsumeContextPool();
+        var bus = new Mock<IBus>().Object;
+        var queueConfig = new Mock<IQueueConfiguration>().Object;
+        var busConfig = new Mock<IBusConfiguration>().Object;
+
+        var headers = new Dictionary<string, object>
+        {
+            ["key"] = "value",
+            [HeaderKeys.MessageId] = "msg-1"
+        };
+        var context = pool.Rent(bus, headers, queueConfig, busConfig, null, CancellationToken.None);
+
+        // All EnsureActive-gated properties must be readable before Release.
+        var ex = Record.Exception(() =>
+        {
+            _ = context.Headers;
+            _ = context.Bus;
+            _ = context.CancellationToken;
+            _ = context.MessageId;
+            _ = context.CorrelationId;
+        });
+        Assert.Null(ex);
+
+        // Headers should reflect the initialised data.
+        Assert.True(context.Headers.ContainsKey("key"));
+        Assert.Equal("value", context.Headers["key"]);
+
+        // After release the context must be invalidated.
+        context.Release();
+        Assert.Throws<InvalidOperationException>(() => _ = context.Headers);
     }
 }

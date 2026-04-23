@@ -40,6 +40,19 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         if (previous != -1 && previous != lastPacketNumber)
             throw new InvalidOperationException(
                 $"LastPacketNumber already set to {previous}; refusing to overwrite with {lastPacketNumber} for stream {SequenceId}.");
+
+        // Defense-in-depth: if any already-received packet carries a number greater than
+        // the newly-established last-packet-number, the stream is in an inconsistent state
+        // (e.g. a packet arrived before the close-packet and claimed a higher slot than the
+        // sender's declared total).  Surface this immediately rather than silently producing
+        // a truncated or corrupt Read() result.
+        foreach (var key in _packets.Keys)
+        {
+            if (key > lastPacketNumber)
+                throw new InvalidOperationException(
+                    $"Packet number {key} already received for stream {SequenceId} but exceeds " +
+                    $"the newly-set LastPacketNumber {lastPacketNumber}. The stream is inconsistent.");
+        }
     }
 
     /// <inheritdoc />
