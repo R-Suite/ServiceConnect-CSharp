@@ -76,10 +76,10 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### RabbitMQ client
 
-- [x] (commit: b5add7c1) **DisposeAsync leaks connection/channel on lock-acquire timeout** — [Producer.cs:395-411](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L395-L411)
+- [x] (commit: d5ace880) **DisposeAsync leaks connection/channel on lock-acquire timeout** — [Producer.cs:395-411](../src/ServiceConnect.Client.RabbitMQ/Producer.cs#L395-L411)
   If the 30-second wait for `_publishLock` or `_connectionSemaphore` times out, `DisposeAsync` returns without tearing down the channel or connection. No finalizer, so a stuck publish leaves a zombie TCP connection for the lifetime of the process. Fixed: teardown moved into `finally` block, always runs. Added `DisposeTimeoutForTests` internal seam; added `ProducerDisposeTests.DisposeAsync_WhenPublishLockHeld_StillDisposesChannelAndConnection`. [r3]
 
-- [x] (commit: b5add7c1) **Audit publish uses queue name as exchange, silently drops on non-empty routing key** — [MessageAuditPublisher.cs:39-45](../src/ServiceConnect.Client.RabbitMQ/MessageAuditPublisher.cs#L39-L45)
+- [x] (commit: d5ace880) **Audit publish uses queue name as exchange, silently drops on non-empty routing key** — [MessageAuditPublisher.cs:39-45](../src/ServiceConnect.Client.RabbitMQ/MessageAuditPublisher.cs#L39-L45)
   The utility topology binds the audit queue to the audit direct-exchange with an empty routing key. `MessageAuditPublisher` publishes with `AuditRoutingKey ?? ""`. Any non-empty `AuditRoutingKey` is unroutable and silently dropped (`mandatory:false`). Fixed: publish always uses `routingKey=""`. Construction-time Warning if `AuditRoutingKey` is non-empty. `AuditRoutingKey` XML doc updated to note reserved status. [r1, r3]
 
 - [ ] **RetryCount header not decoded before parsing → retries broken for interop** — [MessageRetryHandler.cs:39-55](../src/ServiceConnect.Client.RabbitMQ/MessageRetryHandler.cs#L39-L55)
