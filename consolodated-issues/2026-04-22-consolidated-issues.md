@@ -107,6 +107,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 - [x] (commit: 503f4271eb5039113b52e53dd257bcdfb7a9d3a5) **`UpdateDataAsync` silently swallows `w:0` conflicts; `DeleteDataAsync` spuriously throws** — [MongoDbProcessManagerFinder.cs:211-221, 259-271](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs)
   Update checks `IsAcknowledged && ModifiedCount==0` — under `w:0` (IsAcknowledged=false), `ConcurrencyException` is never thrown and `Version` still bumps on the caller's instance. Delete checks only `DeletedCount==0`, which is always zero under `w:0` → always throws. Only bites users explicitly running `w:0`, but asymmetry is real. [r4]
+  - [-] Update-throw disconfirmed by `UpdateDataAsync_WithW0_DoesNotSilentlySwallowResult` — the pre-fix Update path already short-circuited on `result.IsAcknowledged == false`, so it never threw under w:0; the real Update bug was the silent-swallow aspect (caller's Version bumps without Mongo confirmation), and the fix still disables that bogus ModifiedCount assertion under w:0. Test committed as regression guard. Delete-throw was confirmed and fixed.
 
 ### InMemory persistence
 
