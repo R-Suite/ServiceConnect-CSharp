@@ -190,10 +190,15 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            // A missing row or mismatched owner both mean "this caller no longer holds
-            // the lease for this timeout" — surface as ConcurrencyException so parity
-            // with Mongo is preserved and callers don't silently miss invalidations.
-            if (!_state.TimeoutsById.TryGetValue(id, out var entry) || entry.Data.LockedBy != lockOwner)
+            // A missing row, unleased row, or mismatched owner all mean "this caller no longer
+            // holds the lease for this timeout" — surface as ConcurrencyException so parity
+            // with Mongo is preserved and callers don't silently miss invalidations. The
+            // Mongo filter requires Locked == true, so we mirror that here (Guid.Empty is
+            // the default for LockedBy on an unleased row, which would otherwise match a
+            // caller passing Guid.Empty).
+            if (!_state.TimeoutsById.TryGetValue(id, out var entry)
+                || !entry.Data.Locked
+                || entry.Data.LockedBy != lockOwner)
             {
                 throw new ConcurrencyException(
                     $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");
@@ -218,7 +223,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            if (!_state.TimeoutsById.TryGetValue(id, out var entry) || entry.Data.LockedBy != lockOwner)
+            if (!_state.TimeoutsById.TryGetValue(id, out var entry)
+                || !entry.Data.Locked
+                || entry.Data.LockedBy != lockOwner)
             {
                 throw new ConcurrencyException(
                     $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");

@@ -3,6 +3,12 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// Extends <see cref="ITimeoutStore"/> with lock-owner aware timeout release semantics.
 /// </summary>
+/// <remarks>
+/// Lease-invalidation is signalled via <see cref="Exceptions.ConcurrencyException"/>
+/// when the caller's lock owner no longer matches the row's owner. This contract relies on the
+/// underlying store writing with an acknowledged write concern; providers configured for
+/// unacknowledged writes may silently succeed on a stale lease.
+/// </remarks>
 public interface ILeaseAwareTimeoutStore
 {
     /// <summary>

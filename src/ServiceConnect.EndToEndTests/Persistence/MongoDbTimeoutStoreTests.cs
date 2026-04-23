@@ -127,6 +127,36 @@ public class MongoDbTimeoutStoreTests
         Assert.Null(remaining);
     }
 
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task RemoveDispatchedTimeoutAsync_LeaseAware_ThrowsWhenRowIsUnleased()
+    {
+        // Parity guard: the Mongo filter requires Locked == true. An unleased row with
+        // LockedBy = Guid.Empty must throw ConcurrencyException even if the caller passes
+        // Guid.Empty as the lockOwner — keeps both persistence backends at parity (the
+        // InMemory store applies the same !Locked check). Release uses the same filter
+        // structure so Remove alone is sufficient to anchor the contract in E2E.
+        var store = BuildStore("leasestale_unleased", out var client, out var dbName, out _);
+
+        var timeoutId = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = timeoutId,
+            Time = new DateTimeOffset(2026, 4, 22, 11, 55, 0, TimeSpan.Zero),
+        });
+        // Do NOT call GetTimeoutsBatchAsync — the row stays unleased (Locked=false, LockedBy=Guid.Empty).
+
+        await Assert.ThrowsAsync<ConcurrencyException>(() =>
+            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(timeoutId, Guid.Empty));
+
+        // Row must still be present — the failed Remove is a true no-op.
+        var collection = client.GetDatabase(dbName).GetCollection<TimeoutData>("Timeouts");
+        var surviving = await collection.Find(Builders<TimeoutData>.Filter.Eq(x => x.Id, timeoutId))
+            .FirstOrDefaultAsync();
+        Assert.NotNull(surviving);
+        Assert.False(surviving.Locked);
+    }
+
     private MongoDbTimeoutStore BuildStore(
         string dbPrefix,
         out IMongoClient client,
