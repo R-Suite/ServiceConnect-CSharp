@@ -79,11 +79,11 @@ public class MessageAuditPublisherTests
     }
 
     [Fact]
-    public async Task PublishAuditIfEnabledAsync_UsesConfiguredRoutingKey()
+    public async Task PublishAuditIfEnabledAsync_AlwaysUsesEmptyRoutingKey_EvenWhenConfigured()
     {
-        // Audit publish must honour the configured routing key so direct/topic
-        // audit exchanges can bind on it. Hardcoding an empty routing key would
-        // restrict audit to fanout exchanges only.
+        // AuditRoutingKey is ignored at publish time: the audit direct exchange is bound
+        // with an empty routing key, so a non-empty value would cause a silent drop.
+        // The fix forces routingKey="" regardless of the configured value.
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -97,7 +97,7 @@ public class MessageAuditPublisherTests
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "audit", "audit.orders", false,
+            "audit", string.Empty, false,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }

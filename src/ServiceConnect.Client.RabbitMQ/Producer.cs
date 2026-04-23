@@ -52,6 +52,8 @@ public sealed class Producer : IProducer
     private int _disposedInt;
     internal Func<CancellationToken, Task>? ReconnectForTests;
     internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests;
+    /// <summary>Overrides the dispose lock-wait timeout for unit tests.</summary>
+    internal TimeSpan? DisposeTimeoutForTests;
 
     /// <summary>
     /// Initializes a new producer instance using the supplied ServiceConnect configuration.
@@ -384,13 +386,9 @@ public sealed class Producer : IProducer
         if (Interlocked.Exchange(ref _disposedInt, 1) != 0) return;
 
         // Wait for in-flight publishes and (re)connections to complete before tearing down
-        // the channel/connection. Without this, a publisher that held the lock during
-        // dispose would touch a disposed IChannel and throw ObjectDisposedException mid-publish.
-        //
-        // Use a bounded timeout so a stuck publish cannot block dispose indefinitely —
-        // after the timeout we proceed with tear-down and any remaining publisher will
-        // observe the disposed state via their normal exception path.
-        var disposeTimeout = TimeSpan.FromSeconds(30);
+        // the channel/connection. Use a bounded timeout so a stuck publish cannot block
+        // dispose indefinitely — after the timeout we proceed with forced teardown.
+        var disposeTimeout = DisposeTimeoutForTests ?? TimeSpan.FromSeconds(30);
         var publishLockAcquired = false;
         var connectionLockAcquired = false;
         try
@@ -398,31 +396,31 @@ public sealed class Producer : IProducer
             publishLockAcquired = await _publishLock.WaitAsync(disposeTimeout).ConfigureAwait(false);
             connectionLockAcquired = await _connectionSemaphore.WaitAsync(disposeTimeout).ConfigureAwait(false);
 
-            // If we couldn't acquire both locks, a publisher is still in-flight on the channel.
-            // Tearing down now would crash it with ObjectDisposedException. Skip tear-down and
-            // accept the resource leak — the GC will reclaim the channel/connection eventually.
-            // Leaving the semaphores undisposed is also deliberate: disposing one whose waiter
-            // hasn't returned yet would throw on that waiter's Release() call.
-            if (publishLockAcquired && connectionLockAcquired)
+            if (!publishLockAcquired || !connectionLockAcquired)
             {
-                await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+                _logger.LogWarning(
+                    "Producer dispose could not acquire locks within {Timeout}; forcing teardown",
+                    disposeTimeout);
             }
-            else
-            {
-                _logger.LogError(
-                    "Producer dispose timed out waiting for locks (publish={PublishAcquired}, connection={ConnectionAcquired}); skipping teardown to avoid crashing in-flight publishers.",
-                    publishLockAcquired, connectionLockAcquired);
-                return;
-            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Producer dispose lock-wait failed; forcing teardown");
         }
         finally
         {
-            if (connectionLockAcquired) _connectionSemaphore.Release();
-            if (publishLockAcquired) _publishLock.Release();
-        }
+            // Best-effort teardown ALWAYS runs, whether or not we held the locks.
+            // A stuck BasicPublishAsync will observe the channel closing and throw —
+            // that is the correct shutdown signal for an in-flight publisher.
+            try { await TearDownChannelAndConnectionAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Producer channel/connection close failed during dispose"); }
 
-        _publishLock.Dispose();
-        _connectionSemaphore.Dispose();
+            if (publishLockAcquired) _publishLock.Release();
+            if (connectionLockAcquired) _connectionSemaphore.Release();
+
+            _publishLock.Dispose();
+            _connectionSemaphore.Dispose();
+        }
     }
 
     /// <summary>

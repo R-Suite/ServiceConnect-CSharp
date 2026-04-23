@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Interfaces;
@@ -13,10 +15,26 @@ namespace ServiceConnect.Client.RabbitMQ;
 internal sealed class MessageAuditPublisher
 {
     private readonly IQueueConfiguration _queueConfiguration;
+    private readonly ILogger<MessageAuditPublisher> _logger;
 
-    public MessageAuditPublisher(IQueueConfiguration queueConfiguration)
+    public MessageAuditPublisher(
+        IQueueConfiguration queueConfiguration,
+        ILogger<MessageAuditPublisher>? logger = null)
     {
         _queueConfiguration = queueConfiguration ?? throw new ArgumentNullException(nameof(queueConfiguration));
+        _logger = logger ?? NullLogger<MessageAuditPublisher>.Instance;
+
+        // Warn once at construction: AuditRoutingKey is ignored at publish time because the
+        // audit direct exchange is bound with an empty routing key. A non-empty value would
+        // route to nothing with mandatory=false, silently dropping all audit messages.
+        if (!string.IsNullOrEmpty(queueConfiguration.AuditRoutingKey))
+        {
+            _logger.LogWarning(
+                "AuditRoutingKey is configured to \"{RoutingKey}\" but the audit direct exchange " +
+                "is bound with an empty routing key. The configured value will be ignored and " +
+                "routingKey=\"\" will be used at publish time to avoid silent message drops.",
+                queueConfiguration.AuditRoutingKey);
+        }
     }
 
     public async Task PublishAuditIfEnabledAsync(
@@ -38,7 +56,7 @@ internal sealed class MessageAuditPublisher
         var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
         await channel.BasicPublishAsync(
             _queueConfiguration.AuditQueueName,
-            _queueConfiguration.AuditRoutingKey ?? string.Empty,
+            string.Empty, // audit direct-exchange binds with empty routing key; AuditRoutingKey is ignored
             mandatory: false,
             props,
             args.Body,
