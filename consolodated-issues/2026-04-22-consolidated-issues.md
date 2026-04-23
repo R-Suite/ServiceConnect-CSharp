@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 2/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
+Progress: Critical 3/3 · High 3/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -25,8 +25,8 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 - [x] (commit: 1c68b443) **`MessageBusReadStream.IsComplete` accepts non-contiguous packet sets → silent data corruption** — [MessageBusReadStream.cs:46-65, 115-120](../src/ServiceConnect/Services/MessageBusReadStream.cs)
   `Write` has no range check on `packetNumber`; it just bumps `_receivedCount`. `IsComplete` compares the count against `LastPacketNumber+1` without verifying the key set. A sender delivering packets `0, 1, 999` with `LastPacketNumber=2` marks the stream complete while a real packet is missing; downstream `Read` silently returns truncated bytes. Fixed (Option A): `Write` now validates `packetNumber >= 0` and, when `LastPacketNumber` is set, rejects `packetNumber > LastPacketNumber` with `ArgumentOutOfRangeException`; `IsComplete` stays O(1). [r3, r4]
 
-- [ ] **`IRequestReplyManager` split-brain when user registers a custom impl** — [ServiceCollectionExtensions.cs:63-69](../src/ServiceConnect/ServiceCollectionExtensions.cs#L63-L69)
-  `TryAddSingleton<RequestReplyManager>()` registers the concrete type unconditionally. The `IRequestReplyManager` registration is a factory forwarding to the same concrete instance; the `IReplyStatusRequestReplyManager` registration also forwards to the stock concrete type. If the user pre-registered their own `IRequestReplyManager`, outgoing requests use their impl while reply tracking still goes through the stock `RequestReplyManager` — replies silently dropped. XML comment claims "fails fast"; it does not. [r4]
+- [x] (commit: 4377dab2) **`IRequestReplyManager` split-brain when user registers a custom impl** — [ServiceCollectionExtensions.cs](../src/ServiceConnect/ServiceCollectionExtensions.cs)
+  CONFIRMED by `RequestReplyManagerRegistrationTests.AddServiceConnect_FailsFast_WhenUserPartiallyReplacesImpl` — `IRequestReplyManager` resolved to `PartialManager`, `IReplyStatusRequestReplyManager` resolved to stock `RequestReplyManager` (different instances). Fixed: `RegisterRequestReplyManager` now inspects the `ServiceCollection` at `AddServiceConnect` time; if a user descriptor is found, validates it also implements `IReplyStatusRequestReplyManager` and throws `InvalidOperationException` with a clear message if not. If it does, wires `IReplyStatusRequestReplyManager` as a forwarding factory to `GetRequiredService<IRequestReplyManager>()`. Both `ServiceCollectionExtensionsTests` partial-override tests updated to assert the new fail-fast behavior; `FullOverrideRequestReplyManager` happy-path test added. [r4]
 
 ### Interfaces
 

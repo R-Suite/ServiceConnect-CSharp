@@ -73,23 +73,50 @@ public static class ServiceCollectionExtensions
     private static void RegisterRequestReplyManager(IServiceCollection services)
     {
         // Check whether the caller has pre-registered a custom IRequestReplyManager.
-        var existingDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IRequestReplyManager));
+        var existingRrmDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(IRequestReplyManager));
 
-        if (existingDescriptor is not null)
+        if (existingRrmDescriptor is null)
         {
-            // Determine the concrete implementation type so we can verify it also
-            // implements IReplyStatusRequestReplyManager. Both the public contract (used
-            // by Bus to dispatch requests) and the internal contract (used by
-            // ReplyProcessor to correlate incoming replies) must resolve to the same
-            // instance — if they don't, replies are silently dropped.
-            var implType = existingDescriptor.ImplementationType
-                ?? existingDescriptor.ImplementationInstance?.GetType();
+            // No custom registration — use the stock concrete type for both interfaces.
+            services.TryAddSingleton<RequestReplyManager>();
+            services.TryAddSingleton<IRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
+            services.TryAddSingleton<IReplyStatusRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
+            return;
+        }
 
-            if (implType is null || !typeof(IReplyStatusRequestReplyManager).IsAssignableFrom(implType))
+        // A custom IRequestReplyManager has been registered. Both the public contract
+        // (used by Bus to dispatch requests) and the internal contract (used by
+        // ReplyProcessor to correlate incoming replies) must resolve to the same
+        // instance — if they don't, replies are silently dropped.
+        //
+        // Determine the concrete implementation type so we can verify it also
+        // implements IReplyStatusRequestReplyManager. For factory-based registrations
+        // where the type cannot be statically inspected, the caller must pre-register
+        // IReplyStatusRequestReplyManager themselves (TryAdd below will honour it).
+        var implType = existingRrmDescriptor.ImplementationType
+            ?? existingRrmDescriptor.ImplementationInstance?.GetType();
+
+        var replyStatusAlreadyRegistered = services.Any(d => d.ServiceType == typeof(IReplyStatusRequestReplyManager));
+
+        if (!replyStatusAlreadyRegistered)
+        {
+            if (implType is null)
+            {
+                // Factory-based registration and no IReplyStatusRequestReplyManager present.
+                throw new InvalidOperationException(
+                    $"A custom '{nameof(IRequestReplyManager)}' has been registered via a factory, "
+                    + $"but '{nameof(IReplyStatusRequestReplyManager)}' has not been registered. "
+                    + "Both interfaces must resolve to the same instance so that outgoing requests and "
+                    + "incoming reply tracking are in sync. Register IReplyStatusRequestReplyManager as "
+                    + "a forwarding factory before calling AddServiceConnect, e.g.: "
+                    + "services.AddSingleton<IReplyStatusRequestReplyManager>(sp => (IReplyStatusRequestReplyManager)sp.GetRequiredService<IRequestReplyManager>());");
+            }
+
+            if (!typeof(IReplyStatusRequestReplyManager).IsAssignableFrom(implType))
             {
                 throw new InvalidOperationException(
                     $"A custom '{nameof(IRequestReplyManager)}' has been registered but its implementation "
-                    + $"does not also implement '{nameof(IReplyStatusRequestReplyManager)}'. "
+                    + $"('{implType.FullName}') does not also implement '{nameof(IReplyStatusRequestReplyManager)}'. "
                     + "Both interfaces must be implemented by the same type so that outgoing requests and "
                     + "incoming reply tracking use the same instance. Either remove the custom registration "
                     + "and use the built-in RequestReplyManager, or implement both interfaces on your custom type "
@@ -101,13 +128,9 @@ public static class ServiceCollectionExtensions
             services.TryAddSingleton<IReplyStatusRequestReplyManager>(sp =>
                 (IReplyStatusRequestReplyManager)sp.GetRequiredService<IRequestReplyManager>());
         }
-        else
-        {
-            // No custom registration — use the stock concrete type for both interfaces.
-            services.TryAddSingleton<RequestReplyManager>();
-            services.TryAddSingleton<IRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
-            services.TryAddSingleton<IReplyStatusRequestReplyManager>(sp => sp.GetRequiredService<RequestReplyManager>());
-        }
+
+        // IReplyStatusRequestReplyManager is either already registered by the caller or
+        // was just wired above — nothing more to do for the custom registration path.
     }
 
     private static void RegisterProcessors(IServiceCollection services)
