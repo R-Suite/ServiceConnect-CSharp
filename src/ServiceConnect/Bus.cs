@@ -486,7 +486,7 @@ public sealed class Bus : IBus
         HeaderKeys.MessageId,
     };
 
-    private static Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
+    private Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
     {
         // Snapshot once up front so a concurrent caller mutating the source
         // dictionary can't throw "Collection was modified" inside the foreach
@@ -504,8 +504,12 @@ public sealed class Bus : IBus
         {
             foreach (var header in snapshot)
             {
-                if (!ReservedHeaders.Contains(header.Key))
-                    envelope.Headers[header.Key] = header.Value;
+                if (ReservedHeaders.Contains(header.Key))
+                {
+                    _logger.LogWarning("Ignoring caller-supplied reserved header '{Key}'", header.Key);
+                    continue;
+                }
+                envelope.Headers[header.Key] = header.Value;
             }
         }
 
@@ -561,14 +565,14 @@ public sealed class Bus : IBus
     /// without allocating the intermediate <see cref="Envelope"/> or its
     /// <c>Dictionary&lt;string, object&gt;</c> headers map.
     /// </summary>
-    private static Dictionary<string, string> BuildHeadersDirect(Type messageType, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders)
+    private Dictionary<string, string> BuildHeadersDirect(Type messageType, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders)
     {
         // Snapshot-then-iterate: the caller still holds a reference to the
         // underlying dictionary, so a concurrent mutation during the foreach
         // below would throw "Collection was modified". ToArray grabs a stable
         // copy with a single enumeration.
         var snapshot = additionalHeaders is null ? null : additionalHeaders.ToArray();
-        var capacity = 3 + (snapshot?.Length ?? 0);
+        var capacity = ReservedHeaders.Count + (snapshot?.Length ?? 0);
         var headers = new Dictionary<string, string>(capacity);
 
         if (snapshot is not null)
@@ -576,8 +580,12 @@ public sealed class Bus : IBus
             foreach (var kvp in snapshot)
             {
                 // Skip reserved keys — the bus stamps these authoritatively below.
-                if (!ReservedHeaders.Contains(kvp.Key))
-                    headers[kvp.Key] = kvp.Value;
+                if (ReservedHeaders.Contains(kvp.Key))
+                {
+                    _logger.LogWarning("Ignoring caller-supplied reserved header '{Key}'", kvp.Key);
+                    continue;
+                }
+                headers[kvp.Key] = kvp.Value;
             }
         }
 

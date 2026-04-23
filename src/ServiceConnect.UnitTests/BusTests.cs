@@ -990,8 +990,41 @@ namespace ServiceConnect.UnitTests
             Assert.NotEqual(spoofedMessageId, captured[HeaderKeys.MessageId]);
         }
 
+        [Fact]
+        public async Task SendAsync_CallerSuppliesReservedHeader_LogsWarningForDroppedKey()
+        {
+            // M1 observability: warn operators when a caller-supplied reserved header is dropped.
+            var options = new SendOptions
+            {
+                Headers = new Dictionary<string, string>
+                {
+                    [HeaderKeys.MessageType] = "SomeoneElsesType",
+                }
+            };
+
+            _mockSendPipeline
+                .Setup(x => x.ExecuteSendMessagePipelineAsync(
+                    It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(),
+                    It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+            await _bus.SendAsync(message, options, CancellationToken.None);
+
+            _mockLogger.Verify(
+                x => x.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(HeaderKeys.MessageType)),
+                    null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+
         // --- M3: Semaphore dispose race ---
 
+        // Regression guard for the ThrowIfDisposed()-before-semaphore ordering;
+        // the concurrent variant of this race was audited and disconfirmed.
         [Fact]
         public async Task StartConsumingAsync_AfterDispose_ThrowsObjectDisposedException()
         {
