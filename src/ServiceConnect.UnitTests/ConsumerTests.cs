@@ -181,4 +181,73 @@ public class ConsumerTests
 
         connection.Verify(c => c.DisposeAsync(), Times.Never);
     }
+
+    // -----------------------------------------------------------------------
+    // M11 — Consumer.DisposeAsync exception resilience
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task DisposeAsync_WhenFirstHostThrows_StillDisposesRemainingHosts()
+    {
+        // Arrange: inject two IAsyncDisposable stubs into _clients via reflection.
+        // hostA throws TimeoutException; hostB must still be disposed despite A's failure.
+        var hostA = new Mock<IAsyncDisposable>();
+        hostA.Setup(h => h.DisposeAsync()).Throws(new TimeoutException("AMQP 0-9-1 channel closed"));
+        var hostB = new Mock<IAsyncDisposable>();
+        hostB.Setup(h => h.DisposeAsync()).Returns(ValueTask.CompletedTask);
+
+        var connection = new Mock<IServiceConnectConnection>(MockBehavior.Strict);
+
+        var consumer = new Consumer(
+            MakeTransportCfg().Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            NullLogger<Consumer>.Instance,
+            connection.Object);
+
+        // Inject via reflection — requires _clients to be ConcurrentBag<IAsyncDisposable>
+        var clientsField = typeof(Consumer).GetField("_clients", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(clientsField);
+        var clients = (ConcurrentBag<IAsyncDisposable>)clientsField!.GetValue(consumer)!;
+        clients.Add(hostA.Object);
+        clients.Add(hostB.Object);
+
+        await consumer.DisposeAsync(); // must not throw
+
+        hostB.Verify(h => h.DisposeAsync(), Times.Once);
+    }
+
+    // -----------------------------------------------------------------------
+    // M12 — Consumer.StartConsumingAsync idempotency
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task StartConsumingAsync_CalledTwice_ThrowsInvalidOperationException()
+    {
+        // A fully-configured Consumer that can complete the first StartConsumingAsync
+        // call needs topology + a host channel. We use an approach where the second
+        // call throws before any channel is created: the _started gate fires first.
+        // So for this test we just need two calls; the first must succeed (or at least
+        // advance past the gate) and the second must throw.
+        //
+        // The simplest harness: set _started directly via reflection to simulate the
+        // already-consuming state, then confirm the second call throws.
+        var connection = new Mock<IServiceConnectConnection>(MockBehavior.Strict);
+
+        var consumer = new Consumer(
+            MakeTransportCfg().Object,
+            MakeQueueCfg().Object,
+            MakeBusCfg().Object,
+            NullLogger<Consumer>.Instance,
+            connection.Object);
+
+        // Simulate "already started" by setting _started = 1 directly.
+        var startedField = typeof(Consumer).GetField("_started", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(startedField);
+        startedField!.SetValue(consumer, 1);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            consumer.StartConsumingAsync("q", ["MessageType"],
+                (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true })));
+    }
 }

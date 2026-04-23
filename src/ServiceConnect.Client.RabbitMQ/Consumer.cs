@@ -21,7 +21,8 @@ public sealed class Consumer : IConsumer
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
     private readonly IBusConfiguration _busConfiguration;
-    private readonly ConcurrentBag<RabbitMqConsumerHost> _clients = new();
+    private readonly ConcurrentBag<IAsyncDisposable> _clients = new();
+    private int _started; // 0 = not started, 1 = started; access only via Interlocked
     private readonly bool _durable;
     private readonly int _retryDelay;
     private readonly bool _exclusive;
@@ -77,6 +78,10 @@ public sealed class Consumer : IConsumer
     /// <param name="cancellationToken">A token used to cancel startup or consumption initialization.</param>
     public async Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default)
     {
+        if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
+            throw new InvalidOperationException(
+                "Consumer is already consuming. Call DisposeAsync before starting again.");
+
         cancellationToken.ThrowIfCancellationRequested();
 
         if (_connection is null)
@@ -178,10 +183,20 @@ public sealed class Consumer : IConsumer
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        foreach (RabbitMqConsumerHost consumer in _clients)
+        foreach (IAsyncDisposable consumer in _clients)
         {
-            try { await consumer.DisposeAsync().ConfigureAwait(false); }
-            catch (ObjectDisposedException) { }
+            try
+            {
+                await consumer.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // let shutdown cancellation propagate
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to dispose consumer host — continuing");
+            }
         }
 
         // Close and dispose the setup channel before nulling it.
@@ -194,5 +209,8 @@ public sealed class Consumer : IConsumer
         _model = null;
         if (_ownsConnection && _connection != null)
             await _connection.DisposeAsync().ConfigureAwait(false);
+
+        // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
+        Interlocked.Exchange(ref _started, 0);
     }
 }
