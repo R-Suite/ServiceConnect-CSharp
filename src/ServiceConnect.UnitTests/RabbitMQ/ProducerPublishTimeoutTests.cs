@@ -206,4 +206,56 @@ public class ProducerPublishTimeoutTests
 
         Assert.Equal(TimeSpan.FromSeconds(30), timeout);
     }
+
+    [Fact]
+    public async Task PublishAsync_ResetsConnection_WhenBasicPublishTimesOut()
+    {
+        // Arrange: short timeout so the test doesn't wait long.
+        // Verify that ReconnectForTests (the test-seam for ReconnectAfterPublishFailureAsync)
+        // is invoked after the publish times out, clearing the stale confirm-tracker state.
+        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        var channel = MakeHangingChannel();
+        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = true;
+
+        SetField(producer, "_model", channel.Object);
+        SetField(producer, "_connected", true);
+
+        var reconnectCalled = false;
+        producer.ReconnectForTests = _ =>
+        {
+            reconnectCalled = true;
+            return Task.CompletedTask;
+        };
+
+        // Act
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
+
+        // Assert: the reconnect hook must have been invoked to clear the confirm-tracker
+        Assert.True(reconnectCalled, "Expected the connection reset to be called after publish timeout.");
+    }
+
+    [Fact]
+    public async Task PublishAsync_TimeoutException_ContainsExchangeAndRoutingKeyDetails()
+    {
+        // Verify that the enriched TimeoutException message includes exchange / routingKey /
+        // messageId so operators have enough context for post-mortem correlation.
+        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        var channel = MakeHangingChannel();
+        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = true;
+
+        SetField(producer, "_model", channel.Object);
+        SetField(producer, "_connected", true);
+        producer.ReconnectForTests = _ => Task.CompletedTask;
+
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
+
+        // The message must contain the contextual fields added by I2.
+        Assert.Contains("exchange=", ex.Message);
+        Assert.Contains("routingKey=", ex.Message);
+        Assert.Contains("messageId=", ex.Message);
+    }
 }

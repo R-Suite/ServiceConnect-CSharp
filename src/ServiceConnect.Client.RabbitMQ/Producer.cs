@@ -533,10 +533,20 @@ public sealed class Producer : IProducer
                 body,
                 linked.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (linked.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        // Only remap to TimeoutException when our linked CTS fired AND the caller's token didn't.
+        // A spurious OCE (neither token cancelled) propagates as cancellation; a caller-requested
+        // cancellation wins priority over timeout mapping.
+        catch (OperationCanceledException oce) when (linked.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            // Reset the channel: the broker may eventually ack this timed-out publish, which
+            // would contaminate the confirm slot of a later in-flight publish. A fresh
+            // connection + channel clears the confirm-tracker's state.
+            try { await ReconnectAfterPublishFailureAsync(oce, cancellationToken).ConfigureAwait(false); }
+            catch (Exception resetEx) { _logger.LogError(resetEx, "Failed to reset connection after publish timeout; channel state may be indeterminate."); }
+
             throw new TimeoutException(
-                $"BasicPublishAsync exceeded the configured publish timeout of {_publishTimeout.TotalSeconds:0.###}s. " +
+                $"BasicPublishAsync exceeded the configured publish timeout of {_publishTimeout.TotalSeconds:0.###}s " +
+                $"(exchange='{exchange}', routingKey='{routingKey}', messageId='{basicProperties.MessageId ?? "<none>"}'). " +
                 "The broker may be stalled or the connection may be half-open.");
         }
     }
