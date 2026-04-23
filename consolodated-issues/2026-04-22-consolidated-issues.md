@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 7/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
+Progress: Critical 3/3 · High 8/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -41,8 +41,8 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 - [x] (commit: 008a48c5) **Lease-aware Remove/Release don't inspect result counts → duplicate delivery** — [MongoDbTimeoutStore.cs:250-268, 271-292](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L250-L292)
   `DeleteOneAsync`/`UpdateOneAsync` results are discarded. If the reaper unlocked the row after this owner's lease expired (and another worker re-claimed it), the filter on `LockedBy==lockOwner` matches zero rows; the caller sees "success" with no signal to stop. The row is still present and is redispatched → duplicate delivery. [r3]
 
-- [ ] **`GuidRepresentationMode` V2→V3 toggle silently swallowed → filters match zero documents** — [MongoDbPersistenceExtensions.cs:32-39](../src/ServiceConnect.Persistence.MongoDb/MongoDbPersistenceExtensions.cs#L32-L39)
-  `BsonDefaults.GuidRepresentationMode = V3` throws `InvalidOperationException` if another component has already set V2 or if serialization has begun; the catch discards silently. Stored Guids then use CSharpLegacy subtype 3 while filter literals are built with Standard subtype 4 semantics → every Guid filter returns zero documents. Only bites processes sharing the driver with legacy code; severity is high when it hits. [r3]
+- [x] (commit: 8bcf0a82) **`GuidRepresentationMode` V2→V3 toggle silently swallowed → filters match zero documents** — [MongoDbPersistenceExtensions.cs:32-39](../src/ServiceConnect.Persistence.MongoDb/MongoDbPersistenceExtensions.cs#L32-L39)
+  `BsonDefaults.GuidRepresentationMode = V3` throws `InvalidOperationException` if another component has already set V2 or if serialization has begun; the catch discards silently. Stored Guids then use CSharpLegacy subtype 3 while filter literals are built with Standard subtype 4 semantics → every Guid filter returns zero documents. Only bites processes sharing the driver with legacy code; severity is high when it hits. Fixed: `EnsureGuidSerializerRegistered` now toggles then verifies the effective mode — if it's not V3 afterwards, throws with a diagnostic message (original `InvalidOperationException` as InnerException). Same discipline applied in `ModuleInit.cs`. Regression guard `MongoGuidSerializationTests.InsertAndFilterByGuid_UsesStandardBinarySubtype` asserts both the filter round-trip and the stored binary subtype = `UuidStandard` (4). [r3]
 
 ### InMemory persistence
 
