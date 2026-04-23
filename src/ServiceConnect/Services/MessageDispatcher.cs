@@ -135,11 +135,10 @@ public sealed class MessageDispatcher : IMessageDispatcher
                     return new ConsumeEventResult { Success = true };
 
                 // No pending request matched this reply — the caller timed out or this is a
-                // duplicate delivery. Log at Debug and silently ack; returning Success=false
-                // would drive nack/requeue and cause spurious retry/DLQ churn.
-                var replyCorrelationId = headers.TryGetValue(HeaderKeys.ResponseMessageId, out var ridRaw)
-                    ? HeaderDecoder.Decode(ridRaw) ?? "<unknown>"
-                    : "<unknown>";
+                // duplicate delivery. Returning Success=false would drive nack/requeue and
+                // cause spurious retry/DLQ churn, so we log at Debug and silently ack instead.
+                // Reachable only when hasResponseMessageId (see line 131 gate).
+                var replyCorrelationId = HeaderDecoder.Decode(headers[HeaderKeys.ResponseMessageId]) ?? "<unknown>";
                 _logger.LogDebug(
                     "Discarding reply for untracked correlation '{CorrelationId}' (likely timed out or duplicate)",
                     replyCorrelationId);

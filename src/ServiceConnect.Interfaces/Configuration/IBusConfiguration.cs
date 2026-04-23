@@ -8,6 +8,11 @@ public interface IBusConfiguration
     /// <summary>
     /// Gets or sets a value indicating whether handler discovery scans configured assemblies automatically.
     /// </summary>
+    /// <remarks>
+    /// When <c>false</c>, handler discovery does not scan the AppDomain automatically.
+    /// Assemblies explicitly supplied via <see cref="M:ServiceConnect.ServiceConnectBuilder.ScanAssemblies(System.Reflection.Assembly[])"/>
+    /// are still scanned — the explicit list takes precedence over this flag.
+    /// </remarks>
     bool ScanForMessageHandlers { get; set; }
 
     /// <summary>

@@ -314,6 +314,13 @@ public static class ServiceCollectionExtensions
         return HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies());
     }
 
+    /// <remarks>
+    /// If the DI container already contains a descriptor for <c>IMessageHandler&lt;T&gt;</c>
+    /// (regardless of how it was registered — implementation type, instance, or factory),
+    /// the scanner skips adding scan-discovered handlers for <c>T</c>. User registrations are
+    /// authoritative; callers who want both a manually-registered handler and scan-discovered
+    /// handlers for the same message type must register all of them explicitly.
+    /// </remarks>
     private static void RegisterHandlerType(IServiceCollection services, HandlerReference handlerRef)
     {
         var handlerType = handlerRef.HandlerType;

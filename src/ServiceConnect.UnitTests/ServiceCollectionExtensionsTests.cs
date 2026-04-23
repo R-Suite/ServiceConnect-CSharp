@@ -347,6 +347,30 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddServiceConnect_UserFactoryRegistration_SuppressesScannerForSameType()
+    {
+        // Semantic lock-in for the "user registration is authoritative" guard in
+        // RegisterHandlerType: if ANY descriptor answers IMessageHandler<T> before
+        // AddServiceConnect runs (regardless of registration form — factory, instance,
+        // or type), the scanner must not add a second transient descriptor.
+        // This is intentional: callers who want both a manual and a scan-discovered
+        // handler for the same message type must register all of them explicitly.
+        var services = new ServiceCollection();
+        // User factory-registers ONE handler for SampleMessage.
+        services.AddSingleton<IMessageHandler<TestHandlerFixture.SampleMessage>>(
+            _ => new TestHandlerFixture.SampleHandler());
+
+        // Scanner would otherwise find TestHandlerFixture.SampleHandler too.
+        services.AddServiceConnect(b => b.ScanAssemblies(typeof(TestHandlerFixture).Assembly));
+
+        using var provider = services.BuildServiceProvider();
+        var handlers = provider.GetServices<IMessageHandler<TestHandlerFixture.SampleMessage>>().ToList();
+
+        // User registration is authoritative — no duplicate from scanner.
+        Assert.Single(handlers);
+    }
+
+    [Fact]
     public void AddServiceConnect_ThrowsWhenSendMiddlewareIsNotSingleton()
     {
         var services = CreateServices();
