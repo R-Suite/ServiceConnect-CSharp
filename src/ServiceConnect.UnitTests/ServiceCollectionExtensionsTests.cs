@@ -91,38 +91,46 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddServiceConnect_OverriddenRequestReplyManager_DoesNotBreakInternalReplyStatusContract()
+    public void AddServiceConnect_ThrowsAtConfigTime_WhenUserRegistersPartialRequestReplyManager()
     {
-        // Replacing the public IRequestReplyManager must not null out the internal
-        // IReplyStatusRequestReplyManager — that contract resolves to the concrete
-        // RequestReplyManager singleton directly so dispatch never sees a null trust-query.
+        // A caller who replaces IRequestReplyManager with a type that does NOT also
+        // implement IReplyStatusRequestReplyManager would cause a split-brain: outgoing
+        // requests go through the custom impl while reply tracking still goes through
+        // the stock RequestReplyManager, silently dropping replies.
+        // AddServiceConnect must detect this and throw immediately at configuration time.
         var services = CreateServices();
 
         services.AddSingleton<IRequestReplyManager, OverrideRequestReplyManager>();
-        services.AddServiceConnect(b => b
-            .ConfigureQueues(q => q.QueueName = "test")
-            .ConfigureBus(c => c.ScanForMessageHandlers = false));
 
-        var provider = services.BuildServiceProvider();
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => b
+                .ConfigureQueues(q => q.QueueName = "test")
+                .ConfigureBus(c => c.ScanForMessageHandlers = false)));
 
-        Assert.IsType<OverrideRequestReplyManager>(provider.GetRequiredService<IRequestReplyManager>());
-        Assert.NotNull(provider.GetService<IReplyStatusRequestReplyManager>());
+        Assert.Contains(nameof(IRequestReplyManager), exception.Message);
+        Assert.Contains(nameof(IReplyStatusRequestReplyManager), exception.Message);
     }
 
     [Fact]
-    public void AddServiceConnect_AllowsOverriddenRequestReplyManager_ToResolveDispatcherPath()
+    public void AddServiceConnect_AllowsOverriddenRequestReplyManager_WhenItAlsoImplementsReplyStatusContract()
     {
+        // A caller who replaces IRequestReplyManager with a full impl (also implementing
+        // IReplyStatusRequestReplyManager) is supported. Both interfaces must resolve to
+        // the same instance so the dispatcher path works correctly.
         var services = CreateServices();
 
-        services.AddSingleton<IRequestReplyManager, OverrideRequestReplyManager>();
+        services.AddSingleton<IRequestReplyManager, FullOverrideRequestReplyManager>();
         services.AddServiceConnect(b => b
             .ConfigureQueues(q => q.QueueName = "test")
             .ConfigureBus(c => c.ScanForMessageHandlers = false));
 
         var provider = services.BuildServiceProvider();
 
-        Assert.NotNull(provider.GetRequiredService<ReplyProcessor>());
-        Assert.NotNull(provider.GetRequiredService<IMessageDispatcher>());
+        Assert.IsType<FullOverrideRequestReplyManager>(provider.GetRequiredService<IRequestReplyManager>());
+        Assert.NotNull(provider.GetService<IReplyStatusRequestReplyManager>());
+        Assert.Same(
+            provider.GetRequiredService<IRequestReplyManager>(),
+            provider.GetRequiredService<IReplyStatusRequestReplyManager>());
     }
 
     [Fact]
@@ -400,5 +408,45 @@ file sealed class OverrideRequestReplyManager : IRequestReplyManager
         throw new NotSupportedException();
 
     public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type) =>
+        throw new NotSupportedException();
+}
+
+file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReplyStatusRequestReplyManager
+{
+    public Task<TReply> SendRequestAsync<TRequest, TReply>(
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        ServiceConnect.Interfaces.Options.RequestOptions options,
+        CancellationToken cancellationToken = default)
+        where TRequest : Message
+        where TReply : Message =>
+        throw new NotSupportedException();
+
+    public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        ServiceConnect.Interfaces.Options.RequestOptions options,
+        CancellationToken cancellationToken = default)
+        where TRequest : Message
+        where TReply : Message =>
+        throw new NotSupportedException();
+
+    public Task PublishRequestAsync<TRequest, TReply>(
+        byte[] messageBytes,
+        Dictionary<string, string> headers,
+        ServiceConnect.Interfaces.Options.RequestOptions options,
+        Action<TReply> onReply,
+        CancellationToken cancellationToken = default)
+        where TRequest : Message
+        where TReply : Message =>
+        throw new NotSupportedException();
+
+    public void ProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type) =>
+        throw new NotSupportedException();
+
+    public bool TryProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type) =>
+        throw new NotSupportedException();
+
+    public bool IsTrackedRequest(string messageId) =>
         throw new NotSupportedException();
 }
