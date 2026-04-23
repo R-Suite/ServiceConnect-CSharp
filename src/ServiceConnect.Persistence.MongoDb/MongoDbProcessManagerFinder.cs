@@ -17,6 +17,13 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private readonly IMongoDatabase _mongoDatabase;
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
+    private readonly SemaphoreSlim _indexCreationSemaphore = new(1, 1);
+    private static readonly HashSet<int> BenignIndexCodes = new() { 85, 86 }; // IndexOptionsConflict, IndexKeySpecsConflict
+
+    // Under WriteConcern.Unacknowledged the driver does not report ModifiedCount/DeletedCount.
+    // Accessing those properties on an unacknowledged result throws NotSupportedException.
+    // When guards are disabled we skip the concurrency assertions and log a one-time Warning.
+    private readonly bool _concurrencyGuardsEnabled;
 
     // Cached compiled delegates for InsertDataTypedAsync<T>, keyed by concrete data type.
     // Avoid MakeGenericMethod + MethodInfo.Invoke on every insert call.
@@ -41,6 +48,20 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         catch (MongoException ex)
         {
             throw new PersistenceException("Failed to connect to MongoDB for process manager persistence.", ex);
+        }
+
+        // Detect WriteConcern.Unacknowledged (w:0) at construction time.
+        // Under w:0 the driver does not populate ModifiedCount/DeletedCount and accessing
+        // them throws NotSupportedException. Disable the concurrency assertions and log a
+        // one-time Warning so operators are aware the guarantees are relaxed.
+        var effectiveWriteConcern = mongoClient.Settings.WriteConcern;
+        _concurrencyGuardsEnabled = effectiveWriteConcern.IsAcknowledged;
+        if (!_concurrencyGuardsEnabled)
+        {
+            _logger.LogWarning(
+                "MongoDbProcessManagerFinder: WriteConcern.Unacknowledged (w:0) detected. " +
+                "Optimistic-concurrency guards (ModifiedCount/DeletedCount checks) are DISABLED. " +
+                "Concurrent saga updates will not be detected.");
         }
     }
 
@@ -210,7 +231,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             );
             var result = await collection.ReplaceOneAsync(filter, writeRecord, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            if (result.IsAcknowledged && result.ModifiedCount == 0)
+            if (_concurrencyGuardsEnabled && result.IsAcknowledged && result.ModifiedCount == 0)
             {
                 throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {versionData.Data.CorrelationId} and Version {currentVersion} could not be updated.");
@@ -264,7 +285,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
                 $"Failed to delete process manager data with CorrelationId '{correlationId}'.", ex);
         }
 
-        if (result.DeletedCount == 0)
+        if (_concurrencyGuardsEnabled && result.IsAcknowledged && result.DeletedCount == 0)
         {
             throw new ConcurrencyException(
                 $"Concurrency conflict: ProcessManagerData with CorrelationId {correlationId} and Version {expectedVersion} could not be deleted.");
@@ -273,19 +294,38 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
 
     private async Task EnsureCorrelationIdIndexAsync<T>(IMongoCollection<MongoDbData<T>> collection, string collectionName) where T : class, IProcessManagerData
     {
-        if (!_indexedCollections.TryAdd(collectionName, true)) return;
+        // Fast path: index already confirmed by this process instance.
+        if (_indexedCollections.ContainsKey(collectionName)) return;
 
-        var indexKeys = Builders<MongoDbData<T>>.IndexKeys.Ascending(x => x.Data.CorrelationId);
-        var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys, new CreateIndexOptions { Unique = true });
+        await _indexCreationSemaphore.WaitAsync().ConfigureAwait(false);
         try
         {
-            await collection.Indexes.CreateOneAsync(indexModel).ConfigureAwait(false);
+            // Double-check under the semaphore so a thread that was waiting while another
+            // thread created the index does not issue a redundant CreateOneAsync.
+            if (_indexedCollections.ContainsKey(collectionName)) return;
+
+            var indexKeys = Builders<MongoDbData<T>>.IndexKeys.Ascending(x => x.Data.CorrelationId);
+            var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys, new CreateIndexOptions { Unique = true });
+            try
+            {
+                await collection.Indexes.CreateOneAsync(indexModel).ConfigureAwait(false);
+            }
+            catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
+            {
+                // 85 IndexOptionsConflict / 86 IndexKeySpecsConflict — another process
+                // created a compatible index concurrently. Treat as success.
+                _logger.LogDebug("Concurrent index creation for '{CollectionName}': {Code} {Message}", collectionName, ex.Code, ex.Message);
+            }
+
+            // Flip the marker ONLY after index creation succeeds (or benign conflict).
+            // Previously the marker was set before CreateOneAsync so a concurrent caller
+            // could short-circuit, skip index creation, and then race an insert before
+            // the unique index existed — admitting duplicate CorrelationId rows.
+            _indexedCollections.TryAdd(collectionName, true);
         }
-        catch
+        finally
         {
-            // Roll back the marker so a subsequent call retries index creation.
-            _indexedCollections.TryRemove(collectionName, out _);
-            throw;
+            _indexCreationSemaphore.Release();
         }
     }
 

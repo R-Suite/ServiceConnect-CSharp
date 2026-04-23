@@ -252,6 +252,9 @@ public class MongoDbProcessManagerFinderTests
         client = new Mock<IMongoClient>();
         client.Setup(c => c.GetDatabase("test-db", It.IsAny<MongoDatabaseSettings>()))
             .Returns(database.Object);
+        // IMongoClient.Settings is read in the constructor to detect WriteConcern.Unacknowledged.
+        // Return a default MongoClientSettings (WriteConcern.Acknowledged) so the mock doesn't NRE.
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings());
 
         return new MongoDbProcessManagerFinder(
             client.Object,

@@ -93,6 +93,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         foreach (var key in _state.Provider.Keys())
         {
             var value = _state.Provider.Get<string, object>(key.ToString()!);
+            if (value is null) continue; // removed concurrently by an external IKeyValueStore caller
             if (value is MemoryData<T> typed)
             {
                 var candidate = new MemoryData<T> { Data = DeepClone.Clone(typed.Data), Version = typed.Version };

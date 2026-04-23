@@ -628,6 +628,75 @@ namespace ServiceConnect.UnitTests
             Assert.NotNull(found);
             Assert.Equal("v2", ((TestData)found.Data).Name);
         }
+
+        // M18: Keys() snapshot + concurrent external IKeyValueStore.Remove(key) between
+        // snapshot and per-key Get(key) returns null, then value.GetType() on null → NRE.
+        [Fact]
+        public async Task FindDataAsync_ConcurrentKeyValueStoreRemoval_DoesNotNre()
+        {
+            // Arrange: shared CacheProvider exposed as both ICacheProvider and IKeyValueStore.
+            var provider = new CacheProvider();
+            var cache = new ProcessManagerPredicateCache();
+            var state = new InMemoryPersistenceState(TimeProvider.System);
+
+            // We need a finder backed by a provider we can also poke as IKeyValueStore.
+            // InMemoryProcessManagerFinder's internal constructor takes a state; we inject
+            // a state whose Provider is our observable CacheProvider indirectly.
+            // Instead, use the public string-string constructor which creates its own state,
+            // then drive the race through the IKeyValueStore facet of an *external* provider.
+            //
+            // Simplest reliable approach: use InMemoryPersistenceState directly (internal)
+            // with a custom CacheProvider we hold a reference to.
+            var sharedState = new InMemoryPersistenceState(TimeProvider.System);
+            var finder = new InMemoryProcessManagerFinder(cache, sharedState);
+            var kvStore = (IKeyValueStore)sharedState.Provider;
+
+            // Seed a batch of items so the scan loop has multiple keys to traverse.
+            const int itemCount = 50;
+            var ids = Enumerable.Range(0, itemCount).Select(_ => Guid.NewGuid()).ToArray();
+            foreach (var id in ids)
+                await finder.InsertDataAsync(new TestData { CorrelationId = id, Name = "seed" }, CancellationToken.None);
+
+            var mapper = new TestProcessManagerPropertyMapper();
+            mapper.ConfigureMapping<IProcessManagerData, Message>(pm => pm.CorrelationId, m => m.CorrelationId);
+
+            // Act: run many concurrent scans and concurrent removals via the IKeyValueStore
+            // facet, which is NOT protected by the finder's ReaderWriterLockSlim.
+            var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+            var iterations = 200;
+
+            var scanTasks = Enumerable.Range(0, iterations).Select(_ => Task.Run(async () =>
+            {
+                try
+                {
+                    // Pick a random id; result may be null if removed — that is fine.
+                    var id = ids[Random.Shared.Next(ids.Length)];
+                    await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(id), CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    exceptions.Add(ex);
+                }
+            }));
+
+            var removeTasks = Enumerable.Range(0, iterations).Select(_ => Task.Run(() =>
+            {
+                try
+                {
+                    // Remove random keys via the unguarded IKeyValueStore interface.
+                    foreach (var k in kvStore.Keys().Take(3).ToList())
+                        kvStore.Remove(k);
+                }
+                catch (Exception ex)
+                {
+                    exceptions.Add(ex);
+                }
+            }));
+
+            await Task.WhenAll(scanTasks.Concat(removeTasks));
+
+            Assert.Empty(exceptions);
+        }
     }
 
     /// <summary>

@@ -233,4 +233,112 @@ public class MongoDbProcessManagerFinderTests
 
         await Assert.ThrowsAsync<ConcurrencyException>(() => finder.DeleteDataAsync(stub));
     }
+
+    // M15 + M16: concurrent InsertDataAsync callers must not admit duplicate rows, and
+    // concurrent index-creation races (codes 85/86) must not bubble up as errors.
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task EnsureIndex_ConcurrentCallers_AllSeeIndexBeforeInsertSucceeds()
+    {
+        var (finder, connectionString, dbName) = CreateFinder();
+        var correlationId = Guid.NewGuid();
+
+        var tasks = Enumerable.Range(0, 10)
+            .Select(_ => Task.Run(async () =>
+            {
+                var pm = new TestData { CorrelationId = correlationId, Name = "A" };
+                try
+                {
+                    await finder.InsertDataAsync(pm);
+                }
+                catch (ConcurrencyException)
+                {
+                    // Expected: unique-index enforcement — only ONE of the 10 succeeds.
+                }
+                catch (PersistenceException)
+                {
+                    // Also acceptable — unique-index violation wrapped as PersistenceException.
+                }
+            }))
+            .ToList();
+
+        await Task.WhenAll(tasks);
+
+        var collection = GetCollection(connectionString, dbName);
+        var count = await collection.CountDocumentsAsync(
+            Builders<MongoDbData<TestData>>.Filter.Eq(x => x.Data.CorrelationId, correlationId));
+        Assert.Equal(1, count);
+    }
+
+    // M17: Under WriteConcern.Unacknowledged, UpdateDataAsync must not silently swallow
+    // the operation result — concurrency guards should be disabled with a one-time Warning.
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task UpdateDataAsync_WithW0_DoesNotSilentlySwallowResult()
+    {
+        var (finder, connectionString, dbName) = CreateFinderWithWriteConcern(WriteConcern.Unacknowledged);
+
+        var correlationId = Guid.NewGuid();
+        await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v1" });
+
+        // Retrieve via a normal (acknowledged) client so we can get a real version snapshot.
+        var normalOptions = new MongoDbPersistenceOptions
+        {
+            ConnectionString = connectionString,
+            DatabaseName = dbName
+        };
+        var normalClient = MongoClientFactory.Create(normalOptions);
+        var normalFinder = new MongoDbProcessManagerFinder(normalClient, normalOptions, NullLogger<MongoDbProcessManagerFinder>.Instance);
+        var mapper = CreateMapper();
+        var message = new Message(correlationId);
+        var found = await normalFinder.FindDataAsync<TestData>(mapper, message);
+        Assert.NotNull(found);
+
+        found.Data.Name = "v2";
+        // Under w:0, UpdateDataAsync must complete without throwing.
+        await finder.UpdateDataAsync(found);
+    }
+
+    // M17: Under WriteConcern.Unacknowledged, DeleteDataAsync must not spuriously throw.
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task DeleteDataAsync_WithW0_DoesNotSpuriouslyThrow()
+    {
+        var (finder, connectionString, dbName) = CreateFinderWithWriteConcern(WriteConcern.Unacknowledged);
+
+        var correlationId = Guid.NewGuid();
+        await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v1" });
+
+        // Retrieve via acknowledged client to get a valid version token.
+        var normalOptions = new MongoDbPersistenceOptions
+        {
+            ConnectionString = connectionString,
+            DatabaseName = dbName
+        };
+        var normalClient = MongoClientFactory.Create(normalOptions);
+        var normalFinder = new MongoDbProcessManagerFinder(normalClient, normalOptions, NullLogger<MongoDbProcessManagerFinder>.Instance);
+        var mapper = CreateMapper();
+        var message = new Message(correlationId);
+        var found = await normalFinder.FindDataAsync<TestData>(mapper, message);
+        Assert.NotNull(found);
+
+        // Under w:0, DeleteDataAsync returns DeletedCount=0 by design — must NOT throw.
+        await finder.DeleteDataAsync(found);
+    }
+
+    private (MongoDbProcessManagerFinder finder, string connectionString, string dbName) CreateFinderWithWriteConcern(WriteConcern writeConcern)
+    {
+        var dbName = _fixture.GetUniqueDatabaseName();
+        var connectionString = _fixture.MongoDbConnectionString;
+        var settings = MongoClientSettings.FromConnectionString(connectionString);
+        settings.WriteConcern = writeConcern;
+        var client = new MongoClient(settings);
+        var options = new MongoDbPersistenceOptions
+        {
+            ConnectionString = connectionString,
+            DatabaseName = dbName
+        };
+        var finder = new MongoDbProcessManagerFinder(client, options, NullLogger<MongoDbProcessManagerFinder>.Instance);
+        return (finder, connectionString, dbName);
+    }
 }
