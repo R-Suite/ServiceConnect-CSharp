@@ -361,9 +361,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
 
         try
         {
-            var idIndexModel = new CreateIndexModel<TimeoutData>(
-                Builders<TimeoutData>.IndexKeys.Ascending(x => x.Id),
-                new CreateIndexOptions { Unique = true });
+            // Note: TimeoutData.Id maps to the MongoDB _id field (driver convention).
+            // _id is always unique; creating an explicit unique index on it is rejected
+            // by MongoDB with "The field 'unique' is not valid for an _id index specification".
+            // The three composite indexes below are the only ones we need to create.
 
             var lockedTimeIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys
@@ -379,7 +380,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
                 Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
 
             await collection.Indexes.CreateManyAsync(
-                [idIndexModel, lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel]
+                [lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel]
             ).ConfigureAwait(false);
             Interlocked.Exchange(ref _timeoutIndexEnsuredFlag, 1);
         }

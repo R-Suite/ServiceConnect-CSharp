@@ -1,4 +1,4 @@
-Progress: Critical 0/1 · High 0/8 · Medium 0/22 · Low 0/14 · Uncertain 0/3 (updated 2026-04-22)
+Progress: Critical 0/1 · High 0/8 · Medium 0/22 · Low 0/14 · Uncertain 1/3 (updated 2026-04-22)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -158,7 +158,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 Each entry names the specific test that would clinch the finding. These are kept because the potential impact is high enough that verification is worth the effort.
 
-- [ ] **Mongo `AggregateFacetResult<T>` pattern-match may fail under the pinned driver** — [MongoDbTimeoutStore.cs:167-182](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L167-L182)
+- [-] disconfirmed by MongoDbTimeoutStoreFacetTests.GetTimeoutsBatchAsync_ReturnsDueTimeoutsFromFacet **Mongo `AggregateFacetResult<T>` pattern-match may fail under the pinned driver** — [MongoDbTimeoutStore.cs:167-182](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L167-L182)
   If the driver returns `AggregateFacetResult<BsonDocument>` (or a non-generic carrier) instead of the typed `AggregateFacetResult<TimeoutData>` / `<NextTimeoutProjection>`, both branches silently fail and `DueTimeouts` is always empty → total timeout-dispatch outage on Mongo.
   **Test to write (end-to-end):** `tests/ServiceConnect.EndToEndTests` against a real MongoDB via Testcontainers (`sg docker -c`). Insert a `TimeoutData` row with `Time <= utcNow`, call `GetTimeoutsBatchAsync`, assert the result contains the inserted row. Existing unit tests use Moq and don't exercise the real driver. [r4]
 
