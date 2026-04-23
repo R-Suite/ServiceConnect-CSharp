@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 5/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
+Progress: Critical 3/3 · High 7/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -38,7 +38,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### MongoDB persistence
 
-- [ ] **Lease-aware Remove/Release don't inspect result counts → duplicate delivery** — [MongoDbTimeoutStore.cs:250-268, 271-292](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L250-L292)
+- [x] (commit: 008a48c5) **Lease-aware Remove/Release don't inspect result counts → duplicate delivery** — [MongoDbTimeoutStore.cs:250-268, 271-292](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs#L250-L292)
   `DeleteOneAsync`/`UpdateOneAsync` results are discarded. If the reaper unlocked the row after this owner's lease expired (and another worker re-claimed it), the filter on `LockedBy==lockOwner` matches zero rows; the caller sees "success" with no signal to stop. The row is still present and is redispatched → duplicate delivery. [r3]
 
 - [ ] **`GuidRepresentationMode` V2→V3 toggle silently swallowed → filters match zero documents** — [MongoDbPersistenceExtensions.cs:32-39](../src/ServiceConnect.Persistence.MongoDb/MongoDbPersistenceExtensions.cs#L32-L39)
@@ -46,7 +46,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### InMemory persistence
 
-- [ ] **InMemory has no lease safety → duplicate dispatch after lease expiry** — [InMemoryTimeoutStore.cs:9, 139-183](../src/ServiceConnect.Persistence.InMemory/InMemoryTimeoutStore.cs)
+- [x] (commit: 008a48c5) **InMemory has no lease safety → duplicate dispatch after lease expiry** — [InMemoryTimeoutStore.cs:9, 139-183](../src/ServiceConnect.Persistence.InMemory/InMemoryTimeoutStore.cs)
   Does not implement `ILeaseAwareTimeoutStore`. Id-only Remove/Release overloads remove/release unconditionally without checking `LockedBy`. `ProcessManagerTimeoutService` falls through to these because the cast to `ILeaseAwareTimeoutStore` returns null. A worker completing work after its lease was stolen deletes or unlocks the row currently leased to another worker. Parity gap with Mongo. [r3]
 
 ## Medium
