@@ -1,10 +1,13 @@
-Progress: Critical 0/1 · High 0/8 · Medium 0/22 · Low 0/14 · Uncertain 1/3 (updated 2026-04-22)
+Progress: Critical 1/2 · High 0/8 · Medium 0/22 · Low 0/14 · Uncertain 1/3 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
 ---
 
 ## Critical
+
+- [x] (commit: 2ac5c4d6) **`MongoDbTimeoutStore.EnsureTimeoutIndexAsync` attempts an invalid explicit unique index on `_id`** — [MongoDbTimeoutStore.cs:361-363 (pre-fix)](../src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs)
+  `TimeoutData.Id` maps to MongoDB's `_id` field by driver convention. The code created a `CreateIndexModel<TimeoutData>` on `x.Id` with `Unique = true` and passed it to `CreateManyAsync`. MongoDB rejects this with `MongoCommandException: "The field 'unique' is not valid for an _id index specification"` — `_id` is always unique. The 85/86 `IndexOptionsConflict/IndexKeySpecsConflict` catch doesn't trap this error. Result: any fresh Mongo database would fail the very first `InsertTimeoutAsync`/`GetTimeoutsBatchAsync` call — cold-start outage for timeout persistence. Discovered during Phase 0 Task 3 while running `MongoDbTimeoutStoreFacetTests`; fix (dropping the redundant `idIndexModel`) landed bundled with the investigation commit. [discovered post-audit]
 
 - [ ] **`ConsumeContextPool` self-referential `EnsureActive` guard permits cross-message data leak** — [ConsumeContextPool.cs:52-123](../src/ServiceConnect/Services/ConsumeContextPool.cs#L52-L123)
   `_activeToken` lives on the pooled instance itself rather than being captured by callers. After `Release → Rent → Initialize`, the pooled instance's `_rentToken` and `_activeToken` match again, so a stale caller holding the old `IConsumeContext` reference still passes the guard and reads the *next* message's headers, bus, and cancellation token. Silent, no exception. Fix: capture the token value in a struct wrapper returned to the caller, or invalidate the live reference on `Release`. [r3]
