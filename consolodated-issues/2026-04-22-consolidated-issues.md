@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 15/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 19/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -99,18 +99,18 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### MongoDB persistence
 
-- [ ] **ProcessManagerFinder index marker flipped before `CreateOneAsync` awaits** — [MongoDbProcessManagerFinder.cs:274-290](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs#L274-L290)
+- [x] (commit: 503f4271eb5039113b52e53dd257bcdfb7a9d3a5) **ProcessManagerFinder index marker flipped before `CreateOneAsync` awaits** — [MongoDbProcessManagerFinder.cs:274-290](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs#L274-L290)
   `_indexedCollections.TryAdd(name, true)` wins before the unique-index creation returns. Concurrent thread B short-circuits on the marker and proceeds to `InsertOneAsync` while the unique index doesn't yet exist → two rows with the same CorrelationId can land before the index is enforced. [r2, r3]
 
-- [ ] **ProcessManagerFinder does not handle MongoCommandException 85/86 on concurrent index creation** — [MongoDbProcessManagerFinder.cs:274-289](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs#L274-L289)
+- [x] (commit: 503f4271eb5039113b52e53dd257bcdfb7a9d3a5) **ProcessManagerFinder does not handle MongoCommandException 85/86 on concurrent index creation** — [MongoDbProcessManagerFinder.cs:274-289](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs#L274-L289)
   Bare catch rethrows every index-creation error. `MongoDbTimeoutStore:386-392` discriminates `IndexOptionsConflict`/`IndexKeySpecsConflict` as success. Parity gap causes spurious first-insert failures on multi-process startup. [r4]
 
-- [ ] **`UpdateDataAsync` silently swallows `w:0` conflicts; `DeleteDataAsync` spuriously throws** — [MongoDbProcessManagerFinder.cs:211-221, 259-271](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs)
+- [x] (commit: 503f4271eb5039113b52e53dd257bcdfb7a9d3a5) **`UpdateDataAsync` silently swallows `w:0` conflicts; `DeleteDataAsync` spuriously throws** — [MongoDbProcessManagerFinder.cs:211-221, 259-271](../src/ServiceConnect.Persistence.MongoDb/MongoDbProcessManagerFinder.cs)
   Update checks `IsAcknowledged && ModifiedCount==0` — under `w:0` (IsAcknowledged=false), `ConcurrencyException` is never thrown and `Version` still bumps on the caller's instance. Delete checks only `DeletedCount==0`, which is always zero under `w:0` → always throws. Only bites users explicitly running `w:0`, but asymmetry is real. [r4]
 
 ### InMemory persistence
 
-- [ ] **`Provider.Keys()` races with external `IKeyValueStore` callers → NRE** — [InMemoryProcessManagerFinder.cs:93-105](../src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs#L93-L105)
+- [x] (commit: 503f4271eb5039113b52e53dd257bcdfb7a9d3a5) **`Provider.Keys()` races with external `IKeyValueStore` callers → NRE** — [InMemoryProcessManagerFinder.cs:93-105](../src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs#L93-L105)
   The `CacheProvider` backing the finder is also registered as `IKeyValueStore`. Finder iterates `Provider.Keys()` under the finder's read lock; external KV callers are not gated by that lock. A removal between the `Keys()` snapshot and `Get(...)` makes `Get` return null, then the fallback at line 105 calls `value.GetType()` → NRE. [r3, r4]
 
 ### Telemetry
