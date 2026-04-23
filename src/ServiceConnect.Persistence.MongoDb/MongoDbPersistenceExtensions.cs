@@ -27,16 +27,38 @@ public static class MongoDbPersistenceExtensions
     {
         if (Interlocked.Exchange(ref _guidSerializerRegistered, 1) != 0) return;
 
+        Exception? modeToggleError = null;
         try
         {
 #pragma warning disable CS0618 // GuidRepresentationMode is obsolete but v3 is mandatory for Standard-representation semantics in MongoDB.Driver 2.x.
             BsonDefaults.GuidRepresentationMode = GuidRepresentationMode.V3;
 #pragma warning restore CS0618
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            // Mode has already been set (driver forbids toggling once serialization started).
+            // Driver forbids toggling once serialization started. Capture the error so we can
+            // report it as InnerException if the subsequent verification fails.
+            modeToggleError = ex;
         }
+
+        // Toggle, then verify. If the effective mode is still V2 — because another component
+        // in the process set it first or serialization has already begun — our Guid filter
+        // literals will use subtype 4 (Standard) while stored Guid members fall back to
+        // CSharpLegacy subtype 3 and every filter silently misses. Fail loudly so the
+        // misconfiguration is visible at startup rather than as a silent data-access outage.
+#pragma warning disable CS0618
+        if (BsonDefaults.GuidRepresentationMode != GuidRepresentationMode.V3)
+        {
+            throw new InvalidOperationException(
+                "ServiceConnect MongoDB persistence requires BsonDefaults.GuidRepresentationMode = V3 " +
+                "for Guid filter literals to match stored values. The current mode is " +
+                $"{BsonDefaults.GuidRepresentationMode}. Another component in the process has set " +
+                "it to a different value before ServiceConnect initialised, or serialization has " +
+                "already begun and the mode is now frozen. Configure your driver initialisation to " +
+                "set V3 before any BSON serialization begins.",
+                modeToggleError);
+        }
+#pragma warning restore CS0618
 
         try
         {
