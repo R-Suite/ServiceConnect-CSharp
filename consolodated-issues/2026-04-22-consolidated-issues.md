@@ -65,13 +65,13 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 - [x] (commit: 5e8a4983) **Missing `OperationCanceledException` handling in `StopConsumingCoreAsync`** — [Bus.cs:386-393](../src/ServiceConnect/Bus.cs#L386-L393)
   `WaitAsync(_disposeTimeout, cancellationToken)` catches only `TimeoutException`. Host cancellation during shutdown throws OCE out of the try-catch, abandoning the in-flight consumer dispose and leaving resources unreleased. (Public `StopConsumingAsync` path only — `DisposeAsync` passes `default`.) [r1]
 
-- [x] (commit: 89329aa9) **`MessageDispatcher` reports `Success=false` for untracked replies → retry/DLQ noise** — [MessageDispatcher.cs:131-142](../src/ServiceConnect/Services/MessageDispatcher.cs#L131-L142)
+- [x] (commits: 89329aa9, 054f2b52, 5662effd) **`MessageDispatcher` reports `Success=false` for untracked replies → retry/DLQ noise** — [MessageDispatcher.cs:131-142](../src/ServiceConnect/Services/MessageDispatcher.cs#L131-L142)
   Stale/late replies (requester timed out, duplicates) return `Success=false` with `InvalidOperationException`. The transport treats this as a dispatch failure → nack/requeue/DLQ cycle for what should be a benign discard. High-frequency in long-running systems with request timeouts. [r3]
 
-- [x] (commit: 89329aa9) **`ScanAssemblies(...)` is ignored when `ScanForMessageHandlers=false`** — [ServiceCollectionExtensions.cs:228-237](../src/ServiceConnect/ServiceCollectionExtensions.cs#L228-L237)
+- [x] (commits: 89329aa9, 5662effd) **`ScanAssemblies(...)` is ignored when `ScanForMessageHandlers=false`** — [ServiceCollectionExtensions.cs:228-237](../src/ServiceConnect/ServiceCollectionExtensions.cs#L228-L237)
   `ScanAssembliesList` is documented as the preferred explicit registration path, but the code short-circuits to `[]` when `ScanForMessageHandlers=false`. Configurations intending "scan these and nothing else" silently register zero handlers; first message hits "Unregistered message type" and DLQs. [r4]
 
-- [x] (commit: 89329aa9) **Handler singleton guard misses factory-registered singletons** — [ServiceCollectionExtensions.cs:247-254](../src/ServiceConnect/ServiceCollectionExtensions.cs#L247-L254)
+- [x] (commits: 89329aa9, 5662effd) **Handler singleton guard misses factory-registered singletons** — [ServiceCollectionExtensions.cs:247-254](../src/ServiceConnect/ServiceCollectionExtensions.cs#L247-L254)
   Guard only checks `ImplementationType`; descriptors with only `ImplementationFactory` slip through. `TryAddEnumerable(Transient)` then adds a second descriptor, so `GetServices<IMessageHandler<T>>()` returns both. Per-message `IConsumeContext` state on the singleton handler is shared across messages — the precise race the guard was meant to prevent. [r4]
 
 ### RabbitMQ client
