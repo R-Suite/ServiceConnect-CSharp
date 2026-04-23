@@ -3,13 +3,28 @@ namespace ServiceConnect.Persistence.InMemory;
 internal sealed class InMemoryPersistenceState : IDisposable
 {
     private int _disposed;
+    private readonly IDisposable? _ownedProvider;
 
     public InMemoryPersistenceState(TimeProvider? timeProvider = null)
     {
-        Provider = new CacheProvider(timeProvider);
+        var cp = new CacheProvider(timeProvider);
+        Provider = cp;
+        _ownedProvider = cp;
     }
 
-    public CacheProvider Provider { get; }
+    /// <summary>
+    /// Test-seam constructor: accepts an externally-supplied <see cref="ICacheProvider"/>
+    /// whose <see cref="ICacheProvider.Contains{TKey}"/> and
+    /// <see cref="ICacheProvider.Get{TKey,TValue}"/> can be controlled independently,
+    /// enabling deterministic reproduction of the Contains→Get concurrency window.
+    /// </summary>
+    internal InMemoryPersistenceState(ICacheProvider provider)
+    {
+        Provider = provider ?? throw new ArgumentNullException(nameof(provider));
+        _ownedProvider = null; // caller owns lifetime
+    }
+
+    public ICacheProvider Provider { get; }
     public ReaderWriterLockSlim SyncRoot { get; } = new();
     public SortedSet<TimeoutEntry> TimeoutIndex { get; } = new(TimeoutEntryComparer.Instance);
     public Dictionary<Guid, TimeoutEntry> TimeoutsById { get; } = new();
@@ -22,7 +37,7 @@ internal sealed class InMemoryPersistenceState : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        Provider.Dispose();
+        _ownedProvider?.Dispose();
         SyncRoot.Dispose();
     }
 }

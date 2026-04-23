@@ -224,6 +224,10 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             // Read version via a typed IVersioned interface so the cast is
             // compile-time-checked rather than the old dynamic dispatch.
             var storedData = _state.Provider.Get<string, object>(key);
+            if (storedData is null)
+                throw new ConcurrencyException(
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
+
             int currentVersion = storedData is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(
@@ -276,6 +280,10 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             }
 
             var stored = _state.Provider.Get<string, object>(key);
+            if (stored is null)
+                throw new ConcurrencyException(
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
+
             int currentVersion = stored is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(

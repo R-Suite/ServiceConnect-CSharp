@@ -65,4 +65,13 @@ public interface ICacheProvider
     /// sliding-time window. No-ops if the key is not present.
     /// </summary>
     void Update<TKey, TValue>(TKey key, TValue value);
+
+    /// <summary>
+    /// Add a value that never expires. No timer is scheduled and no sliding window is
+    /// maintained — the entry persists until <see cref="Remove{TKey}"/>,
+    /// <see cref="Clear"/>, or <see cref="PurgeNormalPriorities"/> removes it.
+    /// Intended for caller-managed state (e.g. saga/aggregator persistence) where a
+    /// background expiry would silently drop in-flight data.
+    /// </summary>
+    void Add<TKey, TValue>(TKey key, TValue value, CacheItemPriority priority = CacheItemPriority.Normal);
 }

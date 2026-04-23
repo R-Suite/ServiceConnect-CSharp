@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
+using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.InMemory;
@@ -696,6 +697,56 @@ namespace ServiceConnect.UnitTests
             await Task.WhenAll(scanTasks.Concat(removeTasks));
 
             Assert.Empty(exceptions);
+        }
+
+        // M18 completeness: UpdateDataAsync and DeleteDataAsync have the same Contains→Get
+        // race window. A mock provider whose Contains returns true but Get returns null
+        // deterministically exercises the race without any timing dependency.
+
+        [Fact]
+        public async Task UpdateDataAsync_WhenProviderReturnsNullFromGet_ThrowsConcurrencyException()
+        {
+            // Arrange: provider whose Contains says yes but Get returns null,
+            // simulating an external IKeyValueStore.Remove between Contains and Get.
+            var provider = new Mock<ICacheProvider>();
+            provider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
+            provider.Setup(p => p.Get<string, object>(It.IsAny<string>())).Returns((object?)null!);
+
+            var state = new InMemoryPersistenceState(provider.Object);
+            var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), state);
+
+            var pm = new MemoryData<TestData>
+            {
+                Data = new TestData { CorrelationId = Guid.NewGuid() },
+                Version = 0
+            };
+
+            // Act + Assert: must throw ConcurrencyException, NOT NullReferenceException.
+            var ex = await Assert.ThrowsAsync<ConcurrencyException>(() => finder.UpdateDataAsync(pm));
+            Assert.Contains("concurrently removed", ex.Message);
+        }
+
+        [Fact]
+        public async Task DeleteDataAsync_WhenProviderReturnsNullFromGet_ThrowsConcurrencyException()
+        {
+            // Arrange: provider whose Contains says yes but Get returns null,
+            // simulating an external IKeyValueStore.Remove between Contains and Get.
+            var provider = new Mock<ICacheProvider>();
+            provider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
+            provider.Setup(p => p.Get<string, object>(It.IsAny<string>())).Returns((object?)null!);
+
+            var state = new InMemoryPersistenceState(provider.Object);
+            var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), state);
+
+            var pm = new MemoryData<TestData>
+            {
+                Data = new TestData { CorrelationId = Guid.NewGuid() },
+                Version = 0
+            };
+
+            // Act + Assert: must throw ConcurrencyException, NOT NullReferenceException.
+            var ex = await Assert.ThrowsAsync<ConcurrencyException>(() => finder.DeleteDataAsync(pm));
+            Assert.Contains("concurrently removed", ex.Message);
         }
     }
 

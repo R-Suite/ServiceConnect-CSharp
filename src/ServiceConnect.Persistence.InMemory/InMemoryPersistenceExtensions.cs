@@ -22,7 +22,7 @@ public static class InMemoryPersistenceExtensions
             services.TryAddSingleton<ICacheProvider>(sp =>
                 sp.GetRequiredService<InMemoryPersistenceState>().Provider);
             services.TryAddSingleton<IKeyValueStore>(sp =>
-                sp.GetRequiredService<InMemoryPersistenceState>().Provider);
+                (IKeyValueStore)sp.GetRequiredService<InMemoryPersistenceState>().Provider);
             services.TryAddSingleton<IAggregatorPersistor>(sp =>
                 new InMemoryAggregatorPersistor("", "", "", sp.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<InMemoryProcessManagerFinder>(sp =>
