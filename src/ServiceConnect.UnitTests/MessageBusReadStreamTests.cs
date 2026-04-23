@@ -100,4 +100,23 @@ public class MessageBusReadStreamTests
         Assert.False(seq.IsSingleSegment);
         Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, seq.ToArray());
     }
+
+    [Fact]
+    public void IsComplete_ReturnsFalse_WhenPacketSetIsNonContiguous()
+    {
+        // Write packets 0, 1, and 999 with LastPacketNumber=2. _receivedCount == 3 and
+        // LastPacketNumber+1 == 3 — the current IsComplete returns true and Read/ReadSequence
+        // silently returns truncated bytes. Fix: Write must reject packetNumber > LastPacketNumber
+        // (when LastPacketNumber is already set) so this state is unreachable.
+        // After the fix, Write(data, 999) throws ArgumentOutOfRangeException, so IsComplete
+        // cannot return true for a non-contiguous set.
+
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 2 }, 1);
+        stream.SetLastPacketNumber(2);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => stream.Write(new byte[] { 9 }, 999));
+        Assert.False(stream.IsComplete());
+    }
 }

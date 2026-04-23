@@ -45,6 +45,21 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     /// <inheritdoc />
     public void Write(byte[] data, long packetNumber)
     {
+        if (packetNumber < 0)
+            throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
+                "Packet number must be non-negative.");
+        // Validate against LastPacketNumber when it is already set.  This is done
+        // with Volatile.Read so we observe the latest CAS-committed value without
+        // acquiring a separate lock — the worst case is that a concurrent
+        // SetLastPacketNumber races and we miss the check, but that race is
+        // benign: a packet that genuinely belongs to the stream will have
+        // packetNumber <= lastPacketNumber by protocol, and a rogue out-of-range
+        // packet must always fail.
+        var last = Volatile.Read(ref _lastPacketNumber);
+        if (last >= 0 && packetNumber > last)
+            throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
+                $"Packet number {packetNumber} exceeds LastPacketNumber {last} for stream {SequenceId}.");
+
         // Atomically reserve capacity: if the reservation pushes us past the cap,
         // roll it back before any concurrent writer can observe the inflated total
         // and before we insert into the packet dictionary.
