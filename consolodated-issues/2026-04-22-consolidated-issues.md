@@ -53,7 +53,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Core
 
-- [x] (commit: 5e8a4983) **`MessageType`/`CorrelationId` in headers are caller-overridable** — [Bus.cs:442-465, 510-533](../src/ServiceConnect/Bus.cs#L442-L533)
+- [x] (commits: 5e8a4983, 60c96ca3) **`MessageType`/`CorrelationId` in headers are caller-overridable** — [Bus.cs:442-465, 510-533](../src/ServiceConnect/Bus.cs#L442-L533)
   `CreateEnvelope`/`BuildHeadersDirect` set `MessageType` and `CorrelationId` first, then iterate caller `options.Headers` (which can overwrite either), and only `MessageId` is stamped last. The recent "move MessageId authority to Bus" commit enforced spoof-proofing for MessageId only; the other two are still spoofable via `options.Headers`. [r4]
 
 - [x] (commit: 5e8a4983) **`StopConsumingCoreAsync` sets `_stopped = true` even if consumption never started** — [Bus.cs:371-383](../src/ServiceConnect/Bus.cs#L371-L383)
