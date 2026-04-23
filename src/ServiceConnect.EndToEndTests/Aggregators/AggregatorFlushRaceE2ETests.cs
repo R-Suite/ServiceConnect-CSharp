@@ -156,7 +156,7 @@ file class FlushRaceAggregator : Aggregator<TestMessage>
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(60);
 
-    public override void Execute(IList<TestMessage> messages)
+    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)
     {
         var count = _gate.Increment();
         if (count == 1)
@@ -168,5 +168,6 @@ file class FlushRaceAggregator : Aggregator<TestMessage>
         {
             _second.Tcs.TrySetResult(messages);
         }
+        return Task.CompletedTask;
     }
 }

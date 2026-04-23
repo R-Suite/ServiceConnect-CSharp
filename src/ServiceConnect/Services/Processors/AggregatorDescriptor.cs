@@ -7,4 +7,4 @@ internal sealed record AggregatorDescriptor(
     int BatchSize,
     TimeSpan Timeout,
     Func<IList<object>, System.Collections.IList> BuildTypedList,
-    Action<object, object> InvokeExecute);
+    Func<object, object, CancellationToken, Task> InvokeExecuteAsync);

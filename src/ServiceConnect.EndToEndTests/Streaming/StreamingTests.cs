@@ -131,9 +131,10 @@ file class TestStreamHandler : IStreamHandler<TestMessage>
 
     public IMessageBusReadStream Stream { get; set; } = null!;
 
-    public void Execute(TestMessage message)
+    public Task ExecuteAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         var data = Stream.Read();
         _tcs.TrySetResult(data);
+        return Task.CompletedTask;
     }
 }

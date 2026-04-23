@@ -136,5 +136,9 @@ file class UnresolvedBatchAggregator : Aggregator<TestMessage>
     public UnresolvedBatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) => _tcs = tcs;
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
-    public override void Execute(IList<TestMessage> messages) => _tcs.TrySetResult(messages);
+    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)
+    {
+        _tcs.TrySetResult(messages);
+        return Task.CompletedTask;
+    }
 }

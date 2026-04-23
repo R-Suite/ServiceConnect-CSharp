@@ -171,15 +171,15 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         }
     }
 
-    private Task<ProcessResult> InvokeHandlerAsync(
+    private async Task<ProcessResult> InvokeHandlerAsync(
         StreamHandlerDescriptor descriptor,
         object handler,
         object originalMessage,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        descriptor.InvokeExecute(handler, originalMessage);
-        return HandledTask;
+        await descriptor.InvokeExecuteAsync(handler, originalMessage, cancellationToken).ConfigureAwait(false);
+        return ProcessResult.Handled;
     }
 
     public ValueTask DisposeAsync()

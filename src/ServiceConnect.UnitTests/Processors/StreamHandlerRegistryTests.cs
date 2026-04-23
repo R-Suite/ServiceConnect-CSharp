@@ -89,7 +89,7 @@ public class StreamHandlerRegistryTests
     }
 
     [Fact]
-    public void Descriptor_InvokeExecute_CallsExecuteOnHandler()
+    public async Task Descriptor_InvokeExecuteAsync_CallsExecuteAsyncOnHandler()
     {
         var registry = BuildRegistry();
         Assert.True(registry.TryGet(typeof(ShrFoo), out var descriptor));
@@ -97,7 +97,7 @@ public class StreamHandlerRegistryTests
         var handler = new ShrFooStreamHandler();
         var msg = new ShrFoo(Guid.NewGuid());
 
-        descriptor!.InvokeExecute(handler, msg);
+        await descriptor!.InvokeExecuteAsync(handler, msg, CancellationToken.None);
 
         Assert.Same(msg, handler.Executed);
     }
@@ -118,13 +118,17 @@ file class ShrFooStreamHandler : IStreamHandler<ShrFoo>
 {
     public IMessageBusReadStream Stream { get; set; } = null!;
     public ShrFoo? Executed { get; private set; }
-    public void Execute(ShrFoo stream) { Executed = stream; }
+    public Task ExecuteAsync(ShrFoo stream, CancellationToken cancellationToken = default)
+    {
+        Executed = stream;
+        return Task.CompletedTask;
+    }
 }
 
 file class ShrSecondFooStreamHandler : IStreamHandler<ShrFoo>
 {
     public IMessageBusReadStream Stream { get; set; } = null!;
-    public void Execute(ShrFoo stream) { }
+    public Task ExecuteAsync(ShrFoo stream, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class ShrFooMessageHandler : IMessageHandler<ShrFoo>

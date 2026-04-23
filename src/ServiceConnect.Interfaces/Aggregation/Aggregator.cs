@@ -32,5 +32,6 @@ public abstract class Aggregator<T> where T : Message
     /// Processes a completed batch of aggregated messages.
     /// </summary>
     /// <param name="messages">The messages collected for the batch.</param>
-    public abstract void Execute(IList<T> messages);
+    /// <param name="cancellationToken">Token to observe for cancellation.</param>
+    public abstract Task ExecuteAsync(IList<T> messages, CancellationToken cancellationToken = default);
 }

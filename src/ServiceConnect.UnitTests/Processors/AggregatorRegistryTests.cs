@@ -132,7 +132,7 @@ public class AggregatorRegistryTests
     }
 
     [Fact]
-    public void Descriptor_InvokeExecute_CallsExecuteOnAggregator()
+    public async Task Descriptor_InvokeExecuteAsync_CallsExecuteAsyncOnAggregator()
     {
         var refs = new List<HandlerReference>
         {
@@ -145,7 +145,7 @@ public class AggregatorRegistryTests
 
         var agg = new ArgFooAggregator();
         var list = new List<ArgFoo> { new(Guid.NewGuid()) { Val = "x" } };
-        descriptor!.InvokeExecute(agg, list);
+        await descriptor!.InvokeExecuteAsync(agg, list, CancellationToken.None);
 
         Assert.NotNull(agg.Executed);
         Assert.Single(agg.Executed!);
@@ -168,12 +168,16 @@ file class ArgFooAggregator : Aggregator<ArgFoo>
     public IList<ArgFoo>? Executed { get; private set; }
     public override int BatchSize() => 42;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(7);
-    public override void Execute(IList<ArgFoo> messages) { Executed = messages; }
+    public override Task ExecuteAsync(IList<ArgFoo> messages, CancellationToken cancellationToken = default)
+    {
+        Executed = messages;
+        return Task.CompletedTask;
+    }
 }
 
 file class ArgSecondFooAggregator : Aggregator<ArgFoo>
 {
-    public override void Execute(IList<ArgFoo> messages) { }
+    public override Task ExecuteAsync(IList<ArgFoo> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class ArgFooMessageHandler : IMessageHandler<ArgFoo>

@@ -343,7 +343,7 @@ public sealed class H5Handler : IMessageHandler<H5Msg>
 
 public sealed class H5Aggregator : Aggregator<H5Msg>
 {
-    public override void Execute(IList<H5Msg> messages) { }
+    public override Task ExecuteAsync(IList<H5Msg> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file sealed class TestInboundMiddleware : IMessageProcessingMiddleware

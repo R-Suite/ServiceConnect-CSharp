@@ -72,7 +72,7 @@ internal sealed class StreamHandlerRegistry : IHandlerRegistry
             MessageType: messageType,
             HandlerInterfaceType: handlerInterfaceType,
             SetStream: CompileSetStream(handlerInterfaceType),
-            InvokeExecute: CompileInvokeExecute(handlerInterfaceType, messageType));
+            InvokeExecuteAsync: CompileInvokeExecuteAsync(handlerInterfaceType, messageType));
     }
 
     private static Action<object, IMessageBusReadStream> CompileSetStream(Type handlerInterface)
@@ -85,17 +85,18 @@ internal sealed class StreamHandlerRegistry : IHandlerRegistry
         return Expression.Lambda<Action<object, IMessageBusReadStream>>(assign, handlerParam, streamParam).Compile();
     }
 
-    private static Action<object, object> CompileInvokeExecute(Type handlerInterface, Type messageType)
+    private static Func<object, object, CancellationToken, Task> CompileInvokeExecuteAsync(Type handlerInterface, Type messageType)
     {
         var handlerParam = Expression.Parameter(typeof(object), "handler");
         var messageParam = Expression.Parameter(typeof(object), "message");
+        var ctParam = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
 
         var handlerCast = Expression.Convert(handlerParam, handlerInterface);
         var messageCast = Expression.Convert(messageParam, messageType);
 
-        var method = handlerInterface.GetMethod("Execute")!;
-        var call = Expression.Call(handlerCast, method, messageCast);
+        var method = handlerInterface.GetMethod("ExecuteAsync")!;
+        var call = Expression.Call(handlerCast, method, messageCast, ctParam);
 
-        return Expression.Lambda<Action<object, object>>(call, handlerParam, messageParam).Compile();
+        return Expression.Lambda<Func<object, object, CancellationToken, Task>>(call, handlerParam, messageParam, ctParam).Compile();
     }
 }

@@ -6,4 +6,4 @@ internal sealed record StreamHandlerDescriptor(
     Type MessageType,
     Type HandlerInterfaceType,
     Action<object, IMessageBusReadStream> SetStream,
-    Action<object, object> InvokeExecute);
+    Func<object, object, CancellationToken, Task> InvokeExecuteAsync);

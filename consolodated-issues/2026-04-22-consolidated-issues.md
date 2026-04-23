@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 3/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
+Progress: Critical 3/3 · High 5/8 · Medium 0/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-23)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -30,10 +30,10 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Interfaces
 
-- [ ] **Sync `Execute` on `Aggregator<T>` forces sync-over-async** — [Aggregator.cs:35](../src/ServiceConnect.Interfaces/Aggregation/Aggregator.cs#L35)
+- [x] (commit: PLACEHOLDER) **Sync `Execute` on `Aggregator<T>` forces sync-over-async** — [Aggregator.cs:35](../src/ServiceConnect.Interfaces/Aggregation/Aggregator.cs#L35)
   `abstract void Execute(IList<T>)` is synchronous but implementations need async bus/persistence calls, so every implementor must `.Result` / `.GetAwaiter().GetResult()` — standard sync-over-async deadlock footgun. Breaking-change fix (`Task ExecuteAsync`) appropriate on a v7 branch. [r3]
 
-- [ ] **Sync `Execute` on `IStreamHandler<T>`** — [IStreamHandler.cs:18](../src/ServiceConnect.Interfaces/Handlers/IStreamHandler.cs#L18)
+- [x] (commit: PLACEHOLDER) **Sync `Execute` on `IStreamHandler<T>`** — [IStreamHandler.cs:18](../src/ServiceConnect.Interfaces/Handlers/IStreamHandler.cs#L18)
   Same class of bug — realistic stream handlers must read the reassembled `IMessageBusReadStream` asynchronously. [r3]
 
 ### MongoDB persistence

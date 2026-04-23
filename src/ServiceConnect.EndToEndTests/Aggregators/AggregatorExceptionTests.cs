@@ -115,6 +115,6 @@ file class ThrowingAggregator : Aggregator<TestMessage>
 {
     public override int BatchSize() => 1;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
-    public override void Execute(IList<TestMessage> messages) =>
-        throw new InvalidOperationException("Aggregator Execute failed");
+    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default) =>
+        Task.FromException(new InvalidOperationException("Aggregator Execute failed"));
 }

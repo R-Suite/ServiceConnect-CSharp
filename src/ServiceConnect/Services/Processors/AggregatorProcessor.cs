@@ -174,7 +174,7 @@ internal sealed class AggregatorProcessor(
             // is skipped and the batch is retried on the next flush.
             await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
 
-            descriptor.InvokeExecute(aggregator, typedList);
+            await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);
 
             if (snapshot.UnresolvedCount > 0)
                 logger.LogWarning(

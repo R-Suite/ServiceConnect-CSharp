@@ -156,7 +156,7 @@ file class MhrProcessHandler : IProcessHandler<MhrBarData, MhrFooMsg>
 file class MhrStreamHandler : IStreamHandler<MhrFooMsg>
 {
     public IMessageBusReadStream Stream { get; set; } = null!;
-    public void Execute(MhrFooMsg stream) { }
+    public Task ExecuteAsync(MhrFooMsg stream, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class MhrFakeConsumeContext : IConsumeContext

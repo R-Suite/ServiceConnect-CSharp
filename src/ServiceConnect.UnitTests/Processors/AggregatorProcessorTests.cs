@@ -557,9 +557,10 @@ file class AggTestAggregator : Aggregator<AggTestMessage>
 
     public override int BatchSize() => 3;
 
-    public override void Execute(IList<AggTestMessage> messages)
+    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(messages);
+        return Task.CompletedTask;
     }
 }
 
@@ -576,10 +577,11 @@ file class OrderRecordingAggregator : Aggregator<AggTestMessage>
 
     public override int BatchSize() => 3;
 
-    public override void Execute(IList<AggTestMessage> messages)
+    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
         _order.Add("execute");
         _tcs.TrySetResult(messages);
+        return Task.CompletedTask;
     }
 }
 
@@ -595,8 +597,9 @@ file class AggTestTimedAggregator : Aggregator<AggTestMessage>
     public override int BatchSize() => 0;
     public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(200);
 
-    public override void Execute(IList<AggTestMessage> messages)
+    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(messages);
+        return Task.CompletedTask;
     }
 }

@@ -97,7 +97,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
             BatchSize: batchSize,
             Timeout: timeout,
             BuildTypedList: CompileBuildTypedList(messageType),
-            InvokeExecute: CompileInvokeExecute(aggregatorBaseType, messageType));
+            InvokeExecuteAsync: CompileInvokeExecuteAsync(aggregatorBaseType, messageType));
     }
 
     private static Func<IList<object>, IList> CompileBuildTypedList(Type messageType)
@@ -134,17 +134,18 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         return Expression.Lambda<Func<IList<object>, IList>>(block, rawParam).Compile();
     }
 
-    private static Action<object, object> CompileInvokeExecute(Type aggregatorBaseType, Type messageType)
+    private static Func<object, object, CancellationToken, Task> CompileInvokeExecuteAsync(Type aggregatorBaseType, Type messageType)
     {
         var aggParam = Expression.Parameter(typeof(object), "aggregator");
         var listParam = Expression.Parameter(typeof(object), "list");
+        var ctParam = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
 
         var aggCast = Expression.Convert(aggParam, aggregatorBaseType);
         var listCast = Expression.Convert(listParam, typeof(IList<>).MakeGenericType(messageType));
 
-        var method = aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.Execute))!;
-        var call = Expression.Call(aggCast, method, listCast);
+        var method = aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.ExecuteAsync))!;
+        var call = Expression.Call(aggCast, method, listCast, ctParam);
 
-        return Expression.Lambda<Action<object, object>>(call, aggParam, listParam).Compile();
+        return Expression.Lambda<Func<object, object, CancellationToken, Task>>(call, aggParam, listParam, ctParam).Compile();
     }
 }

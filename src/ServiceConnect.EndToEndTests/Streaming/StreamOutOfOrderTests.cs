@@ -135,8 +135,9 @@ file class StreamCaptureHandler : IStreamHandler<TestMessage>
 
     public IMessageBusReadStream Stream { get; set; } = null!;
 
-    public void Execute(TestMessage message)
+    public Task ExecuteAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(Stream.Read());
+        return Task.CompletedTask;
     }
 }
