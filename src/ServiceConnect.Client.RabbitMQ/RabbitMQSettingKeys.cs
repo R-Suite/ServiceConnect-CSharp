@@ -49,4 +49,10 @@ public static class RabbitMQSettingKeys
     public const string HeartbeatEnabled = "HeartbeatEnabled";
     /// <summary>Heartbeat interval, in seconds.</summary>
     public const string HeartbeatTime = "HeartbeatTime";
+
+    /// <summary>
+    /// Maximum time to wait for a broker acknowledgement when publishing under publisher confirms.
+    /// Accepts a <see cref="System.TimeSpan"/>; defaults to 30 seconds.
+    /// </summary>
+    public const string PublishTimeout = "PublishTimeout";
 }

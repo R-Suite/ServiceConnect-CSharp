@@ -46,6 +46,7 @@ public sealed class Producer : IProducer
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
     private readonly bool _publisherAcks;
+    private readonly TimeSpan _publishTimeout;
     private readonly SemaphoreSlim _connectionSemaphore = new(1, 1);
     private volatile bool _connected;
     private int _disposedInt;
@@ -71,6 +72,7 @@ public sealed class Producer : IProducer
         var settings = transportConfiguration.ClientSettings;
         MaximumMessageSize = GetSetting(settings, RabbitMQSettingKeys.MessageSize, DefaultMaxMessageSize, Convert.ToInt64);
         _publisherAcks = GetSetting(settings, RabbitMQSettingKeys.PublisherAcknowledgements, false, Convert.ToBoolean);
+        _publishTimeout = GetSetting(settings, RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromSeconds(30), v => (TimeSpan)v);
         _hosts = transportConfiguration.Host.Split(',');
         _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, DefaultRetryCount, v => Convert.ToUInt16(v));
         _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, DefaultRetryTimeInSeconds, v => Convert.ToUInt16(v));
@@ -178,10 +180,15 @@ public sealed class Producer : IProducer
     // retry budget against a condition that will not heal, and worse, triggers a reconnect
     // loop that tears down the connection for a publish-layer error. Only transport-level
     // failures should flow into the reconnect-retry path.
+    //
+    // TimeoutException comes from PublishWithTimeoutAsync when the broker ack doesn't arrive
+    // within _publishTimeout. A reconnect won't help — the connection is considered stalled/dead;
+    // propagate immediately so callers can decide whether to retry at a higher level.
     private static bool IsRetriablePublishException(Exception ex)
     {
         if (ex is global::RabbitMQ.Client.Exceptions.PublishException) return false;
         if (ex is OperationCanceledException) return false;
+        if (ex is TimeoutException) return false;
         return true;
     }
 
@@ -230,7 +237,8 @@ public sealed class Producer : IProducer
                 if (!_declaredExchanges.ContainsKey(exchangeName))
                     await ConfigureExchangeAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
 
-                await _model!.BasicPublishAsync(
+                await PublishWithTimeoutAsync(
+                    _model!,
                     exchangeName,
                     string.Empty,
                     false,
@@ -269,7 +277,8 @@ public sealed class Producer : IProducer
                 baseHeaders[HeaderKeys.DestinationAddress] = endPoint;
                 var basicProperties = CreateBasicProperties(baseHeaders);
                 await ExecuteWithConnectionRetryAsync(
-                    () => _model!.BasicPublishAsync(
+                    () => PublishWithTimeoutAsync(
+                        _model!,
                         string.Empty,
                         endPoint,
                         false,
@@ -306,7 +315,8 @@ public sealed class Producer : IProducer
             var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
             var basicProperties = CreateBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
-                () => _model!.BasicPublishAsync(
+                () => PublishWithTimeoutAsync(
+                    _model!,
                     string.Empty,
                     endPoint,
                     false,
@@ -341,7 +351,8 @@ public sealed class Producer : IProducer
             var messageHeaders = GetHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
             var basicProperties = CreateBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
-                () => _model!.BasicPublishAsync(
+                () => PublishWithTimeoutAsync(
+                    _model!,
                     string.Empty,
                     endPoint,
                     false,
@@ -492,6 +503,42 @@ public sealed class Producer : IProducer
         result[HeaderKeys.Language] = "C#";
 
         return result;
+    }
+
+    /// <summary>
+    /// Wraps <c>IChannel.BasicPublishAsync</c> with a configurable timeout.
+    /// If the broker ack does not arrive within <see cref="_publishTimeout"/>, the waiting task
+    /// is cancelled and a <see cref="TimeoutException"/> is thrown.  If the caller's own
+    /// <paramref name="cancellationToken"/> fires first, the normal
+    /// <see cref="OperationCanceledException"/> propagates unchanged.
+    /// </summary>
+    private async ValueTask PublishWithTimeoutAsync(
+        IChannel channel,
+        string exchange,
+        string routingKey,
+        bool mandatory,
+        BasicProperties basicProperties,
+        ReadOnlyMemory<byte> body,
+        CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linked.CancelAfter(_publishTimeout);
+        try
+        {
+            await channel.BasicPublishAsync(
+                exchange,
+                routingKey,
+                mandatory,
+                basicProperties,
+                body,
+                linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"BasicPublishAsync exceeded the configured publish timeout of {_publishTimeout.TotalSeconds:0.###}s. " +
+                "The broker may be stalled or the connection may be half-open.");
+        }
     }
 
     private async Task ConfigureExchangeAsync(string exchangeName, string type, CancellationToken cancellationToken)
