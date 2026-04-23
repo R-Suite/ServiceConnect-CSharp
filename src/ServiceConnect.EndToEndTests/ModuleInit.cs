@@ -36,8 +36,12 @@ internal static class ModuleInit
         if (BsonDefaults.GuidRepresentationMode != GuidRepresentationMode.V3)
         {
             throw new InvalidOperationException(
-                "Test infrastructure requires BsonDefaults.GuidRepresentationMode = V3; " +
-                $"current mode is {BsonDefaults.GuidRepresentationMode}.",
+                "Test infrastructure requires BsonDefaults.GuidRepresentationMode = V3 for Guid filter " +
+                "literals to match stored values. The current mode is " +
+                $"{BsonDefaults.GuidRepresentationMode}. Another component loaded before this module " +
+                "initializer has set it to a different value, or BSON serialization has already begun " +
+                "and the driver has frozen the mode. Ensure no static constructor touches the BSON driver " +
+                "before this module initializer runs.",
                 modeToggleError);
         }
 #pragma warning restore CS0618
