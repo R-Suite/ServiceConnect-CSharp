@@ -6,7 +6,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Stores timeout messages in process memory for local execution.
 /// </summary>
-public sealed class InMemoryTimeoutStore : ITimeoutStore
+public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
 {
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
@@ -173,6 +173,60 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 entry.Data.LockedBy = Guid.Empty;
                 entry.Data.LockExpiresAt = null;
             }
+        }
+        finally
+        {
+            _state.SyncRoot.ExitWriteLock();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        _state.SyncRoot.EnterWriteLock();
+        try
+        {
+            // A missing row or mismatched owner both mean "this caller no longer holds
+            // the lease for this timeout" — surface as ConcurrencyException so parity
+            // with Mongo is preserved and callers don't silently miss invalidations.
+            if (!_state.TimeoutsById.TryGetValue(id, out var entry) || entry.Data.LockedBy != lockOwner)
+            {
+                throw new ConcurrencyException(
+                    $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");
+            }
+
+            _state.TimeoutsById.Remove(id);
+            _state.TimeoutIndex.Remove(entry);
+        }
+        finally
+        {
+            _state.SyncRoot.ExitWriteLock();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        _state.SyncRoot.EnterWriteLock();
+        try
+        {
+            if (!_state.TimeoutsById.TryGetValue(id, out var entry) || entry.Data.LockedBy != lockOwner)
+            {
+                throw new ConcurrencyException(
+                    $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");
+            }
+
+            entry.Data.Locked = false;
+            entry.Data.LockedBy = Guid.Empty;
+            entry.Data.LockExpiresAt = null;
         }
         finally
         {

@@ -253,18 +253,24 @@ public class MongoDbTimeoutStoreTests
     }
 
     [Fact]
-    public async Task RemoveDispatchedTimeout_WithStaleOwner_IsBenignNoOp()
+    public async Task RemoveDispatchedTimeout_WithStaleOwner_ThrowsConcurrencyException()
     {
+        // Stale-owner filter matches zero rows → DeletedCount == 0. Surfacing this as a
+        // ConcurrencyException forces the caller (typically ProcessManagerTimeoutService)
+        // to log the lease invalidation instead of silently moving on.
+        var id = Guid.NewGuid();
+        var lockOwner = Guid.NewGuid();
         var collection = new Mock<IMongoCollection<TimeoutData>>();
         collection.Setup(c => c.DeleteOneAsync(It.IsAny<FilterDefinition<TimeoutData>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(BuildDeleteResult(0));
 
         var store = BuildStore(collection);
 
-        var exception = await Record.ExceptionAsync(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(Guid.NewGuid(), Guid.NewGuid()));
+        var exception = await Assert.ThrowsAsync<ConcurrencyException>(() =>
+            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, lockOwner));
 
-        Assert.Null(exception);
+        Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -286,8 +292,13 @@ public class MongoDbTimeoutStoreTests
     }
 
     [Fact]
-    public async Task ReleaseDispatchedTimeout_WithStaleOwner_IsBenignNoOp()
+    public async Task ReleaseDispatchedTimeout_WithStaleOwner_ThrowsConcurrencyException()
     {
+        // Stale-owner filter matches zero rows → MatchedCount == 0. Surfacing as
+        // ConcurrencyException mirrors the Remove path so the caller can log and
+        // recover instead of believing the lock was released.
+        var id = Guid.NewGuid();
+        var lockOwner = Guid.NewGuid();
         var collection = new Mock<IMongoCollection<TimeoutData>>();
         collection.Setup(c => c.UpdateOneAsync(
                 It.IsAny<FilterDefinition<TimeoutData>>(),
@@ -298,10 +309,11 @@ public class MongoDbTimeoutStoreTests
 
         var store = BuildStore(collection);
 
-        var exception = await Record.ExceptionAsync(() =>
-            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(Guid.NewGuid(), Guid.NewGuid()));
+        var exception = await Assert.ThrowsAsync<ConcurrencyException>(() =>
+            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, lockOwner));
 
-        Assert.Null(exception);
+        Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
