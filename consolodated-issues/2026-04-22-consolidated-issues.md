@@ -19,7 +19,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Core
 
-- [x] (commit: TBD) **Producer has no publish-side timeout under publisher confirms** — [Producer.cs:134-143, 233, 272, 309, 344](../src/ServiceConnect.Client.RabbitMQ/Producer.cs)
+- [x] (commit: 567b8dc1) **Producer has no publish-side timeout under publisher confirms** — [Producer.cs:134-143, 233, 272, 309, 344](../src/ServiceConnect.Client.RabbitMQ/Producer.cs)
   With `PublisherAcknowledgements=true`, each `BasicPublishAsync` awaits a broker ack without a timeout. A half-open connection or broker stall blocks the task while `_publishLock` is held; the entire producer backlogs until the connection heartbeat eventually kills the socket (worst case ~minutes). Fixed: added `PublishTimeout` client setting (default 30s) read in constructor; all 4 `BasicPublishAsync` call sites now go through `PublishWithTimeoutAsync` helper which uses a linked `CancellationTokenSource` with `CancelAfter(_publishTimeout)` and maps the timeout case to `TimeoutException`. `TimeoutException` also excluded from `IsRetriablePublishException` to prevent a reconnect loop on timeout. [r4]
 
 - [ ] **`MessageBusReadStream.IsComplete` accepts non-contiguous packet sets → silent data corruption** — [MessageBusReadStream.cs:46-65, 115-120](../src/ServiceConnect/Services/MessageBusReadStream.cs)
