@@ -361,11 +361,17 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                     result.Exception,
                     GetShutdownPublishToken()).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (_shutdownPublishCts.IsCancellationRequested)
+            {
+                // Shutdown grace window expired mid-publish — propagate so the outer finally
+                // leaves the message unacked for broker redelivery after reconnection.
+                throw;
+            }
             catch (Exception retryEx)
             {
                 _logger.LogError(retryEx,
-                    "Retry publish failed for delivery {DeliveryTag}; dropping to prevent unbounded redelivery loop.",
-                    args.DeliveryTag);
+                    "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
+                    args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
                 // Intentionally swallow: the message is already failed and we cannot retry-publish it.
                 // Acking now (processed = true, returned below) prevents the broker from redelivering it
                 // into the same failed path. Without this, the exception propagates to the outer catch in
@@ -393,11 +399,17 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                     new InvalidOperationException($"No processor handled message of type '{typeName}'."),
                     GetShutdownPublishToken()).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (_shutdownPublishCts.IsCancellationRequested)
+            {
+                // Shutdown grace window expired mid-publish — propagate so the outer finally
+                // leaves the message unacked for broker redelivery after reconnection.
+                throw;
+            }
             catch (Exception terminalEx)
             {
                 _logger.LogError(terminalEx,
-                    "Terminal-failure publish failed for delivery {DeliveryTag}; dropping to prevent unbounded redelivery loop.",
-                    args.DeliveryTag);
+                    "Terminal-failure publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
+                    args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
                 // Intentionally swallow — same rationale as the HandleFailureAsync catch above.
             }
         }

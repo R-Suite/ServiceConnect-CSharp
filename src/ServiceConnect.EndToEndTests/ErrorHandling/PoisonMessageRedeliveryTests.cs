@@ -130,9 +130,9 @@ public class PoisonMessageRedeliveryTests
             // After the Phase 1 fix, HandleTerminalFailureAsync throws (broker rejects publish),
             // the inner catch swallows it, ProcessMessageAsync returns true, and EventAsync acks
             // the message — so the handler is called exactly once and there is no redelivery.
-            Assert.True(attemptCount <= 1,
-                $"After the fix, expected the first terminal-failure publish failure to drop the message (attemptCount <= 1). " +
-                $"attemptCount={attemptCount}. Unbounded redelivery loop may have regressed.");
+            Assert.True(attemptCount == 1,
+                $"After the fix, expected the handler to be invoked exactly once (attemptCount == 1). " +
+                $"attemptCount={attemptCount}. Unbounded redelivery loop may have regressed, or the message was never delivered.");
         }
         finally
         {
