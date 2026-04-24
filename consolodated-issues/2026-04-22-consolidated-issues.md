@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 5/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 7/14 · Uncertain 1/2 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -143,8 +143,8 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### RabbitMQ client
 
-- [ ] **Field-initialised `CancellationTokenSource` instances leak when replaced in `StartConsumingAsync`** — [RabbitMqConsumerHost.cs:51, 56, 127-128](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L51-L128). One-shot leak per host on the first start; fresh leak per restart. [r4]
-- [ ] **Direct cast of client-settings `Arguments` to `Dictionary<string, object?>`** — [Consumer.cs:57-59](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L57-L59), [RabbitMqConsumerHost.cs:92-94](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L92-L94). Config-time `InvalidCastException` for any non-`Dictionary<,>` concrete type (e.g. `ReadOnlyDictionary`, `SortedDictionary`). [r3]
+- [x] (commit: 400dadca) **Field-initialised `CancellationTokenSource` instances leak when replaced in `StartConsumingAsync`** — [RabbitMqConsumerHost.cs:51, 56, 127-128](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L51-L128). One-shot leak per host on the first start; fresh leak per restart. [r4]
+- [x] (commit: 05cfc342) **Direct cast of client-settings `Arguments` to `Dictionary<string, object?>`** — [Consumer.cs:57-59](../src/ServiceConnect.Client.RabbitMQ/Consumer.cs#L57-L59), [RabbitMqConsumerHost.cs:92-94](../src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs#L92-L94). Config-time `InvalidCastException` for any non-`Dictionary<,>` concrete type (e.g. `ReadOnlyDictionary`, `SortedDictionary`). [r3]
 
 ### MongoDB persistence
 
