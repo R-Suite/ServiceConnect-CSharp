@@ -165,11 +165,18 @@ public static class ServiceConnectActivitySource
 
         if (activity is null) return null;
 
-        activity.DisplayName = (string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? "anonymous" : eventArgs.EndPoint) + " send";
+        // L14: compute the effective destination from EndPoint (singular) first, then fall back
+        // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
+        // multi-destination fan-outs that previously appeared as anonymous sends in traces.
+        string? destination = !string.IsNullOrWhiteSpace(eventArgs.EndPoint)
+            ? eventArgs.EndPoint
+            : (eventArgs.EndPoints.Count > 0 ? string.Join(",", eventArgs.EndPoints) : null);
 
-        if (!string.IsNullOrEmpty(eventArgs.EndPoint))
+        activity.DisplayName = (destination ?? "anonymous") + " send";
+
+        if (destination is not null)
         {
-            activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.EndPoint);
+            activity.SetTag(MessagingAttributes.MessagingDestination, destination);
         }
         else
         {

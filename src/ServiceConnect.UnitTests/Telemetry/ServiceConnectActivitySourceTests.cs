@@ -476,6 +476,26 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.False(ok);
         Assert.Equal(default, ctx);
     }
+
+    [Fact]
+    public void Send_EndPointsPluralOnly_TagsJoinedDestination()
+    {
+        // L14: Multi-destination sends lost their destination in telemetry because only
+        // the singular EndPoint was ever read. Verify EndPoints (plural) surfaces as a
+        // comma-joined messaging.destination tag and DisplayName.
+        var args = new SendEventArgs
+        {
+            EndPoint = "",
+            EndPoints = new[] { "queue-a", "queue-b" },
+            Headers = new Dictionary<string, string>(),
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("queue-a,queue-b send", activity!.DisplayName);
+        Assert.Equal("queue-a,queue-b", activity.GetTagItem(MessagingDestination));
+    }
 }
 
 [Collection("ActivityListener")]
