@@ -53,7 +53,7 @@ The builder composes four concerns:
 - **Transport** — which broker the bus talks to. `UseRabbitMQ` is the supported transport in v1.
 - **Queues** — the name of this service's queue, plus error and audit queue names, plus any message-to-queue routing for `SendAsync`. See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/).
 - **Bus** — runtime behaviour flags: handler scanning, auto-start, consumer count, exception handler. See `IBusConfiguration`.
-- **Persistence** — optional. Required for process managers, aggregators, and persisted timeouts. Configured via `UseMongoDbPersistence` or `UseSqlServerPersistence`.
+- **Persistence** — optional. Required for process managers, aggregators, and persisted timeouts. Configured via `UseMongoDbPersistence` or `UseInMemoryPersistence`.
 
 ## Lifecycle
 

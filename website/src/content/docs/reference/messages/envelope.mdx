@@ -47,24 +47,31 @@ Gets the raw message body bytes as delivered by the transport.
 public sealed class AuditLoggingMiddleware(ILogger<AuditLoggingMiddleware> logger)
     : IMessageProcessingMiddleware
 {
-    public async Task InvokeAsync(Envelope envelope, MiddlewareDelegate next)
+    public Task<ConsumeEventResult> Process(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        MessageProcessingDelegate next,
+        CancellationToken cancellationToken)
     {
         logger.LogInformation(
             "Received message: {HeaderCount} headers, {BodyLength} bytes",
             envelope.Headers.Count,
             envelope.Body.Length);
 
-        if (envelope.Headers.TryGetValue("MessageType", out var messageType))
+        if (envelope.Headers.TryGetValue("MessageType", out var headerType))
         {
-            logger.LogDebug("MessageType header: {MessageType}", messageType);
+            logger.LogDebug("MessageType header: {MessageType}", headerType);
         }
 
-        await next(envelope);
+        return next(messageBytes, messageType, message, headers, envelope, cancellationToken);
     }
 }
 ```
 
-An audit middleware reads the header bag and the body length directly from the envelope without deserialising. Running at this layer lets the middleware observe every message regardless of its concrete type, and keeps the body as a `ReadOnlyMemory<byte>` slice (no allocation) until something further down the pipeline actually needs to decode it.
+An audit middleware reads the header bag and the body length directly from the envelope without deserialising. Running at this layer lets the middleware observe every message regardless of its concrete type, and keeps the body as a `ReadOnlyMemory<byte>` slice (no allocation) until something further down the pipeline actually needs to decode it. Pass the same tuple forward to `next` so downstream middleware sees the envelope unchanged.
 
 ## See also
 

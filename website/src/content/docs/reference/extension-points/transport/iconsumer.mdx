@@ -77,6 +77,7 @@ The callback the transport invokes for every delivered message.
 public sealed class ConsumeEventResult
 {
     public bool Success { get; set; }
+    public bool NotHandled { get; set; }
     public Exception? Exception { get; set; }
 }
 ```
@@ -85,6 +86,7 @@ Returned by the `ConsumerEventHandler` to communicate the processing outcome bac
 
 - `Success = true` — the message was processed; the transport should acknowledge it to the broker.
 - `Success = false` — processing failed; the transport should nack, requeue, or move the message to the dead-letter destination according to its policy.
+- `NotHandled = true` — the dispatcher ran to completion but no processor claimed the message. Distinct from a failure; the transport should honour [`IBusConfiguration.DeadLetterUnhandledMessages`](../../../bus/ibusconfiguration/#deadletterunhandledmessages) when deciding whether to ack or route the delivery to the error exchange.
 - `Exception` — if non-null, the exception that caused the failure. The transport may log or attach this to the nack decision.
 
 ---

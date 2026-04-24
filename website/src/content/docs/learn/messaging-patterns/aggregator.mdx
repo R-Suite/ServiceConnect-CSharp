@@ -43,17 +43,18 @@ public sealed class TelemetrySliceAggregator : Aggregator<TelemetrySlice>
     public override int BatchSize() => 100;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(10);
 
-    public override void Execute(IList<TelemetrySlice> messages)
+    public override Task ExecuteAsync(IList<TelemetrySlice> messages, CancellationToken cancellationToken = default)
     {
         var total = messages.Sum(m => m.Value);
         Console.WriteLine($"rolled up {messages.Count} slices, total {total}");
+        return Task.CompletedTask;
     }
 }
 ```
 
 Three things to notice:
 
-- **`Execute` is synchronous.** This is deliberate — it runs on a background flush and returns a batch outcome, not a handler result. If the work inside is I/O-bound, block or use your own async-to-sync bridge. Don't `.Result` on a `Task` without understanding what deadlock looks like.
+- **`ExecuteAsync` is async-first.** It runs on a background flush and returns a batch outcome, not a handler result. The supplied `CancellationToken` flows through from the dispatcher — honour it for long-running I/O. Await async work directly; no sync-over-async bridges are needed.
 - **Both size and time are optional knobs.** Return `0` from `BatchSize()` to disable size-based flushing; return `default` (`TimeSpan.Zero`) from `Timeout()` to disable time-based flushing. Whichever you set is the flush trigger. Setting both — as above — flushes on whichever happens first.
 - **There is no correlation key.** One aggregator instance buffers every message of its type that arrives on its queue. If you need per-group batching ("aggregate *per order*"), use a [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) keyed on the group id; aggregator is the right shape only when one big pool is what you want.
 
@@ -92,12 +93,12 @@ Once a flush condition is met, the aggregator:
 
 1. Loads the current batch from the persistor.
 2. Deserialises it back into `T` instances.
-3. Calls `Execute(batch)`.
+3. Calls `ExecuteAsync(batch, cancellationToken)`.
 4. Removes the flushed records from the persistor.
 
-If `Execute` throws, the batch is not removed — it flushes again on the next trigger. This is the expected shape: `Execute` should be idempotent where possible (write to a system that upserts, or tag the flush with a batch id you can deduplicate on).
+If `ExecuteAsync` throws, the batch is not removed — it flushes again on the next trigger. This is the expected shape: `ExecuteAsync` should be idempotent where possible (write to a system that upserts, or tag the flush with a batch id you can deduplicate on).
 
-A batch that arrives out-of-order is still one batch. The aggregator does not sort; if ordering within the batch matters, sort inside `Execute`.
+A batch that arrives out-of-order is still one batch. The aggregator does not sort; if ordering within the batch matters, sort inside `ExecuteAsync`.
 
 ## When not to aggregate
 

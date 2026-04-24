@@ -81,7 +81,7 @@ Messages are the surface that binds services together. Changes to a message type
 
 **Inheritance is supported, but use it deliberately.** A single level of inheritance (`OrderPlaced : DomainEvent : Message`) lets one handler catch a whole category of events — useful for audit, metrics, and outbox subscribers. See [Polymorphic Messages](/ServiceConnect-CSharp/learn/messaging-patterns/polymorphic-messages/) for the pattern. Keep the hierarchy shallow: deep trees make the serialised shape harder to reason about, especially for polyglot consumers.
 
-**Keep them small.** A message names a fact ("an order was placed") and carries just enough data for a handler to act or to look the rest up. If your message exceeds a couple of kilobytes, you probably want a reference id rather than the full payload. For genuinely large payloads use [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/filters-streaming/).
+**Keep them small.** A message names a fact ("an order was placed") and carries just enough data for a handler to act or to look the rest up. If your message exceeds a couple of kilobytes, you probably want a reference id rather than the full payload. For genuinely large payloads use [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/).
 
 **Separate commands from events.** A **command** names an intent (`PlaceOrder`, `RefundRequested`) and typically goes to one handler via `SendAsync`. An **event** names a fact (`OrderPlaced`, `RefundIssued`) and typically goes to many subscribers via `PublishAsync`. Naming commands as imperatives and events as past-tense facts makes intent obvious at the call site.
 

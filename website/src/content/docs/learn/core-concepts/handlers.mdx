@@ -183,7 +183,7 @@ If `HandleAsync` throws, ServiceConnect applies the configured retry policy and,
 - **Idempotent** — the same message may be delivered again after a transient failure. Design the effect so re-delivery is safe (use the `CorrelationId` as a deduplication key, upsert rather than insert).
 - **Quick to recognise failure** — blocking a consumer for minutes on a downstream timeout blocks every other message in the queue. Wrap external calls in reasonable timeouts.
 
-See [Exception Handling](/ServiceConnect-CSharp/learn/operations/exception-handling/) for how to customise the behaviour.
+See [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) for how to customise the behaviour.
 
 ## Reference
 

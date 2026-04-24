@@ -35,4 +35,24 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     href={`${base}/learn/messaging-patterns/filters/`}
     description="Stamp, compress, dedupe, or redact messages with a pluggable cross-cutting hook."
   />
+  <LinkCard
+    title="Streaming"
+    href={`${base}/learn/messaging-patterns/streaming/`}
+    description="Send large payloads in ordered chunks over the same transport, without blowing the broker frame limit."
+  />
+  <LinkCard
+    title="Polymorphic Messages"
+    href={`${base}/learn/messaging-patterns/polymorphic-messages/`}
+    description="Dispatch a single publish to handlers of the message type and every base type or interface it satisfies."
+  />
+  <LinkCard
+    title="Message Deduplication"
+    href={`${base}/reference/filters/messagededuplication/`}
+    description="Drop duplicate deliveries at the pipeline boundary using a pluggable idempotency store."
+  />
+  <LinkCard
+    title="Telemetry"
+    href={`${base}/learn/operations/observability/`}
+    description="OpenTelemetry spans, W3C trace context, and messaging semconv attributes on every publish, send, and consume."
+  />
 </CardGrid>

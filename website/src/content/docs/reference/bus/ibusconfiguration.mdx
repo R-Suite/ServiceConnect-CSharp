@@ -121,6 +121,18 @@ When true, the handler processor forwards messages along the destinations listed
 
 **Remarks.** Defaults to true. Destinations are validated against known queue names when enabled.
 
+---
+
+### `DeadLetterUnhandledMessages`
+
+```csharp
+bool DeadLetterUnhandledMessages { get; set; }
+```
+
+When true, messages that the dispatcher runs to completion on but which no processor claims — see [`ConsumeEventResult.NotHandled`](../../handlers/event-args/#nothandled) — are published to the error exchange instead of silently acked.
+
+**Remarks.** Defaults to false, preserving historical behaviour where unhandled messages are logged and acked. Enable when a handler-less message should be treated as a terminal failure for operator visibility.
+
 ## Usage
 
 ### Configuring a RabbitMQ bus with a named queue

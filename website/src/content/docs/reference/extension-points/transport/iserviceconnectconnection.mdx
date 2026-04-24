@@ -22,8 +22,10 @@ namespace ServiceConnect.Client.RabbitMQ;
 
 public interface IServiceConnectConnection : IAsyncDisposable
 {
-    Task<IChannel> CreateChannelAsync();
+    Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default);
+    Task<IChannel> CreateChannelAsync(CreateChannelOptions? options, CancellationToken cancellationToken = default);
     bool IsConnected();
+    IConnection? UnderlyingConnection { get; }
 }
 ```
 
@@ -36,10 +38,15 @@ See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for 
 ### `CreateChannelAsync`
 
 ```csharp
-Task<IChannel> CreateChannelAsync();
+Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default);
+Task<IChannel> CreateChannelAsync(CreateChannelOptions? options, CancellationToken cancellationToken = default);
 ```
 
-Opens and returns a new `RabbitMQ.Client.IChannel` from the underlying connection. The RabbitMQ consumer and producer call this once per logical consumer loop or send operation to obtain a channel.
+Opens and returns a new `RabbitMQ.Client.IChannel` from the underlying connection. The RabbitMQ consumer and producer call this once per logical consumer loop or send operation to obtain a channel. The second overload forwards `CreateChannelOptions` — for example, to enable publisher confirms on a producer channel — while the first overload uses transport defaults.
+
+**Parameters**
+- `options` — channel options applied to the underlying RabbitMQ channel, or `null` for defaults.
+- `cancellationToken` — token that cancels connection-establishment and channel-open operations.
 
 **Returns.** A newly opened `IChannel`. The caller is responsible for disposing the channel after use.
 
@@ -56,6 +63,18 @@ bool IsConnected();
 Returns `true` when the underlying RabbitMQ connection is open and usable. The transport uses this for health-check reporting and reconnect decisions.
 
 **Returns.** `true` if the connection is currently established; `false` otherwise. Implementations that wrap a `RabbitMQ.Client.IConnection` should delegate to `IConnection.IsOpen`.
+
+---
+
+### `UnderlyingConnection`
+
+```csharp
+IConnection? UnderlyingConnection { get; }
+```
+
+Exposes the underlying `RabbitMQ.Client.IConnection`, or `null` if the connection has not been established yet or has been disposed.
+
+**Remarks.** Used by `RabbitMqConsumerHost` to subscribe to connection-level events (shutdown, blocked, unblocked) for observability. Wrapper implementations should return the live `IConnection` they manage so the host can attach these event handlers; returning `null` during establishment or after disposal is the expected shape.
 
 ---
 
@@ -92,13 +111,18 @@ public sealed class CustomRabbitConnection : IServiceConnectConnection
         _connection = connection;
     }
 
-    public Task<IChannel> CreateChannelAsync()
+    public IConnection? UnderlyingConnection => _connection;
+
+    public Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
+        => CreateChannelAsync(options: null, cancellationToken);
+
+    public Task<IChannel> CreateChannelAsync(CreateChannelOptions? options, CancellationToken cancellationToken = default)
     {
         if (_connection is null)
             throw new InvalidOperationException("Connection has been disposed.");
 
         // Add custom logic here (certificate refresh, rate-limiting, tracing).
-        return _connection.CreateChannelAsync();
+        return _connection.CreateChannelAsync(options, cancellationToken);
     }
 
     public bool IsConnected()
@@ -143,7 +167,12 @@ public sealed class MutualTlsRabbitConnection : IServiceConnectConnection
 
     public bool IsConnected() => _connection?.IsOpen ?? false;
 
-    public async Task<IChannel> CreateChannelAsync()
+    public IConnection? UnderlyingConnection => _connection;
+
+    public Task<IChannel> CreateChannelAsync(CancellationToken cancellationToken = default)
+        => CreateChannelAsync(options: null, cancellationToken);
+
+    public async Task<IChannel> CreateChannelAsync(CreateChannelOptions? options, CancellationToken cancellationToken = default)
     {
         if (_connection is null)
             throw new ObjectDisposedException(nameof(MutualTlsRabbitConnection));
@@ -154,7 +183,7 @@ public sealed class MutualTlsRabbitConnection : IServiceConnectConnection
         var cert = _certProvider();
         _ = cert; // Apply cert to SSL options if the factory supports dynamic reconfiguration.
 
-        return await _connection.CreateChannelAsync();
+        return await _connection.CreateChannelAsync(options, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()

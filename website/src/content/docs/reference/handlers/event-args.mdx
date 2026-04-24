@@ -63,6 +63,16 @@ Gets or sets whether the consumer callback completed successfully. A `false` val
 
 ---
 
+### `NotHandled`
+
+```csharp
+public bool NotHandled { get; set; }
+```
+
+Gets or sets whether the dispatcher ran to completion but no processor claimed the message. Distinct from `Success`: a handler-less message is not a failure, but callers may want to route it to the error exchange rather than silently acking — see [`IBusConfiguration.DeadLetterUnhandledMessages`](../../bus/ibusconfiguration/#deadletterunhandledmessages).
+
+---
+
 ### `Exception`
 
 ```csharp
@@ -142,7 +152,14 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
 {
     private static readonly ActivitySource Source = new("ServiceConnect");
 
-    public async Task InvokeAsync(Envelope envelope, MiddlewareDelegate next)
+    public async Task<ConsumeEventResult> Process(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        MessageProcessingDelegate next,
+        CancellationToken cancellationToken)
     {
         // Shape the consume-event args for downstream collectors before we
         // start the span — the same bag of data a telemetry exporter would
@@ -165,8 +182,9 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
 
         try
         {
-            await next(envelope);
-            RecordResult(activity, new ConsumeEventResult { Success = true });
+            var result = await next(messageBytes, messageType, message, headers, envelope, cancellationToken);
+            RecordResult(activity, result);
+            return result;
         }
         catch (Exception ex)
         {
@@ -182,6 +200,7 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
     private static void RecordResult(Activity? activity, ConsumeEventResult result)
     {
         activity?.SetTag("servicebus.consume.success", result.Success);
+        activity?.SetTag("servicebus.consume.not_handled", result.NotHandled);
         if (!result.Success)
         {
             activity?.SetStatus(ActivityStatusCode.Error, result.Exception?.Message);

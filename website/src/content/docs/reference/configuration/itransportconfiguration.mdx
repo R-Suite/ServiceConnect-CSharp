@@ -217,6 +217,28 @@ Gets the provider-specific client settings bag. RabbitMQ populates this with tra
 
 ---
 
+### `PublishTimeout` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromSeconds(30));
+```
+
+Maximum time the RabbitMQ producer waits for a broker acknowledgement when publishing under publisher confirms. Accepts a `TimeSpan`; defaults to 30 seconds when unset.
+
+**Remarks.** When the broker ack does not arrive within this window the producer throws `TimeoutException` and the publish is **not retried** — the timeout is treated as a fatal publish error distinct from transport-level failures, so the retry loop exits immediately and the caller decides how to respond. Pair with [`PublisherAcknowledgements`](#publisheracknowledgements-rabbitmq-client-setting) — the timeout only has any effect when publisher confirms are enabled.
+
+---
+
+### `PublisherAcknowledgements` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.PublisherAcknowledgements, true);
+```
+
+Enables RabbitMQ publisher confirms for outbound publishes. When enabled the producer waits for a broker ack before completing the publish, bounded by [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting).
+
+---
+
 ### `SetClientSetting`
 
 ```csharp
@@ -226,7 +248,7 @@ void SetClientSetting(string key, object value)
 Stores a provider-specific client setting.
 
 **Parameters**
-- `key` — The setting key, typically a well-known constant from the transport's setting-keys class.
+- `key` — The setting key, typically a well-known constant from the transport's setting-keys class (for example `RabbitMQSettingKeys.PublishTimeout`, `RabbitMQSettingKeys.PublisherAcknowledgements`).
 - `value` — The setting value.
 
 ## Usage

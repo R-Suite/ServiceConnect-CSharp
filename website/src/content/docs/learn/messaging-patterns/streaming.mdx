@@ -70,16 +70,16 @@ public sealed class DocumentUploadedHandler : IStreamHandler<DocumentUploaded>
 {
     public IMessageBusReadStream Stream { get; set; } = null!;
 
-    public void Execute(DocumentUploaded message)
+    public async Task ExecuteAsync(DocumentUploaded message, CancellationToken cancellationToken = default)
     {
         var bytes = Stream.Read();
-        File.WriteAllBytes(message.FileName, bytes);
+        await File.WriteAllBytesAsync(message.FileName, bytes, cancellationToken);
     }
 }
 ```
 
-- **`Stream` is a property, not a parameter.** The dispatcher sets it before calling `Execute`. This is the same pattern as `IConsumeContext` on a normal handler — framework-populated.
-- **`Execute` is synchronous.** By the time it is called, every packet has arrived and been reassembled in memory; the I/O-bound wait is over. If the work inside `Execute` is itself async, run it on a background task or block — but *don't* make that work slow, because it serialises against the next stream's reassembly.
+- **`Stream` is a property, not a parameter.** The dispatcher sets it before calling `ExecuteAsync`. This is the same pattern as `IConsumeContext` on a normal handler — framework-populated.
+- **`ExecuteAsync` lets you await the full reassembled stream.** By the time it is called, every packet has arrived and been reassembled in memory; the I/O-bound wait for the wire is over. The supplied `CancellationToken` flows through from the dispatcher, so long writes to disk or downstream services can be cancelled — but *don't* make that work slow, because it serialises against the next stream's reassembly.
 - **`Stream.Read()` returns the whole byte array.** The reassembly is complete by the time the handler fires; no packet-by-packet processing is expected. For very large payloads where holding everything in memory is painful, `Stream.ReadSequence()` returns a `ReadOnlySequence<byte>` you can stream through.
 
 Register the handler the same way you register any consumer — a `HandlerReference` and a DI registration — except the interface is `IStreamHandler<T>`:
@@ -103,7 +103,7 @@ services.AddServiceConnect(builder =>
 
 Streaming is not free. Each packet is a transport message — RabbitMQ allocates, routes, and acknowledges it. A 50 MB payload at 64 KB packets is ~800 transport messages. At 1 MB packets it is 50. The broker is happier with fewer larger packets, up to the point where a single message becomes uncomfortable for other reasons (memory pressure on the broker, redelivery cost if a packet fails).
 
-The receiver reassembles in memory. A 5 GB payload will hold 5 GB in the receiver's heap until `Execute` returns. If that is not acceptable, chunking the *semantics* (many small `DocumentChunkUploaded` messages with sequence numbers) is the right move, not streaming.
+The receiver reassembles in memory. A 5 GB payload will hold 5 GB in the receiver's heap until `ExecuteAsync` returns. If that is not acceptable, chunking the *semantics* (many small `DocumentChunkUploaded` messages with sequence numbers) is the right move, not streaming.
 
 ## Reference
 

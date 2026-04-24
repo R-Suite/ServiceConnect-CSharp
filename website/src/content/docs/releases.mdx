@@ -18,13 +18,25 @@ ServiceConnect is versioned per-package. Each package ships independently on NuG
 
 ## Picking a version
 
-Match the major versions of the packages you reference. `ServiceConnect` 6.x expects `ServiceConnect.Interfaces` 6.x; the transport and persistence packages follow the same major line. Mixing majors is unsupported and will surface as binding redirects or missing-method exceptions.
+Match the major versions of the packages you reference. `ServiceConnect` 7.x expects `ServiceConnect.Interfaces` 7.x; the transport and persistence packages follow the same major line. Mixing majors is unsupported and will surface as binding redirects or missing-method exceptions.
 
 For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
 
 ## v7 highlights
 
 Version 7 is a reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. If you are upgrading from v6, read the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
+
+### .NET 10 target
+
+Libraries now multi-target `net8.0` and `net10.0`. You can continue to host on .NET 8 LTS, or pick up .NET 10 features (and its runtime improvements) without waiting for a further major. The two target frameworks are kept API-compatible.
+
+### Repository consolidation: 17 projects down to 8
+
+The solution has been pared back from 17 projects to 8: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, `ServiceConnect.Filters.MessageDeduplication`, and the test project. The dropped projects were either experimental transports, abandoned persistence providers, or internal utilities that had no external consumers — removing them cuts build time and clarifies the supported surface.
+
+### MIT relicense
+
+ServiceConnect is now MIT-licensed. Previously the project carried a more restrictive licence that blocked some commercial embedding scenarios; MIT removes that ambiguity.
 
 ### Trust boundary on inbound headers
 

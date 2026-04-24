@@ -43,7 +43,7 @@ string AuditQueueName { get; set; }
 
 Gets or sets the queue name used for audit copies.
 
-**Remarks.** Only populated when [`AuditingEnabled`](#auditingenabled) is true. Interpreted by RabbitMQ as the target exchange — pair with [`AuditRoutingKey`](#auditroutingkey) when routing into a topic or direct exchange.
+**Remarks.** Only populated when [`AuditingEnabled`](#auditingenabled) is true. Interpreted by RabbitMQ as the target exchange; audit publishes always use an empty routing key (see [`AuditRoutingKey`](#auditroutingkey)).
 
 ---
 
@@ -53,9 +53,9 @@ Gets or sets the queue name used for audit copies.
 string AuditRoutingKey { get; set; }
 ```
 
-Gets or sets the routing key stamped on audit-queue publishes.
+**Reserved — currently ignored.** The RabbitMQ audit publisher always publishes with `routingKey=""` because the audit direct exchange is bound to the audit queue with an empty routing key; any non-empty value configured here would be unroutable (`mandatory=false`) and silently dropped.
 
-**Remarks.** Defaults to empty string, which is correct for a fanout exchange or a bound queue acting as the audit sink. Set this when [`AuditQueueName`](#auditqueuename) names a topic/direct exchange and you need a specific binding key — for example, `"orders.audit"` into a shared `app.audit` topic exchange.
+**Remarks.** The property is retained for forward compatibility; setting it to a non-empty value causes `MessageAuditPublisher` to log a Warning at construction and still publishes with an empty routing key. Leave the default empty string.
 
 ---
 

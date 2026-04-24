@@ -17,7 +17,7 @@ See [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) fo
 public abstract class Aggregator<T> where T : Message
 ```
 
-`Aggregator<T>` is an abstract class: the framework resolves one per dispatch, invokes the configured flush triggers, and calls `Execute` with the buffered batch.
+`Aggregator<T>` is an abstract class: the framework resolves one per dispatch, invokes the configured flush triggers, and calls `ExecuteAsync` with the buffered batch.
 
 ### `Timeout`
 
@@ -47,18 +47,19 @@ Gets the maximum number of messages to buffer before dispatching the batch. Over
 
 ---
 
-### `Execute`
+### `ExecuteAsync`
 
 ```csharp
-public abstract void Execute(IList<T> messages)
+public abstract Task ExecuteAsync(IList<T> messages, CancellationToken cancellationToken = default)
 ```
 
-Processes a completed batch. The framework calls this on a background flush after materialising the buffered records through the configured `IAggregatorPersistor`; throwing from `Execute` leaves the batch in the persistor so the next flush retries it.
+Processes a completed batch. The framework calls this on a background flush after materialising the buffered records through the configured `IAggregatorPersistor`; throwing from `ExecuteAsync` leaves the batch in the persistor so the next flush retries it.
 
 **Parameters**
-- `messages` — the messages collected for the batch, in the order the persistor returned them. Sort inside `Execute` if intra-batch ordering matters.
+- `messages` — the messages collected for the batch, in the order the persistor returned them. Sort inside `ExecuteAsync` if intra-batch ordering matters.
+- `cancellationToken` — token to observe for cancellation; flows through from the dispatcher.
 
-**Remarks.** `Execute` is synchronous by design — it runs on a background flush timer and returns a batch outcome, not a handler result. Block or use your own async-to-sync bridge if the work is I/O-bound; `.Result` on a `Task` is a deadlock waiting to happen without the right synchronisation context.
+**Remarks.** `ExecuteAsync` is async-first — it runs on a background flush timer and returns a batch outcome, not a handler result. The `CancellationToken` flows through so long-running I/O can be cancelled cleanly; await async work directly rather than reaching for sync-over-async bridges.
 
 ## AggregatorSnapshot
 
@@ -77,7 +78,7 @@ A point-in-time capture of aggregator messages returned by the configured `IAggr
 IReadOnlyList<object> ResolvedMessages { get; init; }
 ```
 
-Gets the deserialised messages recovered from the persistor. Values are boxed to `object` because the snapshot spans heterogeneous record types; cast to `T` before handing the list to `Aggregator<T>.Execute`.
+Gets the deserialised messages recovered from the persistor. Values are boxed to `object` because the snapshot spans heterogeneous record types; cast to `T` before handing the list to `Aggregator<T>.ExecuteAsync`.
 
 ---
 
@@ -87,7 +88,7 @@ Gets the deserialised messages recovered from the persistor. Values are boxed to
 IReadOnlyList<Guid> ResolvedIds { get; init; }
 ```
 
-Gets the storage-record ids for the resolved messages. The persistor uses these ids to remove the flushed records after a successful `Execute`.
+Gets the storage-record ids for the resolved messages. The persistor uses these ids to remove the flushed records after a successful `ExecuteAsync`.
 
 ---
 
@@ -124,24 +125,24 @@ public sealed class QuoteAggregator : Aggregator<ShippingQuote>
 
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
 
-    public override void Execute(IList<ShippingQuote> messages)
+    public override async Task ExecuteAsync(IList<ShippingQuote> messages, CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return;
 
         var correlationId = messages[0].CorrelationId;
         var cheapest = messages.OrderBy(q => q.Price).First();
 
-        _bus.PublishAsync(new ShippingQuotesReceived(correlationId)
+        await _bus.PublishAsync(new ShippingQuotesReceived(correlationId)
         {
             CarrierCount = messages.Count,
             SelectedCarrier = cheapest.Carrier,
             SelectedPrice = cheapest.Price,
-        }).GetAwaiter().GetResult();
+        });
     }
 }
 ```
 
-`QuoteAggregator` flushes either once 25 quotes have arrived or every 30 seconds — whichever happens first. `Execute` publishes the fan-in event `ShippingQuotesReceived` carrying the winning quote; because `Execute` is synchronous, an async publish is bridged with `GetAwaiter().GetResult()`. If `PublishAsync` throws, the batch remains in the persistor and the next flush retries it.
+`QuoteAggregator` flushes either once 25 quotes have arrived or every 30 seconds — whichever happens first. `ExecuteAsync` publishes the fan-in event `ShippingQuotesReceived` carrying the winning quote; the async publish is awaited directly, and the supplied `CancellationToken` flows through to cooperating work. If `PublishAsync` throws, the batch remains in the persistor and the next flush retries it.
 
 ## See also
 

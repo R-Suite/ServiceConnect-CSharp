@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IStreamHandler<TMessage>` is the contract for consuming a streaming message sent by a producer via [`IBus.CreateStream<T>()`](../../bus/ibus/#createstreamt). The dispatch pipeline reassembles the in-order byte packets into a single `IMessageBusReadStream`, populates the `Stream` property, then calls `Execute` exactly once the complete payload has arrived. Reach for this interface when the payload is too large or too streamy to carry in the body of a normal `Message`.
+`IStreamHandler<TMessage>` is the contract for consuming a streaming message sent by a producer via [`IBus.CreateStream<T>()`](../../bus/ibus/#createstreamt). The dispatch pipeline reassembles the in-order byte packets into a single `IMessageBusReadStream`, populates the `Stream` property, then calls `ExecuteAsync` exactly once the complete payload has arrived. Reach for this interface when the payload is too large or too streamy to carry in the body of a normal `Message`.
 
 See [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/) for the pattern tour.
 
@@ -25,24 +25,25 @@ public interface IStreamHandler<TMessage> where TMessage : Message
 IMessageBusReadStream Stream { get; set; }
 ```
 
-Gets or sets the read stream over the reassembled payload bytes. The dispatch pipeline sets this property before `Execute` is invoked, so handlers read it directly without initialising anything themselves.
+Gets or sets the read stream over the reassembled payload bytes. The dispatch pipeline sets this property before `ExecuteAsync` is invoked, so handlers read it directly without initialising anything themselves.
 
 **Remarks.** The stream is positioned at the start of the payload. Disposing the stream (or reading it to completion) is the handler's responsibility; the pipeline does not automatically release it for you.
 
 ---
 
-### `Execute`
+### `ExecuteAsync`
 
 ```csharp
-void Execute(TMessage stream);
+Task ExecuteAsync(TMessage stream, CancellationToken cancellationToken = default);
 ```
 
 Invoked once the full stream has arrived and been reassembled. Inside this call, `Stream` is populated and readable.
 
 **Parameters**
 - `stream` — the control message carrying metadata about the streamed payload (file name, content type, anything else the producer attached).
+- `cancellationToken` — token to observe for cancellation; flows through from the dispatcher.
 
-**Remarks.** `Execute` is synchronous on this interface — long-running I/O inside it blocks the consumer slot. Offload heavy work appropriately if the consumer concurrency budget is tight.
+**Remarks.** `ExecuteAsync` is async-first on this interface — await downstream I/O directly and pass the supplied `CancellationToken` through so long-running work can be cancelled. The handler still occupies a consumer slot while it runs, so offload heavy work appropriately if the consumer concurrency budget is tight.
 
 ## Usage
 
@@ -57,7 +58,7 @@ public sealed class FileUploadStreamHandler : IStreamHandler<FileUpload>
 
     public IMessageBusReadStream Stream { get; set; } = null!;
 
-    public void Execute(FileUpload message)
+    public async Task ExecuteAsync(FileUpload message, CancellationToken cancellationToken = default)
     {
         var destination = _storage.OpenWrite(message.FileName);
         try
@@ -66,7 +67,7 @@ public sealed class FileUploadStreamHandler : IStreamHandler<FileUpload>
             int read;
             while ((read = Stream.Read(buffer, 0, buffer.Length)) > 0)
             {
-                destination.Write(buffer, 0, read);
+                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             }
         }
         finally

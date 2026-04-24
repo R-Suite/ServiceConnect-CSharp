@@ -54,19 +54,21 @@ A message type inherits `Message` and forwards a correlation id through its own 
 ```csharp
 public sealed class PlaceOrderHandler(IBus bus) : IMessageHandler<PlaceOrder>
 {
-    public async Task Execute(PlaceOrder message, IConsumeContext context)
+    public IConsumeContext Context { get; set; } = null!;
+
+    public async Task HandleAsync(PlaceOrder message)
     {
         // ... persist the order ...
 
         await bus.PublishAsync(new OrderPlaced(
-            correlationId: context.Message.CorrelationId,
+            correlationId: message.CorrelationId,
             OrderId: message.OrderId,
             Total: message.Total));
     }
 }
 ```
 
-When a handler emits a follow-up event, it forwards the inbound message's correlation id into the new message so downstream subscribers and log aggregators can stitch the full conversation together. Generating a fresh id here would break the trace.
+When a handler emits a follow-up event, it forwards the inbound message's correlation id into the new message so downstream subscribers and log aggregators can stitch the full conversation together. Generating a fresh id here would break the trace. `Context` is populated by the dispatch pipeline before `HandleAsync` runs — reach for it when you need the reply helper or other per-message metadata.
 
 ## See also
 

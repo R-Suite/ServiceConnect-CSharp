@@ -108,13 +108,13 @@ Each pattern has a conceptual guide and worked example in [the docs](https://r-s
 
 Runnable console apps live in [`examples/`](examples), one per pattern:
 
-[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [Streaming](examples/Streaming)
+[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [PolymorphicMessages](examples/PolymorphicMessages) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [MessageDeduplication](examples/MessageDeduplication) · [Streaming](examples/Streaming)
 
 Each example ships with a `run.sh` and a `docker-compose.yml` at `examples/docker-compose.yml` for a local RabbitMQ broker.
 
 ## Requirements
 
-- .NET 8 or .NET 10
+- .NET 8 or .NET 10 (core packages multi-target; `ServiceConnect.Filters.MessageDeduplication` requires .NET 10)
 - RabbitMQ 3.7+
 
 ## License

@@ -61,9 +61,13 @@ Anything RabbitMQ-specific that isn't on the interface — connection timeout, h
 ```csharp
 transport.SetClientSetting("Port", 5671);
 transport.SetClientSetting("RequestedHeartbeat", TimeSpan.FromSeconds(30));
+transport.SetClientSetting("PublisherAcknowledgements", true);
+transport.SetClientSetting("PublishTimeout", TimeSpan.FromSeconds(30));
 ```
 
 The keys are passed through to the RabbitMQ client; see that client's documentation for the full list.
+
+- **`PublishTimeout`** (default **30 seconds**) — time to wait for a broker publisher-confirm before failing a publish. Prevents a half-open connection from blocking a producer indefinitely. `TimeoutException` on this path is *not* retried.
 
 ## Queues
 
