@@ -153,7 +153,15 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             );
             // Name + CorrelationId is effectively unique; DeleteOneAsync avoids a full
             // collection scan after the first match.
-            await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
+            var result = await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
+            // IsAcknowledged is false under w:0 — we can't detect no-op then, so don't throw.
+            // When acknowledged, DeletedCount==0 means the row wasn't there: either a concurrent
+            // removal won the race or the caller used a mismatched (name, correlationId). Mirror
+            // M17's choice and raise ConcurrencyException so the caller can distinguish the race
+            // from a structural persistence failure (which would have surfaced as MongoException).
+            if (result.IsAcknowledged && result.DeletedCount == 0)
+                throw new ConcurrencyException(
+                    $"Aggregator row not found: Name='{name}', CorrelationId='{correlationId}'. Row was concurrently removed or caller passed a mismatched key.");
         }
         catch (MongoException ex)
         {

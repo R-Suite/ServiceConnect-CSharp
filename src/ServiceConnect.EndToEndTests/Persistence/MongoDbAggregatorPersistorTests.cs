@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.MongoDb;
 using ServiceConnect.Services;
 using Xunit;
@@ -186,5 +187,18 @@ public class MongoDbAggregatorPersistorTests
         // First write triggers EnsureIndexesAsync; must NOT throw despite the conflict.
         var ex = await Record.ExceptionAsync(() => persistor.InsertDataAsync(item, "batch-l8"));
         Assert.Null(ex);
+    }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task RemoveDataAsync_RowNotFound_ThrowsConcurrencyException()
+    {
+        // L10: Silent no-op on a mismatched (name, correlationId) was masking data-integrity
+        // bugs. Mirror the M17 fix on MongoDbProcessManagerFinder and surface ConcurrencyException
+        // so callers can distinguish a concurrent-removal race from a genuine persistence failure.
+        var persistor = CreatePersistor();
+
+        await Assert.ThrowsAsync<ConcurrencyException>(
+            () => persistor.RemoveDataAsync("nonexistent-agg", Guid.NewGuid(), CancellationToken.None));
     }
 }
