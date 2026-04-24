@@ -132,15 +132,16 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     }
 
     /// <summary>
-    /// Gets an enumerator for keys of a specific type. Streams the ConcurrentDictionary
-    /// snapshot so callers that bail early avoid the full filtered-materialization cost.
+    /// Gets an enumerator for keys assignable to TKey, including derived types and
+    /// interface implementations. Streams the ConcurrentDictionary snapshot so callers
+    /// that bail early avoid the full filtered-materialization cost.
     /// </summary>
     public IEnumerable<TKey> Keys<TKey>()
     {
         var typeOfKey = typeof(TKey);
         foreach (var k in _cache.Keys)
         {
-            if (k.GetType() == typeOfKey) yield return (TKey)k;
+            if (typeOfKey.IsAssignableFrom(k.GetType())) yield return (TKey)k;
         }
     }
 

@@ -477,5 +477,21 @@ namespace ServiceConnect.UnitTests
             timeProvider.Advance(TimeSpan.FromMinutes(2));
             Assert.False(cache.Contains("key1"));
         }
+
+        [Fact]
+        public void KeysOfObject_ReturnsAllKeysIncludingSubtypes()
+        {
+            // L11: Keys<TKey>() used exact-type match, so Keys<object>() returned empty because
+            // no key's runtime type is literally System.Object. Expected semantic is
+            // "keys assignable to TKey"; verify via object (covers everything) and IComparable
+            // (Guid/string/int all implement it).
+            var provider = new CacheProvider();
+            provider.Add<Guid, int>(Guid.NewGuid(), 1);
+            provider.Add<string, int>("two", 2);
+            provider.Add<int, int>(3, 3);
+
+            Assert.Equal(3, provider.Keys<object>().Count());
+            Assert.Equal(3, provider.Keys<IComparable>().Count());
+        }
     }
 }
