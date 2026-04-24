@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 13/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 14/14 · Uncertain 1/2 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -160,7 +160,7 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Telemetry
 
-- [ ] **`SendEventArgs.EndPoints` (plural) never tagged on span** — [ServiceConnectActivitySource.cs:158-167](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L158-L167). Multi-destination sends misreport destination; only the first endpoint is reflected. [r4]
+- [x] (commit: 218ee92a) **`SendEventArgs.EndPoints` (plural) never tagged on span** — [ServiceConnectActivitySource.cs:158-167](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L158-L167). Multi-destination sends misreport destination; only the first endpoint is reflected. [r4]
 
 ## Uncertain — reproduce with a test before acting
 
