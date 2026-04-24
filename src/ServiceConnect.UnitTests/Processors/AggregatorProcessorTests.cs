@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
@@ -621,6 +622,84 @@ public class AggregatorProcessorTests
         await flushTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(1, flushCount);
+    }
+
+    [Fact]
+    public async Task RunFlushAsync_AfterDispose_DoesNotLogSpuriousObjectDisposedException()
+    {
+        // Phase 4 Uncertain: OnTimerFired passes the `_disposed` fast-path guard (because
+        // the timer callback was scheduled BEFORE DisposeAsync set the flag), then loses the
+        // race with DisposeAsync to dispose `_disposeCts`. The first act of RunFlushAsync is
+        // `FlushAggregatorAsync(descriptor, _disposeCts.Token)` — evaluating the Token on a
+        // disposed CancellationTokenSource throws ObjectDisposedException, which gets caught
+        // by `catch (Exception ex)` in RunFlushAsync and funneled into `logger.LogError(...)`.
+        // Effect: a spurious ERROR log entry during otherwise-clean shutdown.
+        //
+        // Deterministic reproduction: fully dispose the processor (so `_disposed=1` AND
+        // `_disposeCts` is disposed — exactly the state a losing timer callback sees at the
+        // Token-access point), then invoke RunFlushAsync directly via reflection. This
+        // bypasses OnTimerFired's guard (already "passed" in the real race) and exercises
+        // RunFlushAsync's failure mode in isolation.
+
+        var capturingLogger = new AptCapturingLogger();
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AggregatorSnapshot.Empty);
+        persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(AggTestMessage), HandlerType = typeof(AggTestTimedAggregator) }
+        };
+        var services = new ServiceCollection();
+        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
+        services.AddSingleton<Aggregator<AggTestMessage>>(new AggTestTimedAggregator(new TaskCompletionSource<IList<AggTestMessage>>()));
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
+        var processor = new AggregatorProcessor(registry, provider, capturingLogger, persistorMock.Object);
+
+        // Fully dispose — _disposed=1, _disposeCts disposed. Realistic post-race state.
+        await processor.DisposeAsync();
+
+        // Fetch the descriptor for AggTestMessage.
+        var registryType = typeof(AggregatorRegistry);
+        var descriptorsField = registryType.GetField("_descriptors", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var descriptors = descriptorsField.GetValue(registry)!;
+        var descriptor = (AggregatorDescriptor)((IEnumerable<KeyValuePair<Type, AggregatorDescriptor>>)descriptors)
+            .First(kvp => kvp.Key == typeof(AggTestMessage)).Value;
+
+        // Invoke RunFlushAsync directly. Bypasses OnTimerFired's guard (same effect as the
+        // real race where that guard had already passed). RunFlushAsync is private → reflection.
+        var processorType = typeof(AggregatorProcessor);
+        var runFlushMethod = processorType.GetMethod("RunFlushAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var runTask = (Task)runFlushMethod.Invoke(processor, new object[] { 42, tcs, descriptor })!;
+        await runTask;
+
+        // With the fix: RunFlushAsync catches the race quietly, no ERROR logged.
+        // Without the fix: `_disposeCts.Token` throws ODE → catch (Exception) logs ERROR.
+        var odeErrors = capturingLogger.Entries
+            .Where(e => e.Level == LogLevel.Error && e.Exception is ObjectDisposedException)
+            .ToList();
+        Assert.Empty(odeErrors);
+    }
+}
+
+file sealed class AptCapturingLogger : ILogger<AggregatorProcessor>
+{
+    public sealed record LogEntry(LogLevel Level, string Message, Exception? Exception);
+    public List<LogEntry> Entries { get; } = [];
+
+    IDisposable? ILogger.BeginScope<TState>(TState state) => null;
+    bool ILogger.IsEnabled(LogLevel logLevel) => true;
+
+    void ILogger.Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+        Func<TState, Exception?, string> formatter)
+    {
+        Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
     }
 }
 

@@ -119,9 +119,25 @@ internal sealed class AggregatorProcessor(
 
     private async Task RunFlushAsync(int id, TaskCompletionSource tcs, AggregatorDescriptor descriptor)
     {
+        // OnTimerFired's `_disposed` guard and this method's `_disposeCts.Token` read
+        // aren't atomic: a callback that passed the guard at T1 can still reach here
+        // after DisposeAsync has disposed `_disposeCts`. Wrap the Token read so the
+        // shutdown race surfaces as quiet cancellation instead of a spurious ERROR log.
+        CancellationToken token;
         try
         {
-            await FlushAggregatorAsync(descriptor, _disposeCts.Token).ConfigureAwait(false);
+            token = _disposeCts.Token;
+        }
+        catch (ObjectDisposedException)
+        {
+            tcs.TrySetCanceled();
+            _activeFlushes.TryRemove(id, out _);
+            return;
+        }
+
+        try
+        {
+            await FlushAggregatorAsync(descriptor, token).ConfigureAwait(false);
             tcs.TrySetResult();
         }
         catch (OperationCanceledException ex)
