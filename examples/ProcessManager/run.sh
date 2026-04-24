@@ -50,7 +50,7 @@ verification_complete() {
     grep -q "^SUCCESS:process-manager-orchestrator:inventory reserved for ${CORRELATION_ID}$" "$OUTPUT_LOG" 2>/dev/null &&
     grep -q "^SUCCESS:payment-worker:captured payment for ${CORRELATION_ID}$" "$OUTPUT_LOG" 2>/dev/null &&
     grep -q "^SUCCESS:process-manager-orchestrator:completed workflow ${CORRELATION_ID}$" "$OUTPUT_LOG" 2>/dev/null &&
-    docker compose -f "$SCRIPT_DIR/../docker-compose.yml" exec -T mongodb mongosh --quiet "$DATABASE_NAME" --eval "const doc = db.FulfillmentState.findOne({ 'Data.CorrelationId': UUID('${CORRELATION_ID}') }); if (!doc || !doc.Data.IsCompleted || !doc.Data.InventoryReserved || !doc.Data.PaymentCaptured) { quit(1); }" >/dev/null 2>&1
+    docker compose -f "$SCRIPT_DIR/../docker-compose.yml" exec -T mongodb mongosh --quiet "$DATABASE_NAME" --eval "const doc = db['ServiceConnect.Examples.ProcessManager.Contracts.FulfillmentState'].findOne({ 'Data.CorrelationId': UUID('${CORRELATION_ID}') }); if (!doc || !doc.Data.IsCompleted || !doc.Data.InventoryReserved || !doc.Data.PaymentCaptured) { quit(1); }" >/dev/null 2>&1
 }
 
 wait_for_completion() {
