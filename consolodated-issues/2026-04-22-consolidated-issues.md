@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 5/14 · Uncertain 1/2 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -135,11 +135,11 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Core
 
-- [ ] **`MessageTypeRegistry.TryResolve` CAS races with concurrent `Register` invalidation** — [MessageTypeRegistry.cs:16-45](../src/ServiceConnect/Services/MessageTypeRegistry.cs#L16-L45). Resolver may publish a stale frozen snapshot lacking a just-registered type; the type is then permanently unresolvable until the next `Register`. Startup-only in the default flow, reachable only if a user calls `Register` dynamically at runtime. [r3, r4]
-- [ ] **`ProcessManagerProcessor.ConfigureMapper` may fire twice under contention** — [ProcessManagerProcessor.cs:56-61](../src/ServiceConnect/Services/Processors/ProcessManagerProcessor.cs#L56-L61). `ConcurrentDictionary.GetOrAdd` factory is not exactly-once; any side effect in `ConfigureMapper` runs twice on concurrent first-dispatch. [r3]
-- [ ] **`HandlerScanner` silently swallows `ReflectionTypeLoadException`** — [HandlerScanner.cs:27-28](../src/ServiceConnect/Services/HandlerScanner.cs#L27-L28). Broken assembly yields partial scan with no startup warning; handler missing → "no handler for message" at runtime instead of a loud startup failure. [r3]
-- [ ] **`ProcessManagerTimeoutService.DisposeAsync` doesn't `Interlocked.Exchange` `_cts`** — [ProcessManagerTimeoutService.cs:163-173](../src/ServiceConnect/Services/ProcessManagerTimeoutService.cs#L163-L173). Racy `StopAsync + DisposeAsync` pair can double-Dispose the CTS. [r4]
-- [ ] **`AggregatorProcessor.DisposeAsync` flush-lock leak via late timer callbacks** — [AggregatorProcessor.cs:139, 190-225](../src/ServiceConnect/Services/Processors/AggregatorProcessor.cs). Bounded resource leak; timer-side semaphore waits fail fast via `_disposeCts.Token`. [r1, r3]
+- [x] (commit: 8fd055d4) **`MessageTypeRegistry.TryResolve` CAS races with concurrent `Register` invalidation** — [MessageTypeRegistry.cs:16-45](../src/ServiceConnect/Services/MessageTypeRegistry.cs#L16-L45). Resolver may publish a stale frozen snapshot lacking a just-registered type; the type is then permanently unresolvable until the next `Register`. Startup-only in the default flow, reachable only if a user calls `Register` dynamically at runtime. [r3, r4]
+- [x] (commit: 4deb4f12) **`ProcessManagerProcessor.ConfigureMapper` may fire twice under contention** — [ProcessManagerProcessor.cs:56-61](../src/ServiceConnect/Services/Processors/ProcessManagerProcessor.cs#L56-L61). `ConcurrentDictionary.GetOrAdd` factory is not exactly-once; any side effect in `ConfigureMapper` runs twice on concurrent first-dispatch. [r3]
+- [x] (commit: d5f7e08a) **`HandlerScanner` silently swallows `ReflectionTypeLoadException`** — [HandlerScanner.cs:27-28](../src/ServiceConnect/Services/HandlerScanner.cs#L27-L28). Broken assembly yields partial scan with no startup warning; handler missing → "no handler for message" at runtime instead of a loud startup failure. [r3]
+- [x] (commit: 11eb71a2) **`ProcessManagerTimeoutService.DisposeAsync` doesn't `Interlocked.Exchange` `_cts`** — [ProcessManagerTimeoutService.cs:163-173](../src/ServiceConnect/Services/ProcessManagerTimeoutService.cs#L163-L173). Racy `StopAsync + DisposeAsync` pair can double-Dispose the CTS. [r4]
+- [x] (commit: b80e99a8) **`AggregatorProcessor.DisposeAsync` flush-lock leak via late timer callbacks** — [AggregatorProcessor.cs:139, 190-225](../src/ServiceConnect/Services/Processors/AggregatorProcessor.cs). Bounded resource leak; timer-side semaphore waits fail fast via `_disposeCts.Token`. [r1, r3]
 
 ### RabbitMQ client
 
