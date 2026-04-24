@@ -100,6 +100,11 @@ internal sealed class AggregatorProcessor(
 
     private void OnTimerFired(AggregatorDescriptor descriptor)
     {
+        // Fast path: dispose has started. Short-circuit so the callback doesn't re-add to
+        // _activeFlushes or re-create a SemaphoreSlim in _flushLocks that DisposeAsync already
+        // cleared — such a lock would be unreachable and never disposed (bounded leak).
+        if (Volatile.Read(ref _disposed) != 0) return;
+
         // Fire and forget from timer callback — log any errors.
         // Use _disposeCts.Token so timer-fired flushes cancel on dispose.
         //

@@ -489,6 +489,90 @@ public class AggregatorProcessorTests
     }
 
     [Fact]
+    public async Task DisposeAsync_WithLateTimerCallback_DoesNotRecreateFlushLock()
+    {
+        // L5: A timer callback that fires after DisposeAsync has cleared _flushLocks
+        // would call _flushLocks.GetOrAdd(...) inside FlushAggregatorAsync, re-creating a
+        // SemaphoreSlim in a dictionary that is never read again — a bounded leak.
+        //
+        // The fix gates OnTimerFired on Volatile.Read(ref _disposed): a late callback
+        // returns before touching any state.
+        //
+        // White-box approach: manually set _disposed=1 via reflection (WITHOUT calling
+        // DisposeAsync so _disposeCts remains live and FlushAggregatorAsync can reach
+        // _flushLocks.GetOrAdd), then call OnTimerFired directly and wait briefly for any
+        // spawned background task to complete. Without the fix, _flushLocks.Count becomes 1.
+        // With the fix, the method returns immediately and _flushLocks stays empty.
+
+        var getSnapshotCalled = new TaskCompletionSource();
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        // GetSnapshotAsync signals when the flush lock has been acquired (i.e. GetOrAdd ran).
+        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns<string, CancellationToken>((_, _) =>
+            {
+                getSnapshotCalled.TrySetResult();
+                return Task.FromResult<IAggregatorSnapshot>(AggregatorSnapshot.Empty);
+            });
+        persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var aggregator = new AggTestTimedAggregator(tcs);
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(AggTestMessage), HandlerType = typeof(AggTestTimedAggregator) }
+        };
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
+        services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
+        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+
+        // Retrieve private fields / methods via reflection.
+        var processorType = typeof(AggregatorProcessor);
+        var disposedField = processorType.GetField("_disposed", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var flushLocksField = processorType.GetField("_flushLocks", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var onTimerFiredMethod = processorType.GetMethod("OnTimerFired", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+        var flushLocks = (System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim>)flushLocksField.GetValue(processor)!;
+
+        // Retrieve the descriptor for AggTestMessage (Timeout-based, not BatchSize-based).
+        var registryType = typeof(AggregatorRegistry);
+        var descriptorsField = registryType.GetField("_descriptors", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var descriptors = descriptorsField.GetValue(registry)!;
+        var descriptor = (AggregatorDescriptor)((System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<Type, AggregatorDescriptor>>)descriptors)
+            .First(kvp => kvp.Key == typeof(AggTestMessage)).Value;
+
+        // Manually mark disposed without calling DisposeAsync — this preserves _disposeCts
+        // so that _disposeCts.Token is accessible (not thrown) when RunFlushAsync runs.
+        // This replicates the exact window: DisposeAsync has set _disposed but hasn't yet
+        // called _disposeCts.Cancel() / _flushLocks.Clear().
+        disposedField.SetValue(processor, 1);
+
+        // _flushLocks should still be populated (we haven't cleared it).
+        // The processor is fully live at this point except _disposed=1.
+
+        // Simulate a late timer callback: call OnTimerFired with _disposed already set.
+        onTimerFiredMethod.Invoke(processor, new object[] { descriptor });
+
+        // Give the background RunFlushAsync task time to run if the guard is missing.
+        // With the fix: OnTimerFired returns immediately, nothing runs, _flushLocks stays empty.
+        // Without the fix: RunFlushAsync calls FlushAggregatorAsync which calls GetOrAdd.
+        await Task.Delay(200);
+
+        // Assert: _flushLocks must be empty — the late callback must not have created any entry.
+        Assert.Empty(flushLocks);
+    }
+
+    [Fact]
     public async Task TimerReuse_DoesNotAllocateNewTimerPerMessage()
     {
         var flushCount = 0;
