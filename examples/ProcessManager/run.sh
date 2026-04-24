@@ -72,23 +72,34 @@ wait_for_completion() {
 start_dependencies
 > "$OUTPUT_LOG"
 
+# Pre-build sequentially: the four projects share ServiceConnect.Interfaces, and
+# concurrent `dotnet run` races on the output DLL lock ("process cannot access
+# the file ... because it is being used by another process").
+for proj in \
+  ServiceConnect.Examples.ProcessManager.Orchestrator \
+  ServiceConnect.Examples.ProcessManager.InventoryWorker \
+  ServiceConnect.Examples.ProcessManager.PaymentWorker \
+  ServiceConnect.Examples.ProcessManager.Starter; do
+  dotnet build "$SCRIPT_DIR/src/$proj/$proj.csproj" >> "$OUTPUT_LOG" 2>&1
+done
+
 SC_EXAMPLES_WORKFLOW_QUEUE_NAME="$WORKFLOW_QUEUE_NAME" \
   SC_EXAMPLES_INVENTORY_QUEUE_NAME="$INVENTORY_QUEUE_NAME" \
   SC_EXAMPLES_PAYMENT_QUEUE_NAME="$PAYMENT_QUEUE_NAME" \
   SC_EXAMPLES_DATABASE_NAME="$DATABASE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.Orchestrator/ServiceConnect.Examples.ProcessManager.Orchestrator.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.Orchestrator/ServiceConnect.Examples.ProcessManager.Orchestrator.csproj" >> "$OUTPUT_LOG" 2>&1 &
 ORCHESTRATOR_PID=$!
 PIDS+=("$ORCHESTRATOR_PID")
 
 SC_EXAMPLES_WORKFLOW_QUEUE_NAME="$WORKFLOW_QUEUE_NAME" \
   SC_EXAMPLES_INVENTORY_QUEUE_NAME="$INVENTORY_QUEUE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.InventoryWorker/ServiceConnect.Examples.ProcessManager.InventoryWorker.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.InventoryWorker/ServiceConnect.Examples.ProcessManager.InventoryWorker.csproj" >> "$OUTPUT_LOG" 2>&1 &
 INVENTORY_PID=$!
 PIDS+=("$INVENTORY_PID")
 
 SC_EXAMPLES_WORKFLOW_QUEUE_NAME="$WORKFLOW_QUEUE_NAME" \
   SC_EXAMPLES_PAYMENT_QUEUE_NAME="$PAYMENT_QUEUE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.PaymentWorker/ServiceConnect.Examples.ProcessManager.PaymentWorker.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.PaymentWorker/ServiceConnect.Examples.ProcessManager.PaymentWorker.csproj" >> "$OUTPUT_LOG" 2>&1 &
 PAYMENT_PID=$!
 PIDS+=("$PAYMENT_PID")
 
@@ -99,7 +110,7 @@ fi
 
 SC_EXAMPLES_WORKFLOW_QUEUE_NAME="$WORKFLOW_QUEUE_NAME" \
   SC_EXAMPLES_CORRELATION_ID="$CORRELATION_ID" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.Starter/ServiceConnect.Examples.ProcessManager.Starter.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ProcessManager.Starter/ServiceConnect.Examples.ProcessManager.Starter.csproj" >> "$OUTPUT_LOG" 2>&1 &
 STARTER_PID=$!
 PIDS+=("$STARTER_PID")
 wait "$STARTER_PID"
