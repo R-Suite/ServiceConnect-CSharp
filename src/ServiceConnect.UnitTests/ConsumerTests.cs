@@ -187,14 +187,19 @@ public class ConsumerTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task DisposeAsync_WhenFirstHostThrows_StillDisposesRemainingHosts()
+    public async Task DisposeAsync_WhenMiddleHostThrows_StillDisposesAllOthers()
     {
-        // Arrange: inject two IAsyncDisposable stubs into _clients via reflection.
-        // hostA throws TimeoutException; hostB must still be disposed despite A's failure.
+        // Arrange: inject three IAsyncDisposable stubs into _clients via reflection.
+        // hostB throws TimeoutException; hostA and hostC must still be disposed.
+        // ConcurrentBag iteration order is unspecified, so asserting all three were
+        // invoked proves "continues past failure" rather than "happened to dispose
+        // others first".
         var hostA = new Mock<IAsyncDisposable>();
-        hostA.Setup(h => h.DisposeAsync()).Throws(new TimeoutException("AMQP 0-9-1 channel closed"));
+        hostA.Setup(h => h.DisposeAsync()).Returns(ValueTask.CompletedTask);
         var hostB = new Mock<IAsyncDisposable>();
-        hostB.Setup(h => h.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        hostB.Setup(h => h.DisposeAsync()).Throws(new TimeoutException("AMQP 0-9-1 channel closed"));
+        var hostC = new Mock<IAsyncDisposable>();
+        hostC.Setup(h => h.DisposeAsync()).Returns(ValueTask.CompletedTask);
 
         var connection = new Mock<IServiceConnectConnection>(MockBehavior.Strict);
 
@@ -211,10 +216,13 @@ public class ConsumerTests
         var clients = (ConcurrentBag<IAsyncDisposable>)clientsField!.GetValue(consumer)!;
         clients.Add(hostA.Object);
         clients.Add(hostB.Object);
+        clients.Add(hostC.Object);
 
         await consumer.DisposeAsync(); // must not throw
 
-        hostB.Verify(h => h.DisposeAsync(), Times.Once);
+        hostA.Verify(h => h.DisposeAsync(), Times.Once);
+        hostB.Verify(h => h.DisposeAsync(), Times.Once); // the failing one was still reached
+        hostC.Verify(h => h.DisposeAsync(), Times.Once); // not leaked past the failure
     }
 
     // -----------------------------------------------------------------------

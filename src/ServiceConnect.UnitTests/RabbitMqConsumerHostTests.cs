@@ -1447,8 +1447,14 @@ public class RabbitMqConsumerHostTests
         var (conn, _, _) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
+        var shutdownObserved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var logMessages = new System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)>();
-        var testLogger = new CapturingLogger(logMessages);
+        var testLogger = new CapturingLogger(logMessages, (level, message) =>
+        {
+            if (level >= Microsoft.Extensions.Logging.LogLevel.Warning
+                && message.Contains("shutdown", StringComparison.OrdinalIgnoreCase))
+                shutdownObserved.TrySetResult(true);
+        });
         var retry = new MessageRetryHandler(3, "err", testLogger);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
@@ -1463,8 +1469,7 @@ public class RabbitMqConsumerHostTests
         // HandleBasicCancelAsync triggers UnregisteredAsync (broker-initiated cancel).
         await consumer.HandleBasicCancelAsync("tag");
 
-        // Give the async handler a moment to run.
-        await Task.Delay(50);
+        await shutdownObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         var unregisteredLog = logMessages.FirstOrDefault(m =>
             m.Level >= Microsoft.Extensions.Logging.LogLevel.Warning
@@ -1483,8 +1488,14 @@ public class RabbitMqConsumerHostTests
         var (conn, consumerChannel, _) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
+        var shutdownObserved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var logMessages = new System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)>();
-        var testLogger = new CapturingLogger(logMessages);
+        var testLogger = new CapturingLogger(logMessages, (level, message) =>
+        {
+            if (level >= Microsoft.Extensions.Logging.LogLevel.Warning
+                && message.Contains("shutdown", StringComparison.OrdinalIgnoreCase))
+                shutdownObserved.TrySetResult(true);
+        });
         var retry = new MessageRetryHandler(3, "err", testLogger);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
@@ -1496,9 +1507,7 @@ public class RabbitMqConsumerHostTests
             RabbitMQ.Client.ShutdownInitiator.Peer, 320, "Channel closed by broker");
         consumerChannel.Raise(c => c.ChannelShutdownAsync += null, consumerChannel.Object, shutdownArgs);
 
-        // Give the async handler a moment to run.
-        await Task.Yield();
-        await Task.Delay(50);
+        await shutdownObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
 
         var channelShutdownLog = logMessages.FirstOrDefault(m =>
             m.Level >= Microsoft.Extensions.Logging.LogLevel.Warning
@@ -1511,14 +1520,20 @@ public class RabbitMqConsumerHostTests
 
     /// <summary>
     /// Minimal ILogger that captures log messages for assertion.
+    /// Optionally accepts an <paramref name="onLog"/> callback invoked after each log entry
+    /// (useful for TCS-based synchronisation without introducing Task.Delay races).
     /// </summary>
-    private sealed class CapturingLogger(System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> bag) : Microsoft.Extensions.Logging.ILogger
+    private sealed class CapturingLogger(
+        System.Collections.Concurrent.ConcurrentBag<(Microsoft.Extensions.Logging.LogLevel Level, string Message)> bag,
+        Action<Microsoft.Extensions.Logging.LogLevel, string>? onLog = null) : Microsoft.Extensions.Logging.ILogger
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
         public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            bag.Add((logLevel, formatter(state, exception)));
+            var message = formatter(state, exception);
+            bag.Add((logLevel, message));
+            onLog?.Invoke(logLevel, message);
         }
     }
 }

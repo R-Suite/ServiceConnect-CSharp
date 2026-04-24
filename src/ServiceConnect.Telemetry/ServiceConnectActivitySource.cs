@@ -193,11 +193,16 @@ public static class ServiceConnectActivitySource
     }
 
     /// <summary>
-    /// Marks <paramref name="activity"/> as failed: sets its status to
-    /// <see cref="ActivityStatusCode.Error"/> and records <paramref name="exception"/>
-    /// as an OTel event so error-rate dashboards reflect reality.
-    /// Safe to call with a <c>null</c> activity (e.g. when telemetry is disabled).
+    /// Marks <paramref name="activity"/> as errored with OTel-semantic-convention exception metadata.
+    /// No-op when <paramref name="activity"/> is null, so callers don't need their own null guards.
     /// </summary>
+    /// <remarks>
+    /// Call from inside a catch block (immediately before <c>throw</c>) so the activity's status
+    /// description reflects the real failure. Exception messages may contain sensitive content
+    /// (connection strings, user data) — trace-sanitisation is the caller's responsibility.
+    /// Not currently wired up by the Bus/Producer/Consumer host paths; exposed as a public
+    /// integration point for downstream consumers instrumenting their own handler pipelines.
+    /// </remarks>
     public static void SetError(Activity? activity, Exception exception)
     {
         if (activity is null) return;

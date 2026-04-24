@@ -635,19 +635,8 @@ namespace ServiceConnect.UnitTests
         [Fact]
         public async Task FindDataAsync_ConcurrentKeyValueStoreRemoval_DoesNotNre()
         {
-            // Arrange: shared CacheProvider exposed as both ICacheProvider and IKeyValueStore.
-            var provider = new CacheProvider();
+            // Arrange: use InMemoryPersistenceState directly so we hold the IKeyValueStore ref.
             var cache = new ProcessManagerPredicateCache();
-            var state = new InMemoryPersistenceState(TimeProvider.System);
-
-            // We need a finder backed by a provider we can also poke as IKeyValueStore.
-            // InMemoryProcessManagerFinder's internal constructor takes a state; we inject
-            // a state whose Provider is our observable CacheProvider indirectly.
-            // Instead, use the public string-string constructor which creates its own state,
-            // then drive the race through the IKeyValueStore facet of an *external* provider.
-            //
-            // Simplest reliable approach: use InMemoryPersistenceState directly (internal)
-            // with a custom CacheProvider we hold a reference to.
             var sharedState = new InMemoryPersistenceState(TimeProvider.System);
             var finder = new InMemoryProcessManagerFinder(cache, sharedState);
             var kvStore = (IKeyValueStore)sharedState.Provider;

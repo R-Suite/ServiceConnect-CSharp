@@ -274,7 +274,7 @@ public class MongoDbProcessManagerFinderTests
     // the operation result — concurrency guards should be disabled with a one-time Warning.
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task UpdateDataAsync_WithW0_DoesNotSilentlySwallowResult()
+    public async Task UpdateDataAsync_WithW0_DoesNotThrow()
     {
         var (finder, connectionString, dbName) = CreateFinderWithWriteConcern(WriteConcern.Unacknowledged);
 

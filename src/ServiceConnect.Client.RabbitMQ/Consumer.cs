@@ -195,7 +195,7 @@ public sealed class Consumer : IConsumer
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to dispose consumer host — continuing");
+                _logger.LogWarning(ex, "Failed to dispose consumer host - continuing");
             }
         }
 

@@ -112,6 +112,9 @@ public class BrokerInitiatedCancelTests
         Assert.Contains("shutdown", shutdownMessage, StringComparison.OrdinalIgnoreCase);
 
         // Also assert that DisposeAsync completes cleanly (no hang) within 15 s.
+        // Note: bus.DisposeAsync() is called explicitly here (before provider.DisposeAsync) as
+        // a behavioural assertion on the timeout bound; this relies on Connection.DisposeAsync
+        // being idempotent since the provider scope will dispose it again via DI teardown.
         using var disposeCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var disposeTask = bus.DisposeAsync().AsTask();
         var completed = await Task.WhenAny(disposeTask, Task.Delay(Timeout.Infinite, disposeCts.Token));

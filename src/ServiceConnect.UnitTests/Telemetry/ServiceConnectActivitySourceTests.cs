@@ -134,8 +134,9 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Contains(activity.SpanId.ToString(), traceparent);
     }
 
+    // Companion: Publish_WhenPublishTelemetryDisabled_StillInjectsTraceparentFromAmbient covers the case where an ambient span IS present.
     [Fact]
-    public void Publish_WhenTelemetryDisabled_DoesNotTouchHeaders()
+    public void Publish_WhenTelemetryDisabled_AndNoAmbientActivity_DoesNotTouchHeaders()
     {
         ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
 
@@ -413,11 +414,19 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         ServiceConnectActivitySource.SetError(activity, ex);
 
         Assert.Equal(ActivityStatusCode.Error, activity!.Status);
+        // SetStatus(Error, message) populates StatusDescription with the exception message.
+        Assert.Equal(ex.Message, activity.StatusDescription);
 
         var exceptionEvent = activity.Events.FirstOrDefault(e => e.Name == "exception");
         Assert.NotEqual(default, exceptionEvent);
         var exTypeTag = exceptionEvent.Tags.FirstOrDefault(t => t.Key == "exception.type").Value?.ToString();
         Assert.Equal(typeof(InvalidOperationException).FullName, exTypeTag);
+        // exception.message must match so error-rate dashboards show the right message.
+        var exMessageTag = exceptionEvent.Tags.FirstOrDefault(t => t.Key == "exception.message").Value?.ToString();
+        Assert.Equal(ex.Message, exMessageTag);
+        // exception.stacktrace must be present (exact format is BCL-defined, so only check non-null).
+        var exStackTag = exceptionEvent.Tags.FirstOrDefault(t => t.Key == "exception.stacktrace").Value?.ToString();
+        Assert.NotNull(exStackTag);
     }
 
     [Fact]
