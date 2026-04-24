@@ -163,12 +163,15 @@ public sealed class ProcessManagerTimeoutService(
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        _cts?.Cancel();
+        // Mirror StopAsync: Interlocked.Exchange claims exclusive ownership of _cts so a racing
+        // StopAsync+DisposeAsync pair can't both call Dispose on the same CTS.
+        var cts = Interlocked.Exchange(ref _cts, null);
+        cts?.Cancel();
         if (_pollingTask != null)
         {
             try { await _pollingTask; }
             catch (OperationCanceledException) { }
         }
-        _cts?.Dispose();
+        cts?.Dispose();
     }
 }

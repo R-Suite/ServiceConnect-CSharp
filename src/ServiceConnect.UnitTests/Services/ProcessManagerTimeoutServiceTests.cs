@@ -568,4 +568,38 @@ public class ProcessManagerTimeoutServiceTests
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => sut.PollOnceAsync());
     }
+
+    [Fact]
+    public async Task StopAsyncAndDisposeAsync_ConcurrentlyRaced_DoesNotDoubleDisposeCts()
+    {
+        // L4: Both StopAsync and DisposeAsync take responsibility for _cts.Dispose(). Without
+        // matching Interlocked.Exchange in DisposeAsync, a race can have both call Dispose on the
+        // same CTS, raising ObjectDisposedException.
+        // Note: the race window is narrow; RED phase may not fire on every run of unfixed code.
+        for (var trial = 0; trial < 50; trial++)
+        {
+            var mockConfig = new Mock<IBusConfiguration>();
+            mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+            var mockFinder = new Mock<ITimeoutStore>();
+            mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()))
+                      .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [], NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30) });
+
+            var sut = new ProcessManagerTimeoutService(
+                mockConfig.Object,
+                new Lazy<IBus>(() => new Mock<IBus>().Object),
+                mockFinder.Object,
+                new Mock<ILogger<ProcessManagerTimeoutService>>().Object);
+
+            await sut.StartAsync(CancellationToken.None);
+
+            var stopTask = Task.Run(() => sut.StopAsync(CancellationToken.None));
+            var disposeTask = Task.Run(async () => await sut.DisposeAsync());
+
+            var stopEx = await Record.ExceptionAsync(async () => await stopTask);
+            var disposeEx = await Record.ExceptionAsync(async () => await disposeTask);
+
+            Assert.Null(stopEx);
+            Assert.Null(disposeEx);
+        }
+    }
 }
