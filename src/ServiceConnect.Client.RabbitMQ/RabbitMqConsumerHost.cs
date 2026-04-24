@@ -124,7 +124,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             await _model.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
 
         Volatile.Write(ref _shutdownTimedOut, 0);
+        // Dispose any CTS replaced here — on first call these are the field-initialised instances,
+        // on restart they are the prior cycle's CTSes. Leaving them undisposed leaks one per
+        // start-stop-start cycle.
+        _shutdownPublishCts.Dispose();
         _shutdownPublishCts = new CancellationTokenSource();
+        _deliveryCts.Dispose();
         _deliveryCts = new CancellationTokenSource();
         _deliveryToken = _deliveryCts.Token;
         // The lambda captures the delivery *token* (not _deliveryCts.Token accessor) so a

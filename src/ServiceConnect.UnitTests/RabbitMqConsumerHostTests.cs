@@ -1518,6 +1518,33 @@ public class RabbitMqConsumerHostTests
             "This confirms M13: ChannelShutdownAsync event is not subscribed.");
     }
 
+    [Fact]
+    public async Task StartConsumingAsync_DisposesPreviouslyAssignedCtsFields()
+    {
+        // L6: Field-initialised CTS instances and any CTS from a previous start must be
+        // disposed before being replaced in StartConsumingAsync — otherwise restart leaks.
+        var (conn, _, _) = MockConnection();
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+
+        var deliveryCtsField = typeof(RabbitMqConsumerHost)
+            .GetField("_deliveryCts", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var shutdownCtsField = typeof(RabbitMqConsumerHost)
+            .GetField("_shutdownPublishCts", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var initialDeliveryCts = (CancellationTokenSource)deliveryCtsField.GetValue(host)!;
+        var initialShutdownCts = (CancellationTokenSource)shutdownCtsField.GetValue(host)!;
+
+        await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "test-queue");
+
+        Assert.Throws<ObjectDisposedException>(() => initialDeliveryCts.Cancel());
+        Assert.Throws<ObjectDisposedException>(() => initialShutdownCts.Cancel());
+
+        await host.DisposeAsync();
+    }
+
     /// <summary>
     /// Minimal ILogger that captures log messages for assertion.
     /// Optionally accepts an <paramref name="onLog"/> callback invoked after each log entry
