@@ -19,6 +19,11 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     private readonly TimeProvider _timeProvider;
     private volatile bool _indexesEnsured;
 
+    // Mongo returns these error codes when concurrent index creation detects that an index
+    // with the same keys or options already exists. Either means "someone else did this for us";
+    // mark ensured-true and continue.
+    private static readonly HashSet<int> BenignIndexCodes = new() { 85, 86 };
+
     /// <summary>
     /// Creates a persistor that stores aggregator data in the default <c>Aggregator</c> collection.
     /// </summary>
@@ -233,10 +238,11 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             await _collection.Indexes.CreateManyAsync([nameIndex, nameCorrelationIndex]).ConfigureAwait(false);
             _indexesEnsured = true;
         }
-        catch
+        catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
         {
-            // Leave the flag false so a subsequent call retries.
-            throw;
+            // Another process / thread created the same index concurrently. Their work is ours;
+            // mark ensured to avoid a round-trip on every subsequent write.
+            _indexesEnsured = true;
         }
     }
 

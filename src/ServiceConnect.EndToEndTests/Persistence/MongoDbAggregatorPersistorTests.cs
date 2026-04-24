@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using MongoDB.Bson;
+using MongoDB.Driver;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.Persistence.MongoDb;
 using ServiceConnect.Services;
@@ -129,5 +131,41 @@ public class MongoDbAggregatorPersistorTests
 
         var labels = result.Select(o => (string)o.GetType().GetProperty("Label")!.GetValue(o)!).ToArray();
         Assert.Equal(names, labels);
+    }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task EnsureIndexes_ConcurrentProcessCreatedSameIndex_DoesNotThrow()
+    {
+        // L8: Benign MongoCommandException 85/86 from concurrent index creation must not
+        // propagate as a persistence failure. Pre-create the compound index with a different
+        // Name so the persistor's CreateManyAsync hits Code 85 (IndexOptionsConflict).
+        var dbName = _fixture.GetUniqueDatabaseName();
+        var options = new MongoDbPersistenceOptions
+        {
+            ConnectionString = _fixture.MongoDbConnectionString,
+            DatabaseName = dbName,
+        };
+        var client = MongoClientFactory.Create(options);
+        var database = client.GetDatabase(options.DatabaseName);
+        var collection = database.GetCollection<BsonDocument>("TestAggregatorConflict");
+
+        var conflictingKeys = Builders<BsonDocument>.IndexKeys
+            .Ascending("Name")
+            .Ascending("DataBson.CorrelationId");
+        await collection.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
+            conflictingKeys,
+            new CreateIndexOptions { Name = "conflicting_name_correlation" }));
+
+        var registry = new MessageTypeRegistry();
+        var item = new { CorrelationId = Guid.NewGuid(), Value = "test" };
+        registry.Register(item.GetType());
+        var persistor = new MongoDbAggregatorPersistor(
+            client, options, "TestAggregatorConflict",
+            NullLogger<MongoDbAggregatorPersistor>.Instance, registry);
+
+        // First write triggers EnsureIndexesAsync; must NOT throw despite the conflict.
+        var ex = await Record.ExceptionAsync(() => persistor.InsertDataAsync(item, "batch-l8"));
+        Assert.Null(ex);
     }
 }
