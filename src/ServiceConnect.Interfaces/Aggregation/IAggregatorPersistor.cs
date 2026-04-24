@@ -35,6 +35,12 @@ public interface IAggregatorPersistor
     /// <param name="name">The logical aggregator name.</param>
     /// <param name="correlationId">The correlation id of the stored message to remove.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <exception cref="Exceptions.ConcurrencyException">
+    /// Thrown by implementations that detect a no-op delete (the (name, correlationId) row did not exist).
+    /// Callers should treat this as a "row was concurrently removed or caller supplied a mismatched key" signal
+    /// distinct from a structural persistence failure. Not all implementations raise this — in-memory
+    /// stores may silently no-op.
+    /// </exception>
     Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default);
 
     /// <summary>

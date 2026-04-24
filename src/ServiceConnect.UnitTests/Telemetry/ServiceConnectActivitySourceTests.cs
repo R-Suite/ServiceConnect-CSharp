@@ -496,6 +496,46 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal("queue-a,queue-b send", activity!.DisplayName);
         Assert.Equal("queue-a,queue-b", activity.GetTagItem(MessagingDestination));
     }
+
+    [Fact]
+    public void Send_EndPointsContainsWhitespaceEntries_FiltersBeforeJoining()
+    {
+        // Holistic follow-up: a stray ""/null/whitespace entry in EndPoints must not leak
+        // into traces as "queue-a,,queue-b". Confirm whitespace entries drop out of the
+        // joined destination tag and display name.
+        var args = new SendEventArgs
+        {
+            EndPoint = "",
+            EndPoints = new[] { "queue-a", "", "   ", "queue-b" },
+            Headers = new Dictionary<string, string>(),
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("queue-a,queue-b send", activity!.DisplayName);
+        Assert.Equal("queue-a,queue-b", activity.GetTagItem(MessagingDestination));
+    }
+
+    [Fact]
+    public void Send_EndPointsAllWhitespace_FallsBackToAnonymous()
+    {
+        // Holistic follow-up: if filtering empties the list, the send must be tagged
+        // anonymous rather than producing a spurious empty-string destination.
+        var args = new SendEventArgs
+        {
+            EndPoint = "",
+            EndPoints = new[] { "", "   " },
+            Headers = new Dictionary<string, string>(),
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("anonymous send", activity!.DisplayName);
+        Assert.Null(activity.GetTagItem(MessagingDestination));
+        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+    }
 }
 
 [Collection("ActivityListener")]
