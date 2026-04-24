@@ -111,8 +111,9 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### InMemory persistence
 
-- [x] (commit: 503f4271eb5039113b52e53dd257bcdfb7a9d3a5) **`Provider.Keys()` races with external `IKeyValueStore` callers → NRE** — [InMemoryProcessManagerFinder.cs:93-105](../src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs#L93-L105)
+- [x] (commit: 503f4271eb5039113b52e53dd257bcdfb7a9d3a5, 6501e3f7) **`Provider.Keys()` races with external `IKeyValueStore` callers → NRE** — [InMemoryProcessManagerFinder.cs:93-105](../src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs#L93-L105)
   The `CacheProvider` backing the finder is also registered as `IKeyValueStore`. Finder iterates `Provider.Keys()` under the finder's read lock; external KV callers are not gated by that lock. A removal between the `Keys()` snapshot and `Get(...)` makes `Get` return null, then the fallback at line 105 calls `value.GetType()` → NRE. [r3, r4]
+  - Follow-up `6501e3f7` extended the KV-race guard to `UpdateDataAsync`/`DeleteDataAsync` (same `Contains → Get → null.GetType()` pattern at lines 218/226/230 and 272/278/282) with deterministic Mock-based regression tests.
 
 ### Telemetry
 
