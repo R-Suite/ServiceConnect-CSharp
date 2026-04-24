@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 10/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 13/14 · Uncertain 1/2 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -154,9 +154,9 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### InMemory persistence
 
-- [ ] **`CacheProvider.Keys<TKey>()` exact-type match loses covariance** — [CacheProvider.cs:138-145](../src/ServiceConnect.Persistence.InMemory/CacheProvider.cs#L138-L145). `Keys<object>()` returns empty; any request by a base/interface type is dropped. Surprising public-API behaviour. [r3]
-- [ ] **`PredicateCacheKey` ctor has no null guard on `propertiesHierarchy`** — [ProcessManagerPredicateCache.cs:24-47](../src/ServiceConnect.Persistence.InMemory/ProcessManagerPredicateCache.cs#L24-L47). Null hierarchy triggers NRE inside `Equals`/`GetHashCode` on the hot path instead of a clear `ArgumentNullException`. [r1]
-- [ ] **`DeepClone` loses polymorphic subclass data inside collections** — [DeepClone.cs:14-32](../src/ServiceConnect.Persistence.InMemory/DeepClone.cs). Top-level object round-trips fine (runtime type passed explicitly); members inside collections or base-typed fields serialize at the declared type under `TypeNameHandling=None` → subclass data silently lost. Bites sagas with polymorphic state. [r4]
+- [x] (commit: 7874d550) **`CacheProvider.Keys<TKey>()` exact-type match loses covariance** — [CacheProvider.cs:138-145](../src/ServiceConnect.Persistence.InMemory/CacheProvider.cs#L138-L145). `Keys<object>()` returns empty; any request by a base/interface type is dropped. Surprising public-API behaviour. [r3]
+- [x] (commit: a332c180) **`PredicateCacheKey` ctor has no null guard on `propertiesHierarchy`** — [ProcessManagerPredicateCache.cs:24-47](../src/ServiceConnect.Persistence.InMemory/ProcessManagerPredicateCache.cs#L24-L47). Null hierarchy triggers NRE inside `Equals`/`GetHashCode` on the hot path instead of a clear `ArgumentNullException`. [r1]
+- [x] (commit: 0d33199e) **`DeepClone` loses polymorphic subclass data inside collections** — [DeepClone.cs:14-32](../src/ServiceConnect.Persistence.InMemory/DeepClone.cs). Top-level object round-trips fine (runtime type passed explicitly); members inside collections or base-typed fields serialize at the declared type under `TypeNameHandling=None` → subclass data silently lost. Bites sagas with polymorphic state. [r4]
 
 ### Telemetry
 
