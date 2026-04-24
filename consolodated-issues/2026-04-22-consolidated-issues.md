@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 14/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 14/14 · Uncertain 1/3 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -172,4 +172,7 @@ Each entry names the specific test that would clinch the finding. These are kept
 
 - [ ] **`AggregatorProcessor` timer-fired flush accesses disposed `_disposeCts`** — [AggregatorProcessor.cs:190-225](../src/ServiceConnect/Services/Processors/AggregatorProcessor.cs#L190-L225)
   If a timer callback fires after `DisposeAsync` snapshots `_activeFlushes` but before `_disposeCts` is disposed, its `RunFlushAsync` accesses `_disposeCts.Token` on a disposed CTS → `ObjectDisposedException`. Narrow window.
+
+- [ ] **`IAggregatorPersistor.RemoveDataAsync` no-op semantics diverge between InMemory and MongoDb** — [IAggregatorPersistor.cs:38-44](../src/ServiceConnect.Interfaces/Aggregation/IAggregatorPersistor.cs#L38-L44), [MongoDbAggregatorPersistor.cs:145-170](../src/ServiceConnect.Persistence.MongoDb/MongoDbAggregatorPersistor.cs#L145-L170), [InMemoryAggregatorPersistor.cs:94-113](../src/ServiceConnect.Persistence.InMemory/InMemoryAggregatorPersistor.cs#L94-L113)
+  L10 made the MongoDb implementation raise `ConcurrencyException` when a `DeleteOneAsync` matches zero rows, but `InMemoryAggregatorPersistor.RemoveDataAsync` still silently no-ops. The two implementations of the same interface now disagree on whether a mismatched `(name, correlationId)` is an error. Either: (a) update `InMemoryAggregatorPersistor` to mirror the MongoDb behavior, (b) add a "wrong correlationId, right name" coverage test once the decision is made, and (c) decide whether the same contract should apply to `RemoveSnapshotAsync` across persistors. Surfaced by Phase 3 holistic review after L10 shipped.
   **Test to write (unit):** use `FakeTimeProvider` in `ServiceConnect.UnitTests/Services/Processors/AggregatorProcessorTests`. Arrange a timer that fires between the `_activeFlushes` snapshot and the `_disposeCts.Dispose()` call in `DisposeAsync` (manual synchronisation via `TaskCompletionSource` handshake), assert no unhandled `ObjectDisposedException` escapes. [r3]
