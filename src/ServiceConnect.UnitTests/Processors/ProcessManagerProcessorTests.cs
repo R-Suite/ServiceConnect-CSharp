@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -287,6 +288,54 @@ public class ProcessManagerProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_ConcurrentFirstDispatch_ConfiguresMapperExactlyOnce()
+    {
+        // L2: GetOrAdd's factory is not exactly-once; a Lazy<T> wrapper is required to ensure
+        // ConfigureMapper is invoked at most once even under concurrent first dispatch.
+        // The static MapperCache is cleared via reflection to isolate this trial.
+
+        // Reset the shared counter on the dummy handler before running.
+        DummyPmHandler.ResetCounter();
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(DummyPmMessage),
+            HandlerType = typeof(DummyPmHandler)
+        });
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IProcessManagerFinder>(new Mock<IProcessManagerFinder>().Object);
+        // Register a single handler instance shared by all concurrent invocations.
+        services.AddSingleton<IProcessHandler<DummyPmData, DummyPmMessage>>(new DummyPmHandler());
+        var provider = services.BuildServiceProvider();
+
+        var processor = new ProcessManagerProcessor(
+            registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object),
+            NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig,
+            new ConsumeContextPool(), new ConsumeContextAccessor());
+
+        // Clear the static MapperCache to ensure this test sees a genuine first dispatch.
+        var cacheField = typeof(ProcessManagerProcessor)
+            .GetField("MapperCache", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var cache = cacheField.GetValue(null)!;
+        cache.GetType().GetMethod("Clear")!.Invoke(cache, null);
+
+        var message = new DummyPmMessage(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = ReadOnlyMemory<byte>.Empty };
+
+        // Dispatch 16 concurrent calls — all racing to populate the empty MapperCache entry.
+        var tasks = Enumerable.Range(0, 16)
+            .Select(_ => processor.ProcessAsync(
+                ReadOnlyMemory<byte>.Empty, typeof(DummyPmMessage), message, headers, envelope))
+            .ToArray();
+        await Task.WhenAll(tasks);
+
+        var configureCount = DummyPmHandler.ConfigureCount;
+        Assert.Equal(1, configureCount);
+    }
+
+    [Fact]
     public async Task ProcessAsync_SetsAmbientConsumeHeadersDuringHandlerAndClearsThemAfterward()
     {
         var timeoutStore = new PmCapturingTimeoutStore();
@@ -465,4 +514,37 @@ file static class PmTestBusFactory
             timeoutStore: timeoutStore,
             consumeContextAccessor: accessor);
     }
+}
+
+// L2 fixtures — used only by ProcessAsync_ConcurrentFirstDispatch_ConfiguresMapperExactlyOnce
+file class DummyPmMessage : Message
+{
+    public DummyPmMessage(Guid correlationId) : base(correlationId) { }
+}
+
+file class DummyPmData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+}
+
+file class DummyPmHandler : IProcessHandler<DummyPmData, DummyPmMessage>
+{
+    private static int _configureCount;
+
+    public static int ConfigureCount => _configureCount;
+
+    public static void ResetCounter() => Interlocked.Exchange(ref _configureCount, 0);
+
+    public IConsumeContext Context { get; set; } = null!;
+
+    public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
+    {
+        Interlocked.Increment(ref _configureCount);
+        // Widen the race window so contending threads are more likely to see the un-cached entry.
+        Thread.SpinWait(50_000);
+        mapper.ConfigureMapping<DummyPmData, DummyPmMessage>(d => d.CorrelationId, m => m.CorrelationId);
+    }
+
+    public Task HandleAsync(DummyPmMessage message, DummyPmData data)
+        => Task.CompletedTask;
 }

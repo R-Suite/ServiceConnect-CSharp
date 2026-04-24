@@ -18,9 +18,12 @@ internal sealed class ProcessManagerProcessor(
     ConsumeContextAccessor consumeContextAccessor,
     IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null) : IMessageProcessor
 {
-    // Cached mapper per handler interface type. ConfigureMapper compiles expression lambdas
-    // that are identical for a given handler type, so we only pay the cost once.
-    private static readonly ConcurrentDictionary<Type, IProcessManagerPropertyMapper> MapperCache = new();
+    // Lazy<T> wrapper ensures the factory delegate runs exactly once even if
+    // ConcurrentDictionary.GetOrAdd invokes its factory multiple times under contention —
+    // losing Lazy instances are thrown away before Value is ever accessed, so their
+    // ConfigureMapper side-effects never execute. LazyThreadSafetyMode.ExecutionAndPublication
+    // is the default, which is exactly what we want.
+    private static readonly ConcurrentDictionary<Type, Lazy<IProcessManagerPropertyMapper>> MapperCache = new();
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
 
@@ -54,11 +57,12 @@ internal sealed class ProcessManagerProcessor(
         }
 
         var mapper = MapperCache.GetOrAdd(descriptor.ProcessHandlerInterfaceType, _ =>
-        {
-            var m = new DefaultProcessManagerPropertyMapper();
-            descriptor.ConfigureMapper(handler, m);
-            return m;
-        });
+            new Lazy<IProcessManagerPropertyMapper>(() =>
+            {
+                var m = new DefaultProcessManagerPropertyMapper();
+                descriptor.ConfigureMapper(handler, m);
+                return m;
+            })).Value;
 
         // Run the find→invoke→update cycle exactly once per delivery. A previous version
         // looped on ConcurrencyException, but every retry re-invoked the user's handler —
