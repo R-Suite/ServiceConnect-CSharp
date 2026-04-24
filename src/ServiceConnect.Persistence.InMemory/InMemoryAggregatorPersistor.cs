@@ -1,4 +1,5 @@
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Exceptions;
 
 namespace ServiceConnect.Persistence.InMemory;
 
@@ -94,6 +95,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     public Task RemoveDataAsync(string name, Guid correlationId, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        bool removed = false;
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
@@ -104,11 +106,19 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
                     if (list[index].Data is Message message && message.CorrelationId == correlationId)
                     {
                         list.RemoveAt(index);
+                        removed = true;
                         break;
                     }
                 }
             }
         }
+        // Mirror MongoDbAggregatorPersistor's no-op-delete contract so callers across persistors
+        // can distinguish a concurrent-removal race from a mismatched-key bug. The InMemoryProcessManagerFinder
+        // already raises ConcurrencyException on DeleteDataAsync no-ops; keeping aggregator behaviour
+        // aligned prevents a silent divergence between persistor families.
+        if (!removed)
+            throw new ConcurrencyException(
+                $"Aggregator row not found: Name='{name}', CorrelationId='{correlationId}'. Row was concurrently removed or caller passed a mismatched key.");
         return Task.CompletedTask;
     }
 

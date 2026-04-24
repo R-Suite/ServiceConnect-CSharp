@@ -201,4 +201,22 @@ public class MongoDbAggregatorPersistorTests
         await Assert.ThrowsAsync<ConcurrencyException>(
             () => persistor.RemoveDataAsync("nonexistent-agg", Guid.NewGuid(), CancellationToken.None));
     }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task RemoveDataAsync_NameExistsButCorrelationIdMismatch_ThrowsConcurrencyException()
+    {
+        // Companion to RowNotFound: the name bucket exists (so EnsureIndexes/collection isn't empty)
+        // but no row carries the supplied correlationId. Silent no-op here would mask the same class
+        // of data-integrity bug the RowNotFound test guards against.
+        var registry = new MessageTypeRegistry();
+        var existing = new { CorrelationId = Guid.NewGuid(), Value = "existing" };
+        registry.Register(existing.GetType());
+        var persistor = CreatePersistor(registry: registry);
+
+        await persistor.InsertDataAsync(existing, "batch-mismatch");
+
+        await Assert.ThrowsAsync<ConcurrencyException>(
+            () => persistor.RemoveDataAsync("batch-mismatch", Guid.NewGuid(), CancellationToken.None));
+    }
 }

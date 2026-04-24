@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -181,13 +182,27 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task RemoveData_WhenKeyDoesNotExist_DoesNotThrow()
+        public async Task RemoveData_WhenKeyDoesNotExist_ThrowsConcurrencyException()
         {
+            // Align InMemory with MongoDb (L10) and InMemoryProcessManagerFinder (M17): a no-op delete
+            // on a mismatched key must surface as ConcurrencyException so callers can distinguish a
+            // concurrent-removal race from a structural persistence failure.
             IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
 
-            var ex = await Record.ExceptionAsync(() => persistor.RemoveDataAsync("nonexistent-key", Guid.NewGuid(), CancellationToken.None));
+            await Assert.ThrowsAsync<ConcurrencyException>(
+                () => persistor.RemoveDataAsync("nonexistent-key", Guid.NewGuid(), CancellationToken.None));
+        }
 
-            Assert.Null(ex);
+        [Fact]
+        public async Task RemoveData_WhenKeyExistsButCorrelationIdMismatch_ThrowsConcurrencyException()
+        {
+            // The (name, correlationId) row not matching any entry — even when the name bucket exists —
+            // is the exact case that was silently no-op'ing. Mirror the MongoDb contract.
+            IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+            await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "batch-mismatch", CancellationToken.None);
+
+            await Assert.ThrowsAsync<ConcurrencyException>(
+                () => persistor.RemoveDataAsync("batch-mismatch", Guid.NewGuid(), CancellationToken.None));
         }
 
         [Fact]
