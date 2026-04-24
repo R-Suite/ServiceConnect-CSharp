@@ -14,8 +14,14 @@ internal static class DeepClone
     private static readonly JsonSerializerSettings Settings = new()
     {
         ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-        // TypeNameHandling.None avoids the Newtonsoft deserialization gadget surface.
-        TypeNameHandling = TypeNameHandling.None,
+        // TypeNameHandling.Auto writes $type metadata only when the runtime type differs
+        // from the declared type — necessary so polymorphic payloads inside collections
+        // (List<Animal> containing Dog, base-typed reference fields) round-trip with
+        // subclass data intact. Deserialization-gadget concerns don't apply here: JSON
+        // produced by this clone never leaves the process; serializer and deserializer
+        // run in the same AppDomain, same moment.
+        TypeNameHandling = TypeNameHandling.Auto,
+        TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
         // Preserve DateTimeKind across round-trip so timestamps don't drift when an
         // in-memory saga is stored/retrieved across time zones in tests.
         DateTimeZoneHandling = DateTimeZoneHandling.RoundtripKind,
