@@ -329,10 +329,11 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     }
 
     [Fact]
-    public void Send_WithNullMessage_DoesNotInjectTraceparent()
+    public void Send_WithNullMessage_StillInjectsTraceparentHeader()
     {
-        // Send.Message can be null (caller-side path where telemetry is invoked with
-        // only endpoint info). Ensure no trace header is injected in that branch.
+        // M19: Send must inject traceparent even when Message is null so that
+        // payload-less sends still propagate W3C context across the broker.
+        // The previously-asserted behaviour (no injection on null Message) was the bug.
         var args = new SendEventArgs
         {
             EndPoint = "svc.queue",
@@ -341,8 +342,91 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         using var activity = ServiceConnectActivitySource.Send(args);
 
+        // With an active listener the call starts an activity, making
+        // Activity.Current non-null, so traceparent must be present.
+        Assert.True(args.Headers.ContainsKey("traceparent"));
+    }
+
+    [Fact]
+    public void Publish_WhenPublishTelemetryDisabled_StillInjectsTraceparentFromAmbient()
+    {
+        // M20: An outer (e.g. ASP.NET) ambient activity must propagate across the
+        // broker even when ServiceConnect's own Publish spans are disabled.
+        ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
+
+        // The existing listener (set up in the constructor) listens to ServiceConnect
+        // sources; we need a separate listener for the ambient "ambient" source.
+        using var ambientListener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "ambient",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(ambientListener);
+
+        using var outerActivity = new ActivitySource("ambient").StartActivity("outer", ActivityKind.Server);
+        Assert.NotNull(outerActivity); // Sanity: outer activity must be non-null to make Activity.Current non-null.
+
+        var args = new PublishEventArgs { RoutingKey = "orders" };
+        using var scActivity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.Null(scActivity); // SC telemetry disabled → no SC span
+        Assert.True(args.Headers.ContainsKey("traceparent")); // ambient context must be injected
+    }
+
+    [Fact]
+    public void Send_WhenSendTelemetryDisabled_StillInjectsTraceparentFromAmbient()
+    {
+        // M20 (Send variant): symmetric to the Publish variant above.
+        ServiceConnectActivitySource.Options.EnableSendTelemetry = false;
+
+        using var ambientListener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "ambient-send",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+        };
+        ActivitySource.AddActivityListener(ambientListener);
+
+        using var outerActivity = new ActivitySource("ambient-send").StartActivity("outer", ActivityKind.Server);
+        Assert.NotNull(outerActivity);
+
+        var args = new SendEventArgs { EndPoint = "svc.queue" };
+        using var scActivity = ServiceConnectActivitySource.Send(args);
+
+        Assert.Null(scActivity); // SC telemetry disabled → no SC span
+        Assert.True(args.Headers.ContainsKey("traceparent")); // ambient context must be injected
+    }
+
+    // ---------------- SetError (M22) ----------------
+
+    [Fact]
+    public void SetError_SetsActivityStatusToError_AndRecordsExceptionDetails()
+    {
+        // M22: SetError must mark the activity as Error and attach exception metadata
+        // so OTel backends surface it in error-rate dashboards.
+        // AddException records details as an ActivityEvent named "exception", not as
+        // activity-level tags, which is why we inspect Events rather than GetTagItem.
+        var args = new PublishEventArgs { RoutingKey = "orders", Message = new Message(Guid.NewGuid()) };
+        using var activity = ServiceConnectActivitySource.Publish(args);
         Assert.NotNull(activity);
-        Assert.False(args.Headers.ContainsKey("traceparent"));
+
+        var ex = new InvalidOperationException("publish failed");
+        ServiceConnectActivitySource.SetError(activity, ex);
+
+        Assert.Equal(ActivityStatusCode.Error, activity!.Status);
+
+        var exceptionEvent = activity.Events.FirstOrDefault(e => e.Name == "exception");
+        Assert.NotEqual(default, exceptionEvent);
+        var exTypeTag = exceptionEvent.Tags.FirstOrDefault(t => t.Key == "exception.type").Value?.ToString();
+        Assert.Equal(typeof(InvalidOperationException).FullName, exTypeTag);
+    }
+
+    [Fact]
+    public void SetError_WithNullActivity_IsNoOp()
+    {
+        // SetError must not throw when called with a null activity (e.g. telemetry disabled).
+        var ex = new InvalidOperationException("oops");
+        var exception = Record.Exception(() => ServiceConnectActivitySource.SetError(null, ex));
+        Assert.Null(exception);
     }
 
     // ---------------- TryGetExistingContext ----------------

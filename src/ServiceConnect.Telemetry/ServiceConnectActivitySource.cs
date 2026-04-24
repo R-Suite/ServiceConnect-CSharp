@@ -45,6 +45,10 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
     {
+        // M20: Inject ambient trace context unconditionally so outer (ASP.NET / OTel) spans
+        // propagate across the broker even when ServiceConnect's own spans are disabled.
+        InjectTraceContext(Activity.Current, eventArgs.Headers);
+
         Activity? activity = StartActivity(
             _publishActivitySource,
             PublishActivitySourceName,
@@ -141,6 +145,12 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
     {
+        // M19/M20: Inject ambient trace context unconditionally — before any early-return — so
+        // payload-less sends and disabled-telemetry paths still propagate W3C context across
+        // the broker. Downstream inject (below) overwrites with the started activity's span
+        // when ServiceConnect's own span is available; otherwise the ambient span propagates.
+        InjectTraceContext(Activity.Current, eventArgs.Headers);
+
         // OTel messaging semconv distinguishes "publish" (pub/sub) from "send"
         // (point-to-point). This method backs SendAsync, so both the operation
         // tag and display name carry "send"; backends otherwise mis-aggregate
@@ -166,6 +176,10 @@ public static class ServiceConnectActivitySource
             activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
         }
 
+        // M19: Inject the started activity's trace context before the null-message early-return
+        // so payload-less sends still carry a traceparent header that downstream consumers can link.
+        InjectTraceContext(activity, eventArgs.Headers);
+
         if (eventArgs.Message is null)
         {
             return activity;
@@ -173,11 +187,33 @@ public static class ServiceConnectActivitySource
 
         activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
 
-        InjectTraceContext(activity, eventArgs.Headers);
-
         TryEnrich(activity, eventArgs.Message);
 
         return activity;
+    }
+
+    /// <summary>
+    /// Marks <paramref name="activity"/> as failed: sets its status to
+    /// <see cref="ActivityStatusCode.Error"/> and records <paramref name="exception"/>
+    /// as an OTel event so error-rate dashboards reflect reality.
+    /// Safe to call with a <c>null</c> activity (e.g. when telemetry is disabled).
+    /// </summary>
+    public static void SetError(Activity? activity, Exception exception)
+    {
+        if (activity is null) return;
+        activity.SetStatus(ActivityStatusCode.Error, exception.Message);
+#if NET9_0_OR_GREATER
+        // AddException is available on .NET 9+; it records the OTel "exception" event.
+        activity.AddException(exception);
+#else
+        // .NET 8 fallback: record the OTel semantic-convention "exception" event manually.
+        activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+        {
+            ["exception.type"]       = exception.GetType().FullName,
+            ["exception.message"]    = exception.Message,
+            ["exception.stacktrace"] = exception.ToString(),
+        }));
+#endif
     }
 
     /// <summary>
