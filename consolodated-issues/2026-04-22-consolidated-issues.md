@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 7/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 10/14 · Uncertain 1/2 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -148,9 +148,9 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### MongoDB persistence
 
-- [ ] **AggregatorPersistor bare catch in index creation** — [MongoDbAggregatorPersistor.cs:236-240](../src/ServiceConnect.Persistence.MongoDb/MongoDbAggregatorPersistor.cs#L236-L240). No 85/86 discrimination; first-insert spurious failure on multi-process startup. [r2]
-- [ ] **Index creation ignores `CancellationToken`** across Aggregator/Finder/TimeoutStore. A shutting-down host can't interrupt index creation if the broker stalls. [r1]
-- [ ] **AggregatorPersistor `RemoveDataAsync` does not validate `DeleteOneAsync` result** — [MongoDbAggregatorPersistor.cs:140-157](../src/ServiceConnect.Persistence.MongoDb/MongoDbAggregatorPersistor.cs). No-op delete (wrong name or missing CorrelationId) returns silently; caller assumes removal succeeded. [r2]
+- [x] (commit: f68b6058) **AggregatorPersistor bare catch in index creation** — [MongoDbAggregatorPersistor.cs:236-240](../src/ServiceConnect.Persistence.MongoDb/MongoDbAggregatorPersistor.cs#L236-L240). No 85/86 discrimination; first-insert spurious failure on multi-process startup. [r2]
+- [x] (commit: 5c600458) **Index creation ignores `CancellationToken`** across Aggregator/Finder/TimeoutStore. A shutting-down host can't interrupt index creation if the broker stalls. [r1]
+- [x] (commit: 2fe8ff62) **AggregatorPersistor `RemoveDataAsync` does not validate `DeleteOneAsync` result** — [MongoDbAggregatorPersistor.cs:140-157](../src/ServiceConnect.Persistence.MongoDb/MongoDbAggregatorPersistor.cs). No-op delete (wrong name or missing CorrelationId) returns silently; caller assumes removal succeeded. [r2]
 
 ### InMemory persistence
 
