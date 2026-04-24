@@ -1,4 +1,4 @@
-Progress: Critical 3/3 · High 8/8 · Medium 19/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-24)
+Progress: Critical 3/3 · High 8/8 · Medium 22/22 · Low 0/14 · Uncertain 1/2 (updated 2026-04-24)
 
 Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/disconfirmed · `[~] <reason>` inconclusive
 
@@ -116,14 +116,14 @@ Legend: `[ ]` pending · `[x] (commit: <sha>)` done · `[-] <reason>` deferred/d
 
 ### Telemetry
 
-- [ ] **`Send` skips trace-context injection when `Message` is null** — [ServiceConnectActivitySource.cs:169-176](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L169-L176)
-  `Send` returns early on `eventArgs.Message is null` before calling `InjectTraceContext`. `Publish` injects unconditionally. Payload-less sends lose W3C `traceparent` propagation — distributed traces break at the broker boundary. [r4]
+- [x] (commit: 952e3ac554fd38d71de52bdfc962b178bf6c05c1) **`Send` skips trace-context injection when `Message` is null** — [ServiceConnectActivitySource.cs:169-176](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L169-L176)
+  `Send` returns early on `eventArgs.Message is null` before calling `InjectTraceContext`. `Publish` injects unconditionally. Payload-less sends lose W3C `traceparent` propagation — distributed traces break at the broker boundary. Fixed: `InjectTraceContext(activity, headers)` now runs before the null-message early-return; `Send_WithNullMessage_StillInjectsTraceparentHeader` regression guard added. [r4]
 
-- [ ] **Trace context not injected when `EnablePublishTelemetry`/`EnableSendTelemetry=false`** — [ServiceConnectActivitySource.cs:56, 156, 239-243](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L239-L243)
-  When telemetry is disabled, `StartActivity` returns null and the method returns before `InjectTraceContext`. Any ambient `Activity.Current` (ASP.NET etc.) never propagates across the broker. Users who disable ServiceConnect's own spans but still rely on an outer OTel scope silently lose cross-broker trace linkage. [r3]
+- [x] (commit: 952e3ac554fd38d71de52bdfc962b178bf6c05c1) **Trace context not injected when `EnablePublishTelemetry`/`EnableSendTelemetry=false`** — [ServiceConnectActivitySource.cs:56, 156, 239-243](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L239-L243)
+  When telemetry is disabled, `StartActivity` returns null and the method returns before `InjectTraceContext`. Any ambient `Activity.Current` (ASP.NET etc.) never propagates across the broker. Users who disable ServiceConnect's own spans but still rely on an outer OTel scope silently lose cross-broker trace linkage. Fixed: `InjectTraceContext(Activity.Current, headers)` at method entry runs unconditionally before the enabled-guard; `Publish_WhenPublishTelemetryDisabled_StillInjectsTraceparentFromAmbient` and `Send_WhenSendTelemetryDisabled_StillInjectsTraceparentFromAmbient` regression guards added. [r3]
 
-- [ ] **Activity status never set on failure → error dashboards useless** — [ServiceConnectActivitySource.cs:46-181](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L46-L181)
-  `Publish`/`Send`/`Consume` start and tag activities but never call `SetStatus(Error)` or `AddException`; no caller sets status either. Failed operations render as `Unset` (appears as `Ok` in most OTel backends), so error-rate/alerting queries built on `status.code` return zero regardless of how often the bus throws. [r1]
+- [x] (commit: 952e3ac554fd38d71de52bdfc962b178bf6c05c1) **Activity status never set on failure → error dashboards useless** — [ServiceConnectActivitySource.cs:46-181](../src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs#L46-L181)
+  `Publish`/`Send`/`Consume` start and tag activities but never call `SetStatus(Error)` or `AddException`; no caller sets status either. Failed operations render as `Unset` (appears as `Ok` in most OTel backends), so error-rate/alerting queries built on `status.code` return zero regardless of how often the bus throws. Fixed: `SetError(Activity?, Exception)` public static helper added; uses `Activity.AddException` on NET9+ and a manual OTel-semconv ActivityEvent on .NET 8. Bus/Producer/RabbitMqConsumerHost currently hold no activity objects so had no call sites to update. `SetError_SetsActivityStatusToError_AndRecordsExceptionDetails` and `SetError_WithNullActivity_IsNoOp` regression guards added. [r1]
 
 ### Interfaces
 
