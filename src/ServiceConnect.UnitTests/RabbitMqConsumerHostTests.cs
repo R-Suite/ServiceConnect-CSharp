@@ -1563,4 +1563,36 @@ public class RabbitMqConsumerHostTests
             onLog?.Invoke(logLevel, message);
         }
     }
+
+    // -----------------------------------------------------------------------
+    // L7 — Accept any IDictionary/IReadOnlyDictionary for queue Arguments
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Ctor_ArgumentsAsReadOnlyDictionary_DoesNotThrow()
+    {
+        // L7: same widening for RabbitMqConsumerHost's Arguments consumption.
+        // Direct cast to IDictionary<,> broke when callers used ReadOnlyDictionary,
+        // which implements IReadOnlyDictionary but not IDictionary.
+        var inner = new Dictionary<string, object?> { ["x-max-length"] = 1000 };
+        var readOnly = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object?>(inner);
+
+        var (conn, _, _) = MockConnection();
+        var tcfg = new Mock<ITransportConfiguration>();
+        tcfg.SetupGet(c => c.MaxRetries).Returns(3);
+        tcfg.SetupGet(c => c.PrefetchCount).Returns((ushort)10);
+        tcfg.SetupProperty(c => c.GracefulShutdownTimeoutMilliseconds, 5000);
+        tcfg.SetupGet(c => c.ClientSettings).Returns(new Dictionary<string, object>
+        {
+            [RabbitMQSettingKeys.Arguments] = readOnly,
+        });
+
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var ex = Record.Exception(() => new RabbitMqConsumerHost(
+            conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance));
+        Assert.Null(ex);
+    }
 }

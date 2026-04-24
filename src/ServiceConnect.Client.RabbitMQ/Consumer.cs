@@ -3,6 +3,7 @@ using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
@@ -55,9 +56,9 @@ public sealed class Consumer : IConsumer
         _durable = !clientSettings.TryGetValue(RabbitMQSettingKeys.Durable, out var durableVal) || (bool)durableVal;
         _exclusive = clientSettings.TryGetValue(RabbitMQSettingKeys.Exclusive, out var exclusiveVal) && (bool)exclusiveVal;
         _autoDelete = clientSettings.TryGetValue(RabbitMQSettingKeys.AutoDelete, out var autoDeleteVal) && (bool)autoDeleteVal;
-        _queueArguments = clientSettings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal) ? (Dictionary<string, object?>)argsVal : [];
-        _retryQueueArguments = clientSettings.TryGetValue(RabbitMQSettingKeys.RetryQueueArguments, out var retryArgsVal) ? (Dictionary<string, object?>)retryArgsVal : [];
-        _utilityQueueArguments = clientSettings.TryGetValue(RabbitMQSettingKeys.UtilityQueueArguments, out var utilArgsVal) ? (Dictionary<string, object?>)utilArgsVal : [];
+        _queueArguments = CoerceToQueueArgs(clientSettings, RabbitMQSettingKeys.Arguments);
+        _retryQueueArguments = CoerceToQueueArgs(clientSettings, RabbitMQSettingKeys.RetryQueueArguments);
+        _utilityQueueArguments = CoerceToQueueArgs(clientSettings, RabbitMQSettingKeys.UtilityQueueArguments);
         _retryDelay = transportConfiguration.RetryDelay;
 
         // Create the topology provisioner once.
@@ -212,5 +213,23 @@ public sealed class Consumer : IConsumer
 
         // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
         Interlocked.Exchange(ref _started, 0);
+    }
+
+    private static Dictionary<string, object?> CoerceToQueueArgs(IReadOnlyDictionary<string, object> settings, string key)
+    {
+        // Accept any dictionary-shaped value; copy into a plain Dictionary<,> so downstream
+        // mutation and enumeration operate on a concrete, non-read-only instance. Direct casting
+        // to Dictionary<,> broke for callers using ReadOnlyDictionary / SortedDictionary /
+        // ImmutableDictionary.
+        if (!settings.TryGetValue(key, out var raw) || raw is null)
+            return new Dictionary<string, object?>();
+        return raw switch
+        {
+            Dictionary<string, object?> d => d,
+            IDictionary<string, object?> id => new Dictionary<string, object?>(id),
+            IReadOnlyDictionary<string, object?> rd => rd.ToDictionary(kv => kv.Key, kv => kv.Value),
+            _ => throw new InvalidOperationException(
+                $"Setting '{key}' must be IDictionary<string, object?> or IReadOnlyDictionary<string, object?>; got {raw.GetType().FullName}."),
+        };
     }
 }

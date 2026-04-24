@@ -3,6 +3,7 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using System.Linq;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
@@ -89,9 +90,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             ? Convert.ToUInt16(prefetchVal)
             : transportConfiguration.PrefetchCount;
         _disablePrefetch = settings.TryGetValue(RabbitMQSettingKeys.DisablePrefetch, out var disablePrefetchVal) && (bool)disablePrefetchVal;
-        _queueArguments = settings.TryGetValue(RabbitMQSettingKeys.Arguments, out var argsVal)
-            ? (IDictionary<string, object?>)argsVal
-            : new Dictionary<string, object?>();
+        _queueArguments = CoerceToQueueArgs(settings, RabbitMQSettingKeys.Arguments);
         _gracefulShutdownTimeoutMs = transportConfiguration.GracefulShutdownTimeoutMilliseconds > 0
             ? transportConfiguration.GracefulShutdownTimeoutMilliseconds
             : 5000;
@@ -699,5 +698,23 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _logger.LogWarning(ex, "Error closing publish channel during dispose");
         }
         _publishChannel = null;
+    }
+
+    private static Dictionary<string, object?> CoerceToQueueArgs(IReadOnlyDictionary<string, object> settings, string key)
+    {
+        // Accept any dictionary-shaped value; copy into a plain Dictionary<,> so downstream
+        // mutation and enumeration operate on a concrete, non-read-only instance. Direct casting
+        // to IDictionary<,> broke for callers using custom IReadOnlyDictionary implementations
+        // that do not also implement IDictionary.
+        if (!settings.TryGetValue(key, out var raw) || raw is null)
+            return new Dictionary<string, object?>();
+        return raw switch
+        {
+            Dictionary<string, object?> d => d,
+            IDictionary<string, object?> id => new Dictionary<string, object?>(id),
+            IReadOnlyDictionary<string, object?> rd => rd.ToDictionary(kv => kv.Key, kv => kv.Value),
+            _ => throw new InvalidOperationException(
+                $"Setting '{key}' must be IDictionary<string, object?> or IReadOnlyDictionary<string, object?>; got {raw.GetType().FullName}."),
+        };
     }
 }

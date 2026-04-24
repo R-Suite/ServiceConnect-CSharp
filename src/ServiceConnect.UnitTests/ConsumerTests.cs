@@ -258,4 +258,52 @@ public class ConsumerTests
             consumer.StartConsumingAsync("q", ["MessageType"],
                 (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true })));
     }
+
+    // -----------------------------------------------------------------------
+    // L7 — Accept any IDictionary/IReadOnlyDictionary for queue Arguments
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Ctor_ArgumentsAsReadOnlyDictionary_DoesNotThrow()
+    {
+        // L7: direct cast of settings[Arguments] to Dictionary<,> broke when callers
+        // passed a ReadOnlyDictionary. Verify the ctor accepts any IDictionary/IReadOnlyDictionary shape.
+        var inner = new Dictionary<string, object?> { ["x-message-ttl"] = 60_000 };
+        var readOnly = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object?>(inner);
+
+        var cfg = new Mock<ITransportConfiguration>();
+        cfg.SetupGet(c => c.MaxRetries).Returns(3);
+        cfg.SetupGet(c => c.RetryDelay).Returns(1000);
+        cfg.SetupGet(c => c.ClientSettings).Returns(new Dictionary<string, object>
+        {
+            [RabbitMQSettingKeys.Arguments] = readOnly,
+        });
+
+        var ex = Record.Exception(() => new Consumer(
+            cfg.Object,
+            new Mock<IQueueConfiguration>().Object,
+            new Mock<IBusConfiguration>().Object,
+            NullLogger<Consumer>.Instance));
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Ctor_ArgumentsAsNonDictionaryValue_ThrowsInvalidOperationException()
+    {
+        // L7: non-dictionary values must produce a clear InvalidOperationException
+        // rather than an opaque InvalidCastException.
+        var cfg = new Mock<ITransportConfiguration>();
+        cfg.SetupGet(c => c.MaxRetries).Returns(3);
+        cfg.SetupGet(c => c.RetryDelay).Returns(1000);
+        cfg.SetupGet(c => c.ClientSettings).Returns(new Dictionary<string, object>
+        {
+            [RabbitMQSettingKeys.Arguments] = "not-a-dictionary",
+        });
+
+        Assert.Throws<InvalidOperationException>(() => new Consumer(
+            cfg.Object,
+            new Mock<IQueueConfiguration>().Object,
+            new Mock<IBusConfiguration>().Object,
+            NullLogger<Consumer>.Instance));
+    }
 }
