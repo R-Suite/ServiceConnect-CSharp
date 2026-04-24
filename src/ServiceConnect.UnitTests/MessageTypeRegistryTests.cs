@@ -7,6 +7,86 @@ namespace ServiceConnect.UnitTests;
 
 public class MessageTypeRegistryTests
 {
+    private sealed class TypeA { }
+    private sealed class TypeB { }
+
+    [Fact]
+    public async Task TryResolve_ConcurrentWithRegister_EventuallyResolvesNewlyRegisteredType()
+    {
+        // L1: TryResolve + Register race could cache a stale frozen snapshot and permanently
+        // hide the newly-registered type until the next Register invalidates again. Stress
+        // the race across many trials; with the bug present, at least one trial wedges and
+        // times out because the stale cache never gets invalidated.
+        for (var trial = 0; trial < 50; trial++)
+        {
+            var registry = new MessageTypeRegistry();
+            registry.Register(typeof(TypeA));
+            // Warm the cache so _types is non-null going in.
+            registry.TryResolve(typeof(TypeA).FullName!, out _);
+            // Force the cache path to be re-built: read _types via a second warm call.
+            registry.TryResolve(typeof(TypeA).FullName!, out _);
+
+            // Now invalidate concurrently: one thread constantly resolving, one registering.
+            using var gate = new ManualResetEventSlim();
+            var bName = typeof(TypeB).FullName!;
+            var resolveTask = Task.Run(() =>
+            {
+                gate.Set();
+                var deadline = DateTime.UtcNow.AddSeconds(3);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (registry.TryResolve(bName, out _)) return;
+                    Thread.Yield();
+                }
+            });
+
+            gate.Wait();
+            registry.Register(typeof(TypeB));
+
+            var completed = await Task.WhenAny(resolveTask, Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.True(completed == resolveTask,
+                $"Trial {trial}: stale-snapshot race wedged TryResolve for TypeB.");
+        }
+    }
+
+    [Fact]
+    public void TryResolve_RegisterDuringSnapshotCasWindow_DoesNotCacheStaleSnapshot()
+    {
+        var registry = new MessageTypeRegistry();
+        registry.Register(typeof(TypeA));
+        // Warm cache so _types != null.
+        registry.TryResolve(typeof(TypeA).FullName!, out _);
+
+        // Invalidate cache so next TryResolve takes the snapshot-and-CAS path.
+        // Use reflection to null _types, simulating what a concurrent Register would do.
+        var typesField = typeof(MessageTypeRegistry).GetField(
+            "_types",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        typesField.SetValue(registry, null);
+
+        // Simulate a concurrent Register in the race window by having the hook register TypeB.
+        var registered = false;
+        registry._testHookBeforeCas = () =>
+        {
+            if (!registered)
+            {
+                registry.Register(typeof(TypeB));
+                registered = true;
+            }
+        };
+        // Trigger the snapshot-and-CAS path. _types is null so this will snapshot and CAS.
+        // The hook fires mid-CAS and registers TypeB, advancing _version.
+        // The fix must detect the version advance and invalidate the published snapshot.
+        registry.TryResolve("nonexistent", out _);
+
+        // After the race, TypeB must be resolvable. With the bug, the stale snapshot was cached
+        // without TypeB — this next call returns false.
+        var found = registry.TryResolve(typeof(TypeB).FullName!, out var resolved);
+        Assert.True(found, "Stale snapshot was cached — race guard missing.");
+        Assert.Equal(typeof(TypeB), resolved);
+    }
+
+
     [Fact]
     public void TryResolve_RegisteredByAssemblyQualifiedName_ReturnsTrue()
     {
