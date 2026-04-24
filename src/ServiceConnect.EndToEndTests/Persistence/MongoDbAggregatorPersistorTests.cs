@@ -135,6 +135,25 @@ public class MongoDbAggregatorPersistorTests
 
     [Fact]
     [Trait("Category", "Docker")]
+    public async Task EnsureIndexes_CancellationTokenCanceled_ThrowsOperationCanceled()
+    {
+        // L9: Index creation must observe the CancellationToken so a shutting-down host can
+        // interrupt a stalled CreateManyAsync rather than blocking indefinitely. Pre-cancel
+        // the token and assert the first write fails-fast with OperationCanceledException.
+        var persistor = CreatePersistor();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var registry = new MessageTypeRegistry();
+        var item = new { CorrelationId = Guid.NewGuid(), Value = "test" };
+        registry.Register(item.GetType());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => persistor.InsertDataAsync(item, "l9-batch", cts.Token));
+    }
+
+    [Fact]
+    [Trait("Category", "Docker")]
     public async Task EnsureIndexes_ConcurrentProcessCreatedSameIndex_DoesNotThrow()
     {
         // L8: Benign MongoCommandException 85/86 from concurrent index creation must not

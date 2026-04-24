@@ -79,7 +79,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
 
         var collectionName = GetCollectionName<T>();
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-        await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
+        await EnsureCorrelationIdIndexAsync(collection, collectionName, cancellationToken).ConfigureAwait(false);
 
         object? msgPropValue;
 
@@ -187,7 +187,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private async Task InsertDataTypedAsync<T>(T data, string collectionName, CancellationToken cancellationToken) where T : class, IProcessManagerData
     {
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-        await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
+        await EnsureCorrelationIdIndexAsync(collection, collectionName, cancellationToken).ConfigureAwait(false);
 
         var mongoDbData = new MongoDbData<T>
         {
@@ -223,7 +223,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-            await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
+            await EnsureCorrelationIdIndexAsync(collection, collectionName, cancellationToken).ConfigureAwait(false);
 
             var filter = Builders<MongoDbData<T>>.Filter.And(
                 Builders<MongoDbData<T>>.Filter.Eq(x => x.Data.CorrelationId, versionData.Data.CorrelationId),
@@ -270,7 +270,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         try
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-            await EnsureCorrelationIdIndexAsync(collection, collectionName).ConfigureAwait(false);
+            await EnsureCorrelationIdIndexAsync(collection, collectionName, cancellationToken).ConfigureAwait(false);
 
             // Match on {CorrelationId, Version} so a delete racing an in-flight update
             // cannot silently drop a saga mid-transition. Same contract as UpdateDataAsync.
@@ -292,12 +292,12 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
-    private async Task EnsureCorrelationIdIndexAsync<T>(IMongoCollection<MongoDbData<T>> collection, string collectionName) where T : class, IProcessManagerData
+    private async Task EnsureCorrelationIdIndexAsync<T>(IMongoCollection<MongoDbData<T>> collection, string collectionName, CancellationToken cancellationToken) where T : class, IProcessManagerData
     {
         // Fast path: index already confirmed by this process instance.
         if (_indexedCollections.ContainsKey(collectionName)) return;
 
-        await _indexCreationSemaphore.WaitAsync().ConfigureAwait(false);
+        await _indexCreationSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Double-check under the semaphore so a thread that was waiting while another
@@ -308,7 +308,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys, new CreateIndexOptions { Unique = true });
             try
             {
-                await collection.Indexes.CreateOneAsync(indexModel).ConfigureAwait(false);
+                await collection.Indexes.CreateOneAsync(indexModel, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
             {

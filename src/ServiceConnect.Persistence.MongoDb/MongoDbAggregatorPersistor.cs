@@ -69,7 +69,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
-            await EnsureIndexesAsync().ConfigureAwait(false);
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
 
             var dataType = data.GetType();
             var dataBson = data.ToBsonDocument(dataType);
@@ -105,7 +105,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
-            await EnsureIndexesAsync().ConfigureAwait(false);
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             // Sort by InsertedAtTicks (insertion-order) with Id as a stable
             // tie-break — without an explicit sort MongoDB returns documents
@@ -146,7 +146,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
-            await EnsureIndexesAsync().ConfigureAwait(false);
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.And(
                 Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
                 Builders<AggregatorDocument>.Filter.Eq("DataBson.CorrelationId", new BsonBinaryData(correlationId, GuidRepresentation.Standard))
@@ -166,7 +166,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
-            await EnsureIndexesAsync().ConfigureAwait(false);
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
         }
@@ -184,7 +184,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 
         try
         {
-            await EnsureIndexesAsync().ConfigureAwait(false);
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             // Delete only the specific documents captured in the snapshot, keyed by (Name, Id).
             // Concurrent inserts and unresolved-type records have different ids and are preserved.
             var filter = Builders<AggregatorDocument>.Filter.And(
@@ -203,7 +203,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         try
         {
-            await EnsureIndexesAsync().ConfigureAwait(false);
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             var count = await _collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken).ConfigureAwait(false);
             return count > int.MaxValue ? int.MaxValue : (int)count;
@@ -219,7 +219,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// Called lazily on first write; the flag is checked before every write to avoid
     /// a round-trip on every call while still retrying after a failure.
     /// </summary>
-    private async Task EnsureIndexesAsync()
+    private async Task EnsureIndexesAsync(CancellationToken cancellationToken)
     {
         if (_indexesEnsured) return;
 
@@ -235,7 +235,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                     .Ascending(x => x.Name)
                     .Ascending("DataBson.CorrelationId"));
 
-            await _collection.Indexes.CreateManyAsync([nameIndex, nameCorrelationIndex]).ConfigureAwait(false);
+            await _collection.Indexes.CreateManyAsync([nameIndex, nameCorrelationIndex], cancellationToken).ConfigureAwait(false);
             _indexesEnsured = true;
         }
         catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))

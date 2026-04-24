@@ -74,7 +74,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
 
             await collection.InsertOneAsync(timeoutData, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
@@ -94,7 +94,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         {
             var retval = new TimeoutsBatch { DueTimeouts = [] };
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
             var utcNow = _timeProvider.GetUtcNow();
 
             // Use a causally-consistent client session so the aggregate facet sees the rows
@@ -205,7 +205,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
 
             // Id-only callers don't know which worker holds the lease. Require
             // LockedBy == Guid.Empty so this path cannot delete a row leased
@@ -229,7 +229,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
             // Same lock-owner guard as Remove: id-only callers cannot reach
             // into another worker's leased row.
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
@@ -255,7 +255,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
 
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
                          Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
@@ -286,7 +286,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
                          Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, lockOwner);
@@ -325,7 +325,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         try
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection).ConfigureAwait(false);
+            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
             var utcNow = _timeProvider.GetUtcNow();
 
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
@@ -371,7 +371,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         return await cursor.ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection)
+    private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection, CancellationToken cancellationToken)
     {
         // Interlocked gate: only one thread performs index creation; the rest short-circuit
         // once the flag flips to 1. A non-atomic bool could in principle allow two threads
@@ -400,7 +400,8 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
                 Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
 
             await collection.Indexes.CreateManyAsync(
-                [lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel]
+                [lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
+                cancellationToken: cancellationToken
             ).ConfigureAwait(false);
             Interlocked.Exchange(ref _timeoutIndexEnsuredFlag, 1);
         }
