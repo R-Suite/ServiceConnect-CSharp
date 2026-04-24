@@ -1,4 +1,6 @@
 using System.Reflection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
@@ -12,9 +14,13 @@ public static class HandlerScanner
     /// Scans the supplied assemblies and returns handler registrations keyed by handled message type.
     /// </summary>
     /// <param name="assemblies">The assemblies to inspect.</param>
+    /// <param name="logger">Optional logger; when supplied, partial-scan warnings from
+    /// <see cref="ReflectionTypeLoadException"/> are reported with assembly name and loader exceptions.
+    /// Pass <see cref="NullLogger.Instance"/> or omit to preserve previous silent behaviour.</param>
     /// <returns>A list of discovered handler references.</returns>
-    public static IList<HandlerReference> ScanForHandlers(IEnumerable<Assembly> assemblies)
+    public static IList<HandlerReference> ScanForHandlers(IEnumerable<Assembly> assemblies, ILogger? logger = null)
     {
+        logger ??= NullLogger.Instance;
         var handlerReferences = new List<HandlerReference>();
         var messageHandlerType = typeof(IMessageHandler<>);
         var processHandlerType = typeof(IProcessHandler<,>);
@@ -25,7 +31,22 @@ public static class HandlerScanner
         {
             Type[] types;
             try { types = assembly.GetTypes(); }
-            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray()!; }
+            catch (ReflectionTypeLoadException ex)
+            {
+                // Partial scan — loaded types are still usable, but this is a strong signal that
+                // the consumer's intent doesn't match what's on disk (missing reference, version
+                // drift, etc.). Surfacing a Warning here lets a misconfigured deploy fail loudly
+                // instead of dropping handlers silently until a message arrives with no handler.
+                types = ex.Types.Where(t => t != null).ToArray()!;
+                logger.LogWarning(
+                    ex,
+                    "Assembly {AssemblyName} threw ReflectionTypeLoadException during handler scan; continuing with partial type list ({LoadedCount}/{RequestedCount}). Loader exceptions: {LoaderExceptionMessages}",
+                    assembly.FullName ?? "<unknown>",
+                    types.Length,
+                    ex.Types.Length,
+                    string.Join(" | ", (ex.LoaderExceptions ?? Array.Empty<Exception?>())
+                        .Where(e => e is not null).Select(e => e!.Message)));
+            }
 
             foreach (var type in types)
             {
