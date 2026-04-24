@@ -29,6 +29,9 @@ internal sealed class ProcessManagerPredicateCache
 
         public PredicateCacheKey(Type t, IReadOnlyDictionary<string, Type> propertiesHierarchy, Type propertyType)
         {
+            ArgumentNullException.ThrowIfNull(t);
+            ArgumentNullException.ThrowIfNull(propertiesHierarchy);
+            ArgumentNullException.ThrowIfNull(propertyType);
             T = t;
             PropertiesHierarchy = propertiesHierarchy;
             PropertyType = propertyType;
