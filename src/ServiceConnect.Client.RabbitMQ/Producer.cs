@@ -423,8 +423,13 @@ public sealed class Producer : IProducer
             if (publishLockAcquired) _publishLock.Release();
             if (connectionLockAcquired) _connectionSemaphore.Release();
 
-            _publishLock.Dispose();
-            _connectionSemaphore.Dispose();
+            // _publishLock and _connectionSemaphore are intentionally NOT Disposed:
+            // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and
+            // we never call AvailableWaitHandle, so disposal is a functional no-op. An
+            // in-flight publisher's `finally { _publishLock.Release(); }` running on a
+            // disposed semaphore throws ObjectDisposedException out of the unwind path,
+            // which we cannot prevent without holding GC references to every caller.
+            // The fields are GC'd with the Producer instance.
         }
     }
 

@@ -80,10 +80,9 @@ public class ProducerDisposeTests
         // Act — should complete in ~50ms (timeout) rather than hanging.
         await producer.DisposeAsync();
 
-        // Release the simulated stuck publish ONLY if the semaphore wasn't disposed by DisposeAsync.
-        // (After the fix, DisposeAsync disposes the semaphore in its finally block regardless of
-        // whether it acquired the lock; so we swallow ObjectDisposedException here.)
-        try { publishLock.Release(); } catch (ObjectDisposedException) { }
+        // The semaphore is not disposed by DisposeAsync, so Release() succeeds cleanly here.
+        // This simulates the in-flight publisher's finally block completing its unwind.
+        publishLock.Release();
 
         // Assert — channel and connection must always be closed even though the lock timed out.
         channel.Verify(c => c.CloseAsync(
@@ -127,10 +126,10 @@ public class ProducerDisposeTests
         await producer.DisposeAsync();
         stopwatch.Stop();
 
-        // DisposeAsync disposes the semaphores in its finally block regardless of
-        // whether it acquired them, so Release() may throw ObjectDisposedException.
-        try { publishLock.Release(); } catch (ObjectDisposedException) { }
-        try { connectionSemaphore.Release(); } catch (ObjectDisposedException) { }
+        // The semaphores are not disposed by DisposeAsync, so Release() succeeds cleanly.
+        // This simulates in-flight publishers completing their finally blocks after teardown.
+        publishLock.Release();
+        connectionSemaphore.Release();
 
         // Both waits share one stopwatch budget, so total elapsed is bounded by
         // disposeTimeout (150ms) plus teardown overhead. 220ms upper bound = 150ms
@@ -140,5 +139,42 @@ public class ProducerDisposeTests
         Assert.InRange(stopwatch.Elapsed,
             TimeSpan.FromMilliseconds(120),
             TimeSpan.FromMilliseconds(220));
+    }
+
+    [Fact]
+    public async Task DisposeAsync_DoesNotDisposeSemaphores_AllowsInFlightPublisherCleanRelease()
+    {
+        // Arrange — set up a producer with mock channel/connection.
+        var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
+        channel.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var connection = new Mock<IConnection>();
+        connection.SetupGet(c => c.IsOpen).Returns(true);
+        connection.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var producer = CreateProducer();
+        SetField(producer, "_model", channel.Object);
+        SetField(producer, "_connection", connection.Object);
+        SetField(producer, "_connected", true);
+        SetField(producer, "DisposeTimeoutForTests", (TimeSpan?)TimeSpan.FromMilliseconds(50));
+
+        // Simulate an in-flight publisher holding _publishLock — dispose times out
+        // waiting for it.
+        var publishLock = GetField<SemaphoreSlim>(producer, "_publishLock");
+        await publishLock.WaitAsync();
+
+        // Act
+        await producer.DisposeAsync();
+
+        // Assert — the in-flight publisher's finally block runs publishLock.Release().
+        // The semaphore must remain alive so this Release() succeeds rather than
+        // throwing ObjectDisposedException out of the publisher's unwind path.
+        var ex = Record.Exception(() => publishLock.Release());
+        Assert.Null(ex);
     }
 }
