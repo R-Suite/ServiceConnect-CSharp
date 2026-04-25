@@ -118,7 +118,12 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         return value switch
         {
             byte[] bytes => (byte[])bytes.Clone(),
-            _ => value,
+            // Strings and value types are immutable / pass-by-value — return as-is.
+            string or ValueType => value,
+            // Any other reference type: deep-clone to prevent caller mutations leaking
+            // into stored snapshot. Mirror the deep-clone behaviour the aggregator
+            // persistor uses on Insert/Get for the same reason.
+            _ => DeepClone.Clone(value),
         };
     }
 

@@ -270,4 +270,28 @@ public class InMemoryTimeoutStoreTests
 
         Assert.Equal("batchSize", ex.ParamName);
     }
+
+    [Fact]
+    public async Task InsertTimeoutAsync_HeaderValueIsList_CallerMutationDoesNotLeakIntoStore()
+    {
+        var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        var sharedList = new List<byte> { 1, 2, 3 };
+        var id = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = id,
+            Destination = "d",
+            ProcessManagerId = Guid.NewGuid(),
+            Time = time.GetUtcNow().AddSeconds(-1),
+            Headers = new Dictionary<string, object> { ["custom"] = sharedList },
+        }, CancellationToken.None);
+
+        sharedList.Add(99); // mutate after insert
+
+        var batch = await store.GetTimeoutsBatchAsync();
+        var stored = (List<byte>)batch.DueTimeouts.Single(t => t.Id == id).Headers["custom"];
+        Assert.Equal(new byte[] { 1, 2, 3 }, stored);
+    }
 }
