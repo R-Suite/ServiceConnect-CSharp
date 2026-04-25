@@ -49,11 +49,29 @@ public class MessageBusReadStreamTests
     }
 
     [Fact]
-    public void Write_DuplicatePacketNumber_Throws()
+    public void Write_DuplicatePacketNumber_DoesNotThrow()
     {
+        // Broker re-delivery is a routine occurrence — the second arrival of the same
+        // packet number is treated as an idempotent ack rather than a stream-corruption
+        // signal that would nack-with-requeue and produce a poison loop.
         var stream = new MessageBusReadStream("seq");
         stream.Write(new byte[] { 1, 2 }, 0);
-        Assert.Throws<InvalidOperationException>(() => stream.Write(new byte[] { 3, 4 }, 0));
+
+        var ex = Record.Exception(() => stream.Write(new byte[] { 9, 9 }, 0));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Write_DuplicatePacketNumber_FirstPayloadWins_AndSizeStaysAccurate()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(0);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 9, 9 }, 0); // ignored
+
+        Assert.True(stream.IsComplete());
+        Assert.Equal(new byte[] { 1, 2 }, stream.Read());
     }
 
     [Fact]

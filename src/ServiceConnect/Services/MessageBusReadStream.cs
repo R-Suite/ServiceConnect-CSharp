@@ -84,9 +84,12 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         }
         if (!_packets.TryAdd(packetNumber, data))
         {
-            // Duplicate packet — roll back the reservation to keep the size check honest.
+            // Broker redelivery: the same packet has arrived twice. Roll back the size
+            // reservation so the in-memory total mirrors the dictionary's contents and
+            // return without throwing; the caller treats this as an idempotent ack.
+            // The first payload wins — TryAdd does not overwrite.
             Interlocked.Add(ref _totalBytesWritten, -data.Length);
-            throw new InvalidOperationException($"Duplicate packet number {packetNumber} received for stream {SequenceId}.");
+            return;
         }
         // Increment after a successful add so IsComplete() can compare counts.
         Interlocked.Increment(ref _receivedCount);
