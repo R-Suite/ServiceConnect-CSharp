@@ -127,8 +127,8 @@ public sealed class ProcessManagerTimeoutService(
 
                     try
                     {
-                        Guid? releaseOwner = timeout.LockedBy != Guid.Empty ? timeout.LockedBy : null;
-                        await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, releaseOwner, cancellationToken).ConfigureAwait(false);
+                        Guid? lockOwner = timeout.LockedBy != Guid.Empty ? timeout.LockedBy : null;
+                        await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, lockOwner, cancellationToken).ConfigureAwait(false);
                     }
                     catch (Exception releaseEx) when (releaseEx is not OperationCanceledException)
                     {

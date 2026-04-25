@@ -124,8 +124,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            if (!_state.TimeoutsById.TryGetValue(id, out var entry))
-                return Task.CompletedTask;
+            var found = _state.TimeoutsById.TryGetValue(id, out var entry);
 
             if (lockOwner is { } owner)
             {
@@ -133,13 +132,18 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 // "this caller no longer holds the lease" — surface as ConcurrencyException
                 // so parity with Mongo is preserved and callers don't silently miss
                 // invalidations.
-                if (!entry.Data.Locked || entry.Data.LockedBy != owner)
+                if (!found || !entry!.Data.Locked || entry.Data.LockedBy != owner)
                     throw new ConcurrencyException(
                         $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
             }
+            else if (!found)
+            {
+                // Unconditional id-only path: caller's intent is "remove if present".
+                return Task.CompletedTask;
+            }
 
             _state.TimeoutsById.Remove(id);
-            _state.TimeoutIndex.Remove(entry);
+            _state.TimeoutIndex.Remove(entry!);
         }
         finally
         {
@@ -157,17 +161,25 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            if (!_state.TimeoutsById.TryGetValue(id, out var entry))
-                return Task.CompletedTask;
+            var found = _state.TimeoutsById.TryGetValue(id, out var entry);
 
             if (lockOwner is { } owner)
             {
-                if (!entry.Data.Locked || entry.Data.LockedBy != owner)
+                // Lease-checked: a missing/unleased/mismatched-owner row all mean
+                // "this caller no longer holds the lease" — surface as ConcurrencyException
+                // so parity with Mongo is preserved and callers don't silently miss
+                // invalidations.
+                if (!found || !entry!.Data.Locked || entry.Data.LockedBy != owner)
                     throw new ConcurrencyException(
                         $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
             }
+            else if (!found)
+            {
+                // Unconditional id-only path: caller's intent is "release if present".
+                return Task.CompletedTask;
+            }
 
-            entry.Data.Locked = false;
+            entry!.Data.Locked = false;
             entry.Data.LockedBy = Guid.Empty;
             entry.Data.LockExpiresAt = null;
         }

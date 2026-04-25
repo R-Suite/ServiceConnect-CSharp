@@ -524,6 +524,8 @@ public class MongoDbTimeoutStoreTests
     {
         // The unconditional (null lockOwner) Release path must filter by id alone — no
         // Locked/LockedBy guard. Matches the new Remove contract: id-only is unconditional.
+        // Pins the fix for the H-20 silent-no-op bug where the previous LockedBy == Guid.Empty
+        // filter caused Release to skip leased rows instead of unconditionally clearing the lease.
         var id = Guid.NewGuid();
         FilterDefinition<TimeoutData>? capturedFilter = null;
         var collection = new Mock<IMongoCollection<TimeoutData>>();
