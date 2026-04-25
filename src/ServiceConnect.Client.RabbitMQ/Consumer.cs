@@ -209,7 +209,14 @@ public sealed class Consumer : IConsumer
         _model?.Dispose();
         _model = null;
         if (_ownsConnection && _connection != null)
+        {
             await _connection.DisposeAsync().ConfigureAwait(false);
+            // Null the field so a subsequent StartConsumingAsync recreates the
+            // connection rather than handing back a disposed one. _ownsConnection
+            // is set fresh on the next StartConsumingAsync, so it does not need a
+            // matching reset here.
+            _connection = null;
+        }
 
         // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
         Interlocked.Exchange(ref _started, 0);
