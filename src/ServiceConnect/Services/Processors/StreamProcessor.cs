@@ -102,27 +102,31 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         // the GetOrAdd factory. The factory runs at most once per absent key, so the
         // increment-and-check executes under ConcurrentDictionary's per-bucket lock,
         // making the "reserve a slot" step atomic. If the new count overshoots the cap we
-        // decrement immediately and record a rejection sentinel on the stack; after GetOrAdd
-        // returns we roll back our own insertion via TryRemove(KVP). This closes the original
-        // TOCTOU where two concurrent callers both observed Count == cap-1 and both called
-        // GetOrAdd, since the Interlocked counter ensures only one of them wins the cap-th slot.
-        ActiveStreamState? rejectedSentinel = null;
+        // decrement immediately and roll back our own insertion via TryRemove(KVP). This
+        // closes the original TOCTOU where two concurrent callers both observed Count == cap-1
+        // and both called GetOrAdd, since the Interlocked counter ensures only one of them
+        // wins the cap-th slot.
+        // The factory only runs for the thread that wins the absent-key race; the captured
+        // flag therefore reflects this thread's admission outcome and never sees torn writes
+        // from concurrent callers (their factories don't run for the same sequenceId).
+        bool rejected = false;
         var state = _activeStreams.GetOrAdd(sequenceId, id =>
         {
             var newCount = Interlocked.Increment(ref _streamCount);
             if (newCount > MaxActiveStreams)
             {
                 Interlocked.Decrement(ref _streamCount);
-                // Create a sentinel to communicate rejection back to the outer code.
-                // ConcurrentDictionary requires the factory to return a value; we use
-                // the sentinel as that placeholder and immediately remove it below.
-                rejectedSentinel = new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow());
-                return rejectedSentinel;
+                rejected = true;
             }
+            // Always return a fresh state. Rejection is rolled back below by TryRemove.
             return new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow());
         });
 
-        if (rejectedSentinel is not null && ReferenceEquals(state, rejectedSentinel))
+        // Note: a concurrent caller with the same sequenceId that arrives between this
+        // thread's GetOrAdd and TryRemove will briefly observe the rejected state as
+        // live. That is bounded to broker-redelivery duplicates of the very first
+        // packet of a stream — accepted as a rare corner cost of avoiding a re-check loop.
+        if (rejected)
         {
             _activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state));
             _logger.LogWarning("Active stream cap {Cap} reached; rejecting new stream {SequenceId}", MaxActiveStreams, sequenceId);
