@@ -105,7 +105,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             // Touch: replace the dict entry with a new ActiveStreamState carrying a fresh
             // LastSeenUtc. The eviction sweep relies on reference-equality TryRemove(KVP)
             // to detect concurrent touches; mutating LastSeenUtc in place would defeat
-            // that. The CAS loop spins on contention with another touch / dispatch path.
+            // that. The CAS loop retries on contention with another touch / dispatch path.
             ActiveStreamState refreshed;
             while (true)
             {
@@ -150,7 +150,12 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             _logger.LogWarning(ex,
                 "Stream {SequenceId} faulted on packet {PacketNumber}; evicting partial state",
                 sequenceId, packetNumber);
-            _activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state));
+            // Key-only remove (not KVP): a concurrent touch may have replaced the dict entry
+            // since our GetOrAdd, but the underlying MessageBusReadStream is the same broken
+            // instance (the record's Stream property carries forward across `with`). The
+            // sequence is poisoned regardless of which state instance is currently in the
+            // dict, so we evict by key rather than by reference.
+            _activeStreams.TryRemove(sequenceId, out _);
             return HandledTask;
         }
 

@@ -322,16 +322,15 @@ public class StreamProcessorTests
 
         var lastSeen = stateType!.GetProperty("LastSeenUtc");
         Assert.NotNull(lastSeen);
-        // Records expose an init-only setter via SetMethod with IsInitOnly metadata; mutable
-        // classes expose a regular setter. The bug-state setter was a plain `set`. Reject any
-        // setter that is not init-only so the field cannot be written outside `with` / ctor.
+        // A positional record property has an init-only setter — its SetMethod carries the
+        // IsExternalInit modifier. A mutable `set` carries no such modifier. Asserting the
+        // setter exists AND is init-only avoids a vacuous pass if the property were ever
+        // refactored to get-only.
         var setter = lastSeen!.SetMethod;
-        if (setter is not null)
-        {
-            var modifiers = setter.ReturnParameter.GetRequiredCustomModifiers();
-            Assert.Contains(modifiers,
-                m => m.FullName == "System.Runtime.CompilerServices.IsExternalInit");
-        }
+        Assert.NotNull(setter);
+        var modifiers = setter!.ReturnParameter.GetRequiredCustomModifiers();
+        Assert.Contains(modifiers,
+            m => m.FullName == "System.Runtime.CompilerServices.IsExternalInit");
     }
 
     // The touch path must REPLACE the active-stream entry with a new instance carrying
