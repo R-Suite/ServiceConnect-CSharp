@@ -91,4 +91,53 @@ public class ProducerDisposeTests
         connection.Verify(c => c.CloseAsync(
             It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task DisposeAsync_WhenBothLocksHeld_RespectsSharedBudgetNotDoubled()
+    {
+        // Arrange — wire up mock channel/connection so teardown succeeds quickly.
+        var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
+        channel.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var connection = new Mock<IConnection>();
+        connection.SetupGet(c => c.IsOpen).Returns(true);
+        connection.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var producer = CreateProducer();
+        SetField(producer, "_model", channel.Object);
+        SetField(producer, "_connection", connection.Object);
+        SetField(producer, "_connected", true);
+
+        var disposeTimeout = TimeSpan.FromMilliseconds(150);
+        SetField(producer, "DisposeTimeoutForTests", (TimeSpan?)disposeTimeout);
+
+        // Hold BOTH semaphores so each WaitAsync(timeout) must time out.
+        var publishLock = GetField<SemaphoreSlim>(producer, "_publishLock");
+        var connectionSemaphore = GetField<SemaphoreSlim>(producer, "_connectionSemaphore");
+        await publishLock.WaitAsync();
+        await connectionSemaphore.WaitAsync();
+
+        // Act — measure dispose wall time.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        await producer.DisposeAsync();
+        stopwatch.Stop();
+
+        // The release calls below must not throw. Whether the semaphore is alive
+        // depends on Task 4; for Task 3 alone, swallow OcDE.
+        try { publishLock.Release(); } catch (ObjectDisposedException) { }
+        try { connectionSemaphore.Release(); } catch (ObjectDisposedException) { }
+
+        // Assert — under shared-budget the elapsed time is roughly disposeTimeout.
+        // Pre-fix it would be ~2 * disposeTimeout (two sequential budgets).
+        // 220ms is a safe upper bound: 150ms timeout + 70ms slack for teardown +
+        // scheduler jitter; 300ms (the buggy worst case) fails this bound.
+        Assert.InRange(stopwatch.Elapsed,
+            TimeSpan.FromMilliseconds(120),
+            TimeSpan.FromMilliseconds(220));
+    }
 }

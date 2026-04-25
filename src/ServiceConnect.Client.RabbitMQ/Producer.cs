@@ -386,15 +386,20 @@ public sealed class Producer : IProducer
         if (Interlocked.Exchange(ref _disposedInt, 1) != 0) return;
 
         // Wait for in-flight publishes and (re)connections to complete before tearing down
-        // the channel/connection. Use a bounded timeout so a stuck publish cannot block
-        // dispose indefinitely — after the timeout we proceed with forced teardown.
+        // the channel/connection. The two waits SHARE a single stopwatch budget so worst-case
+        // dispose latency is bounded by disposeTimeout, not 2 * disposeTimeout. After the
+        // budget is exhausted we proceed with forced teardown regardless.
         var disposeTimeout = DisposeTimeoutForTests ?? TimeSpan.FromSeconds(30);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var publishLockAcquired = false;
         var connectionLockAcquired = false;
         try
         {
             publishLockAcquired = await _publishLock.WaitAsync(disposeTimeout).ConfigureAwait(false);
-            connectionLockAcquired = await _connectionSemaphore.WaitAsync(disposeTimeout).ConfigureAwait(false);
+
+            var remaining = disposeTimeout - stopwatch.Elapsed;
+            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+            connectionLockAcquired = await _connectionSemaphore.WaitAsync(remaining).ConfigureAwait(false);
 
             if (!publishLockAcquired || !connectionLockAcquired)
             {
