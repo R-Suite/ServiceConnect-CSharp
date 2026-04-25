@@ -294,4 +294,34 @@ public class InMemoryTimeoutStoreTests
         var stored = (List<byte>)batch.DueTimeouts.Single(t => t.Id == id).Headers["custom"];
         Assert.Equal(new byte[] { 1, 2, 3 }, stored);
     }
+
+    [Fact]
+    public async Task GetTimeoutsBatchAsync_CallerMutatesReturnedHeaders_DoesNotCorruptStore()
+    {
+        var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+
+        var id = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = id,
+            Destination = "d",
+            ProcessManagerId = Guid.NewGuid(),
+            Time = time.GetUtcNow().AddSeconds(-1),
+            Headers = new Dictionary<string, object> { ["custom"] = new List<byte> { 1, 2, 3 } },
+        }, CancellationToken.None);
+
+        // First fetch — caller mutates the returned list.
+        var firstBatch = await store.GetTimeoutsBatchAsync();
+        var returned = (List<byte>)firstBatch.DueTimeouts.Single(t => t.Id == id).Headers["custom"];
+        returned.Add(99);
+
+        // Advance past the 5-minute lease so the same row becomes claimable again.
+        time.Advance(TimeSpan.FromMinutes(6));
+
+        var secondBatch = await store.GetTimeoutsBatchAsync();
+        var stored = (List<byte>)secondBatch.DueTimeouts.Single(t => t.Id == id).Headers["custom"];
+        Assert.Equal(new byte[] { 1, 2, 3 }, stored);
+    }
 }
