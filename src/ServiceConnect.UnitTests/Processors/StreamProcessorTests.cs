@@ -274,23 +274,17 @@ public class StreamProcessorTests
         var processor = BuildProcessor();
         var sequenceId = Guid.NewGuid().ToString();
 
-        // Establish LastPacketNumber=0 by sending the close packet first.
-        var closeHeaders = new Dictionary<string, object>
+        // Packet 0 of a 3-packet stream — establishes LastPacketNumber=2 without
+        // completing the sequence (packets 1 and 2 are still outstanding).
+        var setupHeaders = new Dictionary<string, object>
         {
             [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
             [HeaderKeys.SequenceId] = sequenceId,
             [HeaderKeys.PacketNumber] = "0",
-            [HeaderKeys.LastPacketNumber] = "0"
+            [HeaderKeys.LastPacketNumber] = "2"
         };
-        var closeEnv = new Envelope { Headers = closeHeaders, Body = new byte[] { 1 } };
-
-        // The first packet completes the stream (packet 0 of 0..0). Without a registered
-        // type / handler the processor returns Handled at the deserialise step; the entry
-        // is removed by the dispatch-time TryRemove on the IsComplete branch. Use a
-        // sequenceId for which the stream stays incomplete — set LastPacketNumber=2 by
-        // sending packet 0 with that close marker, leaving 1 and 2 outstanding.
-        closeHeaders[HeaderKeys.LastPacketNumber] = "2";
-        await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, closeHeaders, closeEnv);
+        var setupEnv = new Envelope { Headers = setupHeaders, Body = new byte[] { 1 } };
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, setupHeaders, setupEnv);
 
         // Now send packet 99 — exceeds LastPacketNumber=2 → underlying Write throws.
         var poisonHeaders = new Dictionary<string, object>
@@ -310,6 +304,8 @@ public class StreamProcessorTests
         var dictField = typeof(StreamProcessor)
             .GetField("_activeStreams", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(dictField);
+        // The dictionary's value type (ActiveStreamState) is a private nested type in
+        // StreamProcessor, so the test inspects it via the non-generic IDictionary surface.
         var dict = (System.Collections.IDictionary)dictField!.GetValue(processor)!;
         Assert.False(dict.Contains(sequenceId), "Active-stream entry must be evicted after a poison-packet exception.");
     }
