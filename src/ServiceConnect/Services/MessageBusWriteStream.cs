@@ -14,6 +14,10 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     private readonly Dictionary<string, string> _baseHeaders;
     private long _packetNumber;
     private int _closedFlag;
+    // 0 = healthy, 1 = a SendBytesAsync call has thrown. Once faulted, WriteAsync refuses
+    // to consume another packet number — a successful retry would land beyond the missing
+    // packet and create a permanent gap the reader can never close.
+    private int _faulted;
     // Track in-flight writes so CloseAsync can drain them before reading _packetNumber
     // for the close packet. Without the drain, a writer that cleared the _closedFlag check
     // but hadn't yet Interlocked.Increment-ed would publish *after* the close packet with
@@ -60,6 +64,9 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         {
             if (Volatile.Read(ref _closedFlag) == 1)
                 throw new ObjectDisposedException(nameof(MessageBusWriteStream));
+            if (Volatile.Read(ref _faulted) == 1)
+                throw new InvalidOperationException(
+                    $"Stream {_sequenceId} is faulted from a previous send failure; create a new stream.");
 
             var packet = new byte[count];
             Array.Copy(buffer, offset, packet, 0, count);
@@ -73,7 +80,18 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
             foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
             headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
 
-            await _producer.SendBytesAsync(_endpoint, _messageType, packet, headers).ConfigureAwait(false);
+            try
+            {
+                await _producer.SendBytesAsync(_endpoint, _messageType, packet, headers).ConfigureAwait(false);
+            }
+            catch
+            {
+                // The reserved packet number is now stranded — there is no safe way for the
+                // caller to retry without producing a permanent gap, so refuse all further
+                // writes. The exception still propagates so the caller learns the send failed.
+                Volatile.Write(ref _faulted, 1);
+                throw;
+            }
         }
         finally
         {
@@ -85,6 +103,12 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     public async Task CloseAsync()
     {
         if (Interlocked.CompareExchange(ref _closedFlag, 1, 0) != 0) return;
+
+        // A faulted stream has a stranded packet number; emitting a close packet would
+        // declare a LastPacketNumber the reader can never reach. Swallow the close
+        // request silently — the caller already received an exception from the failing
+        // write that set the fault flag.
+        if (Volatile.Read(ref _faulted) == 1) return;
 
         // Drain in-flight writes before reading _packetNumber. Any WriteAsync that passed
         // its closed-flag check must complete (either successfully or with an exception)

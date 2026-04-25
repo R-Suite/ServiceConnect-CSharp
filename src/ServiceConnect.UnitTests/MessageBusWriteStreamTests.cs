@@ -151,6 +151,73 @@ public class MessageBusWriteStreamTests
         Assert.NotNull(closedFlag);
         Assert.Equal(typeof(int), closedFlag!.FieldType);
     }
+
+    [Fact]
+    public async Task WriteAsync_WhenSendFails_NextWriteThrows_AndDoesNotCallProducerAgain()
+    {
+        var failingProducer = new Mock<IProducer>();
+        failingProducer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(),
+                It.IsAny<Type>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transport down"));
+
+        await using var stream = new MessageBusWriteStream(failingProducer.Object, "dest", typeof(FakeStreamMsg));
+
+        // First write surfaces the underlying failure.
+        var firstEx = await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync([1], 0, 1));
+        Assert.Equal("transport down", firstEx.Message);
+
+        // Second write must not attempt another send: a successful retry would consume
+        // packet number N+1, leaving packet N permanently missing from the reader's view.
+        var secondEx = await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync([2], 0, 1));
+        Assert.Contains("faulted", secondEx.Message, StringComparison.OrdinalIgnoreCase);
+
+        failingProducer.Verify(
+            p => p.SendBytesAsync(
+                It.IsAny<string>(),
+                It.IsAny<Type>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task CloseAsync_AfterSendFault_DoesNotSendClosePacket()
+    {
+        var failingProducer = new Mock<IProducer>();
+        failingProducer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(),
+                It.IsAny<Type>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transport down"));
+
+        await using var stream = new MessageBusWriteStream(failingProducer.Object, "dest", typeof(FakeStreamMsg));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync([1], 0, 1));
+
+        // CloseAsync on a faulted stream must complete without throwing AND without sending
+        // a close packet — a close packet on a stream with a hole would set LastPacketNumber
+        // to a value the reader can never reach.
+        var ex = await Record.ExceptionAsync(() => stream.CloseAsync());
+        Assert.Null(ex);
+
+        failingProducer.Verify(
+            p => p.SendBytesAsync(
+                It.IsAny<string>(),
+                It.IsAny<Type>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }
 
 file class FakeStreamMsg : Message
