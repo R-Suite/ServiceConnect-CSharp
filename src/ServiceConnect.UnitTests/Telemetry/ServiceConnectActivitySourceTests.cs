@@ -43,11 +43,11 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     // ---------------- Publish ----------------
 
     [Fact]
-    public void Publish_WithRoutingKey_SetsNamedDestinationAndDisplayName()
+    public void Publish_WithExchange_SetsNamedDestinationAndDisplayName()
     {
         var args = new PublishEventArgs
         {
-            RoutingKey = "orders",
+            Exchange = "orders",
             Message = new Message(Guid.NewGuid()),
             Headers = { ["MessageId"] = "msg-1" }
         };
@@ -57,18 +57,77 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.NotNull(activity);
         Assert.Equal("orders publish", activity!.DisplayName);
         Assert.Equal("orders", activity.GetTagItem(MessagingDestination));
-        Assert.Equal("orders", activity.GetTagItem(MessagingDestinationRoutingKey));
         Assert.Equal("rabbitmq", activity.GetTagItem(MessagingSystem));
         Assert.Equal("publish", activity.GetTagItem(MessagingOperation));
         Assert.Equal("msg-1", activity.GetTagItem(MessageId));
     }
 
     [Fact]
-    public void Publish_WithoutRoutingKey_MarksDestinationAnonymous()
+    public void Publish_WithExchangeAndRoutingKey_StampsExchangeAsDestinationAndRoutingKeySeparately()
+    {
+        // OTel messaging semconv (RabbitMQ): messaging.destination.name carries the exchange
+        // name; messaging.rabbitmq.destination.routing_key carries the routing key. Stamping
+        // the routing key onto both attributes broke dashboards keyed on destination.
+        var args = new PublishEventArgs
+        {
+            Exchange = "OrderPlaced",
+            RoutingKey = "high-priority",
+            Message = new Message(Guid.NewGuid()),
+            Headers = { ["MessageId"] = "msg-1" }
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("OrderPlaced publish", activity!.DisplayName);
+        Assert.Equal("OrderPlaced", activity.GetTagItem(MessagingDestination));
+        Assert.Equal("high-priority", activity.GetTagItem(MessagingDestinationRoutingKey));
+    }
+
+    [Fact]
+    public void Publish_WithExchangeOnlyAndEmptyRoutingKey_OmitsRoutingKeyTag()
+    {
+        // RabbitMQ fanout publish — exchange is the type-derived name and routing key is empty.
+        // The destination-name tag must be the exchange; the routing-key tag must not be set.
+        var args = new PublishEventArgs
+        {
+            Exchange = "OrderPlaced",
+            RoutingKey = "",
+            Message = new Message(Guid.NewGuid()),
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("OrderPlaced publish", activity!.DisplayName);
+        Assert.Equal("OrderPlaced", activity.GetTagItem(MessagingDestination));
+        Assert.Null(activity.GetTagItem(MessagingDestinationRoutingKey));
+    }
+
+    [Fact]
+    public void Publish_WithEmptyExchange_MarksDestinationAnonymous()
     {
         var args = new PublishEventArgs
         {
+            Exchange = "",
             RoutingKey = "",
+            Message = new Message(Guid.NewGuid())
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal("anonymous publish", activity!.DisplayName);
+        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+        Assert.Null(activity.GetTagItem(MessagingDestination));
+    }
+
+    [Fact]
+    public void Publish_WithoutExchange_MarksDestinationAnonymous()
+    {
+        var args = new PublishEventArgs
+        {
+            Exchange = "",
             Message = new Message(Guid.NewGuid())
         };
 
@@ -87,7 +146,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         var args = new PublishEventArgs
         {
-            RoutingKey = "orders",
+            Exchange = "orders",
             Message = new Message(Guid.NewGuid())
         };
 
@@ -104,7 +163,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         var args = new PublishEventArgs
         {
-            RoutingKey = "orders",
+            Exchange = "orders",
             Message = new Message(Guid.NewGuid())
         };
 
@@ -118,7 +177,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     {
         var args = new PublishEventArgs
         {
-            RoutingKey = "orders",
+            Exchange = "orders",
             Message = new Message(Guid.NewGuid())
         };
 
@@ -142,7 +201,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         var args = new PublishEventArgs
         {
-            RoutingKey = "orders",
+            Exchange = "orders",
             Message = new Message(Guid.NewGuid())
         };
 
@@ -367,7 +426,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var outerActivity = new ActivitySource("ambient").StartActivity("outer", ActivityKind.Server);
         Assert.NotNull(outerActivity); // Sanity: outer activity must be non-null to make Activity.Current non-null.
 
-        var args = new PublishEventArgs { RoutingKey = "orders" };
+        var args = new PublishEventArgs { Exchange = "orders" };
         using var scActivity = ServiceConnectActivitySource.Publish(args);
 
         Assert.Null(scActivity); // SC telemetry disabled → no SC span
@@ -406,7 +465,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         // so OTel backends surface it in error-rate dashboards.
         // AddException records details as an ActivityEvent named "exception", not as
         // activity-level tags, which is why we inspect Events rather than GetTagItem.
-        var args = new PublishEventArgs { RoutingKey = "orders", Message = new Message(Guid.NewGuid()) };
+        var args = new PublishEventArgs { Exchange = "orders", Message = new Message(Guid.NewGuid()) };
         using var activity = ServiceConnectActivitySource.Publish(args);
         Assert.NotNull(activity);
 
@@ -546,7 +605,7 @@ public sealed class ServiceConnectActivitySource_NoListenerTests
     {
         var args = new PublishEventArgs
         {
-            RoutingKey = "orders",
+            Exchange = "orders",
             Message = new Message(Guid.NewGuid())
         };
 

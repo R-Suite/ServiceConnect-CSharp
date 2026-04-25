@@ -61,17 +61,20 @@ public static class ServiceConnectActivitySource
 
         activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
 
-        if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
+        if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
         {
-            activity.DisplayName = eventArgs.RoutingKey + " publish";
-            activity
-                .SetTag(MessagingAttributes.MessagingDestination, eventArgs.RoutingKey)
-                .SetTag(MessagingAttributes.MessagingDestinationRoutingKey, eventArgs.RoutingKey);
+            activity.DisplayName = eventArgs.Exchange + " publish";
+            activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.Exchange);
         }
         else
         {
             activity.DisplayName = "anonymous publish";
             activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+        }
+
+        if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
+        {
+            activity.SetTag(MessagingAttributes.MessagingDestinationRoutingKey, eventArgs.RoutingKey);
         }
 
         if (eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out string? messageId))
