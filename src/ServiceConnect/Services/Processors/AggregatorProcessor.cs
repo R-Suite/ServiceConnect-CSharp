@@ -65,7 +65,7 @@ internal sealed class AggregatorProcessor(
                 ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-                await FlushAggregatorAsync(descriptor, linkedCts.Token).ConfigureAwait(false);
+                await FlushAggregatorAsync(descriptor, scopeAccessor.Current, linkedCts.Token).ConfigureAwait(false);
                 tcs.TrySetResult();
             }
             catch (OperationCanceledException ex)
@@ -143,7 +143,12 @@ internal sealed class AggregatorProcessor(
 
         try
         {
-            await FlushAggregatorAsync(descriptor, token).ConfigureAwait(false);
+            // Pass null for ambientScope so FlushAggregatorAsync always creates a fresh DI
+            // scope. The Timer captured the dispatcher's ExecutionContext (and therefore
+            // the AsyncLocal-backed ConsumeScopeAccessor) at construction time, so reading
+            // scopeAccessor.CurrentOrNull from this callback would return the disposed
+            // dispatcher scope.
+            await FlushAggregatorAsync(descriptor, ambientScope: null, token).ConfigureAwait(false);
             tcs.TrySetResult();
         }
         catch (OperationCanceledException ex)
@@ -161,7 +166,7 @@ internal sealed class AggregatorProcessor(
         }
     }
 
-    private async Task FlushAggregatorAsync(AggregatorDescriptor descriptor, CancellationToken cancellationToken)
+    private async Task FlushAggregatorAsync(AggregatorDescriptor descriptor, IServiceProvider? ambientScope, CancellationToken cancellationToken)
     {
         var flushLock = _flushLocks.GetOrAdd(descriptor.AggregatorName, _ => new SemaphoreSlim(1, 1));
         await flushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -190,13 +195,13 @@ internal sealed class AggregatorProcessor(
             var resolvedList = snapshot.ResolvedMessages as IList<object> ?? snapshot.ResolvedMessages.ToList();
             var typedList = descriptor.BuildTypedList(resolvedList);
 
-            // Timer-fired flush has no ambient consume scope (no dispatcher push); fall back
-            // to a fresh DI scope. Batch-path flush runs inside ProcessAsync where
-            // scopeAccessor.Current is the dispatcher-pushed scope.
+            // The batch path passes its dispatcher-pushed scope through ambientScope. The timer
+            // path passes null because the Timer captured the dispatcher's ExecutionContext at
+            // construction, so reading the AsyncLocal here would return the now-disposed scope.
             IServiceScope? localScope = null;
             try
             {
-                var resolverProvider = scopeAccessor.CurrentOrNull ?? (localScope = scopeFactory.CreateScope()).ServiceProvider;
+                var resolverProvider = ambientScope ?? (localScope = scopeFactory.CreateScope()).ServiceProvider;
 
                 var aggregator = resolverProvider.GetService(descriptor.AggregatorBaseType);
                 if (aggregator == null) return;

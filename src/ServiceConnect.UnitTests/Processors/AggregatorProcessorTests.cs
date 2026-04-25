@@ -884,6 +884,70 @@ public class AggregatorProcessorTests
         Assert.Equal(0, rootAggregator.Hits);
         Assert.Equal(1, scopedAggregator.Hits);
     }
+
+    // The Timer captures the dispatcher's ExecutionContext at construction. AsyncLocal
+    // flows through EC, so when the timer fires the callback observes the dispatcher's
+    // scope on ConsumeScopeAccessor — but that scope was disposed when ProcessAsync
+    // returned. The flush must always create a fresh DI scope on the timer path.
+    [Fact]
+    public async Task TimerFiredFlush_AlwaysCreatesFreshScope_IgnoresEcCapturedAmbient()
+    {
+        var staleAggregator = new EcCaptureProbeAggregator();
+        var freshAggregator = new EcCaptureProbeAggregator();
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(EcCaptureProbeMessage), HandlerType = typeof(EcCaptureProbeAggregator) }
+        };
+
+        var staleServices = new ServiceCollection();
+        staleServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        staleServices.AddSingleton<Aggregator<EcCaptureProbeMessage>>(staleAggregator);
+        var staleProvider = staleServices.BuildServiceProvider();
+
+        var freshServices = new ServiceCollection();
+        freshServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        freshServices.AddSingleton<Aggregator<EcCaptureProbeMessage>>(freshAggregator);
+        var freshProvider = freshServices.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, freshProvider, NullLogger<AggregatorRegistry>.Instance);
+
+        var probeMessage = new EcCaptureProbeMessage(Guid.NewGuid());
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        // Below batch size so ProcessAsync goes to the timer path, not the immediate flush.
+        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => SnapshotOf(new object[] { probeMessage }));
+        persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var freshScopeFactory = freshProvider.GetRequiredService<IServiceScopeFactory>();
+        await using var processor = new AggregatorProcessor(
+            registry, scopeAccessor, freshScopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+
+        using (scopeAccessor.Push(staleProvider))
+        {
+            await processor.ProcessAsync(
+                ReadOnlyMemory<byte>.Empty,
+                typeof(EcCaptureProbeMessage),
+                probeMessage,
+                new Dictionary<string, object>(),
+                new Envelope { Headers = new Dictionary<string, object>(), Body = ReadOnlyMemory<byte>.Empty },
+                CancellationToken.None);
+        }
+
+        // Wait up to 2s for the 50ms timer to fire and complete the flush.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
+        while (DateTime.UtcNow < deadline && freshAggregator.Hits == 0 && staleAggregator.Hits == 0)
+            await Task.Delay(20);
+
+        Assert.Equal(0, staleAggregator.Hits);
+        Assert.Equal(1, freshAggregator.Hits);
+    }
 }
 
 file sealed class ResetTimerProbeMessage(Guid correlationId) : Message(correlationId);
@@ -994,6 +1058,21 @@ file sealed class ScopeProbeAggregator : Aggregator<ScopeProbeAggMessage>
     public override int BatchSize() => 1;
     public override TimeSpan Timeout() => TimeSpan.Zero;
     public override Task ExecuteAsync(IList<ScopeProbeAggMessage> messages, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _hits);
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class EcCaptureProbeMessage(Guid correlationId) : Message(correlationId);
+
+file sealed class EcCaptureProbeAggregator : Aggregator<EcCaptureProbeMessage>
+{
+    private int _hits;
+    public int Hits => Volatile.Read(ref _hits);
+    public override int BatchSize() => 1000;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(50);
+    public override Task ExecuteAsync(IList<EcCaptureProbeMessage> messages, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _hits);
         return Task.CompletedTask;
