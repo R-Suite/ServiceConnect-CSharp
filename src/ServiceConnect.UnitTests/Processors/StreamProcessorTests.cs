@@ -471,6 +471,53 @@ public class StreamProcessorTests
         Assert.Equal(fakeTime.GetUtcNow(), lastSeen);
     }
 
+    // Concurrent opens that race across the admission threshold must not push
+    // _activeStreams past MaxActiveStreams. Each opener uses a fresh SequenceId so none
+    // of the GetOrAdd calls collide on an existing key; the race is purely on the count check.
+    [Fact]
+    public async Task ProcessAsync_ConcurrentExclusiveOpensAtCap_DoNotExceedCap()
+    {
+        const int cap = 1000;
+        const int parallelism = 64;
+        const int extra = 32;
+
+        var processor = BuildProcessor();
+
+        // Warm to cap-1 sequentially so the race fires right at the boundary.
+        for (int i = 0; i < cap - 1; i++)
+        {
+            var warmHeaders = new Dictionary<string, object>
+            {
+                [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+                [HeaderKeys.SequenceId] = Guid.NewGuid().ToString(),
+                [HeaderKeys.PacketNumber] = "0"
+            };
+            await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, warmHeaders,
+                new Envelope { Headers = warmHeaders, Body = new byte[] { 1 } });
+        }
+
+        using var gate = new ManualResetEventSlim(false);
+        var tasks = Enumerable.Range(0, parallelism + extra).Select(_ => Task.Run(async () =>
+        {
+            var seqId = Guid.NewGuid().ToString();
+            var headers = new Dictionary<string, object>
+            {
+                [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+                [HeaderKeys.SequenceId] = seqId,
+                [HeaderKeys.PacketNumber] = "0"
+            };
+            gate.Wait();
+            await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers,
+                new Envelope { Headers = headers, Body = new byte[] { 1 } });
+        })).ToList();
+
+        gate.Set();
+        await Task.WhenAll(tasks);
+
+        Assert.True(processor.ActiveStreamCount <= cap,
+            $"Expected ActiveStreamCount <= {cap} but was {processor.ActiveStreamCount}");
+    }
+
     // The processor must resolve the IStreamHandler from the consume scope that is currently
     // active when ProcessAsync runs. The dispatcher pushes a per-message scope; without
     // scope-aware resolution, scoped handler dependencies (DbContext, unit-of-work, tenant

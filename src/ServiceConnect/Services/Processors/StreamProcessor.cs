@@ -14,6 +14,12 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private readonly IMessageSerializer _serializer;
     private readonly TimeProvider _timeProvider;
     private readonly ConcurrentDictionary<string, ActiveStreamState> _activeStreams = new();
+    // Tracks admitted stream count separately so admission can be gated with Interlocked
+    // without relying on ConcurrentDictionary.Count (which is accurate but does not compose
+    // atomically with insertion). The counter is incremented inside the GetOrAdd factory
+    // (meaning only the thread whose factory runs counts) and decremented on every eviction
+    // or rollback path, keeping it in sync with actual dictionary membership.
+    private int _streamCount;
     private readonly ITimer _cleanupTimer;
     /// <summary>
     /// Maximum time a partial stream may sit without new packets before it is evicted.
@@ -56,6 +62,9 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
 
     public bool RunBeforeDeserialization => true;
 
+    // Exposed for unit-test observability; not part of the public API.
+    internal int ActiveStreamCount => _activeStreams.Count;
+
     public Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope,
@@ -80,13 +89,6 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             return NotHandledTask;
         }
 
-        // Reject new streams when the active-stream limit is reached.
-        if (!_activeStreams.ContainsKey(sequenceId) && _activeStreams.Count >= MaxActiveStreams)
-        {
-            _logger.LogWarning("Active stream limit ({Limit}) reached; rejecting new stream {SequenceId}", MaxActiveStreams, sequenceId);
-            return NotHandledTask;
-        }
-
         if (!headers.TryGetValue(HeaderKeys.PacketNumber, out var pnRaw))
             return NotHandledTask;
         var pnString = HeaderDecoder.Decode(pnRaw);
@@ -96,7 +98,36 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             return HandledTask; // Handled to prevent infinite requeue
         }
 
-        var state = _activeStreams.GetOrAdd(sequenceId, id => new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow()));
+        // Atomic admission via a separate Interlocked counter that is incremented inside
+        // the GetOrAdd factory. The factory runs at most once per absent key, so the
+        // increment-and-check executes under ConcurrentDictionary's per-bucket lock,
+        // making the "reserve a slot" step atomic. If the new count overshoots the cap we
+        // decrement immediately and record a rejection sentinel on the stack; after GetOrAdd
+        // returns we roll back our own insertion via TryRemove(KVP). This closes the original
+        // TOCTOU where two concurrent callers both observed Count == cap-1 and both called
+        // GetOrAdd, since the Interlocked counter ensures only one of them wins the cap-th slot.
+        ActiveStreamState? rejectedSentinel = null;
+        var state = _activeStreams.GetOrAdd(sequenceId, id =>
+        {
+            var newCount = Interlocked.Increment(ref _streamCount);
+            if (newCount > MaxActiveStreams)
+            {
+                Interlocked.Decrement(ref _streamCount);
+                // Create a sentinel to communicate rejection back to the outer code.
+                // ConcurrentDictionary requires the factory to return a value; we use
+                // the sentinel as that placeholder and immediately remove it below.
+                rejectedSentinel = new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow());
+                return rejectedSentinel;
+            }
+            return new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow());
+        });
+
+        if (rejectedSentinel is not null && ReferenceEquals(state, rejectedSentinel))
+        {
+            _activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state));
+            _logger.LogWarning("Active stream cap {Cap} reached; rejecting new stream {SequenceId}", MaxActiveStreams, sequenceId);
+            return NotHandledTask;
+        }
 
         try
         {
@@ -156,7 +187,8 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             // instance (the record's Stream property carries forward across `with`). The
             // sequence is poisoned regardless of which state instance is currently in the
             // dict, so we evict by key rather than by reference.
-            _activeStreams.TryRemove(sequenceId, out _);
+            if (_activeStreams.TryRemove(sequenceId, out _))
+                Interlocked.Decrement(ref _streamCount);
             return HandledTask;
         }
 
@@ -167,6 +199,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             // "present" to "removed"; the loser sees a stale state and must idempotent-ack.
             if (!_activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state)))
                 return HandledTask;
+            Interlocked.Decrement(ref _streamCount);
 
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))
             {
@@ -213,7 +246,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             if (kvp.Value.LastSeenUtc < cutoff)
             {
                 if (_activeStreams.TryRemove(kvp))
+                {
+                    Interlocked.Decrement(ref _streamCount);
                     _logger.LogWarning("Evicted incomplete stream {SequenceId} after timeout", kvp.Key);
+                }
             }
         }
     }
