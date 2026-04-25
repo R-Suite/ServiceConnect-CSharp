@@ -9,9 +9,11 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// End-to-end guard that a Consumer can be Started, Disposed, and Started again
-/// against the same queue without leaking ConsumerClient references or reusing a
-/// disposed connection.
+/// End-to-end smoke that a freshly-built Consumer over a queue previously used
+/// (and torn down) by another Consumer still consumes cleanly. Same-instance
+/// Dispose→Start field-state invariants (owned-connection nulling, client-bag
+/// clearing) are guarded directly by the unit suite; this exercises the
+/// outward-visible bus shape across lifecycles on shared broker state.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
 public class ConsumerRestartE2ETests
@@ -22,7 +24,7 @@ public class ConsumerRestartE2ETests
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task ConsumerStartDisposeStart_DeliversMessagesAcrossRestart()
+    public async Task FreshConsumerOnPreviouslyUsedQueue_DeliversAfterFirstDisposed()
     {
         var consumerQueue = _fixture.GetUniqueQueueName("consumer-restart");
         var producerQueue = _fixture.GetUniqueQueueName("consumer-restart-producer");
@@ -108,10 +110,10 @@ public class ConsumerRestartE2ETests
             if (firstProvider is IAsyncDisposable a) await a.DisposeAsync();
         }
 
-        // Second lifecycle: rebuild the bus, start the consumer again on the SAME queue,
-        // verify message delivery. Without C-04, the second start would reuse the disposed
-        // connection and either throw or never deliver. Without C-05, the bag would carry
-        // over disposed ConsumerClient hosts and double-dispose them on the next teardown.
+        // Second lifecycle: rebuild the bus and start a fresh consumer on the same queue,
+        // verify message delivery. The first lifecycle's DisposeAsync must release broker
+        // resources cleanly so a new bus on the same queue can stand up and consume without
+        // colliding with leftover topology, leases, or pending unacked deliveries.
         phase = 1;
         var secondProvider = BuildConsumerProvider();
         var secondBus = secondProvider.GetRequiredService<IBus>();
