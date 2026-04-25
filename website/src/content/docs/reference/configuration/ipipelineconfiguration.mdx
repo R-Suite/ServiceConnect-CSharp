@@ -31,7 +31,7 @@ IReadOnlyList<Type> AfterConsumingFilters { get; }
 
 Gets the filters that run after handler invocation.
 
-**Remarks.** Each type must implement `IFilter`. Handy for post-processing concerns such as metrics emission or cleanup.
+**Remarks.** Each type must implement `IFilter`. Handy for post-processing concerns such as metrics emission or cleanup. Returning `FilterAction.Stop` from an after-consuming filter suppresses any remaining post-processing stages but does not un-handle the message — the handler has already run and the message will still be acked.
 
 ---
 

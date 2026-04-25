@@ -1,13 +1,13 @@
 ---
 title: IFilter
-description: A short-circuiting stage in the consume or send pipeline — return FilterAction.Continue to proceed, FilterAction.Stop to drop.
+description: A short-circuiting stage in the consume or send pipeline — return FilterAction.Continue to proceed, FilterAction.Stop to stop.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IFilter` is a short-circuit stage in the pipeline — each filter returns `FilterAction.Continue` to proceed or `FilterAction.Stop` to drop the current message. Filters are cheap, synchronous-feeling hooks that fit neatly in front of a handler for concerns such as deduplication, tenant checks, or feature-flag gating. `IFilterPipeline` is the orchestrator that composes the registered filters into the outgoing, before-consuming, and after-consuming stages that wrap every handler invocation.
+`IFilter` is a short-circuit stage in the pipeline — each filter returns `FilterAction.Continue` to proceed or `FilterAction.Stop` to stop the pipeline. Filters are cheap, synchronous-feeling hooks that fit neatly in front of a handler for concerns such as deduplication, tenant checks, or feature-flag gating. `IFilterPipeline` is the orchestrator that composes the registered filters into the outgoing, before-consuming, and after-consuming stages that wrap every handler invocation.
 
 See [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) for the conceptual model, and reach for [`IMessageProcessingMiddleware`](../imessageprocessingmiddleware/) when you need an `await next()` style wrapper instead of a predicate.
 
@@ -25,7 +25,7 @@ Inspects or mutates `envelope` and returns whether the pipeline should continue.
 - `envelope` — the in-flight message envelope; headers may be read or written.
 - `cancellationToken` — cancels the filter when the consumer loop is stopping.
 
-**Returns.** `FilterAction.Continue` to continue pipeline execution; `FilterAction.Stop` to block the message and stop further stages.
+**Returns.** `FilterAction.Continue` to continue pipeline execution; `FilterAction.Stop` to stop the pipeline and suppress further stages.
 
 **Remarks.** Filters that need the bus should take `IBus` as a constructor dependency and be registered in DI. The historical `IFilter.Bus` property was never populated by the pipeline and returned null at runtime — it has been removed.
 
@@ -51,7 +51,7 @@ Runs every outgoing filter in registration order against `envelope`.
 - `envelope` — the envelope being published or sent.
 - `cancellationToken` — cancels the pipeline when the caller abandons the send.
 
-**Returns.** `FilterAction.Stop` if any filter blocked the message; `FilterAction.Continue` when the pipeline ran to completion.
+**Returns.** `FilterAction.Stop` if any filter stopped the pipeline; `FilterAction.Continue` when the pipeline ran to completion.
 
 **Remarks.** Invoked for every publish, send, and reply. Filters run sequentially and the first `FilterAction.Stop` short-circuits the rest.
 
@@ -71,7 +71,7 @@ Runs the before-consuming filters that fence the handler call.
 - `envelope` — the envelope about to be dispatched to a handler.
 - `cancellationToken` — cancels the pipeline with the consumer loop.
 
-**Returns.** `FilterAction.Stop` if any filter blocked the message; `FilterAction.Continue` when the pipeline ran to completion.
+**Returns.** `FilterAction.Stop` if any filter stopped the pipeline; `FilterAction.Continue` when the pipeline ran to completion.
 
 ---
 
@@ -89,7 +89,7 @@ Runs the after-consuming filters once the handler has returned.
 - `envelope` — the envelope whose handler just completed.
 - `cancellationToken` — cancels the pipeline with the consumer loop.
 
-**Returns.** `FilterAction.Stop` if any filter blocked the message; `FilterAction.Continue` when the pipeline ran to completion. Blocking here suppresses downstream post-processing stages but does not un-handle the message.
+**Returns.** `FilterAction.Stop` if any filter stopped the pipeline; `FilterAction.Continue` when the pipeline ran to completion. Stopping here suppresses remaining post-processing stages but does not un-handle the message.
 
 **Remarks.** Useful for post-processing concerns such as metrics emission, audit trails, or cleanup that is cheaper to run as a predicate than a middleware.
 
