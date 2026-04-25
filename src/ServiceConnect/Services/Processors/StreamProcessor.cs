@@ -161,7 +161,11 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
 
         if (state.Stream.IsComplete())
         {
-            _activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state));
+            // Race: two final-packet deliveries can both observe IsComplete() == true.
+            // Only the caller that wins TryRemove transitions the dict entry from
+            // "present" to "removed"; the loser sees a stale state and must idempotent-ack.
+            if (!_activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state)))
+                return HandledTask;
 
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))
             {

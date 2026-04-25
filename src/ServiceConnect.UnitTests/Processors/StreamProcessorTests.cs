@@ -333,6 +333,71 @@ public class StreamProcessorTests
             m => m.FullName == "System.Runtime.CompilerServices.IsExternalInit");
     }
 
+    // After the duplicate-packet idempotent-ack fix, multiple deliveries of the same final
+    // packet all observe IsComplete() == true. The dispatch path must gate on
+    // TryRemove returning true; otherwise every duplicate triggers another handler
+    // invocation. Use a Barrier to converge N threads at the dispatch boundary.
+    [Fact]
+    public async Task ProcessAsync_ConcurrentFinalPacketDeliveries_DispatchesHandlerOnce()
+    {
+        var sequenceId = Guid.NewGuid().ToString();
+        var msgType = typeof(SptMsg);
+
+        var typeRegistry = new MessageTypeRegistry();
+        typeRegistry.Register(msgType);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = msgType, HandlerType = typeof(SptCountingHandler) }
+        };
+        var streamHandlerRegistry = new StreamHandlerRegistry(handlerRefs, NullLogger<StreamHandlerRegistry>.Instance);
+
+        var counter = new SptCounter();
+        var services = new ServiceCollection();
+        services.AddSingleton<IStreamHandler<SptMsg>>(_ => new SptCountingHandler(counter));
+        var provider = services.BuildServiceProvider();
+
+        var msg = new SptMsg(Guid.NewGuid());
+        var serializerMock = new Mock<IMessageSerializer>();
+        serializerMock
+            .Setup(s => s.Deserialize(It.IsAny<System.Buffers.ReadOnlySequence<byte>>(), msgType))
+            .Returns(msg);
+
+        var processor = new StreamProcessor(
+            provider,
+            NullLogger<StreamProcessor>.Instance,
+            typeRegistry,
+            streamHandlerRegistry,
+            serializerMock.Object,
+            TimeProvider.System);
+
+        var payload = new byte[] { 0x01 };
+
+        const int concurrent = 8;
+        var barrier = new System.Threading.Barrier(concurrent);
+        var tasks = Enumerable.Range(0, concurrent).Select(_ => Task.Run(async () =>
+        {
+            // Each task gets its own headers dict so the dispatch path doesn't race on
+            // a shared dictionary; values are identical.
+            var headers = new Dictionary<string, object>
+            {
+                [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+                [HeaderKeys.SequenceId] = sequenceId,
+                [HeaderKeys.PacketNumber] = "0",
+                [HeaderKeys.LastPacketNumber] = "0",
+                [HeaderKeys.FullTypeName] = msgType.FullName!
+            };
+            var envelope = new Envelope { Headers = headers, Body = payload };
+
+            barrier.SignalAndWait();
+            await processor.ProcessAsync(payload, msgType, null, headers, envelope);
+        })).ToList();
+
+        await Task.WhenAll(tasks);
+
+        Assert.Equal(1, counter.Count);
+    }
+
     // The touch path must REPLACE the active-stream entry with a new instance carrying
     // the updated LastSeenUtc. If the field is mutated in place, the eviction sweep's
     // TOCTOU race is unavoidable.
@@ -407,5 +472,24 @@ file sealed class SptCapturingLogger : ILogger<StreamProcessor>
         Func<TState, Exception?, string> formatter)
     {
         Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
+    }
+}
+
+file sealed class SptCounter
+{
+    private int _count;
+    public int Count => Volatile.Read(ref _count);
+    public void Increment() => Interlocked.Increment(ref _count);
+}
+
+file class SptCountingHandler : IStreamHandler<SptMsg>
+{
+    private readonly SptCounter _counter;
+    public SptCountingHandler(SptCounter counter) => _counter = counter;
+    public IMessageBusReadStream Stream { get; set; } = null!;
+    public Task ExecuteAsync(SptMsg stream, CancellationToken cancellationToken = default)
+    {
+        _counter.Increment();
+        return Task.CompletedTask;
     }
 }
