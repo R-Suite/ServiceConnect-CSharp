@@ -458,8 +458,14 @@ public sealed class Bus : IBus
         }
         finally
         {
+            // Guard against the semaphore being disposed by a concurrent DisposeAsync that won the
+            // race after WaitAsync returned. A disposed-semaphore Release is benign here — we are
+            // already exiting — so swallow any ObjectDisposedException to avoid masking the real cause.
             if (semaphoreAcquired)
-                _lifecycleSemaphore.Release();
+            {
+                try { _lifecycleSemaphore.Release(); }
+                catch (ObjectDisposedException) { }
+            }
         }
 
         if (pendingCancellation != null)

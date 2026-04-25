@@ -1271,16 +1271,23 @@ namespace ServiceConnect.UnitTests
                     _scopeAccessor,
                     mockConsumer.Object);
 
+                using var barrier = new Barrier(2);
+
                 var startTask = Task.Run(async () =>
                 {
+                    barrier.SignalAndWait();
                     try { await bus.StartConsumingAsync(); }
                     catch (ObjectDisposedException ode) when (ode.ObjectName == typeof(Bus).FullName) { /* expected */ }
                     catch (ObjectDisposedException) { Interlocked.Increment(ref unexpected); }
                     catch (InvalidOperationException) { /* race-acceptable */ }
                 });
-                var disposeTask = Task.Run(async () => await bus.DisposeAsync());
+                var disposeTask = Task.Run(async () =>
+                {
+                    barrier.SignalAndWait();
+                    await bus.DisposeAsync();
+                });
 
-                await Task.WhenAll(startTask, disposeTask);
+                await Task.WhenAll(startTask, disposeTask).WaitAsync(TimeSpan.FromSeconds(10));
             }
 
             Assert.Equal(0, unexpected);
