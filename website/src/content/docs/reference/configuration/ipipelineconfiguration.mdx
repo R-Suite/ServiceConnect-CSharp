@@ -19,7 +19,7 @@ IReadOnlyList<Type> BeforeConsumingFilters { get; }
 
 Gets the filters that run before handler invocation.
 
-**Remarks.** Each type must implement `IFilter`. Filters run in registration order; returning `false` short-circuits the pipeline and skips the handler.
+**Remarks.** Each type must implement `IFilter`. Filters run in registration order; returning `FilterAction.Stop` short-circuits the pipeline and skips the handler.
 
 ---
 
@@ -96,24 +96,24 @@ public sealed class LoggingFilter : IFilter
 
     public LoggingFilter(ILogger<LoggingFilter> logger) => _logger = logger;
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
             "Consuming {MessageType} {MessageId} from {SourceAddress}",
             envelope.Headers.GetValueOrDefault("MessageType"),
             envelope.Headers.GetValueOrDefault("MessageId"),
             envelope.Headers.GetValueOrDefault("SourceAddress"));
-        return Task.FromResult(true);
+        return Task.FromResult(FilterAction.Continue);
     }
 }
 
 public sealed class OutgoingRetryFilter : IFilter
 {
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         envelope.Headers["RetryPolicy"] = "exponential";
         envelope.Headers["RetryBudget"] = "5";
-        return Task.FromResult(true);
+        return Task.FromResult(FilterAction.Continue);
     }
 }
 ```

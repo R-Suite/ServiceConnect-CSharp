@@ -73,7 +73,7 @@ There are also two opt-in headers:
 
 ## Tracing (OpenTelemetry)
 
-The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbing for distributed tracing. It exposes three sources — `ServiceConnect.Bus.Publish`, `ServiceConnect.Bus.Send`, and `ServiceConnect.Bus.Consume` — independently sampleable, each emitting spans tagged with the OTel messaging semantic conventions (`messaging.system`, `messaging.destination`, `messaging.message.id`, `messaging.message.conversation_id`). Pub/sub and point-to-point traffic are distinguished by the `messaging.operation` tag (`publish` vs `send`) so backends aggregate each shape separately.
+The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbing for distributed tracing. It exposes three sources — `ServiceConnect.Bus.Publish`, `ServiceConnect.Bus.Send`, and `ServiceConnect.Bus.Consume` — independently sampleable, each emitting spans tagged with the OTel messaging semantic conventions (`messaging.system`, `messaging.destination.name`, `messaging.rabbitmq.destination.routing_key`, `messaging.message.id`, `messaging.message.conversation_id`). For RabbitMQ, `messaging.destination.name` carries the broker-side destination — the exchange name for publishes and the queue name for sends — and `messaging.rabbitmq.destination.routing_key` carries the publish routing key when present. Pub/sub and point-to-point traffic are distinguished by the `messaging.operation` tag (`publish` vs `send`) so backends aggregate each shape separately.
 
 ```bash
 dotnet add package ServiceConnect.Telemetry
