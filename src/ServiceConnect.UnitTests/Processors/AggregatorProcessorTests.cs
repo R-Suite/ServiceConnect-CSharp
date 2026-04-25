@@ -687,15 +687,6 @@ public class AggregatorProcessorTests
         Assert.Empty(odeErrors);
     }
 
-    /// <summary>
-    /// Regression guard: after concurrent ResetTimer calls for the same aggregator,
-    /// the dictionary holds exactly one live timer. The pre-fix code path used
-    /// ConcurrentDictionary.AddOrUpdate whose factory may run multiple times under
-    /// contention; losing factory attempts produced live Timer instances that were
-    /// never installed in _timers and never disposed. The single-flight lock makes
-    /// "exactly one Timer per ResetTimer call, previous disposed atomically" the
-    /// only reachable observable state.
-    /// </summary>
     [Fact]
     public async Task ProcessAsync_AfterDispose_ThrowsObjectDisposedExceptionWithoutTouchingDisposedCts()
     {
@@ -740,6 +731,15 @@ public class AggregatorProcessorTests
                 CancellationToken.None));
     }
 
+    /// <summary>
+    /// Regression guard: after concurrent ResetTimer calls for the same aggregator,
+    /// the dictionary holds exactly one live timer. The pre-fix code path used
+    /// ConcurrentDictionary.AddOrUpdate whose factory may run multiple times under
+    /// contention; losing factory attempts produced live Timer instances that were
+    /// never installed in _timers and never disposed. The single-flight lock makes
+    /// "exactly one Timer per ResetTimer call, previous disposed atomically" the
+    /// only reachable observable state.
+    /// </summary>
     [Fact]
     public async Task ResetTimer_ConcurrentCalls_NoOrphanedTimers()
     {
