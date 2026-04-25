@@ -374,7 +374,7 @@ public class StreamProcessorTests
         var payload = new byte[] { 0x01 };
 
         const int concurrent = 8;
-        var barrier = new System.Threading.Barrier(concurrent);
+        using var barrier = new System.Threading.Barrier(concurrent);
         var tasks = Enumerable.Range(0, concurrent).Select(_ => Task.Run(async () =>
         {
             // Each task gets its own headers dict so the dispatch path doesn't race on
@@ -482,7 +482,7 @@ file sealed class SptCounter
     public void Increment() => Interlocked.Increment(ref _count);
 }
 
-file class SptCountingHandler : IStreamHandler<SptMsg>
+file sealed class SptCountingHandler : IStreamHandler<SptMsg>
 {
     private readonly SptCounter _counter;
     public SptCountingHandler(SptCounter counter) => _counter = counter;
