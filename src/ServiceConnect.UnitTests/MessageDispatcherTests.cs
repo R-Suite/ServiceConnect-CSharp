@@ -70,8 +70,8 @@ public class MessageDispatcherTests
         _replyManager = new TestDispatcherReplyManager();
 
         // Default: filters don't block
-        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
-        _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
+        _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
     }
 
     private static Mock<IPipelineConfiguration> CreateEmptyPipelineConfig()
@@ -210,7 +210,7 @@ public class MessageDispatcherTests
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "BlockedUser" };
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
-        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
 
         bool handlerCalled = false;
         var handler = new TestDispatchHandler(onHandle: _ => handlerCalled = true);
@@ -264,7 +264,7 @@ public class MessageDispatcherTests
         var headers = MakeHeaders(responseMessageId: replyId);
         _mockFilterPipeline
             .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(FilterAction.Stop);
         _mockSerializer
             .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(new FakeMessage1(Guid.NewGuid()));
@@ -289,7 +289,7 @@ public class MessageDispatcherTests
         _mockFilterPipeline
             .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("before-filter"))
-            .ReturnsAsync(false);
+            .ReturnsAsync(FilterAction.Continue);
 
         var preDeser = new OrderRecordingPreDeserProcessor(order);
         var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
@@ -311,7 +311,7 @@ public class MessageDispatcherTests
         // and observe or handle a message the filter rejected.
         _mockFilterPipeline
             .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(FilterAction.Stop);
 
         var preDeser = new OrderRecordingPreDeserProcessor(new List<string>());
         var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });

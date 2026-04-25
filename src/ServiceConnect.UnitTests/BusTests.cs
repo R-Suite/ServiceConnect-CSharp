@@ -46,8 +46,8 @@ namespace ServiceConnect.UnitTests
             _mockQueueConfig = new Mock<IQueueConfiguration>();
             _mockQueueConfig.Setup(x => x.QueueName).Returns("test-queue");
 
-            // Default: filters pass through (false = not stopped)
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+            // Default: filters pass through
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
             _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns(new byte[] { 1, 2, 3 });
 
             _mockDispatcher = new Mock<IMessageDispatcher>();
@@ -221,7 +221,7 @@ namespace ServiceConnect.UnitTests
         public async Task PublishAsync_ShouldNotPublish_WhenFilterBlocksMessage()
         {
             // Arrange — must have outgoing filters registered so the filter pipeline is invoked
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
             var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
             pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
             var busWithFilters = new Bus(
@@ -402,7 +402,7 @@ namespace ServiceConnect.UnitTests
                 .ReturnsAsync(() =>
                 {
                     providerDuringFilter = scopeAccessor.Current;
-                    return false;
+                    return FilterAction.Continue;
                 });
 
             var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
@@ -446,7 +446,7 @@ namespace ServiceConnect.UnitTests
                 .ReturnsAsync(() =>
                 {
                     seenMarkers.Add(scopeAccessor.Current.GetRequiredService<MarkerProbe>());
-                    return false;
+                    return FilterAction.Continue;
                 });
 
             var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
@@ -598,7 +598,7 @@ namespace ServiceConnect.UnitTests
         public async Task SendAsync_ShouldNotSend_WhenFilterBlocksMessage()
         {
             // Arrange — must have outgoing filters registered so the filter pipeline is invoked
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
             var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
             pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
             var busWithFilters = new Bus(
@@ -720,7 +720,7 @@ namespace ServiceConnect.UnitTests
         {
             _mockFilterPipeline
                 .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(true);
+                .ReturnsAsync(FilterAction.Stop);
 
             var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
             pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
@@ -882,7 +882,7 @@ namespace ServiceConnect.UnitTests
                 .ReturnsAsync((Envelope env, CancellationToken _) =>
                 {
                     capturedEnvelope = env;
-                    return false;
+                    return FilterAction.Continue;
                 });
 
             var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
@@ -925,7 +925,7 @@ namespace ServiceConnect.UnitTests
                 .ReturnsAsync((Envelope env, CancellationToken _) =>
                 {
                     seenMessageId = env.Headers[HeaderKeys.MessageId]?.ToString();
-                    return false;
+                    return FilterAction.Continue;
                 });
 
             var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();

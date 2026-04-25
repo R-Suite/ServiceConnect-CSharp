@@ -10,15 +10,14 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests
 {
-    // Marker abstract classes for ordering tests
     public abstract class FakeFilter1 : IFilter
     {
-        public abstract Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
+        public abstract Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
     }
 
     public abstract class FakeFilter2 : IFilter
     {
-        public abstract Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
+        public abstract Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
     }
 
     public class FilterPipelineTests
@@ -40,19 +39,19 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_WithNoFilters_ReturnsFalse()
+        public async Task ExecuteOutgoingFiltersAsync_WithNoFilters_ReturnsContinue()
         {
             var envelope = new Envelope();
             var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
-            Assert.False(result);
+            Assert.Equal(FilterAction.Continue, result);
         }
 
         [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_WhenFilterReturnsTrue_ReturnsFalse()
+        public async Task ExecuteOutgoingFiltersAsync_WhenFilterContinues_PipelineContinues()
         {
-            // true from filter = continue processing => pipeline returns false (not stopped)
             var mockFilter = new Mock<FakeFilter1>();
-            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FilterAction.Continue);
 
             _mockServiceProvider
                 .Setup(sp => sp.GetService(typeof(FakeFilter1)))
@@ -63,15 +62,15 @@ namespace ServiceConnect.UnitTests
             var envelope = new Envelope();
             var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
 
-            Assert.False(result);
+            Assert.Equal(FilterAction.Continue, result);
         }
 
         [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_WhenFilterReturnsFalse_ReturnsTrue()
+        public async Task ExecuteOutgoingFiltersAsync_WhenFilterStops_PipelineStops()
         {
-            // false from filter = stop pipeline => pipeline returns true (stopped)
             var mockFilter = new Mock<FakeFilter1>();
-            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
+            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FilterAction.Stop);
 
             _mockServiceProvider
                 .Setup(sp => sp.GetService(typeof(FakeFilter1)))
@@ -82,7 +81,7 @@ namespace ServiceConnect.UnitTests
             var envelope = new Envelope();
             var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
 
-            Assert.True(result);
+            Assert.Equal(FilterAction.Stop, result);
         }
 
         [Fact]
@@ -93,12 +92,12 @@ namespace ServiceConnect.UnitTests
             var mockFilter1 = new Mock<FakeFilter1>();
             mockFilter1.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
                 .Callback(() => callOrder.Add("filter1"))
-                .ReturnsAsync(true);
+                .ReturnsAsync(FilterAction.Continue);
 
             var mockFilter2 = new Mock<FakeFilter2>();
             mockFilter2.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
                 .Callback(() => callOrder.Add("filter2"))
-                .ReturnsAsync(true);
+                .ReturnsAsync(FilterAction.Continue);
 
             _mockServiceProvider
                 .Setup(sp => sp.GetService(typeof(FakeFilter1)))
@@ -117,13 +116,15 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_StopsAtFirstBlockingFilter()
+        public async Task ExecuteOutgoingFiltersAsync_StopsAtFirstStoppingFilter()
         {
             var mockFilter1 = new Mock<FakeFilter1>();
-            mockFilter1.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(false); // blocks
+            mockFilter1.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FilterAction.Stop);
 
             var mockFilter2 = new Mock<FakeFilter2>();
-            mockFilter2.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            mockFilter2.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FilterAction.Continue);
 
             _mockServiceProvider
                 .Setup(sp => sp.GetService(typeof(FakeFilter1)))
@@ -138,7 +139,7 @@ namespace ServiceConnect.UnitTests
             var envelope = new Envelope();
             await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
 
-            // Filter2 should never have been called
+            // Filter2 should never have been called once filter1 said Stop.
             mockFilter2.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
@@ -156,19 +157,19 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task ExecuteBeforeConsumingFiltersAsync_WithNoFilters_ReturnsFalse()
+        public async Task ExecuteBeforeConsumingFiltersAsync_WithNoFilters_ReturnsContinue()
         {
             var envelope = new Envelope();
             var result = await _pipeline.ExecuteBeforeConsumingFiltersAsync(envelope);
-            Assert.False(result);
+            Assert.Equal(FilterAction.Continue, result);
         }
 
         [Fact]
-        public async Task ExecuteAfterConsumingFiltersAsync_WithNoFilters_ReturnsFalse()
+        public async Task ExecuteAfterConsumingFiltersAsync_WithNoFilters_ReturnsContinue()
         {
             var envelope = new Envelope();
             var result = await _pipeline.ExecuteAfterConsumingFiltersAsync(envelope);
-            Assert.False(result);
+            Assert.Equal(FilterAction.Continue, result);
         }
 
         [Fact]
@@ -178,12 +179,14 @@ namespace ServiceConnect.UnitTests
             // not from any previously captured provider. Swap the current scope mid-flight
             // and verify the new provider is the one queried.
             var firstFilter = new Mock<FakeFilter1>();
-            firstFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            firstFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FilterAction.Continue);
             _mockServiceProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(firstFilter.Object);
 
             var otherProvider = new Mock<IServiceProvider>();
             var swappedFilter = new Mock<FakeFilter1>();
-            swappedFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            swappedFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FilterAction.Continue);
             otherProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(swappedFilter.Object);
 
             _config.OutgoingFilters.Add(typeof(FakeFilter1));
@@ -214,7 +217,8 @@ namespace ServiceConnect.UnitTests
         public async Task ExecuteOutgoingFiltersAsync_PreCancelledToken_ThrowsOCEBeforeFilterRuns()
         {
             var mockFilter = new Mock<FakeFilter1>();
-            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(true);
+            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FilterAction.Continue);
 
             _mockServiceProvider
                 .Setup(sp => sp.GetService(typeof(FakeFilter1)))

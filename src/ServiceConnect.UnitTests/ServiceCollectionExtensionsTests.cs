@@ -436,8 +436,8 @@ file sealed class TestInboundMiddleware : IMessageProcessingMiddleware
 
 file sealed class TestInboundFilter : IFilter
 {
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default) =>
-        Task.FromResult(true);
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default) =>
+        Task.FromResult(FilterAction.Continue);
 }
 
 file sealed class TestSendMiddleware : ISendMessageMiddleware
