@@ -17,7 +17,6 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     private readonly ILogger<MongoDbAggregatorPersistor> _logger;
     private readonly IMessageTypeRegistry _typeRegistry;
     private readonly TimeProvider _timeProvider;
-    private volatile bool _indexesEnsured;
 
     // Mongo returns these error codes when concurrent index creation detects that an index
     // with the same keys or options already exists. Either means "someone else did this for us";
@@ -224,13 +223,15 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 
     /// <summary>
     /// Ensures indexes on Name and the compound (Name, DataBson.CorrelationId) exist.
-    /// Called lazily on first write; the flag is checked before every write to avoid
-    /// a round-trip on every call while still retrying after a failure.
+    /// Every call hits MongoDB. createIndexes is idempotent server-side: if matching
+    /// indexes already exist MongoDB returns immediately without additional work. No
+    /// in-process cache means that if an administrator drops and recreates the database
+    /// while this process is running, the next write naturally recreates the indexes.
+    /// Codes 85 (IndexOptionsConflict) and 86 (IndexKeySpecsConflict) are swallowed to
+    /// keep multi-process startup races safe.
     /// </summary>
     private async Task EnsureIndexesAsync(CancellationToken cancellationToken)
     {
-        if (_indexesEnsured) return;
-
         try
         {
             // Single-field index on Name supports GetDataAsync, RemoveAllAsync, CountAsync
@@ -244,13 +245,11 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                     .Ascending("DataBson.CorrelationId"));
 
             await _collection.Indexes.CreateManyAsync([nameIndex, nameCorrelationIndex], cancellationToken).ConfigureAwait(false);
-            _indexesEnsured = true;
         }
         catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
         {
             // Another process / thread created the same index concurrently. Their work is ours;
-            // mark ensured to avoid a round-trip on every subsequent write.
-            _indexesEnsured = true;
+            // the indexes are present regardless of which side succeeded.
         }
     }
 

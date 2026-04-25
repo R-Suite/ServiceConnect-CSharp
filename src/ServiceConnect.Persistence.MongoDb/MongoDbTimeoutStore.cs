@@ -16,7 +16,6 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     private readonly TimeProvider _timeProvider;
     private readonly int _batchSize;
     private readonly TimeSpan _lockLeaseDuration;
-    private int _timeoutIndexEnsuredFlag;
 
     private const string TimeoutsCollectionName = "Timeouts";
 
@@ -283,19 +282,23 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
     private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection, CancellationToken cancellationToken)
     {
-        // Interlocked gate: only one thread performs index creation; the rest short-circuit
-        // once the flag flips to 1. A non-atomic bool could in principle allow two threads
-        // to race to CreateManyAsync and cause an IndexOptionsConflict, which we'd then
-        // swallow — the atomic flag removes that spurious work entirely.
-        if (Interlocked.CompareExchange(ref _timeoutIndexEnsuredFlag, 0, 0) == 1) return;
-
+        // Every call hits MongoDB. createIndexes is idempotent server-side: if the
+        // collection already has indexes matching the key spec and options, MongoDB
+        // returns immediately without doing additional work. No in-process cache means
+        // that if an administrator drops and recreates the database while this process is
+        // running, the next write naturally recreates the indexes.
+        //
+        // Codes 85 (IndexOptionsConflict) and 86 (IndexKeySpecsConflict) arise when two
+        // processes race to create the same index and MongoDB detects the duplicate
+        // before the first creation has been fully committed. Both are swallowed so
+        // multi-process startup races do not produce spurious write failures.
+        //
+        // Note: TimeoutData.Id maps to the MongoDB _id field (driver convention).
+        // _id is always unique; creating an explicit unique index on it is rejected
+        // by MongoDB with "The field 'unique' is not valid for an _id index specification".
+        // The three composite indexes below are the only ones we need to create.
         try
         {
-            // Note: TimeoutData.Id maps to the MongoDB _id field (driver convention).
-            // _id is always unique; creating an explicit unique index on it is rejected
-            // by MongoDB with "The field 'unique' is not valid for an _id index specification".
-            // The three composite indexes below are the only ones we need to create.
-
             var lockedTimeIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys
                     .Ascending(x => x.Locked)
@@ -313,14 +316,12 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 [lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
                 cancellationToken: cancellationToken
             ).ConfigureAwait(false);
-            Interlocked.Exchange(ref _timeoutIndexEnsuredFlag, 1);
         }
         catch (MongoCommandException ex) when (ex.Code is 85 or 86)
         {
             // 85 IndexOptionsConflict / 86 IndexKeySpecsConflict — another process
             // created the same index concurrently. Treat as success to avoid spurious
             // first-insert failures in multi-process deployments.
-            Interlocked.Exchange(ref _timeoutIndexEnsuredFlag, 1);
         }
     }
 }
