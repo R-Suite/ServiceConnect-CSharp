@@ -330,6 +330,45 @@ public class HandlerProcessorTests
         Assert.False(handlerC.Invoked);
     }
 
+    [Fact]
+    public async Task ProcessAsync_HandlerThrowsOCE_OnNonCancelledCT_IsTreatedAsFault()
+    {
+        // The dispatch CT is not cancelled, but handler A throws OCE bound to a
+        // different (already-cancelled) token. Because the dispatch CT is not
+        // cancelled, the in-loop `when` filter evaluates to false, so the OCE
+        // falls through to the general catch and is aggregated. Handler B must
+        // still run — independent faults must not short-circuit the loop.
+        using var unrelatedCts = new CancellationTokenSource();
+        await unrelatedCts.CancelAsync();
+
+        var handlerA = new CancellingHpHandler(unrelatedCts.Token);
+        var handlerB = new RecordingHpHandler();
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        using var dispatchCts = new CancellationTokenSource(); // intentionally not cancelled
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, dispatchCts.Token));
+
+        // The OCE from handler A must be captured as a handler fault.
+        Assert.Single(ex.InnerExceptions);
+        Assert.IsAssignableFrom<OperationCanceledException>(ex.InnerExceptions[0]);
+
+        // Both handlers must have been invoked — the OCE is a fault, not a shutdown signal.
+        Assert.True(handlerA.Invoked);
+        Assert.True(handlerB.Invoked);
+    }
+
     private static MessageHandlerRegistry BuildRegistry(params Type[] messageTypes)
     {
         var refs = messageTypes
