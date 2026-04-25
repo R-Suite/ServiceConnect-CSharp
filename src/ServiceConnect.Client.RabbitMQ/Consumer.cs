@@ -199,6 +199,10 @@ public sealed class Consumer : IConsumer
                 _logger.LogWarning(ex, "Failed to dispose consumer host - continuing");
             }
         }
+        // Reset the bag so a subsequent StartConsumingAsync starts from empty;
+        // otherwise per-cycle entries accumulate and the disposed-host references
+        // are retained for the lifetime of the Consumer.
+        _clients.Clear();
 
         // Close and dispose the setup channel before nulling it.
         if (_model is { IsOpen: true })

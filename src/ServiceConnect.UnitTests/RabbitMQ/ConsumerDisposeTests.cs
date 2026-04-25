@@ -79,4 +79,48 @@ public class ConsumerDisposeTests
         // reused across StartConsumingAsync calls.
         Assert.Same(connectionMock.Object, GetField<IServiceConnectConnection?>(consumer, "_connection"));
     }
+
+    [Fact]
+    public async Task DisposeAsync_DisposesAllClientsAndClearsBag()
+    {
+        var consumer = CreateConsumer();
+        var clients = GetField<ConcurrentBag<IAsyncDisposable>>(consumer, "_clients");
+
+        var c1 = new Mock<IAsyncDisposable>();
+        c1.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        var c2 = new Mock<IAsyncDisposable>();
+        c2.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
+
+        clients.Add(c1.Object);
+        clients.Add(c2.Object);
+
+        await consumer.DisposeAsync();
+
+        // Each registered client is disposed exactly once.
+        c1.Verify(c => c.DisposeAsync(), Times.Once);
+        c2.Verify(c => c.DisposeAsync(), Times.Once);
+        // Bag is empty after dispose so a subsequent StartConsumingAsync does not
+        // accumulate stale entries.
+        Assert.Empty(clients);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_AcrossMultipleCycles_LeavesBagBounded()
+    {
+        var consumer = CreateConsumer();
+        var clients = GetField<ConcurrentBag<IAsyncDisposable>>(consumer, "_clients");
+
+        for (int cycle = 0; cycle < 5; cycle++)
+        {
+            // Simulate a Start that registered 3 clients, then a Dispose.
+            for (int i = 0; i < 3; i++)
+            {
+                var mock = new Mock<IAsyncDisposable>();
+                mock.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
+                clients.Add(mock.Object);
+            }
+            await consumer.DisposeAsync();
+            Assert.Empty(clients);
+        }
+    }
 }
