@@ -86,7 +86,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
                 return;
             headers = ExtractHeaders(envelope);
         }
@@ -125,7 +125,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
                 return;
             headers = ExtractHeaders(envelope);
         }
@@ -160,7 +160,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
@@ -189,7 +189,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
@@ -224,7 +224,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
             headers = ExtractHeaders(envelope);
         }
@@ -256,7 +256,7 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false))
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
                 return;
             headers = ExtractHeaders(envelope);
         }
@@ -467,7 +467,7 @@ public sealed class Bus : IBus
     // middleware: a fresh per-send DI scope is pushed through ConsumeScopeAccessor so
     // scoped/transient filter dependencies are honoured instead of being leaked via
     // the root provider. The scope is disposed as soon as the filter chain completes.
-    private async Task<bool> RunOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken)
+    private async Task<FilterAction> RunOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         using var _ = _scopeAccessor.Push(scope.ServiceProvider);

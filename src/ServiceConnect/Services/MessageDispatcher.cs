@@ -91,9 +91,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
             // filters here guarantees stream packets and replies traverse the same
             // pre- and post-consume filter stages as any other message
             // (after-filters only fire once beforeFiltersRan is set).
-            bool blocked = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+            FilterAction beforeAction = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
             beforeFiltersRan = true;
-            if (blocked)
+            if (beforeAction == FilterAction.Stop)
                 return new ConsumeEventResult { Success = true };
 
             ReplyProcessor? replyProcessor = null;

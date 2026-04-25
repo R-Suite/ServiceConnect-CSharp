@@ -6,17 +6,20 @@ namespace ServiceConnect.Interfaces;
 public interface IFilterPipeline
 {
     /// <summary>
-    /// Executes all outgoing filters. Returns <c>true</c> if any filter blocked the message.
+    /// Executes all outgoing filters. Returns <see cref="FilterAction.Stop"/> if any filter
+    /// blocked the message; otherwise <see cref="FilterAction.Continue"/>.
     /// </summary>
-    Task<bool> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
+    Task<FilterAction> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Executes all before-consuming filters. Returns <c>true</c> if any filter blocked the message.
+    /// Executes all before-consuming filters. Returns <see cref="FilterAction.Stop"/> if any
+    /// filter blocked the message; otherwise <see cref="FilterAction.Continue"/>.
     /// </summary>
-    Task<bool> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
+    Task<FilterAction> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Executes all after-consuming filters. Returns <c>true</c> if any filter blocked the message.
+    /// Executes all after-consuming filters. Returns <see cref="FilterAction.Stop"/> if any
+    /// filter blocked the message; otherwise <see cref="FilterAction.Continue"/>.
     /// </summary>
-    Task<bool> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
+    Task<FilterAction> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
 }

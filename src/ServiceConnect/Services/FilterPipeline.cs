@@ -11,34 +11,28 @@ namespace ServiceConnect.Services;
 /// </summary>
 public sealed class FilterPipeline(IPipelineConfiguration config, ConsumeScopeAccessor scopeAccessor) : IFilterPipeline
 {
-    /// <summary>
-    /// Runs the configured outgoing filters and returns whether processing was stopped.
-    /// </summary>
-    public Task<bool> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public Task<FilterAction> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         return ExecuteFiltersAsync(config.OutgoingFilters, envelope, cancellationToken);
     }
 
-    /// <summary>
-    /// Runs the configured pre-consume filters and returns whether processing was stopped.
-    /// </summary>
-    public Task<bool> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public Task<FilterAction> ExecuteBeforeConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         return ExecuteFiltersAsync(config.BeforeConsumingFilters, envelope, cancellationToken);
     }
 
-    /// <summary>
-    /// Runs the configured post-consume filters and returns whether processing was stopped.
-    /// </summary>
-    public Task<bool> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public Task<FilterAction> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         return ExecuteFiltersAsync(config.AfterConsumingFilters, envelope, cancellationToken);
     }
 
-    private async Task<bool> ExecuteFiltersAsync(IReadOnlyList<Type> filterTypes, Envelope envelope, CancellationToken cancellationToken)
+    private async Task<FilterAction> ExecuteFiltersAsync(IReadOnlyList<Type> filterTypes, Envelope envelope, CancellationToken cancellationToken)
     {
         if (filterTypes == null || filterTypes.Count == 0)
-            return false;
+            return FilterAction.Continue;
 
         var serviceProvider = scopeAccessor.Current;
 
@@ -47,11 +41,11 @@ public sealed class FilterPipeline(IPipelineConfiguration config, ConsumeScopeAc
             cancellationToken.ThrowIfCancellationRequested();
             var filter = (IFilter)serviceProvider.GetRequiredService(filterType);
 
-            bool continueProcessing = await filter.ProcessAsync(envelope, cancellationToken).ConfigureAwait(false);
-            if (!continueProcessing)
-                return true; // stopped
+            FilterAction action = await filter.ProcessAsync(envelope, cancellationToken).ConfigureAwait(false);
+            if (action == FilterAction.Stop)
+                return FilterAction.Stop;
         }
 
-        return false; // not stopped
+        return FilterAction.Continue;
     }
 }
