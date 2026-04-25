@@ -101,7 +101,12 @@ public class ProducerDisposeConcurrencyE2ETests
 
         Assert.Empty(unexpectedExceptions);
 
-        // Explicit check: no SemaphoreFullException
+        // Explicit failure-mode checks:
+        // - SemaphoreFullException would mean a publisher's Release() ran on a
+        //   semaphore that DisposeAsync had already disposed.
+        // - NullReferenceException would mean a publisher reached _model after
+        //   DisposeAsync nulled it (post-WaitAsync race).
         Assert.DoesNotContain(strayExceptions, ex => ex is SemaphoreFullException);
+        Assert.DoesNotContain(strayExceptions, ex => ex is NullReferenceException);
     }
 }
