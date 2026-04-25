@@ -82,6 +82,10 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal("OrderPlaced publish", activity!.DisplayName);
         Assert.Equal("OrderPlaced", activity.GetTagItem(MessagingDestination));
         Assert.Equal("high-priority", activity.GetTagItem(MessagingDestinationRoutingKey));
+        // Regression guard: the bug being fixed stamped the routing key onto the destination tag.
+        // Asserting the exchange value above implicitly catches it, but the contrived case where
+        // exchange == routing-key would mask a regression. Make the negative assertion explicit.
+        Assert.NotEqual("high-priority", activity.GetTagItem(MessagingDestination));
     }
 
     [Fact]
@@ -120,22 +124,6 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal("anonymous publish", activity!.DisplayName);
         Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
         Assert.Null(activity.GetTagItem(MessagingDestination));
-    }
-
-    [Fact]
-    public void Publish_WithoutExchange_MarksDestinationAnonymous()
-    {
-        var args = new PublishEventArgs
-        {
-            Exchange = "",
-            Message = new Message(Guid.NewGuid())
-        };
-
-        using var activity = ServiceConnectActivitySource.Publish(args);
-
-        Assert.NotNull(activity);
-        Assert.Equal("anonymous publish", activity!.DisplayName);
-        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
     }
 
     [Fact]
