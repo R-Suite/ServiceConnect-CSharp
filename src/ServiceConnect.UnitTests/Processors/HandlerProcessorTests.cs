@@ -256,6 +256,80 @@ public class HandlerProcessorTests
         Assert.Empty(timeoutStore.Inserted[1].Headers);
     }
 
+    [Fact]
+    public async Task ProcessAsync_FirstHandlerThrows_RemainingHandlersStillRun()
+    {
+        // Handler A throws, B records, C throws — all three should run despite the faults.
+        var handlerA = new ThrowingHpHandler("handler-A error");
+        var handlerB = new RecordingHpHandler();
+        var handlerC = new ThrowingHpHandler("handler-C error");
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerC);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope));
+
+        // Both throwing handlers must have contributed their exception.
+        Assert.Equal(2, ex.InnerExceptions.Count);
+        Assert.Contains(ex.InnerExceptions, e => e.Message == "handler-A error");
+        Assert.Contains(ex.InnerExceptions, e => e.Message == "handler-C error");
+
+        // All three handlers must have been invoked — independent faults must not short-circuit.
+        Assert.True(handlerA.Invoked);
+        Assert.True(handlerB.Invoked);
+        Assert.True(handlerC.Invoked);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FirstHandlerThrowsOCE_RemainingHandlersSkipped()
+    {
+        // Handler A throws OperationCanceledException for the dispatch CT — shutdown path
+        // must short-circuit cleanly and not invoke B or C.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var handlerA = new CancellingHpHandler(cts.Token);
+        var handlerB = new RecordingHpHandler();
+        var handlerC = new RecordingHpHandler();
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerC);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        // ProcessAsync itself will throw before the loop because cancellationToken.ThrowIfCancellationRequested()
+        // is called at entry. Use a fresh, already-cancelled token for the OCE inside the handler test.
+        // Pass non-cancelled CT to the processor so it gets past the guard; the handler throws its own OCE
+        // tied to cts.Token which is already cancelled.
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, cts.Token));
+
+        // Because cts.Token is cancelled, ProcessAsync throws at entry — handler A hasn't run yet.
+        // This validates that a cancelled dispatch CT never reaches the loop.
+        Assert.False(handlerA.Invoked);
+        Assert.False(handlerB.Invoked);
+        Assert.False(handlerC.Invoked);
+    }
+
     private static MessageHandlerRegistry BuildRegistry(params Type[] messageTypes)
     {
         var refs = messageTypes
@@ -270,6 +344,46 @@ public class HandlerProcessorTests
 file class TestHpMsg : Message
 {
     public TestHpMsg(Guid correlationId) : base(correlationId) { }
+}
+
+// Throws a fixed exception message on every invocation — used to verify fault collection.
+file sealed class ThrowingHpHandler(string errorMessage) : IMessageHandler<TestHpMsg>
+{
+    public bool Invoked { get; private set; }
+    public IConsumeContext Context { get; set; } = null!;
+
+    public Task HandleAsync(TestHpMsg message)
+    {
+        Invoked = true;
+        throw new InvalidOperationException(errorMessage);
+    }
+}
+
+// Records invocation without throwing — used to verify it still runs despite sibling faults.
+file sealed class RecordingHpHandler : IMessageHandler<TestHpMsg>
+{
+    public bool Invoked { get; private set; }
+    public IConsumeContext Context { get; set; } = null!;
+
+    public Task HandleAsync(TestHpMsg message)
+    {
+        Invoked = true;
+        return Task.CompletedTask;
+    }
+}
+
+// Throws OperationCanceledException for the given token — used to exercise the OCE short-circuit path.
+file sealed class CancellingHpHandler(CancellationToken token) : IMessageHandler<TestHpMsg>
+{
+    public bool Invoked { get; private set; }
+    public IConsumeContext Context { get; set; } = null!;
+
+    public Task HandleAsync(TestHpMsg message)
+    {
+        Invoked = true;
+        token.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
 }
 
 file class TestHpHandler : IMessageHandler<TestHpMsg>

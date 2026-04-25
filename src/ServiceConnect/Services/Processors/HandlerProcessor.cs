@@ -67,11 +67,32 @@ internal sealed class HandlerProcessor(
         {
             using (_consumeContextAccessor.Push(context.Headers))
             {
+                List<Exception>? handlerExceptions = null;
                 foreach (var (handler, descriptor) in invocations)
                 {
-                    descriptor.SetContext(handler, context);
-                    await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
+                    try
+                    {
+                        descriptor.SetContext(handler, context);
+                        await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // Co-operative shutdown — don't run remaining handlers; rethrow the OCE
+                        // unaltered so callers can distinguish shutdown from handler faults.
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Collect handler faults so independent handlers for the same message
+                        // all get a chance to run; aggregate at end of loop.
+                        (handlerExceptions ??= new List<Exception>()).Add(ex);
+                    }
                 }
+
+                if (handlerExceptions is not null)
+                    throw new AggregateException(
+                        $"{handlerExceptions.Count} handler(s) threw while dispatching {message.GetType().Name}.",
+                        handlerExceptions);
 
                 await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
             }
