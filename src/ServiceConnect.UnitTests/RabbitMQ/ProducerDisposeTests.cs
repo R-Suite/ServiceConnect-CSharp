@@ -177,4 +177,52 @@ public class ProducerDisposeTests
         var ex = Record.Exception(() => publishLock.Release());
         Assert.Null(ex);
     }
+
+    [Fact]
+    public async Task PublishAsync_WhenDisposeRanWhileWaitingForLock_ThrowsObjectDisposedException()
+    {
+        // Arrange — producer with mock channel; simulate "publisher already past
+        // EnsureConnectedAsync but still waiting on _publishLock" by holding the
+        // lock from the test, then asynchronously kicking off PublishAsync.
+        var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
+        channel.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var connection = new Mock<IConnection>();
+        connection.SetupGet(c => c.IsOpen).Returns(true);
+        connection.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var producer = CreateProducer();
+        SetField(producer, "_model", channel.Object);
+        SetField(producer, "_connection", connection.Object);
+        SetField(producer, "_connected", true);
+        SetField(producer, "DisposeTimeoutForTests", (TimeSpan?)TimeSpan.FromMilliseconds(50));
+
+        var publishLock = GetField<SemaphoreSlim>(producer, "_publishLock");
+        await publishLock.WaitAsync(); // hold the lock; publisher will queue behind us
+
+        // Kick off PublishAsync — it passes EnsureConnectedAsync (since _connected = true
+        // and _disposedInt = 0) and then blocks on _publishLock.WaitAsync.
+        var publishTask = producer.PublishAsync(typeof(TestPayload), new byte[] { 1, 2, 3 });
+
+        // Run DisposeAsync — sets _disposedInt = 1, waits for the lock with the short
+        // test timeout, gives up, tears down channel/connection, releases nothing
+        // (publishLockAcquired = false), exits.
+        await producer.DisposeAsync();
+
+        // Now release the lock the test was holding — the publisher acquires it,
+        // observes _disposedInt = 1, and must throw ObjectDisposedException rather
+        // than NRE on null _model.
+        publishLock.Release();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => publishTask);
+    }
+
+    // Minimal payload type for PublishAsync's `Type` argument; PublishAsync only uses
+    // it to compute an exchange name, so any class works.
+    private sealed class TestPayload { }
 }

@@ -227,6 +227,11 @@ public sealed class Producer : IProducer
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Re-check after acquiring the lock — DisposeAsync may have set _disposedInt
+            // and torn down _model while we were waiting. Without this check the publish
+            // would NRE on null _model.
+            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+
             var messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
             var basicProperties = CreateBasicProperties(messageHeaders);
 
@@ -269,6 +274,9 @@ public sealed class Producer : IProducer
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Re-check disposed flag after winning the lock; see PublishAsync.
+            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+
             if (!_queueConfiguration.TryGetQueueMapping(type, out IReadOnlyList<string>? endPoints))
                 throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
 
@@ -314,6 +322,9 @@ public sealed class Producer : IProducer
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Re-check disposed flag after winning the lock; see PublishAsync.
+            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+
             var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
             var basicProperties = CreateBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
@@ -350,6 +361,9 @@ public sealed class Producer : IProducer
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Re-check disposed flag after winning the lock; see PublishAsync.
+            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+
             var messageHeaders = GetHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
             var basicProperties = CreateBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
