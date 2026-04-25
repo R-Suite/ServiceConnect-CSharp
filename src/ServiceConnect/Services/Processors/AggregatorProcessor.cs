@@ -146,8 +146,7 @@ internal sealed class AggregatorProcessor(
             // Pass null for ambientScope so FlushAggregatorAsync always creates a fresh DI
             // scope. The Timer captured the dispatcher's ExecutionContext (and therefore
             // the AsyncLocal-backed ConsumeScopeAccessor) at construction time, so reading
-            // scopeAccessor.CurrentOrNull from this callback would return the disposed
-            // dispatcher scope.
+            // the accessor from this callback would observe the disposed dispatcher scope.
             await FlushAggregatorAsync(descriptor, ambientScope: null, token).ConfigureAwait(false);
             tcs.TrySetResult();
         }
