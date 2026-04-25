@@ -8,7 +8,8 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class AggregatorProcessor(
     AggregatorRegistry registry,
-    IServiceProvider serviceProvider,
+    ConsumeScopeAccessor scopeAccessor,
+    IServiceScopeFactory scopeFactory,
     ILogger<AggregatorProcessor> logger,
     IAggregatorPersistor? persistor = null) : IMessageProcessor, IAsyncDisposable
 {
@@ -189,23 +190,36 @@ internal sealed class AggregatorProcessor(
             var resolvedList = snapshot.ResolvedMessages as IList<object> ?? snapshot.ResolvedMessages.ToList();
             var typedList = descriptor.BuildTypedList(resolvedList);
 
-            var aggregator = serviceProvider.GetService(descriptor.AggregatorBaseType);
-            if (aggregator == null) return;
+            // Timer-fired flush has no ambient consume scope (no dispatcher push); fall back
+            // to a fresh DI scope. Batch-path flush runs inside ProcessAsync where
+            // scopeAccessor.Current is the dispatcher-pushed scope.
+            IServiceScope? localScope = null;
+            try
+            {
+                var resolverProvider = scopeAccessor.CurrentOrNull ?? (localScope = scopeFactory.CreateScope()).ServiceProvider;
 
-            // Remove BEFORE execute so a cancellation between the two cannot leave the
-            // snapshot persisted after the handler has run — that window caused the same
-            // batch to be re-fetched and re-dispatched on the next tick. Concurrent inserts
-            // and unresolved-type records are preserved; there is still no per-message
-            // remove loop. If RemoveSnapshotAsync throws, the awaited InvokeExecuteAsync
-            // call is skipped and the batch is retried on the next flush.
-            await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
+                var aggregator = resolverProvider.GetService(descriptor.AggregatorBaseType);
+                if (aggregator == null) return;
 
-            await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);
+                // Remove BEFORE execute so a cancellation between the two cannot leave the
+                // snapshot persisted after the handler has run — that window caused the same
+                // batch to be re-fetched and re-dispatched on the next tick. Concurrent inserts
+                // and unresolved-type records are preserved; there is still no per-message
+                // remove loop. If RemoveSnapshotAsync throws, the awaited InvokeExecuteAsync
+                // call is skipped and the batch is retried on the next flush.
+                await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
 
-            if (snapshot.UnresolvedCount > 0)
-                logger.LogWarning(
-                    "Aggregator {AggregatorName} dispatched {Count} record(s); {UnresolvedCount} unresolved record(s) retained for a later flush",
-                    descriptor.AggregatorName, snapshot.ResolvedMessages.Count, snapshot.UnresolvedCount);
+                await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);
+
+                if (snapshot.UnresolvedCount > 0)
+                    logger.LogWarning(
+                        "Aggregator {AggregatorName} dispatched {Count} record(s); {UnresolvedCount} unresolved record(s) retained for a later flush",
+                        descriptor.AggregatorName, snapshot.ResolvedMessages.Count, snapshot.UnresolvedCount);
+            }
+            finally
+            {
+                localScope?.Dispose();
+            }
         }
         finally
         {

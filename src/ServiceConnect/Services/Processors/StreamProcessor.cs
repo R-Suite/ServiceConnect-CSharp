@@ -7,7 +7,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly ILogger<StreamProcessor> _logger;
     private readonly IMessageTypeRegistry _typeRegistry;
     private readonly StreamHandlerRegistry _streamHandlerRegistry;
@@ -38,14 +38,14 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private static readonly Task<ProcessResult> HandledTask = Task.FromResult(ProcessResult.Handled);
 
     public StreamProcessor(
-        IServiceProvider serviceProvider,
+        ConsumeScopeAccessor scopeAccessor,
         ILogger<StreamProcessor> logger,
         IMessageTypeRegistry typeRegistry,
         StreamHandlerRegistry streamHandlerRegistry,
         IMessageSerializer serializer,
         TimeProvider timeProvider)
     {
-        _serviceProvider = serviceProvider;
+        _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
@@ -187,7 +187,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                 return HandledTask;
             }
 
-            var handler = _serviceProvider.GetService(descriptor.HandlerInterfaceType);
+            var handler = _scopeAccessor.Current.GetService(descriptor.HandlerInterfaceType);
             if (handler == null)
             {
                 _logger.LogWarning("No IStreamHandler registered for {MessageType}", resolvedType.FullName);

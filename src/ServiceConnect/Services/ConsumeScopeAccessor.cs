@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace ServiceConnect.Services;
 
 /// <summary>
@@ -29,6 +31,14 @@ public sealed class ConsumeScopeAccessor
     public IServiceProvider Current =>
         _current.Value ?? throw new InvalidOperationException(
             "No consume scope is currently active. The dispatcher and outbound filter path must push a scope before resolving scoped services.");
+
+    /// <summary>
+    /// Returns the current scope's <see cref="IServiceProvider"/>, or <c>null</c> when no
+    /// scope is pushed. Use this when a callback path may run outside any consume scope
+    /// (e.g. timer-fired flushes) and the caller will fall back to creating a fresh scope
+    /// via <see cref="IServiceScopeFactory"/>.
+    /// </summary>
+    public IServiceProvider? CurrentOrNull => _current.Value;
 
     private sealed class Popper(IServiceProvider? previous) : IDisposable
     {

@@ -12,14 +12,30 @@ namespace ServiceConnect.UnitTests.Processors;
 
 public class StreamProcessorTests
 {
-    private static StreamProcessor BuildProcessor() =>
-        new StreamProcessor(
-            new ServiceCollection().BuildServiceProvider(),
+    private static (ConsumeScopeAccessor accessor, IDisposable scope, IServiceScopeFactory factory) BuildScopeContext(IServiceProvider provider)
+    {
+        var accessor = new ConsumeScopeAccessor();
+        var scope = accessor.Push(provider);
+        var factory = provider.GetRequiredService<IServiceScopeFactory>();
+        return (accessor, scope, factory);
+    }
+
+    private static StreamProcessor BuildProcessor()
+    {
+        var provider = new ServiceCollection().BuildServiceProvider();
+        var accessor = new ConsumeScopeAccessor();
+        // Push a never-popped scope: BuildProcessor is called from sync test bodies
+        // that don't await across the call, so the AsyncLocal value stays in scope
+        // for any subsequent ProcessAsync invocations on the returned processor.
+        accessor.Push(provider);
+        return new StreamProcessor(
+            accessor,
             NullLogger<StreamProcessor>.Instance,
             new MessageTypeRegistry(),
             new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance),
             Mock.Of<IMessageSerializer>(),
             TimeProvider.System);
+    }
 
     [Fact]
     public void Constructor_UsesSingleStateDictionaryAndInjectedSerializer()
@@ -234,8 +250,10 @@ public class StreamProcessorTests
             .Setup(s => s.Deserialize(It.IsAny<System.Buffers.ReadOnlySequence<byte>>(), msgType))
             .Returns(msg);
 
+        var (accessor, scopeStream1, _) = BuildScopeContext(provider);
+        using var _scopeStream1 = scopeStream1;
         var processor = new StreamProcessor(
-            provider,
+            accessor,
             capturingLogger,
             typeRegistry,
             streamHandlerRegistry,
@@ -363,8 +381,10 @@ public class StreamProcessorTests
             .Setup(s => s.Deserialize(It.IsAny<System.Buffers.ReadOnlySequence<byte>>(), msgType))
             .Returns(msg);
 
+        var (accessor, scopeStream2, _) = BuildScopeContext(provider);
+        using var _scopeStream2 = scopeStream2;
         var processor = new StreamProcessor(
-            provider,
+            accessor,
             NullLogger<StreamProcessor>.Instance,
             typeRegistry,
             streamHandlerRegistry,
@@ -407,8 +427,10 @@ public class StreamProcessorTests
         var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(
             DateTimeOffset.UtcNow);
 
+        var (accessor, scopeStream3, _) = BuildScopeContext(new ServiceCollection().BuildServiceProvider());
+        using var _scopeStream3 = scopeStream3;
         var processor = new StreamProcessor(
-            new ServiceCollection().BuildServiceProvider(),
+            accessor,
             NullLogger<StreamProcessor>.Instance,
             new MessageTypeRegistry(),
             new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance),
@@ -447,6 +469,91 @@ public class StreamProcessorTests
         var lastSeenProp = secondState!.GetType().GetProperty("LastSeenUtc")!;
         var lastSeen = (DateTimeOffset)lastSeenProp.GetValue(secondState)!;
         Assert.Equal(fakeTime.GetUtcNow(), lastSeen);
+    }
+
+    // The processor must resolve the IStreamHandler from the consume scope that is currently
+    // active when ProcessAsync runs. The dispatcher pushes a per-message scope; without
+    // scope-aware resolution, scoped handler dependencies (DbContext, unit-of-work, tenant
+    // context) leak across messages. To verify the lookup honours Current (not anything
+    // captured at ctor time), this test sets up two providers each carrying a different
+    // IStreamHandler instance and pushes the "scoped" one before invoking ProcessAsync.
+    [Fact]
+    public async Task ProcessAsync_ResolvesHandlerFromCurrentConsumeScope_NotRoot()
+    {
+        var rootHandlerProbe = new ScopeProbeStreamHandler("root");
+        var scopedHandlerProbe = new ScopeProbeStreamHandler("scoped");
+
+        var rootServices = new ServiceCollection();
+        rootServices.AddSingleton<IStreamHandler<ScopeProbeMessage>>(rootHandlerProbe);
+        var rootProvider = rootServices.BuildServiceProvider();
+
+        var scopedServices = new ServiceCollection();
+        scopedServices.AddSingleton<IStreamHandler<ScopeProbeMessage>>(scopedHandlerProbe);
+        var scopedProvider = scopedServices.BuildServiceProvider();
+
+        var typeRegistry = new MessageTypeRegistry();
+        typeRegistry.Register(typeof(ScopeProbeMessage));
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ScopeProbeMessage), HandlerType = typeof(ScopeProbeStreamHandler) }
+        };
+        var streamRegistry = new StreamHandlerRegistry(handlerRefs, NullLogger<StreamHandlerRegistry>.Instance);
+
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var serializer = new NewtonsoftJsonMessageSerializer();
+
+        var processor = new StreamProcessor(
+            scopeAccessor,
+            NullLogger<StreamProcessor>.Instance,
+            typeRegistry,
+            streamRegistry,
+            serializer,
+            TimeProvider.System);
+
+        // Push the root provider as an outer (mismatched) scope first. If the processor
+        // were ever to fall back to a captured-at-ctor reference, rootHandlerProbe would
+        // be the resolved instance. The inner push of scopedProvider must override.
+        using var rootPush = scopeAccessor.Push(rootProvider);
+        using (scopeAccessor.Push(scopedProvider))
+        {
+            var sequenceId = Guid.NewGuid().ToString();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(
+                Newtonsoft.Json.JsonConvert.SerializeObject(new ScopeProbeMessage(Guid.NewGuid())));
+            var headers = new Dictionary<string, object>
+            {
+                [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+                [HeaderKeys.SequenceId] = sequenceId,
+                [HeaderKeys.PacketNumber] = "0",
+                [HeaderKeys.LastPacketNumber] = "0",
+                [HeaderKeys.FullTypeName] = typeof(ScopeProbeMessage).AssemblyQualifiedName!
+            };
+            var envelope = new Envelope { Headers = headers, Body = bytes };
+
+            await processor.ProcessAsync(bytes, typeof(ScopeProbeMessage), null, headers, envelope, CancellationToken.None);
+        }
+
+        Assert.Equal(0, rootHandlerProbe.InvocationCount);
+        Assert.Equal(1, scopedHandlerProbe.InvocationCount);
+    }
+}
+
+file sealed class ScopeProbeMessage : Message
+{
+    public ScopeProbeMessage(Guid correlationId) : base(correlationId) { }
+}
+
+file sealed class ScopeProbeStreamHandler : IStreamHandler<ScopeProbeMessage>
+{
+    private int _count;
+    public ScopeProbeStreamHandler(string label) { Label = label; }
+    public string Label { get; }
+    public int InvocationCount => Volatile.Read(ref _count);
+    public IMessageBusReadStream Stream { get; set; } = null!;
+    public Task ExecuteAsync(ScopeProbeMessage message, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _count);
+        return Task.CompletedTask;
     }
 }
 

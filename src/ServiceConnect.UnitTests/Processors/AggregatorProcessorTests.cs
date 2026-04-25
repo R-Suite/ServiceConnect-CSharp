@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using Xunit;
 
@@ -17,6 +18,14 @@ public class AggregatorProcessorTests
         return new AggregatorSnapshot(msgList, ids, unresolved);
     }
 
+    private static (ConsumeScopeAccessor accessor, IDisposable scope, IServiceScopeFactory factory) BuildScopeContext(IServiceProvider provider)
+    {
+        var accessor = new ConsumeScopeAccessor();
+        var scope = accessor.Push(provider);
+        var factory = provider.GetRequiredService<IServiceScopeFactory>();
+        return (accessor, scope, factory);
+    }
+
     [Fact]
     public async Task ProcessAsync_NoAggregator_ReturnsNotHandled()
     {
@@ -28,7 +37,9 @@ public class AggregatorProcessorTests
             new List<HandlerReference>(),
             provider,
             NullLogger<AggregatorRegistry>.Instance);
-        var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance);
 
         var msg = new AggTestMessage(Guid.NewGuid()) { Value = "test" };
         var headers = new Dictionary<string, object>();
@@ -79,7 +90,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -138,7 +151,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -192,7 +207,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -232,7 +249,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -283,7 +302,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -338,7 +359,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
 
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
@@ -363,7 +386,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(new List<HandlerReference>(), provider, NullLogger<AggregatorRegistry>.Instance);
-        var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance);
 
         await processor.DisposeAsync();
         await processor.DisposeAsync();
@@ -463,7 +488,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -535,7 +562,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
 
         // Retrieve private fields / methods via reflection.
         var processorType = typeof(AggregatorProcessor);
@@ -608,7 +637,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        await using var processor = new AggregatorProcessor(registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
@@ -659,7 +690,9 @@ public class AggregatorProcessorTests
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
-        var processor = new AggregatorProcessor(registry, provider, capturingLogger, persistorMock.Object);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        var processor = new AggregatorProcessor(registry, accessor, scopeFactory, capturingLogger, persistorMock.Object);
 
         // Fully dispose — _disposed=1, _disposeCts disposed. Realistic post-race state.
         await processor.DisposeAsync();
@@ -716,8 +749,10 @@ public class AggregatorProcessorTests
             .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
         var processor = new AggregatorProcessor(
-            registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+            registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
 
         await processor.DisposeAsync();
 
@@ -764,8 +799,10 @@ public class AggregatorProcessorTests
             .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
         await using var processor = new AggregatorProcessor(
-            registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+            registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
 
         var tasks = Enumerable.Range(0, 64).Select(_ =>
             processor.ProcessAsync(
@@ -782,6 +819,70 @@ public class AggregatorProcessorTests
         var timers = (System.Collections.Concurrent.ConcurrentDictionary<string, Timer>)timersField!.GetValue(processor)!;
 
         Assert.Single(timers);
+    }
+
+    // The batch-path flush must resolve the Aggregator<T> instance from the consume scope
+    // that is currently active when ProcessAsync runs. The dispatcher pushes a per-message
+    // scope; without scope-aware resolution, scoped aggregator dependencies leak across
+    // messages. BatchSize=1 makes ProcessAsync take the synchronous batch-flush path so
+    // the scope active at call time is the one observed by FlushAggregatorAsync. (The
+    // timer-fired path runs outside any consume scope and falls back to a fresh scope from
+    // IServiceScopeFactory; that is a different code path with its own behaviour contract.)
+    [Fact]
+    public async Task ProcessAsync_BatchPath_ResolvesAggregatorFromCurrentConsumeScope()
+    {
+        var rootAggregator = new ScopeProbeAggregator();
+        var scopedAggregator = new ScopeProbeAggregator();
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ScopeProbeAggMessage), HandlerType = typeof(ScopeProbeAggregator) }
+        };
+
+        var rootServices = new ServiceCollection();
+        rootServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        rootServices.AddSingleton<Aggregator<ScopeProbeAggMessage>>(rootAggregator);
+        var rootProvider = rootServices.BuildServiceProvider();
+
+        var scopedServices = new ServiceCollection();
+        scopedServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        scopedServices.AddSingleton<Aggregator<ScopeProbeAggMessage>>(scopedAggregator);
+        var scopedProvider = scopedServices.BuildServiceProvider();
+
+        // The registry materializes the aggregator once at startup against rootProvider to
+        // read BatchSize/Timeout — this is fine; only the per-flush resolution needs to be
+        // scope-aware.
+        var registry = new AggregatorRegistry(handlerRefs, rootProvider, NullLogger<AggregatorRegistry>.Instance);
+
+        var probeMessage = new ScopeProbeAggMessage(Guid.NewGuid());
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => SnapshotOf(new object[] { probeMessage }));
+        persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
+        await using var processor = new AggregatorProcessor(
+            registry, scopeAccessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+
+        using (scopeAccessor.Push(scopedProvider))
+        {
+            await processor.ProcessAsync(
+                ReadOnlyMemory<byte>.Empty,
+                typeof(ScopeProbeAggMessage),
+                probeMessage,
+                new Dictionary<string, object>(),
+                new Envelope { Headers = new Dictionary<string, object>(), Body = ReadOnlyMemory<byte>.Empty },
+                CancellationToken.None);
+        }
+
+        Assert.Equal(0, rootAggregator.Hits);
+        Assert.Equal(1, scopedAggregator.Hits);
     }
 }
 
@@ -882,4 +983,19 @@ file sealed class PostDisposeProbeAggregator : Aggregator<PostDisposeProbeMessag
     public override TimeSpan Timeout() => TimeSpan.Zero;
     public override Task ExecuteAsync(IList<PostDisposeProbeMessage> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
+}
+
+file sealed class ScopeProbeAggMessage(Guid correlationId) : Message(correlationId);
+
+file sealed class ScopeProbeAggregator : Aggregator<ScopeProbeAggMessage>
+{
+    private int _hits;
+    public int Hits => Volatile.Read(ref _hits);
+    public override int BatchSize() => 1;
+    public override TimeSpan Timeout() => TimeSpan.Zero;
+    public override Task ExecuteAsync(IList<ScopeProbeAggMessage> messages, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _hits);
+        return Task.CompletedTask;
+    }
 }
