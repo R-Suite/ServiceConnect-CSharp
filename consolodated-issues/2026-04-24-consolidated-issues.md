@@ -26,11 +26,11 @@ Within each finding, bracketed tags cite the originating review(s), e.g. `[C#1, 
 
 | Severity | Raised | Confirmed / partial after pass-2 | Fixed | Rejected / reclassified after pass-2 |
 |---|---|---|---|---|
-| Critical | 10 | 8 | 5 (C-01, C-02, C-03, C-04, C-05) | 2 (C-07, C-10) |
-| High | 22 | 11 | 5 (H-01, H-02, H-05, H-06, H-07) | 11 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19, H-20 partial) |
+| Critical | 10 | 8 | 6 (C-01, C-02, C-03, C-04, C-05, C-06) | 2 (C-07, C-10) |
+| High | 22 | 11 | 8 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12) | 11 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19, H-20 partial) |
 | Medium | 32 | 25 | 0 | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
 | Low | 72 | 52 | 0 | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
-| **Total** | **136** | **96** | **10** | **43** |
+| **Total** | **136** | **96** | **14** | **43** |
 
 Pass-2 also upgraded several earlier partial/equivocal verdicts to CONFIRMED (C-03, C-06, C-09, H-10, H-22, M-04, M-13, M-19, M-32, L-06, L-43) — marked inline.
 
@@ -82,6 +82,7 @@ Data-loss, silent saga corruption, double-dispatch, unbounded resource growth th
 - **Fix sketch**: Build the mapper per consume-scope, resolve `IProcessManagerFinder` / saga mappers from the per-message `IServiceScope`, or require the scanner to register static mapper instances.
 - **Pass-2 verdict**: CONFIRMED both sub-claims. Mapper cache is process-static and `ProcessManagerProcessor` is registered Singleton in `ServiceCollectionExtensions.cs:156`; both the mapper and the resolved finder outlive any per-message scope.
 - **Sources**: [C.Imp, N.M5]
+- **Status**: fixed in 5de3bdf6 + e4e401ec + 5fbd4458
 
 ### C-07 — `TimeoutData.Destination` defaults to empty; dispatcher silently skips → zombie sagas
 - **Location**: `src/ServiceConnect.Interfaces/Timeouts/TimeoutData.cs:16` + `src/ServiceConnect/Services/ProcessManagerTimeoutService.cs:110`
@@ -185,18 +186,21 @@ Functional bugs that occur on normal shutdown/restart paths, divergent contracts
 - **Fix**: Quiesce via a "disposing" flag and wait for in-flight consume/flush tasks before disposing.
 - **Pass-2 verdict**: CONFIRMED (narrow). `_activeFlushes` is drained and `ObjectDisposedException` is caught for the narrow shutdown race, but a snapshot-after-ProcessAsync-entry race exists: ProcessAsync can observe running state, Dispose can then proceed, and the flush path continues using disposed resources. Real race; narrow trigger.
 - **Sources**: [C.Imp]
+- **Status**: fixed in f3e78855 + 8ef58c98
 
 ### H-11 — `AggregatorProcessor.ResetTimer` `AddOrUpdate` creates duplicate Timers under contention
 - **Location**: `src/ServiceConnect/Services/Processors/AggregatorProcessor.cs:83-99`
 - **Bug**: AddOrUpdate's factory can run twice under contention, leaving one of the Timer instances orphaned and still firing. Flush fires more than once or at the wrong schedule; timer leaks on every contention event.
 - **Fix**: Use GetOrAdd with a Lazy, or dispose the loser timer inside the update factory.
 - **Sources**: [N.M4]
+- **Status**: fixed in c39be6aa
 
 ### H-12 — StreamProcessor / AggregatorProcessor resolve dependencies from the root provider
 - **Location**: `src/ServiceConnect/Services/Processors/StreamProcessor.cs:143, AggregatorProcessor.cs:187`
 - **Bug**: Both processors resolve their handler collaborators from `IServiceProvider` (root) rather than a per-message scope. Scoped dependencies either leak or are resolved as singletons relative to the bus lifetime.
 - **Fix**: Pull dependencies from the `IServiceScope` the processor creates for the current batch/stream.
 - **Sources**: [C.Imp]
+- **Status**: fixed in e4aaf12c + 12578252 (timer-fired flush ExecutionContext follow-up)
 
 ### H-13 — `ProcessManagerTimeoutService` Release uses shutdown token
 - **Location**: `src/ServiceConnect/Services/ProcessManagerTimeoutService.cs:119-140`
