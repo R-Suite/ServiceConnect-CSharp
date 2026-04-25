@@ -686,6 +686,69 @@ public class AggregatorProcessorTests
             .ToList();
         Assert.Empty(odeErrors);
     }
+
+    /// <summary>
+    /// Regression guard: after concurrent ResetTimer calls for the same aggregator,
+    /// the dictionary holds exactly one live timer. The pre-fix code path used
+    /// ConcurrentDictionary.AddOrUpdate whose factory may run multiple times under
+    /// contention; losing factory attempts produced live Timer instances that were
+    /// never installed in _timers and never disposed. The single-flight lock makes
+    /// "exactly one Timer per ResetTimer call, previous disposed atomically" the
+    /// only reachable observable state.
+    /// </summary>
+    [Fact]
+    public async Task ResetTimer_ConcurrentCalls_NoOrphanedTimers()
+    {
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ResetTimerProbeMessage), HandlerType = typeof(ResetTimerProbeAggregator) }
+        };
+
+        var aggregator = new ResetTimerProbeAggregator();
+        var services = new ServiceCollection();
+        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<Aggregator<ResetTimerProbeMessage>>(aggregator);
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
+
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock
+            .Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        persistorMock
+            .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        await using var processor = new AggregatorProcessor(
+            registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+
+        var tasks = Enumerable.Range(0, 64).Select(_ =>
+            processor.ProcessAsync(
+                ReadOnlyMemory<byte>.Empty,
+                typeof(ResetTimerProbeMessage),
+                new ResetTimerProbeMessage(Guid.NewGuid()),
+                new Dictionary<string, object>(),
+                new Envelope { Headers = new Dictionary<string, object>(), Body = ReadOnlyMemory<byte>.Empty },
+                CancellationToken.None)).ToArray();
+        await Task.WhenAll(tasks);
+
+        var timersField = typeof(AggregatorProcessor).GetField("_timers",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var timers = (System.Collections.Concurrent.ConcurrentDictionary<string, Timer>)timersField!.GetValue(processor)!;
+
+        Assert.Single(timers);
+    }
+}
+
+file sealed class ResetTimerProbeMessage(Guid correlationId) : Message(correlationId);
+
+file sealed class ResetTimerProbeAggregator : Aggregator<ResetTimerProbeMessage>
+{
+    public override int BatchSize() => 1000;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(50);
+    public override Task ExecuteAsync(IList<ResetTimerProbeMessage> messages, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }
 
 file sealed class AptCapturingLogger : ILogger<AggregatorProcessor>

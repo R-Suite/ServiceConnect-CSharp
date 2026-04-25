@@ -13,6 +13,11 @@ internal sealed class AggregatorProcessor(
     IAggregatorPersistor? persistor = null) : IMessageProcessor, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, Timer> _timers = new();
+    // Single-flight lock for ResetTimer. Concurrent calls for the same aggregator
+    // would otherwise rely on ConcurrentDictionary.AddOrUpdate factory semantics,
+    // whose factory may re-run under contention — losing-factory Timer instances
+    // are then orphaned (already running, never installed, never disposed).
+    private readonly object _resetTimerLock = new();
     // Per-aggregator flush lock. Holding this across the full flush body prevents
     // the timer-fired path and the batch-size path from double-flushing and
     // racing on Get/Invoke/Remove.
@@ -82,19 +87,14 @@ internal sealed class AggregatorProcessor(
 
     private void ResetTimer(AggregatorDescriptor descriptor)
     {
-        // Create a new timer on every update instead of reusing via Change().
-        // Change() on a timer that FlushAggregatorAsync concurrently TryRemove+Dispose'd
-        // causes ObjectDisposedException. The new-timer-per-update pattern is safe
-        // because we dispose the previous timer after AddOrUpdate returns.
-        Timer? previous = null;
-        _timers.AddOrUpdate(
-            descriptor.AggregatorName,
-            _ => new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan),
-            (_, existing) =>
-            {
-                previous = existing;
-                return new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan);
-            });
+        Timer? previous;
+        Timer newTimer;
+        lock (_resetTimerLock)
+        {
+            _timers.TryGetValue(descriptor.AggregatorName, out previous);
+            newTimer = new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan);
+            _timers[descriptor.AggregatorName] = newTimer;
+        }
         previous?.Dispose();
     }
 
