@@ -166,12 +166,11 @@ public class AggregatorProcessorTests
     }
 
     [Fact]
-    public async Task FlushAggregator_RemovesSnapshotBeforeInvokingExecute()
+    public async Task FlushAggregator_InvokesExecuteBeforeRemovingSnapshot()
     {
-        // RemoveSnapshotAsync must run before Execute. If Execute ran first, a
-        // cancellation between the two would leave the snapshot persisted after
-        // the handler's side-effects had fired, and the next timer tick would
-        // re-dispatch the same batch — duplicating every side-effect.
+        // Execute must run before RemoveSnapshotAsync. Removing first means a handler
+        // exception drops the batch permanently; keeping the snapshot until after a
+        // successful execute preserves it for redelivery on failure.
         var messages = new List<AggTestMessage>
         {
             new(Guid.NewGuid()) { Value = "A" },
@@ -218,7 +217,7 @@ public class AggregatorProcessorTests
 
         var waited = await Task.WhenAny(executed.Task, Task.Delay(2000));
         Assert.Same(executed.Task, waited);
-        Assert.Equal(new[] { "remove", "execute" }, callOrder);
+        Assert.Equal(new[] { "execute", "remove" }, callOrder);
     }
 
     [Fact]
@@ -721,6 +720,57 @@ public class AggregatorProcessorTests
     }
 
     [Fact]
+    public async Task FlushAggregatorAsync_HandlerThrows_SnapshotRemainsForRetry()
+    {
+        // If the handler throws a non-cancellation exception, the snapshot must not have
+        // been removed yet — the messages stay in the persistor so the broker can redeliver
+        // and the batch is re-flushable on the next admission.
+        var persistor = new ServiceConnect.Persistence.InMemory.InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+
+        var throwingAggregator = new ThrowingAggregator();
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(AggTestMessage), HandlerType = typeof(ThrowingAggregator) }
+        };
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IAggregatorPersistor>(persistor);
+        services.AddSingleton<Aggregator<AggTestMessage>>(throwingAggregator);
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistor);
+
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        // BatchSize=3: the first two messages are buffered; the third triggers a synchronous
+        // flush. The handler throws, so the test expects an exception from ProcessAsync.
+        var messages = new[]
+        {
+            new AggTestMessage(Guid.NewGuid()) { Value = "x1" },
+            new AggTestMessage(Guid.NewGuid()) { Value = "x2" },
+            new AggTestMessage(Guid.NewGuid()) { Value = "x3" },
+        };
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), messages[0], headers, envelope);
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), messages[1], headers, envelope);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), messages[2], headers, envelope));
+
+        // Derive the stream name exactly as the processor does so CountAsync targets the right key.
+        var aggregatorBaseType = typeof(ThrowingAggregator).BaseType!;
+        var streamName = aggregatorBaseType.FullName!;
+
+        // The messages must still be in the persistor so they can be retried.
+        var remaining = await persistor.CountAsync(streamName);
+        Assert.Equal(messages.Length, remaining);
+    }
+
+    [Fact]
     public async Task ProcessAsync_AfterDispose_ThrowsObjectDisposedExceptionWithoutTouchingDisposedCts()
     {
         // Verify that calling ProcessAsync on a disposed processor fails fast with
@@ -1077,4 +1127,11 @@ file sealed class EcCaptureProbeAggregator : Aggregator<EcCaptureProbeMessage>
         Interlocked.Increment(ref _hits);
         return Task.CompletedTask;
     }
+}
+
+file sealed class ThrowingAggregator : Aggregator<AggTestMessage>
+{
+    public override int BatchSize() => 3;
+    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
+        => throw new InvalidOperationException("handler failure — batch must remain for retry");
 }

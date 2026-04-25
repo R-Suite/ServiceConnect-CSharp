@@ -205,15 +205,12 @@ internal sealed class AggregatorProcessor(
                 var aggregator = resolverProvider.GetService(descriptor.AggregatorBaseType);
                 if (aggregator == null) return;
 
-                // Remove BEFORE execute so a cancellation between the two cannot leave the
-                // snapshot persisted after the handler has run — that window caused the same
-                // batch to be re-fetched and re-dispatched on the next tick. Concurrent inserts
-                // and unresolved-type records are preserved; there is still no per-message
-                // remove loop. If RemoveSnapshotAsync throws, the awaited InvokeExecuteAsync
-                // call is skipped and the batch is retried on the next flush.
-                await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
-
+                // Execute first, then remove on success. On handler exception we propagate
+                // without removing so the broker redelivers and the snapshot is re-flushable.
+                // Cancellation also leaves the snapshot in place — by-design for retry on
+                // next admission.
                 await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);
+                await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
 
                 if (snapshot.UnresolvedCount > 0)
                     logger.LogWarning(
