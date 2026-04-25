@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -9,7 +8,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class ProcessManagerProcessor(
     ProcessManagerHandlerRegistry registry,
-    IServiceProvider serviceProvider,
+    ConsumeScopeAccessor scopeAccessor,
     Lazy<IBus> bus,
     ILogger<ProcessManagerProcessor> logger,
     IBusConfiguration busConfig,
@@ -18,12 +17,6 @@ internal sealed class ProcessManagerProcessor(
     ConsumeContextAccessor consumeContextAccessor,
     IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null) : IMessageProcessor
 {
-    // Lazy<T> wrapper ensures the factory delegate runs exactly once even if
-    // ConcurrentDictionary.GetOrAdd invokes its factory multiple times under contention —
-    // losing Lazy instances are thrown away before Value is ever accessed, so their
-    // ConfigureMapper side-effects never execute. LazyThreadSafetyMode.ExecutionAndPublication
-    // is the default, which is exactly what we want.
-    private static readonly ConcurrentDictionary<Type, Lazy<IProcessManagerPropertyMapper>> MapperCache = new();
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
 
@@ -38,7 +31,7 @@ internal sealed class ProcessManagerProcessor(
         if (!registry.TryGet(messageType, out var descriptor))
             return ProcessResult.NotHandled;
 
-        var finder = serviceProvider.GetService<IProcessManagerFinder>();
+        var finder = scopeAccessor.Current.GetService<IProcessManagerFinder>();
         if (finder == null)
         {
             logger.LogWarning(
@@ -47,7 +40,7 @@ internal sealed class ProcessManagerProcessor(
             return ProcessResult.NotHandled;
         }
 
-        var handler = serviceProvider.GetService(descriptor.ProcessHandlerInterfaceType);
+        var handler = scopeAccessor.Current.GetService(descriptor.ProcessHandlerInterfaceType);
         if (handler == null)
         {
             logger.LogWarning(
@@ -56,13 +49,14 @@ internal sealed class ProcessManagerProcessor(
             return ProcessResult.NotHandled;
         }
 
-        var mapper = MapperCache.GetOrAdd(descriptor.ProcessHandlerInterfaceType, _ =>
-            new Lazy<IProcessManagerPropertyMapper>(() =>
-            {
-                var m = new DefaultProcessManagerPropertyMapper();
-                descriptor.ConfigureMapper(handler, m);
-                return m;
-            })).Value;
+        // Build mapper per message rather than caching globally. The previous static
+        // ConcurrentDictionary<Type, Lazy<IProcessManagerPropertyMapper>> ran ConfigureMapper
+        // exactly once per handler-interface type, closing over the first handler instance ever
+        // resolved. Any per-instance state read inside ConfigureMapper was pinned process-wide.
+        // Per-message construction is cheap (a small object plus the lambda registrations) and
+        // removes the pinning.
+        var mapper = new DefaultProcessManagerPropertyMapper();
+        descriptor.ConfigureMapper(handler, mapper);
 
         // Run the find→invoke→update cycle exactly once per delivery. A previous version
         // looped on ConcurrencyException, but every retry re-invoked the user's handler —
@@ -100,8 +94,8 @@ internal sealed class ProcessManagerProcessor(
         }
 
         var trustQuery = replyStatusRequestReplyManager
-            ?? serviceProvider.GetService<IReplyStatusRequestReplyManager>()
-            ?? serviceProvider.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
+            ?? scopeAccessor.Current.GetService<IReplyStatusRequestReplyManager>()
+            ?? scopeAccessor.Current.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
 
         var context = _contextPool.Rent(
             bus.Value,

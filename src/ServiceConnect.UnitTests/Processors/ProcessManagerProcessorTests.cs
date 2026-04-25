@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -36,12 +35,21 @@ public class ProcessManagerProcessorTests
     private static ProcessManagerHandlerRegistry BuildRegistry(params HandlerReference[] refs)
         => new(refs.ToList(), NullLogger<ProcessManagerHandlerRegistry>.Instance);
 
+    private static (ConsumeScopeAccessor accessor, IDisposable scope) BuildScopeAccessor(IServiceProvider provider)
+    {
+        var accessor = new ConsumeScopeAccessor();
+        var scope = accessor.Push(provider);
+        return (accessor, scope);
+    }
+
     [Fact]
     public async Task ProcessAsync_NullMessage_ReturnsNotHandled()
     {
         var registry = BuildRegistry();
         var provider = new ServiceCollection().BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), null,
             new Dictionary<string, object>(), new Envelope());
@@ -55,7 +63,9 @@ public class ProcessManagerProcessorTests
         var (services, _, _) = CreateBaseServices();
         var registry = BuildRegistry(); // empty
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
@@ -75,7 +85,9 @@ public class ProcessManagerProcessorTests
         });
         services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(new PmTestHandler());
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
@@ -93,7 +105,9 @@ public class ProcessManagerProcessorTests
             MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
         });
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "x" };
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
@@ -119,7 +133,9 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var correlationId = Guid.NewGuid();
         var msg = new PmTestMessage(correlationId) { Content = "test" };
@@ -156,7 +172,9 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync(persistence);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(existingData.CorrelationId) { Content = "update" };
 
@@ -197,7 +215,9 @@ public class ProcessManagerProcessorTests
             .ThrowsAsync(new ServiceConnect.Interfaces.Exceptions.ConcurrencyException("stale version"));
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(existingData.CorrelationId) { Content = "update" };
 
@@ -215,7 +235,9 @@ public class ProcessManagerProcessorTests
         var (services, _, _) = CreateBaseServices();
         var registry = BuildRegistry();
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -242,7 +264,9 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         var msg = new PmTestMessage(Guid.NewGuid()) { Content = "will-throw" };
 
@@ -273,7 +297,9 @@ public class ProcessManagerProcessorTests
             MessageType = typeof(PmMutableMessage), HandlerType = typeof(PmMutatingThrowingHandler)
         });
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             processor.ProcessAsync(new byte[] { 1 }, typeof(PmMutableMessage), new PmMutableMessage(existing.CorrelationId),
@@ -288,13 +314,12 @@ public class ProcessManagerProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_ConcurrentFirstDispatch_ConfiguresMapperExactlyOnce()
+    public async Task ProcessAsync_RunsConfigureMapperPerMessage()
     {
-        // L2: GetOrAdd's factory is not exactly-once; a Lazy<T> wrapper is required to ensure
-        // ConfigureMapper is invoked at most once even under concurrent first dispatch.
-        // The static MapperCache is cleared via reflection to isolate this trial.
+        // The static MapperCache was removed. Per-message scoped resolution makes
+        // per-instance handler state correctly observable on every delivery, which means
+        // ConfigureMapper now runs once per message — not once per process.
 
-        // Reset the shared counter on the dummy handler before running.
         DummyPmHandler.ResetCounter();
 
         var registry = BuildRegistry(new HandlerReference
@@ -305,42 +330,36 @@ public class ProcessManagerProcessorTests
 
         var services = new ServiceCollection();
         services.AddSingleton<IProcessManagerFinder>(new Mock<IProcessManagerFinder>().Object);
-        // Register a single handler instance shared by all concurrent invocations.
         services.AddSingleton<IProcessHandler<DummyPmData, DummyPmMessage>>(new DummyPmHandler());
         var provider = services.BuildServiceProvider();
 
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
         var processor = new ProcessManagerProcessor(
-            registry, provider, new Lazy<IBus>(() => new Mock<IBus>().Object),
+            registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object),
             NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig,
             new ConsumeContextPool(), new ConsumeContextAccessor());
-
-        // Clear the static MapperCache to ensure this test sees a genuine first dispatch.
-        var cacheField = typeof(ProcessManagerProcessor)
-            .GetField("MapperCache", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var cache = cacheField.GetValue(null)!;
-        cache.GetType().GetMethod("Clear")!.Invoke(cache, null);
 
         var message = new DummyPmMessage(Guid.NewGuid());
         var headers = new Dictionary<string, object>();
         var envelope = new Envelope { Headers = headers, Body = ReadOnlyMemory<byte>.Empty };
 
-        // Dispatch 16 concurrent calls — all racing to populate the empty MapperCache entry.
-        var tasks = Enumerable.Range(0, 16)
+        const int messageCount = 16;
+        var tasks = Enumerable.Range(0, messageCount)
             .Select(_ => processor.ProcessAsync(
                 ReadOnlyMemory<byte>.Empty, typeof(DummyPmMessage), message, headers, envelope))
             .ToArray();
         await Task.WhenAll(tasks);
 
-        var configureCount = DummyPmHandler.ConfigureCount;
-        Assert.Equal(1, configureCount);
+        Assert.Equal(messageCount, DummyPmHandler.ConfigureCount);
     }
 
     [Fact]
     public async Task ProcessAsync_SetsAmbientConsumeHeadersDuringHandlerAndClearsThemAfterward()
     {
         var timeoutStore = new PmCapturingTimeoutStore();
-        var accessor = new ConsumeContextAccessor();
-        var bus = PmTestBusFactory.Create(DefaultQueueConfig, timeoutStore, accessor);
+        var consumeAccessor = new ConsumeContextAccessor();
+        var bus = PmTestBusFactory.Create(DefaultQueueConfig, timeoutStore, consumeAccessor);
 
         var services = new ServiceCollection();
         var mockFinder = new Mock<IProcessManagerFinder>();
@@ -358,7 +377,9 @@ public class ProcessManagerProcessorTests
             .ReturnsAsync((IPersistenceData<PmTestData>?)null);
 
         var provider = services.BuildServiceProvider();
-        var processor = new ProcessManagerProcessor(registry, provider, new Lazy<IBus>(() => bus), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), accessor);
+        var (scopeAccessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, scopeAccessor, new Lazy<IBus>(() => bus), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), consumeAccessor);
 
         var correlationId = Guid.NewGuid();
         var headers = new Dictionary<string, object>
@@ -516,7 +537,7 @@ file static class PmTestBusFactory
     }
 }
 
-// L2 fixtures — used only by ProcessAsync_ConcurrentFirstDispatch_ConfiguresMapperExactlyOnce
+// Fixtures used only by ProcessAsync_RunsConfigureMapperPerMessage.
 file class DummyPmMessage : Message
 {
     public DummyPmMessage(Guid correlationId) : base(correlationId) { }
@@ -540,8 +561,6 @@ file class DummyPmHandler : IProcessHandler<DummyPmData, DummyPmMessage>
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
     {
         Interlocked.Increment(ref _configureCount);
-        // Widen the race window so contending threads are more likely to see the un-cached entry.
-        Thread.SpinWait(50_000);
         mapper.ConfigureMapping<DummyPmData, DummyPmMessage>(d => d.CorrelationId, m => m.CorrelationId);
     }
 
