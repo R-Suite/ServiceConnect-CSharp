@@ -31,7 +31,6 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     }
 
     private const int InitialVersion = 1;
-    private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (Func<object, object?> Data, Func<object, object?> Version)>
         ReflectionAccessors = new();
 
