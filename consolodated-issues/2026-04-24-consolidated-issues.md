@@ -26,11 +26,11 @@ Within each finding, bracketed tags cite the originating review(s), e.g. `[C#1, 
 
 | Severity | Raised | Confirmed / partial after pass-2 | Fixed | Rejected / reclassified after pass-2 |
 |---|---|---|---|---|
-| Critical | 10 | 8 | 6 (C-01, C-02, C-03, C-04, C-05, C-06) | 2 (C-07, C-10) |
-| High | 22 | 11 | 8 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12) | 11 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19, H-20 partial) |
+| Critical | 10 | 8 | 8 (C-01, C-02, C-03, C-04, C-05, C-06, C-08, C-09) | 2 (C-07, C-10) |
+| High | 22 | 11 | 10 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12, H-15, H-20) | 10 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19) |
 | Medium | 32 | 25 | 0 | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
-| Low | 72 | 52 | 0 | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
-| **Total** | **136** | **96** | **14** | **43** |
+| Low | 72 | 52 | 1 (L-73) | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
+| **Total** | **136** | **96** | **19** | **42** |
 
 Pass-2 also upgraded several earlier partial/equivocal verdicts to CONFIRMED (C-03, C-06, C-09, H-10, H-22, M-04, M-13, M-19, M-32, L-06, L-43) — marked inline.
 
@@ -92,12 +92,14 @@ Data-loss, silent saga corruption, double-dispatch, unbounded resource growth th
 - **Sources**: [R.High, N.L4]
 
 ### C-08 — `InMemoryTimeoutStore` id-only Remove/Release ignores lease ownership
+- **Status**: fixed in c03acc72 + a315d2d7
 - **Location**: `src/ServiceConnect.Persistence.InMemory/InMemoryTimeoutStore.cs:139-158, 163-183`
 - **Bug**: The id-only `RemoveDispatchedTimeoutAsync(Guid)` / `ReleaseDispatchedTimeoutAsync(Guid)` overloads unconditionally mutate state. The lease-aware overloads (186-244) correctly enforce lease ownership. Mongo's id-only path silently no-ops on leased rows. Callers following the Mongo contract against InMemory will stomp an active peer's lease. Partially remediated (lease-aware overloads are correct) — the id-only paths still diverge.
 - **Fix sketch**: Either have the id-only overloads delegate to the lease-aware overloads with a sentinel that means "no ownership check" and forbid them for normal use, or teach them to respect current lease state (wins: behavioural parity with Mongo).
 - **Sources**: [C#5, N.H3, N.H4]
 
 ### C-09 — MongoDb `GetTimeoutsBatchAsync` nextPipeline returns a value that is never consumed (dead code smell)
+- **Status**: fixed in 7326d9fb
 - **Location**: `src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs:144-185`
 - **Bug (original)**: Claimed nextPipeline misses leased rows whose lease expires before next wake.
 - **Pass-2 verdict**: RECLASSIFIED — the nextPipeline's `NextQueryTime` is **never read** by `ProcessManagerTimeoutService`, which uses a fixed `PeriodicTimer` interval. The original correctness claim is moot *because the value is never consumed*, but the query is still executed every batch — this is vestigial dead code, not a runtime bug. Severity reduced to hygiene/perf; leaving entry under Critical until the dead code is removed.
@@ -217,6 +219,7 @@ Functional bugs that occur on normal shutdown/restart paths, divergent contracts
 - **Sources**: [N.M7, P.Min]
 
 ### H-15 — `CacheProvider.PurgeNormalPriorities` key-only TryRemove drops concurrently-upgraded High entry
+- **Status**: fixed in ca5213be
 - **Location**: `src/ServiceConnect.Persistence.InMemory/CacheProvider.cs:165-182`
 - **Bug**: Uses `_cache.TryRemove(cacheItem.Key, out _)` rather than the KVP overload. If another thread has upgraded the entry's `Priority` from Normal to High between the scan and the remove, the purge deletes the High entry anyway.
 - **Fix**: Use `TryRemove(KeyValuePair<,>)` with the specific cache-item reference observed during the scan, or CAS on priority.
@@ -251,6 +254,7 @@ Functional bugs that occur on normal shutdown/restart paths, divergent contracts
 - **Sources**: [C.Imp]
 
 ### H-20 — MongoDb id-only Remove/Release silent no-op on leased rows (contract side)
+- **Status**: fixed in c03acc72
 - **Location**: `src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs:213-247`
 - **Bug**: The id-only overloads refuse to touch a row whose lease is still active, returning no indication. Callers that intended "force-remove" get no result and believe the row is clear.
 - **Fix**: Return a result discriminator (Removed/NotFound/Leased) or require the lease-aware overload for leased rows.
@@ -521,7 +525,7 @@ Dead code, minor nullability/comment quirks, hygiene items, and hard-to-trigger 
 - **L-70** `IProducer.MaximumMessageSize` units/sentinel undocumented — `IProducer.cs:33` — [C.Min]
 - **L-71** `HandlerReference` / `ProcessManagerToMessageMap` no value-equality — [N.L22]
 - **L-72** `IBus.RequestTimeoutAsync` default-interface-method throws `NotSupportedException` — `IBus.cs:87-88` — [N.L24]
-- **L-73** `ILeaseAwareTimeoutStore` doesn't extend `ITimeoutStore` — `ILeaseAwareTimeoutStore.cs:12` — [N.L25]
+- **L-73** `ILeaseAwareTimeoutStore` doesn't extend `ITimeoutStore` — `ILeaseAwareTimeoutStore.cs:12` — [N.L25] — **fixed in c03acc72** (interfaces collapsed into one per Phase 0 D2; inverted relationship is gone)
 - **L-74** `HeaderKeys` are transport-literal (RabbitMQ casing) — `HeaderKeys.cs` — [N.L31] — **Pass-2: REJECTED** (PascalCase is ServiceConnect's own convention, not RabbitMQ's — mischaracterised)
 - **L-75** `IMessageDispatcher`/`IMessageProcessingMiddleware`/`ISendMessageMiddleware` Task-returning methods without `Async` suffix — [P.Imp]
 
