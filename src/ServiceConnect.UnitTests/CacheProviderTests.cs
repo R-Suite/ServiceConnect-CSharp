@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
@@ -267,6 +268,48 @@ namespace ServiceConnect.UnitTests
             int removed = cache.PurgeNormalPriorities();
 
             Assert.Equal(0, removed);
+        }
+
+        [Fact]
+        public async Task PurgeNormalPriorities_ConcurrentPriorityUpgrade_DoesNotRemoveUpgradedEntry()
+        {
+            // Bounded stress: many iterations of "purge concurrent with re-Add upgrading
+            // Normal -> High" so the race between the foreach's KVP capture and the
+            // TryRemove call opens repeatedly. With the key-only TryRemove, the purge's
+            // scan captures a Normal CacheItem reference, the concurrent Add swaps the
+            // slot to a fresh High CacheItem, and TryRemove(key) then deletes the High
+            // entry it never observed. With the KVP-overload, TryRemove succeeds only
+            // when the value reference still matches what the scan observed, so the
+            // upgraded entry survives.
+
+            const int iterations = 5_000;
+            int losses = 0;
+
+            for (int i = 0; i < iterations; i++)
+            {
+                var cache = new CacheProvider();
+
+                // Seed several Normal entries so the foreach has multiple iterations
+                // during which the concurrent upgrade can land.
+                for (int k = 0; k < 16; k++)
+                    cache.Add($"k{k}", $"v{k}-normal", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
+
+                const string victim = "k8";
+
+                var upgrade = Task.Run(() =>
+                    cache.Add(victim, "v8-high", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.High));
+                var purge = Task.Run(() => cache.PurgeNormalPriorities());
+
+                await Task.WhenAll(upgrade, purge);
+
+                // After both tasks finish, the upgrade has definitely run, so the slot
+                // currently holds the High CacheItem. The High entry must survive — purge
+                // is documented to remove only Normal entries.
+                if (!cache.Contains(victim))
+                    losses++;
+            }
+
+            Assert.Equal(0, losses);
         }
 
         [Fact]

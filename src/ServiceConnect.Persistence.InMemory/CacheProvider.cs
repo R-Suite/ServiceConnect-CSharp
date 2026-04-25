@@ -170,7 +170,12 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
             if (cacheItem.Value.Priority != CacheItemPriority.Normal)
                 continue;
 
-            if (_cache.TryRemove(cacheItem.Key, out _))
+            // KVP-overload TryRemove succeeds only when the value reference still
+            // matches the one observed during the scan. A concurrent re-Add that
+            // upgraded the priority replaces the dictionary slot with a fresh
+            // CacheItem reference, so this remove correctly fails and leaves the
+            // upgraded entry in place.
+            if (_cache.TryRemove(cacheItem))
             {
                 _slidingTime.TryRemove(cacheItem.Key, out _);
                 DisposeTimer(cacheItem.Key);
