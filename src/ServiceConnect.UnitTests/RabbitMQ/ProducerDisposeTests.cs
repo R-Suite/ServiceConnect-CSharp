@@ -127,15 +127,16 @@ public class ProducerDisposeTests
         await producer.DisposeAsync();
         stopwatch.Stop();
 
-        // The release calls below must not throw. Whether the semaphore is alive
-        // depends on Task 4; for Task 3 alone, swallow OcDE.
+        // DisposeAsync disposes the semaphores in its finally block regardless of
+        // whether it acquired them, so Release() may throw ObjectDisposedException.
         try { publishLock.Release(); } catch (ObjectDisposedException) { }
         try { connectionSemaphore.Release(); } catch (ObjectDisposedException) { }
 
-        // Assert — under shared-budget the elapsed time is roughly disposeTimeout.
-        // Pre-fix it would be ~2 * disposeTimeout (two sequential budgets).
-        // 220ms is a safe upper bound: 150ms timeout + 70ms slack for teardown +
-        // scheduler jitter; 300ms (the buggy worst case) fails this bound.
+        // Both waits share one stopwatch budget, so total elapsed is bounded by
+        // disposeTimeout (150ms) plus teardown overhead. 220ms upper bound = 150ms
+        // timeout + 70ms slack for mock-channel close + scheduler jitter. 120ms
+        // lower bound guards against a pathological fast return (timers never
+        // fire early, so this is a sanity check that the waits actually ran).
         Assert.InRange(stopwatch.Elapsed,
             TimeSpan.FromMilliseconds(120),
             TimeSpan.FromMilliseconds(220));
