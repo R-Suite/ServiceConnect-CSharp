@@ -697,6 +697,50 @@ public class AggregatorProcessorTests
     /// only reachable observable state.
     /// </summary>
     [Fact]
+    public async Task ProcessAsync_AfterDispose_ThrowsObjectDisposedExceptionWithoutTouchingDisposedCts()
+    {
+        // Verify that calling ProcessAsync on a disposed processor fails fast with
+        // ObjectDisposedException rather than reaching _disposeCts.Token (which would
+        // be disposed and throw an unrelated ODE from the linked-CTS construction).
+        // BatchSize=1 ensures the batch path is taken on the first message, so the
+        // dispose guard inside the batch block is also exercised.
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(PostDisposeProbeMessage), HandlerType = typeof(PostDisposeProbeAggregator) }
+        };
+
+        var aggregator = new PostDisposeProbeAggregator();
+        var services = new ServiceCollection();
+        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<Aggregator<PostDisposeProbeMessage>>(aggregator);
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, provider, NullLogger<AggregatorRegistry>.Instance);
+
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock
+            .Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        persistorMock
+            .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var processor = new AggregatorProcessor(
+            registry, provider, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+
+        await processor.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            processor.ProcessAsync(
+                ReadOnlyMemory<byte>.Empty,
+                typeof(PostDisposeProbeMessage),
+                new PostDisposeProbeMessage(Guid.NewGuid()),
+                new Dictionary<string, object>(),
+                new Envelope { Headers = new Dictionary<string, object>(), Body = ReadOnlyMemory<byte>.Empty },
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ResetTimer_ConcurrentCalls_NoOrphanedTimers()
     {
         var handlerRefs = new List<HandlerReference>
@@ -828,4 +872,14 @@ file class AggTestTimedAggregator : Aggregator<AggTestMessage>
         _tcs.TrySetResult(messages);
         return Task.CompletedTask;
     }
+}
+
+file sealed class PostDisposeProbeMessage(Guid correlationId) : Message(correlationId);
+
+file sealed class PostDisposeProbeAggregator : Aggregator<PostDisposeProbeMessage>
+{
+    public override int BatchSize() => 1;
+    public override TimeSpan Timeout() => TimeSpan.Zero;
+    public override Task ExecuteAsync(IList<PostDisposeProbeMessage> messages, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }

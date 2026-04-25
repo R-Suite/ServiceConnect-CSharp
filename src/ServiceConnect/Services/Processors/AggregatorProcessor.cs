@@ -33,6 +33,8 @@ internal sealed class AggregatorProcessor(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
         if (message == null) return ProcessResult.NotHandled;
 
         if (!registry.TryGet(messageType, out var descriptor))
@@ -49,16 +51,19 @@ internal sealed class AggregatorProcessor(
         var count = await persistor.CountAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
         if (descriptor.BatchSize > 0 && count >= descriptor.BatchSize)
         {
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
-
-            // Track the batch-path flush so DisposeAsync waits for it to complete. Without
-            // this, dispose can race ahead and dispose the flush lock while this thread
-            // is mid-flush, yielding ObjectDisposedException.
+            // Register in _activeFlushes BEFORE reading _disposeCts.Token. A concurrent
+            // DisposeAsync either (a) takes its drain snapshot before our TryAdd — we
+            // re-check _disposed below and bail with ODE; or (b) sees our entry in the
+            // snapshot and awaits its completion. Either way _disposeCts.Token is only
+            // ever read while DisposeAsync is still awaiting our task.
             var id = Interlocked.Increment(ref _flushId);
             var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _activeFlushes.TryAdd(id, tcs.Task);
             try
             {
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
                 await FlushAggregatorAsync(descriptor, linkedCts.Token).ConfigureAwait(false);
                 tcs.TrySetResult();
             }
