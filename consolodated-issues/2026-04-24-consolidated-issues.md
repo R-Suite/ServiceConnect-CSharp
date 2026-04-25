@@ -27,10 +27,10 @@ Within each finding, bracketed tags cite the originating review(s), e.g. `[C#1, 
 | Severity | Raised | Confirmed / partial after pass-2 | Fixed | Rejected / reclassified after pass-2 |
 |---|---|---|---|---|
 | Critical | 10 | 8 | 8 (C-01, C-02, C-03, C-04, C-05, C-06, C-08, C-09) | 2 (C-07, C-10) |
-| High | 22 | 11 | 10 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12, H-15, H-20) | 10 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19) |
+| High | 22 | 11 | 12 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12, H-15, H-20, H-21, H-22) | 10 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19) |
 | Medium | 32 | 25 | 0 | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
 | Low | 72 | 52 | 1 (L-73) | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
-| **Total** | **136** | **96** | **19** | **42** |
+| **Total** | **136** | **96** | **21** | **42** |
 
 Pass-2 also upgraded several earlier partial/equivocal verdicts to CONFIRMED (C-03, C-06, C-09, H-10, H-22, M-04, M-13, M-19, M-32, L-06, L-43) — marked inline.
 
@@ -262,12 +262,14 @@ Functional bugs that occur on normal shutdown/restart paths, divergent contracts
 - **Sources**: [C.Imp] (paired with C-08)
 
 ### H-21 — Telemetry: `messaging.destination.name` set to routing key, not exchange
+- **Status**: fixed in dac580e6 + 06bf8bd1
 - **Location**: `src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs:66-69`
 - **Bug**: OTel messaging semconv says `messaging.destination.name` is the broker-side destination (exchange name for RabbitMQ). Current code writes the routing key, breaking dashboards keyed on destination.
 - **Fix**: Write exchange name; add `messaging.rabbitmq.routing_key` for the routing key.
 - **Sources**: [C#12]
 
 ### H-22 — `IFilter` vs `IFilterPipeline` inverted semantics
+- **Status**: fixed in 36b20c27 + 15b44fe8 + 23c3d25b + 4e0f448f + 0e45702d + 73d8fcf1 + 2b37e279
 - **Location**: `src/ServiceConnect.Interfaces/IFilter.cs:17`, `src/ServiceConnect.Interfaces/IFilterPipeline.cs:10-22`
 - **Bug**: `IFilter.ProcessAsync` returns `true` meaning "continue processing". `IFilterPipeline.ProcessAsync` returns `true` meaning "blocked" — i.e. stop. Easy to call a filter from a pipeline impl and invert the logic.
 - **Fix**: Unify to a single convention (prefer explicit enum `Continue`/`Stop`).
