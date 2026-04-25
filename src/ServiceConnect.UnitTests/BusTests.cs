@@ -1245,6 +1245,46 @@ namespace ServiceConnect.UnitTests
 
             return (Bus)constructor.Invoke(args);
         }
+
+        [Fact]
+        public async Task ConcurrentStartAndDispose_DoesNotThrowSemaphoreDisposedException()
+        {
+            int iterations = 100;
+            int unexpected = 0;
+            for (int i = 0; i < iterations; i++)
+            {
+                var mockConsumer = new Mock<IConsumer>();
+                mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
+                    .Returns(Task.CompletedTask);
+
+                var bus = new Bus(
+                    _mockSerializer.Object,
+                    _mockFilterPipeline.Object,
+                    _mockSendPipeline.Object,
+                    _mockRequestReplyManager.Object,
+                    _mockLogger.Object,
+                    _mockQueueConfig.Object,
+                    _mockDispatcher.Object,
+                    _handlerReferences,
+                    _mockPipelineConfig.Object,
+                    _scopeFactory,
+                    _scopeAccessor,
+                    mockConsumer.Object);
+
+                var startTask = Task.Run(async () =>
+                {
+                    try { await bus.StartConsumingAsync(); }
+                    catch (ObjectDisposedException ode) when (ode.ObjectName == typeof(Bus).FullName) { /* expected */ }
+                    catch (ObjectDisposedException) { Interlocked.Increment(ref unexpected); }
+                    catch (InvalidOperationException) { /* race-acceptable */ }
+                });
+                var disposeTask = Task.Run(async () => await bus.DisposeAsync());
+
+                await Task.WhenAll(startTask, disposeTask);
+            }
+
+            Assert.Equal(0, unexpected);
+        }
     }
 
     file sealed class MarkerProbe

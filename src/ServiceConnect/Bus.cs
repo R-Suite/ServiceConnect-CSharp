@@ -33,7 +33,9 @@ public sealed class Bus : IBus
     private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private bool _consuming;
     private bool _stopped;
-    private volatile bool _disposed;
+    // 0 = alive, 1 = disposed. Accessed via Interlocked/Volatile only — never under _stateLock —
+    // so DisposeAsync can publish disposal atomically without ordering it against the lifecycle semaphore.
+    private int _disposed;
 
     internal Bus(
         IMessageSerializer serializer,
@@ -290,9 +292,21 @@ public sealed class Bus : IBus
             throw new InvalidOperationException(
                 "QueueName is not set. Configure via ServiceConnectBuilder.ConfigureQueues(q => q.QueueName = \"...\") before starting consumption (E-07).");
 
-        await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Dispose won the race between ThrowIfDisposed and WaitAsync — surface as a typed Bus
+            // disposal so callers see one exception type, not a raw SemaphoreSlim disposal.
+            throw new ObjectDisposedException(typeof(Bus).FullName);
+        }
+
+        try
+        {
+            ThrowIfDisposed(); // re-check: Dispose may have completed after we acquired the semaphore
+
             IConsumer localConsumer;
             List<string> messageTypeNames;
 
@@ -323,7 +337,11 @@ public sealed class Bus : IBus
         }
         finally
         {
-            _lifecycleSemaphore.Release();
+            // Guard against the semaphore being disposed by a concurrent DisposeAsync that won the
+            // race after WaitAsync returned. A disposed-semaphore Release is benign here — we are
+            // already exiting — so swallow any ObjectDisposedException to avoid masking the real cause.
+            try { _lifecycleSemaphore.Release(); }
+            catch (ObjectDisposedException) { }
         }
     }
 
@@ -379,6 +397,12 @@ public sealed class Bus : IBus
         catch (OperationCanceledException oce)
         {
             pendingCancellation = oce;
+        }
+        catch (ObjectDisposedException)
+        {
+            // The semaphore was disposed by a concurrent DisposeAsync — translate to a typed
+            // Bus disposal so callers see a consistent exception type rather than a raw semaphore disposal.
+            throw new ObjectDisposedException(typeof(Bus).FullName);
         }
 
         try
@@ -445,11 +469,8 @@ public sealed class Bus : IBus
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        lock (_stateLock)
-        {
-            if (_disposed) return;
-            _disposed = true;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
 
         await StopConsumingCoreAsync().ConfigureAwait(false);
         await _sendPipeline.DisposeAsync().ConfigureAwait(false);
@@ -460,7 +481,8 @@ public sealed class Bus : IBus
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Volatile.Read(ref _disposed) != 0)
+            throw new ObjectDisposedException(typeof(Bus).FullName);
     }
 
     // Outgoing filters share the scoped-pipeline contract with inbound filters and
