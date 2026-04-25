@@ -26,11 +26,11 @@ Within each finding, bracketed tags cite the originating review(s), e.g. `[C#1, 
 
 | Severity | Raised | Confirmed / partial after pass-2 | Fixed | Rejected / reclassified after pass-2 |
 |---|---|---|---|---|
-| Critical | 10 | 8 | 3 (C-01, C-02, C-03) | 2 (C-07, C-10) |
-| High | 22 | 11 | 2 (H-01, H-02) | 11 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19, H-20 partial) |
+| Critical | 10 | 8 | 5 (C-01, C-02, C-03, C-04, C-05) | 2 (C-07, C-10) |
+| High | 22 | 11 | 5 (H-01, H-02, H-05, H-06, H-07) | 11 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19, H-20 partial) |
 | Medium | 32 | 25 | 0 | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
 | Low | 72 | 52 | 0 | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
-| **Total** | **136** | **96** | **5** | **43** |
+| **Total** | **136** | **96** | **10** | **43** |
 
 Pass-2 also upgraded several earlier partial/equivocal verdicts to CONFIRMED (C-03, C-06, C-09, H-10, H-22, M-04, M-13, M-19, M-32, L-06, L-43) — marked inline.
 
@@ -67,12 +67,14 @@ Data-loss, silent saga corruption, double-dispatch, unbounded resource growth th
 - **Bug**: `DisposeAsync` disposes `_connection` (when owned) but never nulls the field. `StartConsumingAsync` guards recreation with `if (_connection is null)` — which is false after dispose. On restart, the consumer tries to use a disposed RabbitMQ connection.
 - **Fix sketch**: Set `_connection = null` after dispose; likewise for any other fields the start-path uses `is null` to detect.
 - **Sources**: [C#2, N.M3, P.Imp]
+- **Status**: fixed in 7e3a261b
 
 ### C-05 — RabbitMQ Consumer: `_clients` bag grows unbounded across Stop/Start cycles
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/Consumer.cs:187`
 - **Bug**: `_clients` is a `ConcurrentBag<ConsumerClient>` that accumulates across every start/stop cycle without ever being cleared. Long-lived buses that restart consumers (e.g. transport reconnects, topology refresh) leak a ConsumerClient per cycle.
 - **Fix sketch**: Clear or replace the bag at the end of each stop sequence, or move the collection's lifetime to the start path.
 - **Sources**: [C#3]
+- **Status**: fixed in 21eae3b2
 
 ### C-06 — `ProcessManagerProcessor` static `MapperCache` pins the first handler + root-provider scope bypass
 - **Location**: `src/ServiceConnect/Services/Processors/ProcessManagerProcessor.cs:41-65`
@@ -147,18 +149,21 @@ Functional bugs that occur on normal shutdown/restart paths, divergent contracts
 - **Bug**: Dispose releases and disposes `_publishLock`/`_connectionSemaphore` even while other publisher tasks may still be awaiting them. In-flight publishers throw `ObjectDisposedException` instead of receiving a clean shutdown signal.
 - **Fix**: Quiesce with a drain token before disposing semaphores.
 - **Sources**: [P.Imp]
+- **Status**: fixed in 049c00a8
 
 ### H-06 — Producer Dispose can publish/create state after teardown, leaks
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/Producer.cs:384-424`
 - **Bug**: Teardown does not set a "disposing" flag that the publish path checks, so a concurrent `PublishAsync` can re-create `_model`/`_connection` after Dispose has already closed the previous pair. The newly created resources are leaked.
 - **Fix**: Set `_disposing` before acquiring locks; make publish a no-op once set.
 - **Sources**: [C.Imp]
+- **Status**: fixed in a4791a97
 
 ### H-07 — Producer Dispose worst-case 60s (two sequential 30s waits)
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/Producer.cs:391-397`
 - **Bug**: `publishLockAcquired = await _publishLock.WaitAsync(disposeTimeout)` then `connectionLockAcquired = await _connectionSemaphore.WaitAsync(disposeTimeout)` — two 30-second budgets back-to-back, not a shared budget. Worst case 60s, not the documented 30.
 - **Fix**: Share a single stopwatch-derived budget across both waits.
 - **Sources**: [C.Imp]
+- **Status**: fixed in 107ab1c7
 
 ### H-08 — `Connection.DisposeAsync` uses unbounded `_connectionLock.WaitAsync`
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/Connection.cs:93-126`
