@@ -712,14 +712,19 @@ namespace ServiceConnect.UnitTests
             var found = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(correlationId), CancellationToken.None);
             Assert.NotNull(found);
 
-            // First update — stores version N+1.
-            ((TestData)found!.Data).Name = "v1";
+            // Initial version after Insert is 1; the caller's handle reflects that on Find.
+            Assert.Equal(1, ((MemoryData<IProcessManagerData>)found!).Version);
+
+            // First update — store goes 1 → 2; caller's handle must move in lockstep.
+            ((TestData)found.Data).Name = "v1";
             await finder.UpdateDataAsync(found, CancellationToken.None);
+            Assert.Equal(2, ((MemoryData<IProcessManagerData>)found).Version);
 
             // Second update on the same handle — must not throw because the caller's
             // Version was incremented to match what the store now holds.
             ((TestData)found.Data).Name = "v2";
             await finder.UpdateDataAsync(found, CancellationToken.None);
+            Assert.Equal(3, ((MemoryData<IProcessManagerData>)found).Version);
 
             // Confirm the second write was persisted.
             var reloaded = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(correlationId), CancellationToken.None);
