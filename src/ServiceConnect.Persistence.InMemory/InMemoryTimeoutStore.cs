@@ -58,6 +58,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     /// </summary>
     public Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
     {
+        if (batchSize.HasValue && batchSize.Value <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize.Value, "batchSize must be greater than zero when supplied.");
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var retval = new TimeoutsBatch { DueTimeouts = [] };

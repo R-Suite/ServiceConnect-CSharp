@@ -78,6 +78,9 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     /// <inheritdoc />
     public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
     {
+        if (batchSize is { } cap && cap <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), cap, "batchSize must be greater than zero when supplied.");
+
         cancellationToken.ThrowIfCancellationRequested();
 
         MongoClientSessionHandle? session = null;

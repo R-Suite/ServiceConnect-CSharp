@@ -22,11 +22,15 @@ public interface ITimeoutStore
     /// Loads the next batch of due timeouts.
     /// </summary>
     /// <param name="batchSize">
-    /// When supplied, limits the number of timeouts returned in a single poll. When null,
-    /// each persistor falls back to its own default cap (MongoDb uses the configured
-    /// <c>TimeoutBatchSize</c>; InMemory returns all due timeouts).
+    /// When supplied, limits the number of timeouts returned in a single poll. Must be
+    /// greater than zero when supplied; null leaves cap behaviour to the persistor's
+    /// default (MongoDb uses the configured <c>TimeoutBatchSize</c>; InMemory returns all
+    /// due timeouts).
     /// </param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="batchSize"/> is non-null and not greater than zero.
+    /// </exception>
     Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default);
 
     /// <summary>

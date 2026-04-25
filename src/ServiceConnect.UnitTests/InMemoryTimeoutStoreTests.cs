@@ -202,19 +202,72 @@ public class InMemoryTimeoutStoreTests
     [Fact]
     public async Task GetTimeoutsBatchAsync_WithBatchSize_HonoursCap()
     {
-        var store = new InMemoryTimeoutStore("", "");
+        var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
         for (int i = 0; i < 50; i++)
             await store.InsertTimeoutAsync(new TimeoutData
             {
                 Id = Guid.NewGuid(),
                 Destination = "dest",
                 ProcessManagerId = Guid.NewGuid(),
-                Time = DateTimeOffset.UtcNow.AddSeconds(-1),
+                Time = time.GetUtcNow().AddMinutes(-1),
                 Headers = new Dictionary<string, object>(),
             }, CancellationToken.None);
 
         var batch = await store.GetTimeoutsBatchAsync(batchSize: 10);
 
         Assert.Equal(10, batch.DueTimeouts.Count);
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatchAsync_NullBatchSize_ReturnsAllDueTimeouts()
+    {
+        var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        for (int i = 0; i < 5; i++)
+            await store.InsertTimeoutAsync(new TimeoutData
+            {
+                Id = Guid.NewGuid(),
+                Time = time.GetUtcNow().AddMinutes(-1),
+                Headers = new Dictionary<string, object>(),
+            });
+
+        var batch = await store.GetTimeoutsBatchAsync();
+
+        Assert.Equal(5, batch.DueTimeouts.Count);
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatchAsync_BatchSizeLargerThanDueCount_ReturnsAllDueTimeouts()
+    {
+        var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
+        var time = new FakeTimeProvider(now);
+        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        for (int i = 0; i < 5; i++)
+            await store.InsertTimeoutAsync(new TimeoutData
+            {
+                Id = Guid.NewGuid(),
+                Time = time.GetUtcNow().AddMinutes(-1),
+                Headers = new Dictionary<string, object>(),
+            });
+
+        var batch = await store.GetTimeoutsBatchAsync(batchSize: 100);
+
+        Assert.Equal(5, batch.DueTimeouts.Count);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task GetTimeoutsBatchAsync_BatchSizeZeroOrNegative_Throws(int invalidBatchSize)
+    {
+        var store = new InMemoryTimeoutStore();
+
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            store.GetTimeoutsBatchAsync(batchSize: invalidBatchSize));
+
+        Assert.Equal("batchSize", ex.ParamName);
     }
 }

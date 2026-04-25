@@ -187,6 +187,40 @@ public class MongoDbTimeoutStoreTests
         Assert.Null(remaining);
     }
 
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task GetTimeoutsBatchAsync_CallerBatchSize_OverridesConfiguredDefault()
+    {
+        // Store is configured with a large default (100) but the caller requests only 3.
+        // The caller-supplied value must win — exactly 3 rows returned from 10 inserted.
+        var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
+        var timeProvider = new FakeTimeProvider(now);
+        var dbName = _fixture.GetUniqueDatabaseName("caller_batchsize");
+        var options = new MongoDbPersistenceOptions
+        {
+            ConnectionString = _fixture.MongoDbConnectionString,
+            DatabaseName = dbName,
+            TimeoutBatchSize = 100,
+        };
+        var client = MongoClientFactory.Create(options);
+        var store = new MongoDbTimeoutStore(
+            client,
+            options,
+            NullLogger<MongoDbTimeoutStore>.Instance,
+            timeProvider);
+
+        for (int i = 0; i < 10; i++)
+            await store.InsertTimeoutAsync(new TimeoutData
+            {
+                Id = Guid.NewGuid(),
+                Time = timeProvider.GetUtcNow().AddMinutes(-1),
+            });
+
+        var batch = await store.GetTimeoutsBatchAsync(batchSize: 3);
+
+        Assert.Equal(3, batch.DueTimeouts.Count);
+    }
+
     private MongoDbTimeoutStore BuildStore(
         string dbPrefix,
         out IMongoClient client,
