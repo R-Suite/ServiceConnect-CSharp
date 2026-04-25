@@ -228,7 +228,7 @@ Strictly sequential: Phase 0 → 1 → 2 → 3 → 4 → 5 → 6a → 6b → 7a 
 (Updated as each phase closes.)
 
 - Phase 0: not started
-- Phase 1: not started
+- Phase 1: complete (5 items, commits 2e8c9d76 0569dc65 5400117c 64217763 c9d24bb5)
 - Phase 2: not started
 - Phase 3: not started
 - Phase 4: not started
