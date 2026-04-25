@@ -97,24 +97,41 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         }
 
         var state = _activeStreams.GetOrAdd(sequenceId, id => new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow()));
-        state.Stream.Write(messageBytes.ToArray(), packetNumber);
-        state.LastSeenUtc = _timeProvider.GetUtcNow();
 
-        if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
+        try
         {
-            var lpnString = HeaderDecoder.Decode(lpnRaw);
-            if (!long.TryParse(lpnString, out var lastPacketNumber))
+            state.Stream.Write(messageBytes.ToArray(), packetNumber);
+            state.LastSeenUtc = _timeProvider.GetUtcNow();
+
+            if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
             {
-                _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
-                return HandledTask;
+                var lpnString = HeaderDecoder.Decode(lpnRaw);
+                if (!long.TryParse(lpnString, out var lastPacketNumber))
+                {
+                    _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
+                    return HandledTask;
+                }
+                // Cap LastPacketNumber to prevent attacker-controlled unbounded state.
+                if (lastPacketNumber > MaxPacketNumber)
+                {
+                    _logger.LogWarning("Stream {SequenceId} LastPacketNumber {Value} exceeds maximum {Max}; discarding", sequenceId, lastPacketNumber, MaxPacketNumber);
+                    return HandledTask;
+                }
+                state.Stream.SetLastPacketNumber(lastPacketNumber);
             }
-            // Cap LastPacketNumber to prevent attacker-controlled unbounded state.
-            if (lastPacketNumber > MaxPacketNumber)
-            {
-                _logger.LogWarning("Stream {SequenceId} LastPacketNumber {Value} exceeds maximum {Max}; discarding", sequenceId, lastPacketNumber, MaxPacketNumber);
-                return HandledTask;
-            }
-            state.Stream.SetLastPacketNumber(lastPacketNumber);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A poison packet wedges the sequence — successive packets keep re-throwing
+            // on the same violated invariant (size cap, packet > LastPacketNumber, or
+            // LastPacketNumber re-set with a different value). Drop the entry so the
+            // next packet starts a fresh sequence rather than waiting for the 5-minute
+            // sweep.
+            _logger.LogWarning(ex,
+                "Stream {SequenceId} faulted on packet {PacketNumber}; evicting partial state",
+                sequenceId, packetNumber);
+            _activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state));
+            return HandledTask;
         }
 
         if (state.Stream.IsComplete())

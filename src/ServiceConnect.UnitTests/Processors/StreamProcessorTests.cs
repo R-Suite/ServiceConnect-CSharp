@@ -264,6 +264,55 @@ public class StreamProcessorTests
         Assert.Contains(capturingLogger.Entries, e =>
             e.Level == LogLevel.Error && e.Message.Contains(sequenceId));
     }
+
+    // When MessageBusReadStream.Write throws (e.g. packet number exceeds the
+    // already-set LastPacketNumber), the StreamProcessor must evict the entry
+    // from _activeStreams so the sequence is not wedged until the 5-minute sweep.
+    [Fact]
+    public async Task ProcessAsync_WhenWriteThrowsForPoisonPacket_EvictsActiveStreamEntry()
+    {
+        var processor = BuildProcessor();
+        var sequenceId = Guid.NewGuid().ToString();
+
+        // Establish LastPacketNumber=0 by sending the close packet first.
+        var closeHeaders = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+            [HeaderKeys.LastPacketNumber] = "0"
+        };
+        var closeEnv = new Envelope { Headers = closeHeaders, Body = new byte[] { 1 } };
+
+        // The first packet completes the stream (packet 0 of 0..0). Without a registered
+        // type / handler the processor returns Handled at the deserialise step; the entry
+        // is removed by the dispatch-time TryRemove on the IsComplete branch. Use a
+        // sequenceId for which the stream stays incomplete — set LastPacketNumber=2 by
+        // sending packet 0 with that close marker, leaving 1 and 2 outstanding.
+        closeHeaders[HeaderKeys.LastPacketNumber] = "2";
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, closeHeaders, closeEnv);
+
+        // Now send packet 99 — exceeds LastPacketNumber=2 → underlying Write throws.
+        var poisonHeaders = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "99"
+        };
+        var poisonEnv = new Envelope { Headers = poisonHeaders, Body = new byte[] { 9 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 9 }, typeof(object), null, poisonHeaders, poisonEnv);
+
+        // Handled to drop the poison packet without requeue.
+        Assert.Equal(ProcessResult.Handled, result);
+
+        // The sequence must no longer occupy a slot in _activeStreams.
+        var dictField = typeof(StreamProcessor)
+            .GetField("_activeStreams", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(dictField);
+        var dict = (System.Collections.IDictionary)dictField!.GetValue(processor)!;
+        Assert.False(dict.Contains(sequenceId), "Active-stream entry must be evicted after a poison-packet exception.");
+    }
 }
 
 file class SptMsg : Message { public SptMsg(Guid c) : base(c) { } }
