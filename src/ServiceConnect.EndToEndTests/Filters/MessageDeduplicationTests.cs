@@ -18,30 +18,31 @@ file sealed class TestDeduplicationFilter : IFilter
 
     private readonly ConcurrentDictionary<string, byte> _seen = new(StringComparer.Ordinal);
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         if (!envelope.Headers.TryGetValue(BusinessIdHeader, out var rawId))
-            return Task.FromResult(true);
+            return Task.FromResult(FilterAction.Continue);
 
         var messageId = rawId is byte[] bytes
             ? Encoding.UTF8.GetString(bytes)
             : rawId?.ToString() ?? string.Empty;
 
         if (string.IsNullOrEmpty(messageId))
-            return Task.FromResult(true);
+            return Task.FromResult(FilterAction.Continue);
 
         if (_seen.TryAdd(messageId, 0))
-            return Task.FromResult(true);
+            return Task.FromResult(FilterAction.Continue);
 
         // Already seen — block if this is a redelivery
         if (!envelope.Headers.TryGetValue(HeaderKeys.Redelivered, out var rawRedelivered))
-            return Task.FromResult(true);
+            return Task.FromResult(FilterAction.Continue);
 
         var redeliveredStr = rawRedelivered is byte[] redeliveredBytes
             ? Encoding.UTF8.GetString(redeliveredBytes)
             : rawRedelivered?.ToString() ?? string.Empty;
 
-        return Task.FromResult(!string.Equals(redeliveredStr, "True", StringComparison.OrdinalIgnoreCase));
+        var isRedelivery = string.Equals(redeliveredStr, "True", StringComparison.OrdinalIgnoreCase);
+        return Task.FromResult(isRedelivery ? FilterAction.Stop : FilterAction.Continue);
     }
 }
 

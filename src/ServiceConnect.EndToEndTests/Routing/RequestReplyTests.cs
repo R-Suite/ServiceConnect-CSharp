@@ -115,6 +115,6 @@ public class RequestReplyTests
 
     private class BlockAllFilter : IFilter
     {
-        public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default) => Task.FromResult(FilterAction.Stop);
     }
 }

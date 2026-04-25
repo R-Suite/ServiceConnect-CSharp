@@ -11,40 +11,40 @@ namespace ServiceConnect.EndToEndTests;
 file sealed class OrderTrackingFilterA : IFilter
 {
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("FilterA");
-        return Task.FromResult(true); // continue processing (true = keep going)
+        return Task.FromResult(FilterAction.Continue);
     }
 }
 
 file sealed class OrderTrackingFilterB : IFilter
 {
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("FilterB");
-        return Task.FromResult(true); // continue processing (true = keep going)
+        return Task.FromResult(FilterAction.Continue);
     }
 }
 
 file sealed class ChainBlockingFilter : IFilter
 {
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("BlockingFilter");
-        return Task.FromResult(false); // block — stop pipeline (false = don't continue)
+        return Task.FromResult(FilterAction.Stop);
     }
 }
 
 file sealed class ChainSecondFilter : IFilter
 {
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         FilterChainTests.ExecutionOrder.Enqueue("SecondFilter");
-        return Task.FromResult(true); // continue processing
+        return Task.FromResult(FilterAction.Continue);
     }
 }
 

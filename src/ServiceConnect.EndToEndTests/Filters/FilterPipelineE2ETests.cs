@@ -11,10 +11,10 @@ file sealed class BlockingFilter : IFilter
 {
     public bool WasCalled { get; private set; }
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         WasCalled = true;
-        return Task.FromResult(false); // block the message
+        return Task.FromResult(FilterAction.Stop); // block the message
     }
 }
 
@@ -22,11 +22,11 @@ file sealed class HeaderAddingFilter : IFilter
 {
     public bool WasCalled { get; private set; }
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         WasCalled = true;
         envelope.Headers["X-Test-Header"] = "added-by-filter";
-        return Task.FromResult(true); // allow the message through
+        return Task.FromResult(FilterAction.Continue); // allow the message through
     }
 }
 

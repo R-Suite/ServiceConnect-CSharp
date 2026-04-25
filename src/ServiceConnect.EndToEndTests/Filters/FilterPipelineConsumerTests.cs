@@ -10,9 +10,9 @@ namespace ServiceConnect.EndToEndTests;
 file sealed class ConsumerBlockingFilter : IFilter
 {
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(false); // block the message — handler must not be invoked
+        return Task.FromResult(FilterAction.Stop); // block the message — handler must not be invoked
     }
 }
 
@@ -23,10 +23,10 @@ file sealed class AfterConsumingSignalFilter : IFilter
     public AfterConsumingSignalFilter(TaskCompletionSource tcs) => _tcs = tcs;
 
 
-    public Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult();
-        return Task.FromResult(true);
+        return Task.FromResult(FilterAction.Continue);
     }
 }
 
