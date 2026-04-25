@@ -160,11 +160,11 @@ public class MongoDbTimeoutStoreTests
     [Trait("Category", "Docker")]
     public async Task RemoveDispatchedTimeoutAsync_NullLockOwner_RemovesLeasedRow()
     {
-        // Phase 0 D2: lockOwner == null means unconditional remove. The pre-decision
-        // Mongo store filtered on LockedBy == Guid.Empty, silently no-op'ing on leased
-        // rows. The new contract requires the id-only path to genuinely delete the row
-        // even when it is leased — callers reach for the lockOwner overload only when
-        // they want lease-checked semantics.
+        // lockOwner == null means unconditional remove. The pre-fix Mongo store filtered
+        // on LockedBy == Guid.Empty, silently no-op'ing on leased rows. The current
+        // contract requires the id-only path to genuinely delete the row even when it
+        // is leased — callers reach for the lockOwner overload only when they want
+        // lease-checked semantics.
         var store = BuildStore("null_owner_rm", out var client, out var dbName, out _);
 
         var timeoutId = Guid.NewGuid();

@@ -141,9 +141,9 @@ public class InMemoryTimeoutStoreLeaseTests
     [Fact]
     public async Task RemoveDispatchedTimeoutAsync_NonNullLockOwner_MissingRow_ThrowsConcurrencyException()
     {
-        // Phase 0 D2: non-null lockOwner against a missing row must throw, not silently
-        // no-op. A missing row's "current lock owner" is nobody, so the caller's lease
-        // is already invalidated — surface as ConcurrencyException to match Mongo.
+        // A non-null lockOwner against a missing row must throw, not silently no-op.
+        // A missing row's "current lock owner" is nobody, so the caller's lease is
+        // already invalidated — surface as ConcurrencyException to match Mongo.
         var store = new InMemoryTimeoutStore();
         var randomId = Guid.NewGuid();
         var ownerThatNeverHadIt = Guid.NewGuid();
@@ -155,8 +155,8 @@ public class InMemoryTimeoutStoreLeaseTests
     [Fact]
     public async Task ReleaseDispatchedTimeoutAsync_NonNullLockOwner_MissingRow_ThrowsConcurrencyException()
     {
-        // Phase 0 D2: non-null lockOwner against a missing row must throw, not silently
-        // no-op. Mirrors RemoveDispatchedTimeoutAsync contract and Mongo behaviour.
+        // A non-null lockOwner against a missing row must throw, not silently no-op.
+        // Mirrors RemoveDispatchedTimeoutAsync contract and Mongo behaviour.
         var store = new InMemoryTimeoutStore();
         var randomId = Guid.NewGuid();
         var ownerThatNeverHadIt = Guid.NewGuid();
@@ -168,9 +168,8 @@ public class InMemoryTimeoutStoreLeaseTests
     [Fact]
     public async Task RemoveDispatchedTimeoutAsync_NullLockOwner_RemovesLeasedRow()
     {
-        // Phase 0 D2: lockOwner == null is the unconditional id-only path. A leased
-        // row must still be removed when the caller explicitly opts out of the lease
-        // check by passing null.
+        // lockOwner == null is the unconditional id-only path. A leased row must still
+        // be removed when the caller explicitly opts out of the lease check by passing null.
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
         var store = new InMemoryTimeoutStore(timeProvider: time);
