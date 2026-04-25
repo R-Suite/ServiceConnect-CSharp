@@ -386,6 +386,7 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 - **Location**: `src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs:243-249`
 - **Bug**: Version numbers the store increments are not reflected back to the caller's object; subsequent updates with the caller's stale Version fail.
 - **Sources**: [P.Imp]
+- **Status**: fixed — `newData.Version` incremented after successful store update; parity matrix updated.
 
 ### M-22 — Persistors bypass `EnsureGuidSerializerRegistered` when ctor'd directly
 - **Location**: `MongoDbAggregatorPersistor.cs:150-153`, `MongoDbProcessManagerFinder.cs:39-66`, `MongoDbTimeoutStore.cs:38-67`
@@ -544,6 +545,7 @@ Dead code, minor nullability/comment quirks, hygiene items, and hard-to-trigger 
 | TimeoutStore batch-size cap | Applied | Applied | Aligned |
 | Lease-aware Remove on stale lease | `ConcurrencyException` | `ConcurrencyException` | Aligned |
 | AggregatorPersistor.RemoveDataAsync on missing | `ConcurrencyException` | `ConcurrencyException` | Aligned |
+| ProcessManagerFinder Version write-back | Reflected to caller | Reflected to caller (FindOneAndUpdate) | Aligned |
 | Wake-up when peer holds due lease | Wakes at lease expiry | 1-minute fallback | **Divergent** |
 
 ---

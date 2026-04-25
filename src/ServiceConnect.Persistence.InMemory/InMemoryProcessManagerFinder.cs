@@ -246,6 +246,12 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                 Data = DeepClone.Clone(data.Data),
                 Version = newData.Version + 1
             });
+
+            // Reflect the store-side increment back to the caller so consecutive updates
+            // using the same MemoryData<T> instance don't fail concurrency check. Mongo
+            // persistor returns the post-update document via FindOneAndUpdate; InMemory
+            // previously diverged.
+            newData.Version = newData.Version + 1;
         }
         finally
         {

@@ -693,6 +693,39 @@ namespace ServiceConnect.UnitTests
             var ex = await Assert.ThrowsAsync<ConcurrencyException>(() => finder.DeleteDataAsync(pm));
             Assert.Contains("concurrently removed", ex.Message);
         }
+
+        [Fact]
+        public async Task UpdateDataAsync_BumpsCallerVersion_AllowsConsecutiveUpdates()
+        {
+            // Insert a saga, find it, then do two consecutive updates on the same
+            // MemoryData<T> handle. The second update must not throw ConcurrencyException.
+            // Mongo persistor returns the post-update document via FindOneAndUpdate; the
+            // InMemory persistor must reflect the new Version back to the caller's instance
+            // so consecutive updates with the same handle behave identically.
+            var correlationId = Guid.NewGuid();
+            IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+            await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v0" }, CancellationToken.None);
+
+            var mapper = new TestProcessManagerPropertyMapper();
+            mapper.ConfigureMapping<IProcessManagerData, Message>(d => d.CorrelationId, m => m.CorrelationId);
+
+            var found = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(correlationId), CancellationToken.None);
+            Assert.NotNull(found);
+
+            // First update — stores version N+1.
+            ((TestData)found!.Data).Name = "v1";
+            await finder.UpdateDataAsync(found, CancellationToken.None);
+
+            // Second update on the same handle — must not throw because the caller's
+            // Version was incremented to match what the store now holds.
+            ((TestData)found.Data).Name = "v2";
+            await finder.UpdateDataAsync(found, CancellationToken.None);
+
+            // Confirm the second write was persisted.
+            var reloaded = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(correlationId), CancellationToken.None);
+            Assert.NotNull(reloaded);
+            Assert.Equal("v2", ((TestData)reloaded!.Data).Name);
+        }
     }
 
     /// <summary>
