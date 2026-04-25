@@ -355,6 +355,97 @@ public class ProcessManagerProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_ResolvesHandlerAndFinderFromCurrentConsumeScope_NotRoot()
+    {
+        var rootHandler = new ScopeProbePmHandler("root");
+        var scopedHandler = new ScopeProbePmHandler("scoped");
+        var rootFinder = new ScopeProbePmFinder("root");
+        var scopedFinder = new ScopeProbePmFinder("scoped");
+
+        var rootServices = new ServiceCollection();
+        rootServices.AddSingleton<IProcessManagerFinder>(rootFinder);
+        rootServices.AddSingleton<IProcessHandler<ScopeProbePmData, ScopeProbePmMessage>>(rootHandler);
+        var rootProvider = rootServices.BuildServiceProvider();
+
+        var scopedServices = new ServiceCollection();
+        scopedServices.AddSingleton<IProcessManagerFinder>(scopedFinder);
+        scopedServices.AddSingleton<IProcessHandler<ScopeProbePmData, ScopeProbePmMessage>>(scopedHandler);
+        var scopedProvider = scopedServices.BuildServiceProvider();
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(ScopeProbePmMessage), HandlerType = typeof(ScopeProbePmHandler)
+        });
+
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var processor = new ProcessManagerProcessor(
+            registry, scopeAccessor, new Lazy<IBus>(() => new Mock<IBus>().Object),
+            NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig,
+            new ConsumeContextPool(), new ConsumeContextAccessor());
+
+        using (scopeAccessor.Push(scopedProvider))
+        {
+            await processor.ProcessAsync(
+                ReadOnlyMemory<byte>.Empty,
+                typeof(ScopeProbePmMessage),
+                new ScopeProbePmMessage(Guid.NewGuid()),
+                new Dictionary<string, object>(),
+                new Envelope { Headers = new Dictionary<string, object>(), Body = ReadOnlyMemory<byte>.Empty },
+                CancellationToken.None);
+        }
+
+        Assert.Equal(0, rootHandler.Invocations);
+        Assert.Equal(1, scopedHandler.Invocations);
+        Assert.Equal(0, rootFinder.FindCount);
+        Assert.Equal(1, scopedFinder.FindCount);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ConsecutiveMessages_ConfigureMapperRunsPerMessage()
+    {
+        // The pre-fix path memoized the mapper across the process lifetime via a
+        // static cache whose Lazy factory captured the first handler instance. After
+        // the fix, ConfigureMapper runs once per message against the per-message
+        // handler, so the captured handler instance for message N is the handler
+        // resolved from message N's scope.
+
+        var configureCount = 0;
+        var probeHandler = new ScopeProbePmHandler("probe", () => Interlocked.Increment(ref configureCount));
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IProcessManagerFinder>(new ScopeProbePmFinder("svc"));
+        services.AddSingleton<IProcessHandler<ScopeProbePmData, ScopeProbePmMessage>>(probeHandler);
+        var provider = services.BuildServiceProvider();
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(ScopeProbePmMessage), HandlerType = typeof(ScopeProbePmHandler)
+        });
+
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var processor = new ProcessManagerProcessor(
+            registry, scopeAccessor, new Lazy<IBus>(() => new Mock<IBus>().Object),
+            NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig,
+            new ConsumeContextPool(), new ConsumeContextAccessor());
+
+        using (scopeAccessor.Push(provider))
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                await processor.ProcessAsync(
+                    ReadOnlyMemory<byte>.Empty,
+                    typeof(ScopeProbePmMessage),
+                    new ScopeProbePmMessage(Guid.NewGuid()),
+                    new Dictionary<string, object>(),
+                    new Envelope { Headers = new Dictionary<string, object>(), Body = ReadOnlyMemory<byte>.Empty },
+                    CancellationToken.None);
+            }
+        }
+
+        Assert.Equal(3, configureCount);
+    }
+
+    [Fact]
     public async Task ProcessAsync_SetsAmbientConsumeHeadersDuringHandlerAndClearsThemAfterward()
     {
         var timeoutStore = new PmCapturingTimeoutStore();
@@ -565,5 +656,59 @@ file class DummyPmHandler : IProcessHandler<DummyPmData, DummyPmMessage>
     }
 
     public Task HandleAsync(DummyPmMessage message, DummyPmData data)
+        => Task.CompletedTask;
+}
+
+file sealed class ScopeProbePmMessage(Guid correlationId) : Message(correlationId);
+
+file sealed class ScopeProbePmData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+}
+
+file sealed class ScopeProbePmHandler(string label, Action? onConfigureMapper = null)
+    : IProcessHandler<ScopeProbePmData, ScopeProbePmMessage>
+{
+    private int _invocations;
+    public string Label { get; } = label;
+    public int Invocations => Volatile.Read(ref _invocations);
+    public IConsumeContext Context { get; set; } = null!;
+
+    public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
+    {
+        onConfigureMapper?.Invoke();
+        mapper.ConfigureMapping<ScopeProbePmData, ScopeProbePmMessage>(d => d.CorrelationId, m => m.CorrelationId);
+    }
+
+    public Task HandleAsync(ScopeProbePmMessage message, ScopeProbePmData data)
+    {
+        Interlocked.Increment(ref _invocations);
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class ScopeProbePmFinder(string label) : IProcessManagerFinder
+{
+    private int _findCount;
+    public string Label { get; } = label;
+    public int FindCount => Volatile.Read(ref _findCount);
+
+    public Task<IPersistenceData<TData>?> FindDataAsync<TData>(
+        IProcessManagerPropertyMapper mapper, Message message, CancellationToken cancellationToken = default)
+        where TData : class, IProcessManagerData
+    {
+        Interlocked.Increment(ref _findCount);
+        return Task.FromResult<IPersistenceData<TData>?>(null);
+    }
+
+    public Task InsertDataAsync(IProcessManagerData data, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task UpdateDataAsync<TData>(IPersistenceData<TData> persistenceData, CancellationToken cancellationToken = default)
+        where TData : class, IProcessManagerData
+        => Task.CompletedTask;
+
+    public Task DeleteDataAsync<TData>(IPersistenceData<TData> persistenceData, CancellationToken cancellationToken = default)
+        where TData : class, IProcessManagerData
         => Task.CompletedTask;
 }
