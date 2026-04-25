@@ -63,7 +63,7 @@ public class MessageBusReadStreamTests
     }
 
     [Fact]
-    public void Write_DuplicatePacketNumber_FirstPayloadWins_AndSizeStaysAccurate()
+    public void Write_DuplicatePacketNumber_FirstPayloadWins_AndStreamIsComplete()
     {
         var stream = new MessageBusReadStream("seq");
         stream.SetLastPacketNumber(0);
