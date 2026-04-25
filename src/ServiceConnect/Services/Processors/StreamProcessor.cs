@@ -103,9 +103,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             state.Stream.Write(messageBytes.ToArray(), packetNumber);
 
             // Touch: replace the dict entry with a new ActiveStreamState carrying a fresh
-            // LastSeenUtc. The eviction sweep relies on reference-equality TryRemove(KVP)
-            // to detect concurrent touches; mutating LastSeenUtc in place would defeat
-            // that. The CAS loop retries on contention with another touch / dispatch path.
+            // LastSeenUtc. The eviction sweep's TryRemove(KVP) compares records by
+            // structural equality; mutating LastSeenUtc in place would leave the record
+            // structurally equal and defeat that check, which is why we replace the entry
+            // instead. The CAS loop retries on contention with another touch / dispatch path.
             ActiveStreamState refreshed;
             while (true)
             {
@@ -249,7 +250,8 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     }
 
     // Immutable so updates require a new instance via ConcurrentDictionary.TryUpdate;
-    // the eviction sweep's KVP-based TryRemove relies on reference equality to detect
-    // concurrent touches.
+    // the eviction sweep's KVP-based TryRemove compares records by structural equality,
+    // so a concurrent touch produces an unequal record and the sweep no-ops on the stale
+    // value (in-place mutation would stay structurally equal and defeat the check).
     private sealed record ActiveStreamState(MessageBusReadStream Stream, DateTimeOffset LastSeenUtc);
 }
