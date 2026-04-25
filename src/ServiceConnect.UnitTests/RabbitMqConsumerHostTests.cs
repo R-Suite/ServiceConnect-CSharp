@@ -1595,4 +1595,42 @@ public class RabbitMqConsumerHostTests
             conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance));
         Assert.Null(ex);
     }
+
+    [Fact]
+    public async Task StartConsumingAsync_BasicConsumeAsync_FlowsCancellationToken()
+    {
+        // BasicConsumeAsync must receive the caller's CancellationToken so that a
+        // broker-side hang during consumer registration can be cancelled by the caller.
+        using var cts = new CancellationTokenSource();
+        var capturedToken = default(CancellationToken);
+
+        var consumerChannel = CreateMockChannel();
+        consumerChannel.Setup(c => c.BasicConsumeAsync(
+                It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string>(),
+                It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<IDictionary<string, object?>?>(),
+                It.IsAny<IAsyncBasicConsumer>(), It.IsAny<CancellationToken>()))
+            .Callback<string, bool, string, bool, bool, IDictionary<string, object?>?, IAsyncBasicConsumer, CancellationToken>(
+                (_, _, _, _, _, _, _, ct) => capturedToken = ct)
+            .ReturnsAsync("tag");
+
+        var publishChannel = CreateMockChannel();
+        var conn = new Mock<IServiceConnectConnection>();
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CancellationToken>())).ReturnsAsync(consumerChannel.Object);
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>())).ReturnsAsync(publishChannel.Object);
+
+        var tcfg = MakeTransportCfg();
+        var qcfg = MakeQueueCfg();
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }),
+            "q",
+            cancellationToken: cts.Token);
+
+        Assert.Equal(cts.Token, capturedToken);
+    }
 }

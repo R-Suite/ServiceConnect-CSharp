@@ -152,7 +152,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             underlying.ConnectionUnblockedAsync += OnConnectionUnblockedAsync;
         }
 
-        _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer).ConfigureAwait(false);
+        _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer, cancellationToken).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
     }
 
