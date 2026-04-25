@@ -574,10 +574,10 @@ file sealed class PmCapturingTimeoutStore : ITimeoutStore
     public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
-    public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
-    public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 }
 

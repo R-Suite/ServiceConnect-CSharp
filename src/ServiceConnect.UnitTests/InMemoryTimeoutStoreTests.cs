@@ -196,6 +196,6 @@ public class InMemoryTimeoutStoreTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            store.ReleaseDispatchedTimeoutAsync(Guid.NewGuid(), cts.Token));
+            store.ReleaseDispatchedTimeoutAsync(Guid.NewGuid(), cancellationToken: cts.Token));
     }
 }

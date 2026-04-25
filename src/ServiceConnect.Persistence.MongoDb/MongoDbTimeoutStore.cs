@@ -9,7 +9,7 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// <summary>
 /// MongoDB implementation of timeout persistence and lock-aware timeout leasing.
 /// </summary>
-public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
+public sealed class MongoDbTimeoutStore : ITimeoutStore
 {
     private readonly IMongoClient _mongoClient;
     private readonly IMongoDatabase _mongoDatabase;
@@ -149,56 +149,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
     }
 
     /// <inheritdoc />
-    public async Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        try
-        {
-            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
-
-            // Id-only callers don't know which worker holds the lease. Require
-            // LockedBy == Guid.Empty so this path cannot delete a row leased
-            // by a live worker — only the lease-aware (id, lockOwner) overload
-            // can touch actively-leased rows.
-            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, Guid.Empty);
-            await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
-        }
-        catch (MongoException ex)
-        {
-            throw new PersistenceException($"Failed to remove dispatched timeout with Id '{id}'.", ex);
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        try
-        {
-            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
-            // Same lock-owner guard as Remove: id-only callers cannot reach
-            // into another worker's leased row.
-            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, Guid.Empty);
-            var update = Builders<TimeoutData>.Update
-                .Set(x => x.Locked, false)
-                .Set(x => x.LockedBy, Guid.Empty)
-                .Set(x => x.LockExpiresAt, null);
-            await collection.UpdateOneAsync(filter, update, cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-        catch (MongoException ex)
-        {
-            throw new PersistenceException($"Failed to release dispatched timeout with Id '{id}'.", ex);
-        }
-    }
-
-    /// <inheritdoc />
-    public async Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    public async Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -208,28 +159,34 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
 
-            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, lockOwner);
+            // null lockOwner is the unconditional id-only path — no Locked/LockedBy guard
+            // so a leased row is genuinely deleted (matches the new contract; the previous
+            // LockedBy == Guid.Empty filter caused silent no-op).
+            FilterDefinition<TimeoutData> filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id);
+            if (lockOwner is { } owner)
+            {
+                filter &= Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
+                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner);
+            }
             result = await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (MongoException ex)
         {
-            throw new PersistenceException($"Failed to remove dispatched timeout with Id '{id}' and lock owner '{lockOwner}'.", ex);
+            throw new PersistenceException($"Failed to remove dispatched timeout with Id '{id}'.", ex);
         }
 
-        // Filter-match of zero means the lease this caller held has been reassigned
-        // (reaper fired, or another worker re-claimed the row after lease expiry). The
-        // timeout is still present in the store and must not be treated as dispatched.
-        if (result.IsAcknowledged && result.DeletedCount == 0)
+        // Lease-checked path: zero matches means the lease has been reassigned (reaper
+        // fired, or another worker re-claimed after lease expiry). The timeout is still
+        // in the store and must not be treated as dispatched.
+        if (lockOwner is { } expected && result.IsAcknowledged && result.DeletedCount == 0)
         {
             throw new ConcurrencyException(
-                $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");
+                $"Lease for timeout '{id}' was invalidated; lock owner '{expected}' no longer holds the lease.");
         }
     }
 
     /// <inheritdoc />
-    public async Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    public async Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -238,9 +195,14 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
-            var filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
-                         Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, lockOwner);
+
+            FilterDefinition<TimeoutData> filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id);
+            if (lockOwner is { } owner)
+            {
+                filter &= Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
+                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner);
+            }
+
             var update = Builders<TimeoutData>.Update
                 .Set(x => x.Locked, false)
                 .Set(x => x.LockedBy, Guid.Empty)
@@ -249,16 +211,13 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
         }
         catch (MongoException ex)
         {
-            throw new PersistenceException($"Failed to release dispatched timeout with Id '{id}' and lock owner '{lockOwner}'.", ex);
+            throw new PersistenceException($"Failed to release dispatched timeout with Id '{id}'.", ex);
         }
 
-        // MatchedCount==0 means the filter (id + Locked + LockedBy==lockOwner) found
-        // nothing — our lease was reassigned mid-flight. The caller must not treat the
-        // row as released because they are not the owner any longer.
-        if (result.IsAcknowledged && result.MatchedCount == 0)
+        if (lockOwner is { } expected && result.IsAcknowledged && result.MatchedCount == 0)
         {
             throw new ConcurrencyException(
-                $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");
+                $"Lease for timeout '{id}' was invalidated; lock owner '{expected}' no longer holds the lease.");
         }
     }
 

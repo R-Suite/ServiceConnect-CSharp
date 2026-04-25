@@ -203,7 +203,7 @@ public class MongoDbTimeoutStoreTests
 
         var store = BuildStore(collection);
 
-        await ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, lockOwner);
+        await store.RemoveDispatchedTimeoutAsync(id, lockOwner: lockOwner);
 
         var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", json);
@@ -236,7 +236,7 @@ public class MongoDbTimeoutStoreTests
 
         var store = BuildStore(collection);
 
-        await ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, lockOwner);
+        await store.ReleaseDispatchedTimeoutAsync(id, lockOwner: lockOwner);
 
         var filterJson = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", filterJson);
@@ -267,14 +267,14 @@ public class MongoDbTimeoutStoreTests
         var store = BuildStore(collection);
 
         var exception = await Assert.ThrowsAsync<ConcurrencyException>(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, lockOwner));
+            store.RemoveDispatchedTimeoutAsync(id, lockOwner: lockOwner));
 
         Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task RemoveDispatchedTimeout_WithMatchingOwner_WhenMongoFails_IncludesLockOwnerInPersistenceException()
+    public async Task RemoveDispatchedTimeout_WithMatchingOwner_WhenMongoFails_ThrowsPersistenceException()
     {
         var id = Guid.NewGuid();
         var lockOwner = Guid.NewGuid();
@@ -285,10 +285,9 @@ public class MongoDbTimeoutStoreTests
         var store = BuildStore(collection);
 
         var exception = await Assert.ThrowsAsync<PersistenceException>(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, lockOwner));
+            store.RemoveDispatchedTimeoutAsync(id, lockOwner: lockOwner));
 
         Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -310,14 +309,14 @@ public class MongoDbTimeoutStoreTests
         var store = BuildStore(collection);
 
         var exception = await Assert.ThrowsAsync<ConcurrencyException>(() =>
-            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, lockOwner));
+            store.ReleaseDispatchedTimeoutAsync(id, lockOwner: lockOwner));
 
         Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task ReleaseDispatchedTimeout_WithMatchingOwner_WhenMongoFails_IncludesLockOwnerInPersistenceException()
+    public async Task ReleaseDispatchedTimeout_WithMatchingOwner_WhenMongoFails_ThrowsPersistenceException()
     {
         var id = Guid.NewGuid();
         var lockOwner = Guid.NewGuid();
@@ -332,35 +331,34 @@ public class MongoDbTimeoutStoreTests
         var store = BuildStore(collection);
 
         var exception = await Assert.ThrowsAsync<PersistenceException>(() =>
-            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, lockOwner));
+            store.ReleaseDispatchedTimeoutAsync(id, lockOwner: lockOwner));
 
         Assert.Contains(id.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(lockOwner.ToString(), exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task RemoveDispatchedTimeout_IdOnly_FilterRequiresLockedByEmpty()
+    public async Task RemoveDispatchedTimeout_IdOnly_FilterIsIdAlone()
     {
-        // The id-only Remove overload must pin LockedBy to Guid.Empty so it can
-        // only delete rows that no live worker currently holds. Filtering by id
-        // alone (or id + Locked=true) would let one worker delete a timeout that
-        // another worker has leased.
+        // The unconditional (null lockOwner) Remove path must filter by id alone — no
+        // Locked/LockedBy guard. The previous LockedBy == Guid.Empty filter caused a
+        // silent no-op when the row was leased; the new contract removes that guard so
+        // the row is deleted regardless of lease state.
         var id = Guid.NewGuid();
         FilterDefinition<TimeoutData>? capturedFilter = null;
         var collection = new Mock<IMongoCollection<TimeoutData>>();
         collection.Setup(c => c.DeleteOneAsync(It.IsAny<FilterDefinition<TimeoutData>>(), It.IsAny<CancellationToken>()))
             .Callback<FilterDefinition<TimeoutData>, CancellationToken>((filter, _) => capturedFilter = filter)
-            .ReturnsAsync(BuildDeleteResult(0));
+            .ReturnsAsync(BuildDeleteResult(1));
 
         var store = BuildStore(collection);
 
-        await ((ITimeoutStore)store).RemoveDispatchedTimeoutAsync(id);
+        await store.RemoveDispatchedTimeoutAsync(id, lockOwner: null);
 
         var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", json);
         Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"LockedBy\"", json);
-        Assert.Contains(Guid.Empty.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"Locked\"", json);
+        Assert.DoesNotContain("\"LockedBy\"", json);
     }
 
     [Fact]
@@ -522,11 +520,10 @@ public class MongoDbTimeoutStoreTests
     }
 
     [Fact]
-    public async Task ReleaseDispatchedTimeout_IdOnly_FilterRequiresLockedByEmpty()
+    public async Task ReleaseDispatchedTimeout_IdOnly_FilterIsIdAlone()
     {
-        // Same guard as the id-only Remove: release by id alone must pin
-        // LockedBy to Guid.Empty so it cannot clear lock fields on a row owned
-        // by another session.
+        // The unconditional (null lockOwner) Release path must filter by id alone — no
+        // Locked/LockedBy guard. Matches the new Remove contract: id-only is unconditional.
         var id = Guid.NewGuid();
         FilterDefinition<TimeoutData>? capturedFilter = null;
         var collection = new Mock<IMongoCollection<TimeoutData>>();
@@ -536,16 +533,16 @@ public class MongoDbTimeoutStoreTests
                 It.IsAny<UpdateOptions?>(),
                 It.IsAny<CancellationToken>()))
             .Callback<FilterDefinition<TimeoutData>, UpdateDefinition<TimeoutData>, UpdateOptions?, CancellationToken>((filter, _, _, _) => capturedFilter = filter)
-            .ReturnsAsync(BuildUpdateResult(0, 0));
+            .ReturnsAsync(BuildUpdateResult(1, 1));
 
         var store = BuildStore(collection);
 
-        await ((ITimeoutStore)store).ReleaseDispatchedTimeoutAsync(id);
+        await store.ReleaseDispatchedTimeoutAsync(id, lockOwner: null);
 
         var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", json);
         Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("\"LockedBy\"", json);
-        Assert.Contains(Guid.Empty.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"Locked\"", json);
+        Assert.DoesNotContain("\"LockedBy\"", json);
     }
 }

@@ -86,7 +86,7 @@ public class ProcessManagerTimeoutServiceTests
                 It.Is<SendOptions>(options => options.EndPoint == "test-queue"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
-        _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Once);
+        _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -290,19 +290,18 @@ public class ProcessManagerTimeoutServiceTests
 
         await sut.PollOnceAsync();
 
-        _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Once);
-        _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Never);
+        _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task PollOnce_LeaseAwareStore_WithLockOwner_UsesOwnerAwareRemove()
+    public async Task PollOnce_WithLockOwner_PassesOwnerToRemove()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
 
         var timeoutId = Guid.NewGuid();
         var lockOwner = Guid.NewGuid();
-        var leaseAwareStore = new Mock<ITimeoutStore>();
-        var leaseAwareView = leaseAwareStore.As<ILeaseAwareTimeoutStore>();
+        var store = new Mock<ITimeoutStore>();
         var batch = new TimeoutsBatch
         {
             DueTimeouts = new List<TimeoutData>
@@ -321,8 +320,8 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        leaseAwareStore.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
-        leaseAwareView.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, lockOwner, It.IsAny<CancellationToken>()))
+        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        store.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)lockOwner, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
@@ -330,22 +329,21 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var sut = CreateSut(leaseAwareStore.Object);
+        var sut = CreateSut(store.Object);
 
         await sut.PollOnceAsync();
 
-        leaseAwareView.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, lockOwner, It.IsAny<CancellationToken>()), Times.Once);
-        leaseAwareStore.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)lockOwner, It.IsAny<CancellationToken>()), Times.Once);
+        store.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task PollOnce_LeaseAwareStore_WithoutLockOwner_FallsBackToLegacyRemove()
+    public async Task PollOnce_WithoutLockOwner_PassesNullToRemove()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
 
         var timeoutId = Guid.NewGuid();
-        var leaseAwareStore = new Mock<ITimeoutStore>();
-        var leaseAwareView = leaseAwareStore.As<ILeaseAwareTimeoutStore>();
+        var store = new Mock<ITimeoutStore>();
         var batch = new TimeoutsBatch
         {
             DueTimeouts = new List<TimeoutData>
@@ -364,8 +362,8 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        leaseAwareStore.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
-        leaseAwareStore.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()))
+        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        store.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
@@ -373,23 +371,22 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var sut = CreateSut(leaseAwareStore.Object);
+        var sut = CreateSut(store.Object);
 
         await sut.PollOnceAsync();
 
-        leaseAwareStore.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Once);
-        leaseAwareView.Verify(f => f.RemoveDispatchedTimeoutAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()), Times.Once);
+        store.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.Is<Guid?>(g => g.HasValue), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task PollOnce_SendFails_WithLeaseAwareStoreAndLockOwner_UsesOwnerAwareRelease()
+    public async Task PollOnce_SendFails_WithLockOwner_PassesOwnerToRelease()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
 
         var timeoutId = Guid.NewGuid();
         var lockOwner = Guid.NewGuid();
-        var leaseAwareStore = new Mock<ITimeoutStore>();
-        var leaseAwareView = leaseAwareStore.As<ILeaseAwareTimeoutStore>();
+        var store = new Mock<ITimeoutStore>();
         var batch = new TimeoutsBatch
         {
             DueTimeouts = new List<TimeoutData>
@@ -408,8 +405,8 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        leaseAwareStore.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
-        leaseAwareView.Setup(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, lockOwner, It.IsAny<CancellationToken>()))
+        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        store.Setup(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, (Guid?)lockOwner, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
@@ -417,12 +414,12 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
 
-        var sut = CreateSut(leaseAwareStore.Object);
+        var sut = CreateSut(store.Object);
 
         await sut.PollOnceAsync();
 
-        leaseAwareView.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, lockOwner, It.IsAny<CancellationToken>()), Times.Once);
-        leaseAwareStore.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, (Guid?)lockOwner, It.IsAny<CancellationToken>()), Times.Once);
+        store.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -471,14 +468,14 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<SendOptions>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()))
+        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
 
         var sut = CreateSut(_mockFinder.Object);
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => sut.PollOnceAsync());
 
-        _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()), Times.Never);
+        _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -512,8 +509,8 @@ public class ProcessManagerTimeoutServiceTests
             .Returns(Task.CompletedTask);
 
         CancellationToken removeToken = default;
-        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()))
-            .Callback<Guid, CancellationToken>((_, token) => removeToken = token)
+        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid?, CancellationToken>((_, _, token) => removeToken = token)
             .Returns(Task.CompletedTask);
 
         var sut = CreateSut(_mockFinder.Object);
@@ -550,7 +547,7 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<SendOptions>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("boom"));
-        _mockFinder.Setup(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<CancellationToken>()))
+        _mockFinder.Setup(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new OperationCanceledException());
 
         var sut = CreateSut(_mockFinder.Object);

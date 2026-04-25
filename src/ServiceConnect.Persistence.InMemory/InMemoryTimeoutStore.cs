@@ -6,7 +6,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Stores timeout messages in process memory for local execution.
 /// </summary>
-public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
+public sealed class InMemoryTimeoutStore : ITimeoutStore
 {
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
@@ -116,75 +116,26 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
         };
     }
 
-    /// <summary>
-    /// Permanently removes a timeout after it has been dispatched.
-    /// </summary>
-    public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        _state.SyncRoot.EnterWriteLock();
-        try
-        {
-            if (_state.TimeoutsById.TryGetValue(id, out var entry))
-            {
-                _state.TimeoutsById.Remove(id);
-                _state.TimeoutIndex.Remove(entry);
-            }
-        }
-        finally
-        {
-            _state.SyncRoot.ExitWriteLock();
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Releases a previously locked timeout so it can be dispatched again.
-    /// </summary>
-    public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        _state.SyncRoot.EnterWriteLock();
-        try
-        {
-            if (_state.TimeoutsById.TryGetValue(id, out var entry))
-            {
-                entry.Data.Locked = false;
-                entry.Data.LockedBy = Guid.Empty;
-                entry.Data.LockExpiresAt = null;
-            }
-        }
-        finally
-        {
-            _state.SyncRoot.ExitWriteLock();
-        }
-
-        return Task.CompletedTask;
-    }
-
     /// <inheritdoc />
-    public Task RemoveDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    public Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            // A missing row, unleased row, or mismatched owner all mean "this caller no longer
-            // holds the lease for this timeout" — surface as ConcurrencyException so parity
-            // with Mongo is preserved and callers don't silently miss invalidations. The
-            // Mongo filter requires Locked == true, so we mirror that here (Guid.Empty is
-            // the default for LockedBy on an unleased row, which would otherwise match a
-            // caller passing Guid.Empty).
-            if (!_state.TimeoutsById.TryGetValue(id, out var entry)
-                || !entry.Data.Locked
-                || entry.Data.LockedBy != lockOwner)
+            if (!_state.TimeoutsById.TryGetValue(id, out var entry))
+                return Task.CompletedTask;
+
+            if (lockOwner is { } owner)
             {
-                throw new ConcurrencyException(
-                    $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");
+                // Lease-checked: a missing/unleased/mismatched-owner row all mean
+                // "this caller no longer holds the lease" — surface as ConcurrencyException
+                // so parity with Mongo is preserved and callers don't silently miss
+                // invalidations.
+                if (!entry.Data.Locked || entry.Data.LockedBy != owner)
+                    throw new ConcurrencyException(
+                        $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
             }
 
             _state.TimeoutsById.Remove(id);
@@ -199,19 +150,21 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
     }
 
     /// <inheritdoc />
-    public Task ReleaseDispatchedTimeoutAsync(Guid id, Guid lockOwner, CancellationToken cancellationToken = default)
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         _state.SyncRoot.EnterWriteLock();
         try
         {
-            if (!_state.TimeoutsById.TryGetValue(id, out var entry)
-                || !entry.Data.Locked
-                || entry.Data.LockedBy != lockOwner)
+            if (!_state.TimeoutsById.TryGetValue(id, out var entry))
+                return Task.CompletedTask;
+
+            if (lockOwner is { } owner)
             {
-                throw new ConcurrencyException(
-                    $"Lease for timeout '{id}' was invalidated; lock owner '{lockOwner}' no longer holds the lease.");
+                if (!entry.Data.Locked || entry.Data.LockedBy != owner)
+                    throw new ConcurrencyException(
+                        $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
             }
 
             entry.Data.Locked = false;

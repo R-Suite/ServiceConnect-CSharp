@@ -53,7 +53,7 @@ public class MongoDbTimeoutStoreTests
 
         // sessionA tries to Remove with its now-stale lockOwner. Expect ConcurrencyException.
         await Assert.ThrowsAsync<ConcurrencyException>(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(timeoutId, sessionA));
+            store.RemoveDispatchedTimeoutAsync(timeoutId, lockOwner: sessionA));
 
         // And the row must still be present so the rightful owner can still dispatch it.
         var surviving = await collection.Find(Builders<TimeoutData>.Filter.Eq(x => x.Id, timeoutId))
@@ -90,7 +90,7 @@ public class MongoDbTimeoutStoreTests
             Builders<TimeoutData>.Update.Set(x => x.LockedBy, sessionB));
 
         await Assert.ThrowsAsync<ConcurrencyException>(() =>
-            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(timeoutId, sessionA));
+            store.ReleaseDispatchedTimeoutAsync(timeoutId, lockOwner: sessionA));
 
         // LockedBy must still be sessionB; Release from a stale owner must not clear the lease.
         var surviving = await collection.Find(Builders<TimeoutData>.Filter.Eq(x => x.Id, timeoutId))
@@ -118,8 +118,7 @@ public class MongoDbTimeoutStoreTests
         var batch = await store.GetTimeoutsBatchAsync();
         var claimed = Assert.Single(batch.DueTimeouts);
 
-        await ((ILeaseAwareTimeoutStore)store)
-            .RemoveDispatchedTimeoutAsync(timeoutId, claimed.LockedBy);
+        await store.RemoveDispatchedTimeoutAsync(timeoutId, lockOwner: claimed.LockedBy);
 
         var collection = client.GetDatabase(dbName).GetCollection<TimeoutData>("Timeouts");
         var remaining = await collection.Find(Builders<TimeoutData>.Filter.Eq(x => x.Id, timeoutId))
@@ -147,7 +146,7 @@ public class MongoDbTimeoutStoreTests
         // Do NOT call GetTimeoutsBatchAsync — the row stays unleased (Locked=false, LockedBy=Guid.Empty).
 
         await Assert.ThrowsAsync<ConcurrencyException>(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(timeoutId, Guid.Empty));
+            store.RemoveDispatchedTimeoutAsync(timeoutId, lockOwner: Guid.Empty));
 
         // Row must still be present — the failed Remove is a true no-op.
         var collection = client.GetDatabase(dbName).GetCollection<TimeoutData>("Timeouts");
@@ -155,6 +154,37 @@ public class MongoDbTimeoutStoreTests
             .FirstOrDefaultAsync();
         Assert.NotNull(surviving);
         Assert.False(surviving.Locked);
+    }
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task RemoveDispatchedTimeoutAsync_NullLockOwner_RemovesLeasedRow()
+    {
+        // Phase 0 D2: lockOwner == null means unconditional remove. The pre-decision
+        // Mongo store filtered on LockedBy == Guid.Empty, silently no-op'ing on leased
+        // rows. The new contract requires the id-only path to genuinely delete the row
+        // even when it is leased — callers reach for the lockOwner overload only when
+        // they want lease-checked semantics.
+        var store = BuildStore("null_owner_rm", out var client, out var dbName, out _);
+
+        var timeoutId = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = timeoutId,
+            Time = new DateTimeOffset(2026, 4, 22, 11, 55, 0, TimeSpan.Zero),
+        });
+
+        // Claim the row so it has a non-Empty LockedBy — the pre-fix id-only path
+        // filtered on LockedBy == Guid.Empty and would silently no-op here.
+        var batch = await store.GetTimeoutsBatchAsync();
+        Assert.Single(batch.DueTimeouts);
+
+        await store.RemoveDispatchedTimeoutAsync(timeoutId, lockOwner: null);
+
+        var collection = client.GetDatabase(dbName).GetCollection<TimeoutData>("Timeouts");
+        var remaining = await collection.Find(Builders<TimeoutData>.Filter.Eq(x => x.Id, timeoutId))
+            .FirstOrDefaultAsync();
+        Assert.Null(remaining);
     }
 
     private MongoDbTimeoutStore BuildStore(

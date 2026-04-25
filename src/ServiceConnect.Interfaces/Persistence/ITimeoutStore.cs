@@ -3,6 +3,12 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// Persists scheduled timeout messages for later dispatch.
 /// </summary>
+/// <remarks>
+/// The remove and release operations accept an optional lock owner. When supplied,
+/// the operation is lease-checked: implementations throw
+/// <see cref="Exceptions.ConcurrencyException"/> when the lease has been reassigned
+/// to another worker. When the lock owner is null, the operation is unconditional.
+/// </remarks>
 public interface ITimeoutStore
 {
     /// <summary>
@@ -16,20 +22,41 @@ public interface ITimeoutStore
     /// Loads the next batch of due timeouts.
     /// </summary>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    /// <returns>The due timeouts and the next recommended poll time.</returns>
     Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Removes a timeout after it has been dispatched successfully.
+    /// Removes a timeout after it has been dispatched.
     /// </summary>
     /// <param name="id">The timeout identifier.</param>
+    /// <param name="lockOwner">
+    /// When non-null, the row is removed only if its current lock owner matches; when null,
+    /// the row is removed unconditionally.
+    /// </param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <exception cref="Exceptions.ConcurrencyException">
+    /// Thrown when <paramref name="lockOwner"/> is supplied and the row's current owner
+    /// does not match.
+    /// </exception>
+    Task RemoveDispatchedTimeoutAsync(
+        Guid id,
+        Guid? lockOwner = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Releases a dispatched timeout so it may be retried later.
     /// </summary>
     /// <param name="id">The timeout identifier.</param>
+    /// <param name="lockOwner">
+    /// When non-null, the row is released only if its current lock owner matches; when null,
+    /// the row is released unconditionally.
+    /// </param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
+    /// <exception cref="Exceptions.ConcurrencyException">
+    /// Thrown when <paramref name="lockOwner"/> is supplied and the row's current owner
+    /// does not match.
+    /// </exception>
+    Task ReleaseDispatchedTimeoutAsync(
+        Guid id,
+        Guid? lockOwner = null,
+        CancellationToken cancellationToken = default);
 }

@@ -345,7 +345,7 @@ namespace ServiceConnect.UnitTests
             var id = Guid.NewGuid();
             await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
-            await finder.RemoveDispatchedTimeoutAsync(id, CancellationToken.None);
+            await finder.RemoveDispatchedTimeoutAsync(id, cancellationToken: CancellationToken.None);
 
             var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
             Assert.Empty(batch.DueTimeouts);
@@ -356,7 +356,7 @@ namespace ServiceConnect.UnitTests
         {
             ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
 
-            var ex = await Record.ExceptionAsync(() => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), CancellationToken.None));
+            var ex = await Record.ExceptionAsync(() => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), cancellationToken: CancellationToken.None));
 
             Assert.Null(ex);
         }
@@ -437,7 +437,7 @@ namespace ServiceConnect.UnitTests
             cts.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), cts.Token));
+                () => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), cancellationToken: cts.Token));
         }
 
         [Fact]

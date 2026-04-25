@@ -25,7 +25,6 @@ public sealed class ProcessManagerTimeoutService(
     private Task? _pollingTask;
     private readonly Lazy<IBus> _bus = bus ?? throw new ArgumentNullException(nameof(bus));
     private readonly ITimeoutStore? _finder = finder;
-    private readonly ILeaseAwareTimeoutStore? _leaseAwareFinder = finder as ILeaseAwareTimeoutStore;
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>
@@ -117,10 +116,10 @@ public sealed class ProcessManagerTimeoutService(
                         }, cancellationToken).ConfigureAwait(false);
                     }
 
-                    if (_leaseAwareFinder != null && timeout.LockedBy != Guid.Empty)
-                        await _leaseAwareFinder.RemoveDispatchedTimeoutAsync(timeout.Id, timeout.LockedBy, CancellationToken.None).ConfigureAwait(false);
-                    else
-                        await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, CancellationToken.None).ConfigureAwait(false);
+                    // Pass the captured lease owner only when one is set — the store treats null
+                    // as the unconditional id-only path and a non-null Guid as lease-checked.
+                    Guid? lockOwner = timeout.LockedBy != Guid.Empty ? timeout.LockedBy : null;
+                    await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, lockOwner, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -128,10 +127,8 @@ public sealed class ProcessManagerTimeoutService(
 
                     try
                     {
-                        if (_leaseAwareFinder != null && timeout.LockedBy != Guid.Empty)
-                            await _leaseAwareFinder.ReleaseDispatchedTimeoutAsync(timeout.Id, timeout.LockedBy, cancellationToken).ConfigureAwait(false);
-                        else
-                            await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, cancellationToken).ConfigureAwait(false);
+                        Guid? releaseOwner = timeout.LockedBy != Guid.Empty ? timeout.LockedBy : null;
+                        await _finder.ReleaseDispatchedTimeoutAsync(timeout.Id, releaseOwner, cancellationToken).ConfigureAwait(false);
                     }
                     catch (Exception releaseEx) when (releaseEx is not OperationCanceledException)
                     {

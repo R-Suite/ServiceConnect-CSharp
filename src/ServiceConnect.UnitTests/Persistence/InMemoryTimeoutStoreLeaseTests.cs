@@ -29,7 +29,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // A different caller tries to Remove with a Guid that no one owns.
         var staleOwner = Guid.NewGuid();
         var ex = await Assert.ThrowsAsync<ConcurrencyException>(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, staleOwner));
+            store.RemoveDispatchedTimeoutAsync(id, lockOwner: staleOwner));
 
         Assert.Contains(id.ToString(), ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(staleOwner.ToString(), ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -50,7 +50,7 @@ public class InMemoryTimeoutStoreLeaseTests
 
         var staleOwner = Guid.NewGuid();
         var ex = await Assert.ThrowsAsync<ConcurrencyException>(() =>
-            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, staleOwner));
+            store.ReleaseDispatchedTimeoutAsync(id, lockOwner: staleOwner));
 
         Assert.Contains(id.ToString(), ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(staleOwner.ToString(), ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -76,7 +76,7 @@ public class InMemoryTimeoutStoreLeaseTests
 
         // Actual owner performs Remove — no throw and the timeout is gone from the store.
         var ex = await Record.ExceptionAsync(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, claimed.LockedBy));
+            store.RemoveDispatchedTimeoutAsync(id, lockOwner: claimed.LockedBy));
         Assert.Null(ex);
 
         var nextBatch = await store.GetTimeoutsBatchAsync();
@@ -98,7 +98,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // Do NOT claim — row is unleased (Locked=false, LockedBy=Guid.Empty).
 
         await Assert.ThrowsAsync<ConcurrencyException>(
-            () => ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(id, Guid.Empty));
+            () => store.RemoveDispatchedTimeoutAsync(id, lockOwner: Guid.Empty));
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class InMemoryTimeoutStoreLeaseTests
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
 
         await Assert.ThrowsAsync<ConcurrencyException>(
-            () => ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(id, Guid.Empty));
+            () => store.ReleaseDispatchedTimeoutAsync(id, lockOwner: Guid.Empty));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class InMemoryTimeoutStoreLeaseTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            ((ILeaseAwareTimeoutStore)store).RemoveDispatchedTimeoutAsync(Guid.NewGuid(), Guid.NewGuid(), cts.Token));
+            store.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), lockOwner: Guid.NewGuid(), cts.Token));
     }
 
     [Fact]
@@ -135,6 +135,6 @@ public class InMemoryTimeoutStoreLeaseTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            ((ILeaseAwareTimeoutStore)store).ReleaseDispatchedTimeoutAsync(Guid.NewGuid(), Guid.NewGuid(), cts.Token));
+            store.ReleaseDispatchedTimeoutAsync(Guid.NewGuid(), lockOwner: Guid.NewGuid(), cts.Token));
     }
 }
