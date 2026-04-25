@@ -12,6 +12,27 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     private readonly CacheProvider _provider;
     private int _disposed;
 
+    // Cache one accessor per data type so the reflection cost is paid once. Mongo's aggregator
+    // persistor matches by serialized DataBson.CorrelationId — accepting any POCO with a
+    // Guid CorrelationId property — so InMemory matches its sibling rather than restricting
+    // callers to Message-derived types.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<object, Guid?>> CorrelationIdAccessors = new();
+
+    private static Guid? GetCorrelationId(object data)
+    {
+        if (data is Message message)
+            return message.CorrelationId;
+
+        var accessor = CorrelationIdAccessors.GetOrAdd(data.GetType(), static type =>
+        {
+            var prop = type.GetProperty("CorrelationId", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            if (prop is null || prop.PropertyType != typeof(Guid) || prop.GetMethod is null)
+                return static _ => null;
+            return obj => (Guid?)prop.GetValue(obj);
+        });
+        return accessor(data);
+    }
+
     // Parameters required by IAggregatorPersistor factory convention but unused in InMemory implementation
     /// <summary>
     /// Initializes a new <see cref="InMemoryAggregatorPersistor"/> instance.
@@ -103,7 +124,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
                 var list = (List<Entry>)_provider.Get<string, object>(name);
                 for (var index = 0; index < list.Count; index++)
                 {
-                    if (list[index].Data is Message message && message.CorrelationId == correlationId)
+                    if (GetCorrelationId(list[index].Data) is { } id && id == correlationId)
                     {
                         list.RemoveAt(index);
                         removed = true;

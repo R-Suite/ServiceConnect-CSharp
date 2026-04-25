@@ -326,5 +326,23 @@ namespace ServiceConnect.UnitTests
             var second = Record.Exception(() => persistor.Dispose());
             Assert.Null(second);
         }
+
+        [Fact]
+        public async Task RemoveDataAsync_NonMessageDtoWithCorrelationIdProperty_RemovesEntry()
+        {
+            var persistor = new InMemoryAggregatorPersistor("", "", "");
+            var dto = new ThirdPartyDto { CorrelationId = Guid.NewGuid(), Payload = "payload-A" };
+
+            await persistor.InsertDataAsync(dto, "stream-A");
+            await persistor.RemoveDataAsync("stream-A", dto.CorrelationId);
+
+            Assert.Equal(0, await persistor.CountAsync("stream-A"));
+        }
+
+        private sealed class ThirdPartyDto
+        {
+            public Guid CorrelationId { get; init; }
+            public string Payload { get; init; } = string.Empty;
+        }
     }
 }
