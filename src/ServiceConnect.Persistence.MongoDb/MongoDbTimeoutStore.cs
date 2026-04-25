@@ -76,7 +76,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     }
 
     /// <inheritdoc />
-    public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+    public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -109,12 +109,13 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 .Set(x => x.LockedBy, sessionId)
                 .Set(x => x.LockExpiresAt, utcNow.Add(_lockLeaseDuration));
 
-            // Two-step claim: pull up to _batchSize candidate ids (UpdateMany has no .Limit()),
-            // then UpdateMany filtered to those ids — still guarded by the due-unlocked
-            // predicate so anything another worker raced in between is silently skipped.
+            // Two-step claim: pull up to the effective batch cap candidate ids (UpdateMany
+            // has no .Limit()), then UpdateMany filtered to those ids — still guarded by
+            // the due-unlocked predicate so anything another worker raced in between is
+            // silently skipped. The caller-supplied cap overrides the configured default.
             var candidateIds = await FindAsync(collection, dueUnlockedFilter,
                     Builders<TimeoutData>.Sort.Ascending(x => x.Time),
-                    _batchSize, session, cancellationToken)
+                    batchSize ?? _batchSize, session, cancellationToken)
                 .ConfigureAwait(false);
 
             if (candidateIds.Count == 0)

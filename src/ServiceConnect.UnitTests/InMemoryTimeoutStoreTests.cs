@@ -198,4 +198,23 @@ public class InMemoryTimeoutStoreTests
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
             store.ReleaseDispatchedTimeoutAsync(Guid.NewGuid(), cancellationToken: cts.Token));
     }
+
+    [Fact]
+    public async Task GetTimeoutsBatchAsync_WithBatchSize_HonoursCap()
+    {
+        var store = new InMemoryTimeoutStore("", "");
+        for (int i = 0; i < 50; i++)
+            await store.InsertTimeoutAsync(new TimeoutData
+            {
+                Id = Guid.NewGuid(),
+                Destination = "dest",
+                ProcessManagerId = Guid.NewGuid(),
+                Time = DateTimeOffset.UtcNow.AddSeconds(-1),
+                Headers = new Dictionary<string, object>(),
+            }, CancellationToken.None);
+
+        var batch = await store.GetTimeoutsBatchAsync(batchSize: 10);
+
+        Assert.Equal(10, batch.DueTimeouts.Count);
+    }
 }

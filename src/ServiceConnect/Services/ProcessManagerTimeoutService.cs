@@ -84,7 +84,7 @@ public sealed class ProcessManagerTimeoutService(
 
         try
         {
-            var batch = await _finder.GetTimeoutsBatchAsync(cancellationToken).ConfigureAwait(false);
+            var batch = await _finder.GetTimeoutsBatchAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
             if (batch.DueTimeouts == null || batch.DueTimeouts.Count == 0) return;
 
             foreach (var timeout in batch.DueTimeouts)

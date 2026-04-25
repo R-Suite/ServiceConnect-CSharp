@@ -541,7 +541,7 @@ Dead code, minor nullability/comment quirks, hygiene items, and hard-to-trigger 
 | PM UpdateDataAsync mutation hygiene | Deep-clone | Reference-share (but serialize is synchronous) | **Implementation differs but no observable divergence** (pass-2 resolved H-19 as NOT-A-BUG) |
 | TimeoutStore.RemoveDispatchedTimeoutAsync(id) on leased row | Removes | Silent no-op | **Divergent** (see C-08, H-20 — silent no-op is documented safety for canonical callers; 3rd-party UX gap remains) |
 | TimeoutStore.ReleaseDispatchedTimeoutAsync(id) on leased row | Releases | Silent no-op | **Divergent** (see C-08, H-20) |
-| TimeoutStore batch-size cap | Ignored | Applied | **Divergent** (see M-19) |
+| TimeoutStore batch-size cap | Applied | Applied | Aligned |
 | Lease-aware Remove on stale lease | `ConcurrencyException` | `ConcurrencyException` | Aligned |
 | AggregatorPersistor.RemoveDataAsync on missing | `ConcurrencyException` | `ConcurrencyException` | Aligned |
 | Wake-up when peer holds due lease | Wakes at lease expiry | 1-minute fallback | **Divergent** |

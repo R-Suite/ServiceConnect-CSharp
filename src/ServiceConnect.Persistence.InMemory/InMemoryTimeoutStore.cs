@@ -56,7 +56,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     /// Returns due timeouts. Callers poll on a fixed cadence; per-batch next-query hints
     /// are not exposed because no consumer reads them.
     /// </summary>
-    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -78,6 +78,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                     entry.Data.LockedBy = sessionId;
                     entry.Data.LockExpiresAt = utcNow + LockLeaseDuration;
                     retval.DueTimeouts.Add(Clone(entry.Data));
+
+                    if (batchSize is { } cap && retval.DueTimeouts.Count >= cap)
+                        break;
                 }
                 // Due-but-leased rows are skipped this poll; the next fixed-cadence poll
                 // (or the lease reaper if one is configured) will reclaim them once the

@@ -29,7 +29,7 @@ public class ProcessManagerTimeoutServiceTests
         await sut.StartAsync(CancellationToken.None);
         await sut.StopAsync(CancellationToken.None);
 
-        _mockFinder.Verify(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _mockFinder.Verify(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
                 It.Is<SendOptions>(options => options.EndPoint == "test-queue"),
@@ -110,7 +110,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
                 It.IsAny<SendOptions>(),
@@ -182,7 +182,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         SendOptions? dispatchedOptions = null;
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
@@ -234,7 +234,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
                 It.IsAny<SendOptions>(),
@@ -279,7 +279,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
                 It.Is<SendOptions>(options => options.EndPoint == "test-queue"),
@@ -320,7 +320,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         store.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)lockOwner, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         _mockBus.Setup(bus => bus.SendAsync(
@@ -362,7 +362,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         store.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         _mockBus.Setup(bus => bus.SendAsync(
@@ -405,7 +405,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         store.Setup(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, (Guid?)lockOwner, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         _mockBus.Setup(bus => bus.SendAsync(
@@ -426,7 +426,7 @@ public class ProcessManagerTimeoutServiceTests
     public async Task StopAsync_DisposesAndClearsCancellationSource()
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()))
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [] });
 
         var sut = CreateSut(_mockFinder.Object);
@@ -462,7 +462,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
                 It.IsAny<SendOptions>(),
@@ -500,7 +500,7 @@ public class ProcessManagerTimeoutServiceTests
         };
 
         using var cts = new CancellationTokenSource();
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
                 It.IsAny<SendOptions>(),
@@ -541,7 +541,7 @@ public class ProcessManagerTimeoutServiceTests
             },
         };
 
-        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
         _mockBus.Setup(bus => bus.SendAsync(
                 It.IsAny<TimeoutMessage>(),
                 It.IsAny<SendOptions>(),
@@ -567,7 +567,7 @@ public class ProcessManagerTimeoutServiceTests
             var mockConfig = new Mock<IBusConfiguration>();
             mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
             var mockFinder = new Mock<ITimeoutStore>();
-            mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()))
+            mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
                       .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [] });
 
             var sut = new ProcessManagerTimeoutService(

@@ -473,7 +473,7 @@ file sealed class CapturingTimeoutStore : ITimeoutStore
         return Task.CompletedTask;
     }
 
-    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
         => throw new NotSupportedException();
 
     public Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
