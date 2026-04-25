@@ -101,7 +101,27 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         try
         {
             state.Stream.Write(messageBytes.ToArray(), packetNumber);
-            state.LastSeenUtc = _timeProvider.GetUtcNow();
+
+            // Touch: replace the dict entry with a new ActiveStreamState carrying a fresh
+            // LastSeenUtc. The eviction sweep relies on reference-equality TryRemove(KVP)
+            // to detect concurrent touches; mutating LastSeenUtc in place would defeat
+            // that. The CAS loop spins on contention with another touch / dispatch path.
+            ActiveStreamState refreshed;
+            while (true)
+            {
+                if (!_activeStreams.TryGetValue(sequenceId, out var current))
+                {
+                    // Eviction or completion-dispatch removed the entry between our
+                    // GetOrAdd and now. Treat as an idempotent ack.
+                    return HandledTask;
+                }
+                refreshed = current with { LastSeenUtc = _timeProvider.GetUtcNow() };
+                if (_activeStreams.TryUpdate(sequenceId, refreshed, current))
+                {
+                    state = refreshed;
+                    break;
+                }
+            }
 
             if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
             {
@@ -219,9 +239,8 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         return _cleanupTimer.DisposeAsync();
     }
 
-    private sealed class ActiveStreamState(MessageBusReadStream stream, DateTimeOffset lastSeenUtc)
-    {
-        public MessageBusReadStream Stream { get; } = stream;
-        public DateTimeOffset LastSeenUtc { get; set; } = lastSeenUtc;
-    }
+    // Immutable so updates require a new instance via ConcurrentDictionary.TryUpdate;
+    // the eviction sweep's KVP-based TryRemove relies on reference equality to detect
+    // concurrent touches.
+    private sealed record ActiveStreamState(MessageBusReadStream Stream, DateTimeOffset LastSeenUtc);
 }

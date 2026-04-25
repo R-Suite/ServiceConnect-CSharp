@@ -309,6 +309,81 @@ public class StreamProcessorTests
         var dict = (System.Collections.IDictionary)dictField!.GetValue(processor)!;
         Assert.False(dict.Contains(sequenceId), "Active-stream entry must be evicted after a poison-packet exception.");
     }
+
+    // ActiveStreamState must be a record (or readonly struct) so that updating
+    // LastSeenUtc requires a new instance and the eviction sweep's KVP-based TryRemove
+    // can detect concurrent touches via reference inequality.
+    [Fact]
+    public void ActiveStreamState_IsImmutable_LastSeenUtcHasNoPublicSetter()
+    {
+        var stateType = typeof(StreamProcessor)
+            .GetNestedType("ActiveStreamState", BindingFlags.NonPublic);
+        Assert.NotNull(stateType);
+
+        var lastSeen = stateType!.GetProperty("LastSeenUtc");
+        Assert.NotNull(lastSeen);
+        // Records expose an init-only setter via SetMethod with IsInitOnly metadata; mutable
+        // classes expose a regular setter. The bug-state setter was a plain `set`. Reject any
+        // setter that is not init-only so the field cannot be written outside `with` / ctor.
+        var setter = lastSeen!.SetMethod;
+        if (setter is not null)
+        {
+            var modifiers = setter.ReturnParameter.GetRequiredCustomModifiers();
+            Assert.Contains(modifiers,
+                m => m.FullName == "System.Runtime.CompilerServices.IsExternalInit");
+        }
+    }
+
+    // The touch path must REPLACE the active-stream entry with a new instance carrying
+    // the updated LastSeenUtc. If the field is mutated in place, the eviction sweep's
+    // TOCTOU race is unavoidable.
+    [Fact]
+    public async Task ProcessAsync_TouchPath_ReplacesActiveStreamStateInstance()
+    {
+        var fakeTime = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(
+            DateTimeOffset.UtcNow);
+
+        var processor = new StreamProcessor(
+            new ServiceCollection().BuildServiceProvider(),
+            NullLogger<StreamProcessor>.Instance,
+            new MessageTypeRegistry(),
+            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance),
+            Mock.Of<IMessageSerializer>(),
+            fakeTime);
+
+        var sequenceId = Guid.NewGuid().ToString();
+        var headers0 = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0"
+        };
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers0, new Envelope { Headers = headers0, Body = new byte[] { 1 } });
+
+        var dictField = typeof(StreamProcessor)
+            .GetField("_activeStreams", BindingFlags.Instance | BindingFlags.NonPublic);
+        var dict = (System.Collections.IDictionary)dictField!.GetValue(processor)!;
+        var firstState = dict[sequenceId];
+        Assert.NotNull(firstState);
+
+        // Advance time and send the next packet — touch path must produce a new state instance.
+        fakeTime.Advance(TimeSpan.FromSeconds(30));
+        var headers1 = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "1"
+        };
+        await processor.ProcessAsync(new byte[] { 2 }, typeof(object), null, headers1, new Envelope { Headers = headers1, Body = new byte[] { 2 } });
+
+        var secondState = dict[sequenceId];
+        Assert.NotNull(secondState);
+        Assert.NotSame(firstState, secondState);
+
+        var lastSeenProp = secondState!.GetType().GetProperty("LastSeenUtc")!;
+        var lastSeen = (DateTimeOffset)lastSeenProp.GetValue(secondState)!;
+        Assert.Equal(fakeTime.GetUtcNow(), lastSeen);
+    }
 }
 
 file class SptMsg : Message { public SptMsg(Guid c) : base(c) { } }
