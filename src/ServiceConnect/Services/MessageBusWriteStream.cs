@@ -15,8 +15,8 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     private long _packetNumber;
     private int _closedFlag;
     // 0 = healthy, 1 = a SendBytesAsync call has thrown. Once faulted, WriteAsync refuses
-    // to consume another packet number — a successful retry would land beyond the missing
-    // packet and create a permanent gap the reader can never close.
+    // to consume another packet number — any subsequent send would land beyond the stranded
+    // number and create a permanent gap the reader can never close.
     private int _faulted;
     // Track in-flight writes so CloseAsync can drain them before reading _packetNumber
     // for the close packet. Without the drain, a writer that cleared the _closedFlag check
