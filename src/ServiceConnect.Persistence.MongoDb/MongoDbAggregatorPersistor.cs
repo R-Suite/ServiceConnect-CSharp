@@ -18,9 +18,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     private readonly IMessageTypeRegistry _typeRegistry;
     private readonly TimeProvider _timeProvider;
 
-    // Mongo returns these error codes when concurrent index creation detects that an index
-    // with the same keys or options already exists. Either means "someone else did this for us";
-    // mark ensured-true and continue.
+    // Mongo returns these codes when concurrent index creation detects that an index with
+    // the same keys (86) or options (85) already exists. Either way the index is present,
+    // so the ensure call has succeeded as far as the caller is concerned.
     private static readonly HashSet<int> BenignIndexCodes = new() { 85, 86 };
 
     /// <summary>
