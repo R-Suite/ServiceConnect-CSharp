@@ -31,7 +31,9 @@ internal sealed class ProcessManagerProcessor(
         if (!registry.TryGet(messageType, out var descriptor))
             return ProcessResult.NotHandled;
 
-        var finder = scopeAccessor.Current.GetService<IProcessManagerFinder>();
+        var scope = scopeAccessor.Current;
+
+        var finder = scope.GetService<IProcessManagerFinder>();
         if (finder == null)
         {
             logger.LogWarning(
@@ -40,7 +42,7 @@ internal sealed class ProcessManagerProcessor(
             return ProcessResult.NotHandled;
         }
 
-        var handler = scopeAccessor.Current.GetService(descriptor.ProcessHandlerInterfaceType);
+        var handler = scope.GetService(descriptor.ProcessHandlerInterfaceType);
         if (handler == null)
         {
             logger.LogWarning(
@@ -49,12 +51,8 @@ internal sealed class ProcessManagerProcessor(
             return ProcessResult.NotHandled;
         }
 
-        // Build mapper per message rather than caching globally. The previous static
-        // ConcurrentDictionary<Type, Lazy<IProcessManagerPropertyMapper>> ran ConfigureMapper
-        // exactly once per handler-interface type, closing over the first handler instance ever
-        // resolved. Any per-instance state read inside ConfigureMapper was pinned process-wide.
-        // Per-message construction is cheap (a small object plus the lambda registrations) and
-        // removes the pinning.
+        // ConfigureMapper may read per-instance handler state, so build the mapper against
+        // the freshly-resolved handler each delivery rather than memoising one mapper.
         var mapper = new DefaultProcessManagerPropertyMapper();
         descriptor.ConfigureMapper(handler, mapper);
 
@@ -64,11 +62,12 @@ internal sealed class ProcessManagerProcessor(
         // Letting the ConcurrencyException propagate hands the decision to the configured
         // transport-level retry policy instead, which users can size against their tolerance
         // for side-effect replay.
-        await RunPipelineOnceAsync(finder, descriptor, mapper, handler, (Message)message, messageType, headers, cancellationToken).ConfigureAwait(false);
+        await RunPipelineOnceAsync(scope, finder, descriptor, mapper, handler, (Message)message, messageType, headers, cancellationToken).ConfigureAwait(false);
         return ProcessResult.Handled;
     }
 
     private async Task RunPipelineOnceAsync(
+        IServiceProvider scope,
         IProcessManagerFinder finder,
         ProcessManagerDescriptor descriptor,
         IProcessManagerPropertyMapper mapper,
@@ -94,8 +93,8 @@ internal sealed class ProcessManagerProcessor(
         }
 
         var trustQuery = replyStatusRequestReplyManager
-            ?? scopeAccessor.Current.GetService<IReplyStatusRequestReplyManager>()
-            ?? scopeAccessor.Current.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
+            ?? scope.GetService<IReplyStatusRequestReplyManager>()
+            ?? scope.GetService<IRequestReplyManager>() as IReplyStatusRequestReplyManager;
 
         var context = _contextPool.Rent(
             bus.Value,

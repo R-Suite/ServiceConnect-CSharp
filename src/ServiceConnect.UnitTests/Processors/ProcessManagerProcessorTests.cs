@@ -316,10 +316,6 @@ public class ProcessManagerProcessorTests
     [Fact]
     public async Task ProcessAsync_RunsConfigureMapperPerMessage()
     {
-        // The static MapperCache was removed. Per-message scoped resolution makes
-        // per-instance handler state correctly observable on every delivery, which means
-        // ConfigureMapper now runs once per message — not once per process.
-
         DummyPmHandler.ResetCounter();
 
         var registry = BuildRegistry(new HandlerReference
@@ -357,15 +353,10 @@ public class ProcessManagerProcessorTests
     [Fact]
     public async Task ProcessAsync_ResolvesHandlerAndFinderFromCurrentConsumeScope_NotRoot()
     {
-        var rootHandler = new ScopeProbePmHandler("root");
-        var scopedHandler = new ScopeProbePmHandler("scoped");
-        var rootFinder = new ScopeProbePmFinder("root");
-        var scopedFinder = new ScopeProbePmFinder("scoped");
-
-        var rootServices = new ServiceCollection();
-        rootServices.AddSingleton<IProcessManagerFinder>(rootFinder);
-        rootServices.AddSingleton<IProcessHandler<ScopeProbePmData, ScopeProbePmMessage>>(rootHandler);
-        var rootProvider = rootServices.BuildServiceProvider();
+        var rootHandler = new ScopeProbePmHandler();
+        var scopedHandler = new ScopeProbePmHandler();
+        var rootFinder = new ScopeProbePmFinder();
+        var scopedFinder = new ScopeProbePmFinder();
 
         var scopedServices = new ServiceCollection();
         scopedServices.AddSingleton<IProcessManagerFinder>(scopedFinder);
@@ -403,17 +394,12 @@ public class ProcessManagerProcessorTests
     [Fact]
     public async Task ProcessAsync_ConsecutiveMessages_ConfigureMapperRunsPerMessage()
     {
-        // The pre-fix path memoized the mapper across the process lifetime via a
-        // static cache whose Lazy factory captured the first handler instance. After
-        // the fix, ConfigureMapper runs once per message against the per-message
-        // handler, so the captured handler instance for message N is the handler
-        // resolved from message N's scope.
-
+        // Each delivery resolves a fresh handler instance, so per-instance state inside ConfigureMapper must be re-observed.
         var configureCount = 0;
-        var probeHandler = new ScopeProbePmHandler("probe", () => Interlocked.Increment(ref configureCount));
+        var probeHandler = new ScopeProbePmHandler(() => Interlocked.Increment(ref configureCount));
 
         var services = new ServiceCollection();
-        services.AddSingleton<IProcessManagerFinder>(new ScopeProbePmFinder("svc"));
+        services.AddSingleton<IProcessManagerFinder>(new ScopeProbePmFinder());
         services.AddSingleton<IProcessHandler<ScopeProbePmData, ScopeProbePmMessage>>(probeHandler);
         var provider = services.BuildServiceProvider();
 
@@ -666,11 +652,10 @@ file sealed class ScopeProbePmData : IProcessManagerData
     public Guid CorrelationId { get; set; }
 }
 
-file sealed class ScopeProbePmHandler(string label, Action? onConfigureMapper = null)
+file sealed class ScopeProbePmHandler(Action? onConfigureMapper = null)
     : IProcessHandler<ScopeProbePmData, ScopeProbePmMessage>
 {
     private int _invocations;
-    public string Label { get; } = label;
     public int Invocations => Volatile.Read(ref _invocations);
     public IConsumeContext Context { get; set; } = null!;
 
@@ -687,10 +672,9 @@ file sealed class ScopeProbePmHandler(string label, Action? onConfigureMapper = 
     }
 }
 
-file sealed class ScopeProbePmFinder(string label) : IProcessManagerFinder
+file sealed class ScopeProbePmFinder : IProcessManagerFinder
 {
     private int _findCount;
-    public string Label { get; } = label;
     public int FindCount => Volatile.Read(ref _findCount);
 
     public Task<IPersistenceData<TData>?> FindDataAsync<TData>(
