@@ -68,7 +68,6 @@ public class ProcessManagerTimeoutServiceTests
                     Locked = false
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -109,7 +108,6 @@ public class ProcessManagerTimeoutServiceTests
                     Headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 3 }
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -182,7 +180,6 @@ public class ProcessManagerTimeoutServiceTests
                     }
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -235,7 +232,6 @@ public class ProcessManagerTimeoutServiceTests
                     }
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -281,7 +277,6 @@ public class ProcessManagerTimeoutServiceTests
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -324,7 +319,6 @@ public class ProcessManagerTimeoutServiceTests
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         leaseAwareStore.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -368,7 +362,6 @@ public class ProcessManagerTimeoutServiceTests
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         leaseAwareStore.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -413,7 +406,6 @@ public class ProcessManagerTimeoutServiceTests
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         leaseAwareStore.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -438,7 +430,7 @@ public class ProcessManagerTimeoutServiceTests
     {
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [], NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30) });
+            .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [] });
 
         var sut = CreateSut(_mockFinder.Object);
 
@@ -471,7 +463,6 @@ public class ProcessManagerTimeoutServiceTests
                     Headers = new Dictionary<string, object>(),
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30),
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -509,7 +500,6 @@ public class ProcessManagerTimeoutServiceTests
                     Headers = new Dictionary<string, object>()
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30)
         };
 
         using var cts = new CancellationTokenSource();
@@ -552,7 +542,6 @@ public class ProcessManagerTimeoutServiceTests
                     Headers = new Dictionary<string, object>(),
                 }
             },
-            NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30),
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -582,7 +571,7 @@ public class ProcessManagerTimeoutServiceTests
             mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
             var mockFinder = new Mock<ITimeoutStore>();
             mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<CancellationToken>()))
-                      .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [], NextQueryTime = DateTimeOffset.UtcNow.AddSeconds(30) });
+                      .ReturnsAsync(new TimeoutsBatch { DueTimeouts = [] });
 
             var sut = new ProcessManagerTimeoutService(
                 mockConfig.Object,

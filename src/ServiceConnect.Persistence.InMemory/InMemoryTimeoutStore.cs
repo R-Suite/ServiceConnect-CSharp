@@ -11,7 +11,6 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
 
-    private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
 
     /// <summary>
@@ -54,7 +53,8 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
     }
 
     /// <summary>
-    /// Returns due timeouts and the next time the store should be queried.
+    /// Returns due timeouts. Callers poll on a fixed cadence; per-batch next-query hints
+    /// are not exposed because no consumer reads them.
     /// </summary>
     public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
     {
@@ -63,38 +63,25 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
         var retval = new TimeoutsBatch { DueTimeouts = [] };
         DateTimeOffset utcNow = _timeProvider.GetUtcNow();
         var sessionId = Guid.NewGuid();
-        var nextQueryTime = DateTimeOffset.MaxValue;
 
         _state.SyncRoot.EnterWriteLock();
         try
         {
             foreach (var entry in _state.TimeoutIndex)
             {
-                if (entry.Time <= utcNow)
-                {
-                    if (!entry.Data.Locked || entry.Data.LockExpiresAt <= utcNow)
-                    {
-                        entry.Data.Locked = true;
-                        entry.Data.LockedBy = sessionId;
-                        entry.Data.LockExpiresAt = utcNow + LockLeaseDuration;
-                        retval.DueTimeouts.Add(Clone(entry.Data));
-                    }
-                    else if (entry.Data.LockExpiresAt is { } leaseExpiry && leaseExpiry < nextQueryTime)
-                    {
-                        // Due row leased by another worker. Without this branch
-                        // we would skip it silently and rely solely on the first
-                        // future entry for NextQueryTime — which could push the
-                        // re-poll well past this lease's expiry, leaving the row
-                        // un-dispatched after the worker that held it crashed.
-                        nextQueryTime = leaseExpiry;
-                    }
-                }
-                else
-                {
-                    if (entry.Time < nextQueryTime)
-                        nextQueryTime = entry.Time;
+                if (entry.Time > utcNow)
                     break;
+
+                if (!entry.Data.Locked || entry.Data.LockExpiresAt <= utcNow)
+                {
+                    entry.Data.Locked = true;
+                    entry.Data.LockedBy = sessionId;
+                    entry.Data.LockExpiresAt = utcNow + LockLeaseDuration;
+                    retval.DueTimeouts.Add(Clone(entry.Data));
                 }
+                // Due-but-leased rows are skipped this poll; the next fixed-cadence poll
+                // (or the lease reaper if one is configured) will reclaim them once the
+                // lease expires.
             }
         }
         finally
@@ -102,10 +89,6 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStor
             _state.SyncRoot.ExitWriteLock();
         }
 
-        if (nextQueryTime == DateTimeOffset.MaxValue)
-            nextQueryTime = utcNow.Add(DefaultNextQueryInterval);
-
-        retval.NextQueryTime = nextQueryTime;
         return Task.FromResult(retval);
     }
 

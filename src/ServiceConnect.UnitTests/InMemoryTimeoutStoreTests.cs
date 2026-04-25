@@ -132,55 +132,6 @@ public class InMemoryTimeoutStoreTests
     }
 
     [Fact]
-    public async Task GetTimeoutsBatch_NextQueryTime_PointsAtEarliestFuture()
-    {
-        var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
-        var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
-
-        var expectedNext = now.AddSeconds(30);
-        await store.InsertTimeoutAsync(new TimeoutData { Id = Guid.NewGuid(), Time = expectedNext });
-        await store.InsertTimeoutAsync(new TimeoutData { Id = Guid.NewGuid(), Time = now.AddMinutes(5) });
-
-        var batch = await store.GetTimeoutsBatchAsync();
-        Assert.Empty(batch.DueTimeouts);
-        Assert.Equal(expectedNext, batch.NextQueryTime);
-    }
-
-    [Fact]
-    public async Task GetTimeoutsBatch_NextQueryTime_RespectsLeaseExpiryOfDueButLeasedRow()
-    {
-        // NextQueryTime must be bounded by the earliest lease expiry of any due-but-
-        // leased row, not just by the next unlocked future entry. Otherwise a leased
-        // row whose lease expires before the next unlocked entry would sit idle
-        // until the later poll fires and could miss its reclaim window entirely.
-        var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
-        var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
-
-        var leasedDueId = Guid.NewGuid();
-        var leaseExpiresAt = now.AddMinutes(2);
-        await store.InsertTimeoutAsync(new TimeoutData
-        {
-            Id = leasedDueId,
-            Time = now.AddMinutes(-1),
-            Locked = true,
-            LockedBy = Guid.NewGuid(),
-            LockExpiresAt = leaseExpiresAt,
-        });
-        await store.InsertTimeoutAsync(new TimeoutData
-        {
-            Id = Guid.NewGuid(),
-            Time = now.AddHours(1),
-        });
-
-        var batch = await store.GetTimeoutsBatchAsync();
-
-        Assert.Empty(batch.DueTimeouts);
-        Assert.Equal(leaseExpiresAt, batch.NextQueryTime);
-    }
-
-    [Fact]
     public async Task RemoveDispatchedTimeout_RemovesFromIndex_SoSubsequentPollSkipsIt()
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);

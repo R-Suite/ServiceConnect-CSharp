@@ -328,29 +328,6 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public async Task GetTimeoutsBatch_FutureTimeout_SetsNextQueryTime()
-        {
-            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
-            var futureTime = DateTimeOffset.UtcNow.AddHours(1);
-            await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), futureTime), CancellationToken.None);
-
-            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
-
-            Assert.Equal(futureTime, batch.NextQueryTime);
-        }
-
-        [Fact]
-        public async Task GetTimeoutsBatch_NoFutureTimeouts_NextQueryTimeIsWithinOneMinute()
-        {
-            ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
-
-            var batch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
-            var expectedMax = DateTimeOffset.UtcNow.AddMinutes(1).AddSeconds(1);
-
-            Assert.True(batch.NextQueryTime <= expectedMax);
-        }
-
-        [Fact]
         public async Task GetTimeoutsBatch_PastTimeout_IsInDueList()
         {
             ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
@@ -382,27 +359,6 @@ namespace ServiceConnect.UnitTests
             var ex = await Record.ExceptionAsync(() => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), CancellationToken.None));
 
             Assert.Null(ex);
-        }
-
-        [Fact]
-        public async Task GetTimeoutsBatch_UsesProvidedTimeProviderForScheduling()
-        {
-            var now = new DateTimeOffset(2026, 4, 14, 20, 0, 0, TimeSpan.Zero);
-            var timeProvider = new FakeTimeProvider(now);
-            ITimeoutStore finder = new InMemoryTimeoutStore(timeProvider: timeProvider);
-
-            var timeoutId = Guid.NewGuid();
-            var dueAt = now.AddMinutes(10);
-            await finder.InsertTimeoutAsync(MakeTimeoutData(timeoutId, dueAt), CancellationToken.None);
-
-            var futureBatch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
-            Assert.Equal(dueAt, futureBatch.NextQueryTime);
-            Assert.Empty(futureBatch.DueTimeouts);
-
-            timeProvider.Advance(TimeSpan.FromMinutes(10));
-
-            var dueBatch = await finder.GetTimeoutsBatchAsync(CancellationToken.None);
-            Assert.Contains(dueBatch.DueTimeouts, timeout => timeout.Id == timeoutId);
         }
 
         // --- Pre-cancelled token tests ---

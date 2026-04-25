@@ -1,4 +1,3 @@
-using System.Linq;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
@@ -6,12 +5,6 @@ using ServiceConnect.Interfaces.Exceptions;
 using MongoClientSessionHandle = MongoDB.Driver.IClientSessionHandle;
 
 namespace ServiceConnect.Persistence.MongoDb;
-
-internal sealed class NextTimeoutProjection
-{
-    public Guid Id { get; set; }
-    public DateTimeOffset Time { get; set; }
-}
 
 /// <summary>
 /// MongoDB implementation of timeout persistence and lock-aware timeout leasing.
@@ -26,7 +19,6 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
     private int _timeoutIndexEnsuredFlag;
 
     private const string TimeoutsCollectionName = "Timeouts";
-    private static readonly TimeSpan DefaultNextQueryInterval = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// Creates a timeout store backed by MongoDB.
@@ -97,10 +89,8 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
             await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
             var utcNow = _timeProvider.GetUtcNow();
 
-            // Use a causally-consistent client session so the aggregate facet sees the rows
-            // we just claim-locked, even if a primary failover happens between the two calls.
-            // Without this, a failover could route the aggregate to a secondary that hasn't
-            // replicated the UpdateManyAsync yet, and we'd silently miss the rows we just locked.
+            // Causally-consistent client session so the read of the rows we just lock-updated
+            // hits a node that has applied the update (relevant under primary failover).
             try
             {
                 session = await _mongoClient.StartSessionAsync(
@@ -120,71 +110,32 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore, ILeaseAwareTimeoutStore
                 .Set(x => x.LockedBy, sessionId)
                 .Set(x => x.LockExpiresAt, utcNow.Add(_lockLeaseDuration));
 
-            // Cap per-poll batch size. Two-step pattern because MongoDB
-            // UpdateMany has no .Limit(): first pull up to _batchSize
-            // candidate ids sorted by Time, then UpdateMany only those ids
-            // (still guarded by the due-unlocked filter so anything another
-            // worker claimed in between is silently skipped). The unclaimed
-            // remainder is picked up on the next poll.
+            // Two-step claim: pull up to _batchSize candidate ids (UpdateMany has no .Limit()),
+            // then UpdateMany filtered to those ids — still guarded by the due-unlocked
+            // predicate so anything another worker raced in between is silently skipped.
             var candidateIds = await FindAsync(collection, dueUnlockedFilter,
                     Builders<TimeoutData>.Sort.Ascending(x => x.Time),
                     _batchSize, session, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (candidateIds.Count > 0)
-            {
-                var batchFilter = dueUnlockedFilter &
-                                  Builders<TimeoutData>.Filter.In(x => x.Id, candidateIds);
-                if (session is not null)
-                    await collection.UpdateManyAsync(session, batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
-                else
-                    await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
+            if (candidateIds.Count == 0)
+                return retval;
 
-            var duePipeline = new EmptyPipelineDefinition<TimeoutData>()
-                .Match(t => t.LockedBy == sessionId && t.Locked);
+            var batchFilter = dueUnlockedFilter &
+                              Builders<TimeoutData>.Filter.In(x => x.Id, candidateIds);
+            if (session is not null)
+                await collection.UpdateManyAsync(session, batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+            else
+                await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            var nextPipeline = new EmptyPipelineDefinition<TimeoutData>()
-                .Match(t => t.Time > utcNow && !t.Locked)
-                .Sort(Builders<TimeoutData>.Sort.Ascending(t => t.Time))
-                .Limit(1)
-                .Project(t => new NextTimeoutProjection { Id = t.Id, Time = t.Time });
+            // Read back exactly the rows we just claimed (LockedBy == sessionId).
+            var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
+                            & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
+            using var cursor = session is not null
+                ? await collection.FindAsync(session, ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false)
+                : await collection.FindAsync(ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await cursor.ForEachAsync(doc => retval.DueTimeouts.Add(doc), cancellationToken).ConfigureAwait(false);
 
-            var facetPipeline = new EmptyPipelineDefinition<TimeoutData>()
-                .Facet(
-                    AggregateFacet.Create("Due", duePipeline),
-                    AggregateFacet.Create("Next", nextPipeline));
-
-            var facetResult = session is not null
-                ? await collection.Aggregate(session, facetPipeline, cancellationToken: cancellationToken)
-                                   .FirstOrDefaultAsync(cancellationToken)
-                                   .ConfigureAwait(false)
-                : await collection.Aggregate(facetPipeline, cancellationToken: cancellationToken)
-                                   .FirstOrDefaultAsync(cancellationToken)
-                                   .ConfigureAwait(false);
-
-            var nextQueryTime = DateTimeOffset.MaxValue;
-            if (facetResult is not null)
-            {
-                var dueFacet = facetResult.Facets.FirstOrDefault(f => f.Name == "Due");
-                if (dueFacet is AggregateFacetResult<TimeoutData> typedDue)
-                {
-                    foreach (var doc in typedDue.Output)
-                        retval.DueTimeouts.Add(doc);
-                }
-
-                var nextFacet = facetResult.Facets.FirstOrDefault(f => f.Name == "Next");
-                if (nextFacet is AggregateFacetResult<NextTimeoutProjection> typedNext
-                    && typedNext.Output.Count > 0)
-                {
-                    nextQueryTime = typedNext.Output[0].Time;
-                }
-            }
-
-            if (nextQueryTime == DateTimeOffset.MaxValue)
-                nextQueryTime = utcNow.Add(DefaultNextQueryInterval);
-
-            retval.NextQueryTime = nextQueryTime;
             return retval;
         }
         catch (MongoException ex)
