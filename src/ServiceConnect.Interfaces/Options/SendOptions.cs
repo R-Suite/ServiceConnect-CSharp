@@ -20,5 +20,5 @@ public readonly record struct SendOptions
     /// <summary>
     /// Gets the destination endpoints when sending to multiple queues.
     /// </summary>
-    public IList<string>? EndPoints { get; init; }
+    public IReadOnlyList<string>? EndPoints { get; init; }
 }
