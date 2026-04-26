@@ -11,7 +11,7 @@ public sealed class InventoryReservedHandler(WorkflowQueue workflowQueue) : IMes
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(InventoryReserved message)
+    public async Task HandleAsync(InventoryReserved message, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("payment-worker", $"captured payment for {message.CorrelationId}");
         await Console.Out.FlushAsync();

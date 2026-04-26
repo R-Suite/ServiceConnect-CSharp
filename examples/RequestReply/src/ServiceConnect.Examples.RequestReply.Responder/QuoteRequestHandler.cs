@@ -8,7 +8,7 @@ public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(QuoteRequest message)
+    public async Task HandleAsync(QuoteRequest message, CancellationToken cancellationToken = default)
     {
         await Context!.ReplyAsync(new QuoteResponse(message.CorrelationId) { Price = 42.50m });
         ConsoleStatus.Success("request-reply-responder", $"processed {message.ProductCode}");

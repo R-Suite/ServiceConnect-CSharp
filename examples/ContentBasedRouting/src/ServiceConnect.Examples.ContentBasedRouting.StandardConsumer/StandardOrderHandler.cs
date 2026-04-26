@@ -8,7 +8,7 @@ public sealed class StandardOrderHandler : IMessageHandler<StandardOrderPlaced>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(StandardOrderPlaced message)
+    public async Task HandleAsync(StandardOrderPlaced message, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("standard-consumer", $"processed {message.OrderId}");
         await Console.Out.FlushAsync();

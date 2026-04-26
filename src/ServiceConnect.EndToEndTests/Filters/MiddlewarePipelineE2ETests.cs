@@ -128,5 +128,5 @@ file sealed class NoOpMessageHandler : IMessageHandler<TestMessage>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestMessage message) => Task.CompletedTask;
+    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

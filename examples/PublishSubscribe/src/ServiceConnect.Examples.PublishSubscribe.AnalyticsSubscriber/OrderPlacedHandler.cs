@@ -8,7 +8,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(OrderPlaced message)
+    public Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("analytics-subscriber", $"processed {message.OrderId}");
         return Task.CompletedTask;

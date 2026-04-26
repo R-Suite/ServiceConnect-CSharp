@@ -121,14 +121,14 @@ file class TimeoutProcessHandler :
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(TestMessage message, TimeoutProcessData data)
+    public async Task HandleAsync(TestMessage message, TimeoutProcessData data, CancellationToken cancellationToken = default)
     {
         data.CorrelationId = message.CorrelationId;
         data.TimeoutRequested = true;
         await Context!.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromMilliseconds(500));
     }
 
-    public Task HandleAsync(TimeoutMessage message, TimeoutProcessData data)
+    public Task HandleAsync(TimeoutMessage message, TimeoutProcessData data, CancellationToken cancellationToken = default)
     {
         data.TimeoutHandled = true;
         _timeoutHandled.TrySetResult(true);

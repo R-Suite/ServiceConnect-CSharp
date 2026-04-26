@@ -18,7 +18,7 @@ public sealed class FulfillmentProcessHandler :
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data)
+    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, CancellationToken cancellationToken = default)
     {
         if (data.IsSubmitted)
         {
@@ -37,7 +37,7 @@ public sealed class FulfillmentProcessHandler :
             Context.CancellationToken);
     }
 
-    public async Task HandleAsync(InventoryReserved message, FulfillmentState data)
+    public async Task HandleAsync(InventoryReserved message, FulfillmentState data, CancellationToken cancellationToken = default)
     {
         if (data.InventoryReserved)
         {
@@ -55,7 +55,7 @@ public sealed class FulfillmentProcessHandler :
             Context.CancellationToken);
     }
 
-    public Task HandleAsync(PaymentCaptured message, FulfillmentState data)
+    public Task HandleAsync(PaymentCaptured message, FulfillmentState data, CancellationToken cancellationToken = default)
     {
         if (data.PaymentCaptured)
         {

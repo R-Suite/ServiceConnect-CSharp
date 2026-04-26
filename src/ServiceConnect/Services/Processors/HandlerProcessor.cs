@@ -73,7 +73,7 @@ internal sealed class HandlerProcessor(
                     try
                     {
                         descriptor.SetContext(handler, context);
-                        await descriptor.InvokeHandleAsync(handler, message).ConfigureAwait(false);
+                        await descriptor.InvokeHandleAsync(handler, message, cancellationToken).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {

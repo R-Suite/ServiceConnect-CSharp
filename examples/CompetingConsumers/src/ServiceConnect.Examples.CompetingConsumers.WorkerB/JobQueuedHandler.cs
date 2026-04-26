@@ -8,7 +8,7 @@ public sealed class JobQueuedHandler : IMessageHandler<JobQueued>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(JobQueued message)
+    public async Task HandleAsync(JobQueued message, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("worker-b", $"processed {message.JobId}");
         await Console.Out.FlushAsync();

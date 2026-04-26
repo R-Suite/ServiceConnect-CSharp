@@ -134,5 +134,5 @@ file class ShrSecondFooStreamHandler : IStreamHandler<ShrFoo>
 file class ShrFooMessageHandler : IMessageHandler<ShrFoo>
 {
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(ShrFoo message) => Task.CompletedTask;
+    public Task HandleAsync(ShrFoo message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

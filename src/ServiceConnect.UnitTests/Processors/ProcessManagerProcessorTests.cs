@@ -500,7 +500,7 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
-    public Task HandleAsync(PmTestMessage message, PmTestData data)
+    public Task HandleAsync(PmTestMessage message, PmTestData data, CancellationToken cancellationToken = default)
     {
         data.Counter++;
         Invoked = true;
@@ -515,7 +515,7 @@ file class PmThrowingHandler : IProcessHandler<PmTestData, PmTestMessage>
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
-    public Task HandleAsync(PmTestMessage message, PmTestData data)
+    public Task HandleAsync(PmTestMessage message, PmTestData data, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("handler failure");
 }
 
@@ -537,7 +537,7 @@ file class PmMutatingThrowingHandler : IProcessHandler<PmMutableData, PmMutableM
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
         => mapper.ConfigureMapping<PmMutableData, PmMutableMessage>(d => d.CorrelationId, m => m.CorrelationId);
 
-    public Task HandleAsync(PmMutableMessage message, PmMutableData data)
+    public Task HandleAsync(PmMutableMessage message, PmMutableData data, CancellationToken cancellationToken = default)
     {
         data.Counter++;
         throw new InvalidOperationException("handler failure");
@@ -550,7 +550,7 @@ file sealed class PmTimeoutRequestingHandler(IBus bus) : IProcessHandler<PmTestD
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
-    public Task HandleAsync(PmTestMessage message, PmTestData data)
+    public Task HandleAsync(PmTestMessage message, PmTestData data, CancellationToken cancellationToken = default)
         => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));
 }
 
@@ -641,7 +641,7 @@ file class DummyPmHandler : IProcessHandler<DummyPmData, DummyPmMessage>
         mapper.ConfigureMapping<DummyPmData, DummyPmMessage>(d => d.CorrelationId, m => m.CorrelationId);
     }
 
-    public Task HandleAsync(DummyPmMessage message, DummyPmData data)
+    public Task HandleAsync(DummyPmMessage message, DummyPmData data, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
 
@@ -665,7 +665,7 @@ file sealed class ScopeProbePmHandler(Action? onConfigureMapper = null)
         mapper.ConfigureMapping<ScopeProbePmData, ScopeProbePmMessage>(d => d.CorrelationId, m => m.CorrelationId);
     }
 
-    public Task HandleAsync(ScopeProbePmMessage message, ScopeProbePmData data)
+    public Task HandleAsync(ScopeProbePmMessage message, ScopeProbePmData data, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _invocations);
         return Task.CompletedTask;

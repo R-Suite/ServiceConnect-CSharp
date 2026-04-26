@@ -135,7 +135,7 @@ file class ConcurrentIncrementHandler : IProcessHandler<ConcurrentCounterData, T
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestMessage message, ConcurrentCounterData data)
+    public Task HandleAsync(TestMessage message, ConcurrentCounterData data, CancellationToken cancellationToken = default)
     {
         data.CorrelationId = message.CorrelationId;
         data.Counter++;

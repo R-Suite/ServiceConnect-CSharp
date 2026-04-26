@@ -160,7 +160,7 @@ file class PubReqReplyHandler : IMessageHandler<TestRequest>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(TestRequest message)
+    public async Task HandleAsync(TestRequest message, CancellationToken cancellationToken = default)
     {
         await Context!.ReplyAsync(new TestResponse(Guid.NewGuid())
         {

@@ -369,6 +369,30 @@ public class HandlerProcessorTests
         Assert.True(handlerB.Invoked);
     }
 
+    [Fact]
+    public async Task ProcessAsync_PassesCancellationTokenToHandler()
+    {
+        var ctReceived = new TaskCompletionSource<CancellationToken>();
+        var handler = new CtRecordingHandler(ctReceived);
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<CtMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var refs = new List<HandlerReference> { new() { MessageType = typeof(CtMsg), HandlerType = typeof(CtRecordingHandler) } };
+        var registry = new MessageHandlerRegistry(refs, NullLogger<MessageHandlerRegistry>.Instance);
+        var processor = new HandlerProcessor(registry, NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+        var msg = new CtMsg();
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        using var cts = new CancellationTokenSource();
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(CtMsg), msg, headers, envelope, cts.Token);
+        var observed = await ctReceived.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.Equal(cts.Token, observed);
+    }
+
     private static MessageHandlerRegistry BuildRegistry(params Type[] messageTypes)
     {
         var refs = messageTypes
@@ -391,7 +415,7 @@ file sealed class ThrowingHpHandler(string errorMessage) : IMessageHandler<TestH
     public bool Invoked { get; private set; }
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestHpMsg message)
+    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
     {
         Invoked = true;
         throw new InvalidOperationException(errorMessage);
@@ -404,7 +428,7 @@ file sealed class RecordingHpHandler : IMessageHandler<TestHpMsg>
     public bool Invoked { get; private set; }
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestHpMsg message)
+    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
     {
         Invoked = true;
         return Task.CompletedTask;
@@ -417,7 +441,7 @@ file sealed class CancellingHpHandler(CancellationToken token) : IMessageHandler
     public bool Invoked { get; private set; }
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestHpMsg message)
+    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
     {
         Invoked = true;
         token.ThrowIfCancellationRequested();
@@ -435,7 +459,7 @@ file class TestHpHandler : IMessageHandler<TestHpMsg>
     public IReadOnlyDictionary<string, object>? ObservedHeaders { get; private set; }
     public bool ContextWasSet { get; private set; }
 
-    public Task HandleAsync(TestHpMsg message)
+    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
     {
         Invoked = true;
         if (Context != null)
@@ -452,7 +476,7 @@ file sealed class TimeoutRequestingHandler(IBus bus) : IMessageHandler<TestHpMsg
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestHpMsg message)
+    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
         => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));
 }
 
@@ -514,4 +538,23 @@ file static class TestBusFactory
             timeoutStore: timeoutStore,
             consumeContextAccessor: accessor);
     }
+}
+
+// Records the CancellationToken received by HandleAsync so the test can assert it
+// is the same token that was passed into ProcessAsync.
+file sealed class CtRecordingHandler(TaskCompletionSource<CancellationToken> tcs)
+    : IMessageHandler<CtMsg>
+{
+    public IConsumeContext Context { get; set; } = null!;
+
+    public Task HandleAsync(CtMsg message, CancellationToken cancellationToken = default)
+    {
+        tcs.TrySetResult(cancellationToken);
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class CtMsg : Message
+{
+    public CtMsg() : base(Guid.NewGuid()) { }
 }

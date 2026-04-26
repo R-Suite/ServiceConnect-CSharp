@@ -104,17 +104,22 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
         return Expression.Lambda<Action<object, IConsumeContext>>(assign, handlerParam, ctxParam).Compile();
     }
 
-    private static Func<object, object, Task> CompileInvokeHandleAsync(Type handlerInterface, Type messageType)
+    private static Func<object, object, CancellationToken, Task> CompileInvokeHandleAsync(
+        Type handlerInterface, Type messageType)
     {
         var handlerParam = Expression.Parameter(typeof(object), "handler");
         var messageParam = Expression.Parameter(typeof(object), "message");
+        var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
 
         var handlerCast = Expression.Convert(handlerParam, handlerInterface);
         var messageCast = Expression.Convert(messageParam, messageType);
 
-        var method = handlerInterface.GetMethod("HandleAsync")!;
-        var call = Expression.Call(handlerCast, method, messageCast);
+        var method = handlerInterface.GetMethod(
+            "HandleAsync",
+            new[] { messageType, typeof(CancellationToken) })!;
+        var call = Expression.Call(handlerCast, method, messageCast, ctParam);
 
-        return Expression.Lambda<Func<object, object, Task>>(call, handlerParam, messageParam).Compile();
+        return Expression.Lambda<Func<object, object, CancellationToken, Task>>(
+            call, handlerParam, messageParam, ctParam).Compile();
     }
 }

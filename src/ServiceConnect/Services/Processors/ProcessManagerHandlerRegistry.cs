@@ -169,21 +169,24 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
             call, finderParam, persistenceParam, ctParam).Compile();
     }
 
-    private static Func<object, Message, object, Task> CompileInvokeHandleAsync(
+    private static Func<object, Message, object, CancellationToken, Task> CompileInvokeHandleAsync(
         Type handlerInterface, Type messageType, Type dataType)
     {
         var handlerParam = Expression.Parameter(typeof(object), "handler");
         var messageParam = Expression.Parameter(typeof(Message), "message");
         var dataParam = Expression.Parameter(typeof(object), "data");
+        var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
 
         var handlerCast = Expression.Convert(handlerParam, handlerInterface);
         var messageCast = Expression.Convert(messageParam, messageType);
         var dataCast = Expression.Convert(dataParam, dataType);
 
-        var method = handlerInterface.GetMethod("HandleAsync")!;
-        var call = Expression.Call(handlerCast, method, messageCast, dataCast);
+        var method = handlerInterface.GetMethod(
+            "HandleAsync",
+            new[] { messageType, dataType, typeof(CancellationToken) })!;
+        var call = Expression.Call(handlerCast, method, messageCast, dataCast, ctParam);
 
-        return Expression.Lambda<Func<object, Message, object, Task>>(
-            call, handlerParam, messageParam, dataParam).Compile();
+        return Expression.Lambda<Func<object, Message, object, CancellationToken, Task>>(
+            call, handlerParam, messageParam, dataParam, ctParam).Compile();
     }
 }

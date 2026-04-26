@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace ServiceConnect.Interfaces;
 
 /// <summary>
@@ -22,8 +24,10 @@ public interface IProcessHandler<TData, TMessage>
     /// <summary>
     /// Invoked with the deserialized message and the correlated persisted state.
     /// Mutations to <paramref name="data"/> are persisted when the method returns.
+    /// The <paramref name="cancellationToken"/> is sourced from the transport consume
+    /// context and signals cooperative shutdown.
     /// </summary>
-    Task HandleAsync(TMessage message, TData data);
+    Task HandleAsync(TMessage message, TData data, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Configures the correlation mapping between <typeparamref name="TMessage"/> and

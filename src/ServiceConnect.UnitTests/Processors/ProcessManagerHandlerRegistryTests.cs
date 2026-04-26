@@ -126,7 +126,7 @@ public class ProcessManagerHandlerRegistryTests
         var msg = new FooMessage(Guid.NewGuid());
         var data = new FooData { CorrelationId = Guid.NewGuid() };
 
-        await descriptor!.InvokeHandleAsync(handler, msg, data);
+        await descriptor!.InvokeHandleAsync(handler, msg, data, CancellationToken.None);
 
         Assert.Same(msg, handler.ReceivedMessage);
         Assert.Same(data, handler.ReceivedData);
@@ -239,7 +239,7 @@ file class FooHandler : IProcessHandler<FooData, FooMessage>
     public FooMessage? ReceivedMessage { get; private set; }
     public FooData? ReceivedData { get; private set; }
 
-    public Task HandleAsync(FooMessage message, FooData data)
+    public Task HandleAsync(FooMessage message, FooData data, CancellationToken cancellationToken = default)
     {
         ReceivedMessage = message;
         ReceivedData = data;
@@ -250,13 +250,13 @@ file class FooHandler : IProcessHandler<FooData, FooMessage>
 file class SecondFooHandler : IProcessHandler<FooData, FooMessage>
 {
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(FooMessage message, FooData data) => Task.CompletedTask;
+    public Task HandleAsync(FooMessage message, FooData data, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class PlainFooHandler : IMessageHandler<FooMessage>
 {
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(FooMessage message) => Task.CompletedTask;
+    public Task HandleAsync(FooMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class FakeConsumeContext : IConsumeContext

@@ -183,5 +183,5 @@ file class ArgSecondFooAggregator : Aggregator<ArgFoo>
 file class ArgFooMessageHandler : IMessageHandler<ArgFoo>
 {
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(ArgFoo message) => Task.CompletedTask;
+    public Task HandleAsync(ArgFoo message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

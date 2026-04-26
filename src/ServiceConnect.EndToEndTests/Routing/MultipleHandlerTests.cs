@@ -108,7 +108,7 @@ file class TaggedHandlerA : IMessageHandler<TestMessage>
         _tcs = tcs;
     }
 
-    public Task HandleAsync(TestMessage message)
+    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         _bag.Add("HandlerA");
         if (_bag.Count >= 2)
@@ -130,7 +130,7 @@ file class TaggedHandlerB : IMessageHandler<TestMessage>
         _tcs = tcs;
     }
 
-    public Task HandleAsync(TestMessage message)
+    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         _bag.Add("HandlerB");
         if (_bag.Count >= 2)

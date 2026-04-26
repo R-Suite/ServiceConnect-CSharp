@@ -138,7 +138,7 @@ file class Step1Handler : IMessageHandler<StepMessage>
 
     public Step1Handler(Action onHandled) => _onHandled = onHandled;
 
-    public Task HandleAsync(StepMessage message)
+    public Task HandleAsync(StepMessage message, CancellationToken cancellationToken = default)
     {
         message.CurrentStep = "Step1";
         _onHandled();
@@ -153,7 +153,7 @@ file class Step2Handler : IMessageHandler<StepMessage>
 
     public Step2Handler(Action<string> onHandled) => _onHandled = onHandled;
 
-    public Task HandleAsync(StepMessage message)
+    public Task HandleAsync(StepMessage message, CancellationToken cancellationToken = default)
     {
         _onHandled(message.CurrentStep);
         return Task.CompletedTask;

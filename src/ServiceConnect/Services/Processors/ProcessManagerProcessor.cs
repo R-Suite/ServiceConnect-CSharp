@@ -108,7 +108,7 @@ internal sealed class ProcessManagerProcessor(
             using (_consumeContextAccessor.Push(context.Headers))
             {
                 descriptor.SetHandlerContext(handler, context);
-                await descriptor.InvokeHandleAsync(handler, message, data).ConfigureAwait(false);
+                await descriptor.InvokeHandleAsync(handler, message, data, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (Exception ex)

@@ -395,7 +395,7 @@ public sealed class H5Msg : Message
 public sealed class H5Handler : IMessageHandler<H5Msg>
 {
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(H5Msg message) => Task.CompletedTask;
+    public Task HandleAsync(H5Msg message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public sealed class H5Aggregator : Aggregator<H5Msg>
@@ -417,7 +417,7 @@ public static class TestHandlerFixture
     public sealed class SampleHandler : IMessageHandler<SampleMessage>
     {
         public IConsumeContext Context { get; set; } = null!;
-        public Task HandleAsync(SampleMessage message) => Task.CompletedTask;
+        public Task HandleAsync(SampleMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
 

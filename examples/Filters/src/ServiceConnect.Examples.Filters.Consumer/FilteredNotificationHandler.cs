@@ -8,7 +8,7 @@ public sealed class FilteredNotificationHandler : IMessageHandler<FilteredNotifi
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(FilteredNotification message)
+    public Task HandleAsync(FilteredNotification message, CancellationToken cancellationToken = default)
     {
         var traceId = Context is not null && Context.Headers.TryGetValue("X-Trace-Id", out var rawTraceId)
             ? HeaderDecoder.Decode(rawTraceId) ?? "missing"

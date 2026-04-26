@@ -34,7 +34,7 @@ file class TestDispatchHandler : IMessageHandler<FakeMessage1>
         _throwOnHandle = throwOnHandle;
     }
 
-    public Task HandleAsync(FakeMessage1 message)
+    public Task HandleAsync(FakeMessage1 message, CancellationToken cancellationToken = default)
     {
         _onContextSet?.Invoke(Context);
         if (_throwOnHandle != null)
@@ -804,7 +804,7 @@ file class PolyBaseHandler : IMessageHandler<PolyBaseMessage>
 {
     public bool Invoked { get; private set; }
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(PolyBaseMessage message) { Invoked = true; return Task.CompletedTask; }
+    public Task HandleAsync(PolyBaseMessage message, CancellationToken cancellationToken = default) { Invoked = true; return Task.CompletedTask; }
 }
 
 file sealed class UnregisteredReplyMessage : Message

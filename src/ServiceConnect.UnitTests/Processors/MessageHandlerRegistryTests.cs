@@ -104,7 +104,7 @@ public class MessageHandlerRegistryTests
         var handler = new MhrFooHandler();
         var msg = new MhrFooMsg(Guid.NewGuid());
 
-        await descriptor!.InvokeHandleAsync(handler, msg);
+        await descriptor!.InvokeHandleAsync(handler, msg, CancellationToken.None);
 
         Assert.Same(msg, handler.Received);
     }
@@ -138,19 +138,19 @@ file class MhrFooHandler : IMessageHandler<MhrFooMsg>
 {
     public IConsumeContext Context { get; set; } = null!;
     public MhrFooMsg? Received { get; private set; }
-    public Task HandleAsync(MhrFooMsg message) { Received = message; return Task.CompletedTask; }
+    public Task HandleAsync(MhrFooMsg message, CancellationToken cancellationToken = default) { Received = message; return Task.CompletedTask; }
 }
 
 file class MhrSecondFooHandler : IMessageHandler<MhrFooMsg>
 {
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(MhrFooMsg message) => Task.CompletedTask;
+    public Task HandleAsync(MhrFooMsg message, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class MhrProcessHandler : IProcessHandler<MhrBarData, MhrFooMsg>
 {
     public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(MhrFooMsg message, MhrBarData data) => Task.CompletedTask;
+    public Task HandleAsync(MhrFooMsg message, MhrBarData data, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class MhrStreamHandler : IStreamHandler<MhrFooMsg>

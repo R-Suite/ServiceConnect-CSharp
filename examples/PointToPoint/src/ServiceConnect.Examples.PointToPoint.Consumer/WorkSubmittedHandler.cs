@@ -8,7 +8,7 @@ public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(WorkSubmitted message)
+    public Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("point-to-point-consumer", $"processed {message.WorkId}");
         return Task.CompletedTask;

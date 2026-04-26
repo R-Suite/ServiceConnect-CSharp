@@ -11,7 +11,7 @@ public sealed class OrderSubmittedHandler(WorkflowQueue workflowQueue) : IMessag
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(OrderSubmitted message)
+    public async Task HandleAsync(OrderSubmitted message, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("inventory-worker", $"reserved inventory for {message.CorrelationId}");
         await Console.Out.FlushAsync();

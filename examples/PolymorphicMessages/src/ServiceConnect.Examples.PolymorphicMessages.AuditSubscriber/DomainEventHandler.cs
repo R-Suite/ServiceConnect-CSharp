@@ -13,7 +13,7 @@ public sealed class DomainEventHandler : IMessageHandler<DomainEvent>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(DomainEvent message)
+    public Task HandleAsync(DomainEvent message, CancellationToken cancellationToken = default)
     {
         var concreteTypeName = message.GetType().Name;
         var orderId = message switch

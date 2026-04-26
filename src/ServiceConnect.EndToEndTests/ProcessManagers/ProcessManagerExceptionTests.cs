@@ -120,7 +120,7 @@ file class ThrowingProcessHandler : IProcessHandler<TestProcessData, TestMessage
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestMessage message, TestProcessData data)
+    public Task HandleAsync(TestMessage message, TestProcessData data, CancellationToken cancellationToken = default)
     {
         throw new InvalidOperationException("PM handler exploded");
     }

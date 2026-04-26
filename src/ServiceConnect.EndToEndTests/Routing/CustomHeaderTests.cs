@@ -196,7 +196,7 @@ file class HeaderCaptureHandler : IMessageHandler<TestMessage>
 
     public HeaderCaptureHandler(Action<IReadOnlyDictionary<string, object>> callback) => _callback = callback;
 
-    public Task HandleAsync(TestMessage message)
+    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         _callback(Context!.Headers);
         return Task.CompletedTask;
@@ -207,7 +207,7 @@ file class HeaderEchoReplyHandler : IMessageHandler<TestRequest>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(TestRequest message)
+    public async Task HandleAsync(TestRequest message, CancellationToken cancellationToken = default)
     {
         var traceId = Context!.Headers.TryGetValue("X-Trace-Id", out var value)
             ? (value is byte[] bytes ? System.Text.Encoding.UTF8.GetString(bytes) : value?.ToString() ?? string.Empty)

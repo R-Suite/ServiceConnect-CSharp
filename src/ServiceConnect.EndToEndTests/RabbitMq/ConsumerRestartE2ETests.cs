@@ -161,7 +161,7 @@ file sealed class RestartCheckHandler : IMessageHandler<TestMessage>
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestMessage message)
+    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         if (_phase.Current == 0) _first.TrySetResult(message);
         else _second.TrySetResult(message);

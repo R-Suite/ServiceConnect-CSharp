@@ -111,7 +111,7 @@ file class CounterProcessHandler : IProcessHandler<TestProcessData, TestMessage>
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestMessage message, TestProcessData data)
+    public Task HandleAsync(TestMessage message, TestProcessData data, CancellationToken cancellationToken = default)
     {
         data.Counter++;
         data.LastContent = message.Content;

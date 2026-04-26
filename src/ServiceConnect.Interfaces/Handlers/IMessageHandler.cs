@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace ServiceConnect.Interfaces;
 
 /// <summary>
@@ -16,6 +18,9 @@ public interface IMessageHandler<in TMessage> where TMessage : Message
     /// </summary>
     IConsumeContext Context { get; set; }
 
-    /// <summary>Invoked with the deserialized message.</summary>
-    Task HandleAsync(TMessage message);
+    /// <summary>
+    /// Invoked with the deserialized message. The <paramref name="cancellationToken"/>
+    /// is sourced from the transport consume context and signals cooperative shutdown.
+    /// </summary>
+    Task HandleAsync(TMessage message, CancellationToken cancellationToken = default);
 }

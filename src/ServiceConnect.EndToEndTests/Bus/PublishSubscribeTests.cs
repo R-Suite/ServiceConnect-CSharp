@@ -15,7 +15,7 @@ public class CallbackHandler<T> : IMessageHandler<T> where T : Message
 
     public CallbackHandler(Action<T> callback) => _callback = callback;
 
-    public Task HandleAsync(T message)
+    public Task HandleAsync(T message, CancellationToken cancellationToken = default)
     {
         _callback(message);
         return Task.CompletedTask;

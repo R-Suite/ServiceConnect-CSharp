@@ -193,7 +193,7 @@ file class TimeoutHeaderPmHandler :
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(TestMessage message, TimeoutHeaderData data)
+    public async Task HandleAsync(TestMessage message, TimeoutHeaderData data, CancellationToken cancellationToken = default)
     {
         data.CorrelationId = message.CorrelationId;
         data.TimeoutScheduled = true;
@@ -202,7 +202,7 @@ file class TimeoutHeaderPmHandler :
         await Context!.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromMilliseconds(500));
     }
 
-    public Task HandleAsync(TimeoutMessage message, TimeoutHeaderData data)
+    public Task HandleAsync(TimeoutMessage message, TimeoutHeaderData data, CancellationToken cancellationToken = default)
     {
         // Capture the headers re-emitted by BuildOutgoingHeaders for assertion
         _headersCaptured.TrySetResult(Context!.Headers);
