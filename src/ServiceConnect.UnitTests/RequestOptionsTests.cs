@@ -6,19 +6,15 @@ namespace ServiceConnect.UnitTests;
 public class RequestOptionsTests
 {
     [Fact]
-    public void Default_IsFreshInstance_MutationsDoNotLeakAcrossCallers()
+    public void Default_ReturnsInstanceWithDefaultTimeout()
     {
-        // Each access to Default must return a fresh instance so one caller
-        // mutating the returned options (e.g. setting Timeout) cannot leak into
-        // another caller that relies on the out-of-the-box defaults.
+        // RequestOptions is a readonly record struct, so each access to Default returns
+        // an independent copy by value. Mutations on one copy cannot affect another.
         var first = RequestOptions.Default;
-        first.Timeout = 123;
-        first.EndPoint = "leaked";
-
         var second = RequestOptions.Default;
 
+        Assert.Equal(RequestOptions.DefaultTimeoutMs, first.Timeout);
         Assert.Equal(RequestOptions.DefaultTimeoutMs, second.Timeout);
         Assert.Null(second.EndPoint);
-        Assert.NotSame(first, second);
     }
 }
