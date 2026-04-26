@@ -43,6 +43,8 @@ internal sealed class MessageAuditPublisher
         Dictionary<string, object> headers,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (!_queueConfiguration.AuditingEnabled)
             return;
 
