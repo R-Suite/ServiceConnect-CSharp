@@ -47,8 +47,9 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     }
 
     /// <inheritdoc />
-    public async Task WriteAsync(byte[] buffer, int offset, int count)
+    public async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(buffer);
 
         if ((uint)offset > (uint)buffer.Length)
@@ -82,7 +83,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 
             try
             {
-                await _producer.SendBytesAsync(_endpoint, _messageType, packet, headers).ConfigureAwait(false);
+                await _producer.SendBytesAsync(_endpoint, _messageType, packet, headers, cancellationToken).ConfigureAwait(false);
             }
             catch
             {
@@ -100,8 +101,9 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     }
 
     /// <inheritdoc />
-    public async Task CloseAsync()
+    public async Task CloseAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (Interlocked.CompareExchange(ref _closedFlag, 1, 0) != 0) return;
 
         // A faulted stream has a stranded packet number; emitting a close packet would
@@ -118,12 +120,14 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         var spin = new SpinWait();
         while (Volatile.Read(ref _inFlightWrites) > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (spin.NextSpinWillYield && DateTime.UtcNow >= deadline)
                 throw new TimeoutException(
                     $"Timed out waiting for {Volatile.Read(ref _inFlightWrites)} in-flight write(s) to drain before closing stream {_sequenceId}.");
 
             if (spin.NextSpinWillYield)
-                await Task.Delay(10).ConfigureAwait(false);
+                await Task.Delay(10, cancellationToken).ConfigureAwait(false);
             else
                 spin.SpinOnce();
         }

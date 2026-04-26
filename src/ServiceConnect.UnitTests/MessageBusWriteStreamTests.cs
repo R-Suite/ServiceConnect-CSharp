@@ -218,6 +218,48 @@ public class MessageBusWriteStreamTests
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
+
+    [Fact]
+    public async Task WriteAsync_CancelledToken_ThrowsOperationCanceledException()
+    {
+        var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => stream.WriteAsync(new byte[10], 0, 10, cts.Token));
+    }
+
+    [Fact]
+    public async Task CloseAsync_CancelledDuringDrain_ThrowsOperationCanceledException()
+    {
+        // A producer whose SendBytesAsync never completes simulates a stalled in-flight write.
+        var tcs = new TaskCompletionSource<bool>();
+        var stalledProducer = new Mock<IProducer>();
+        stalledProducer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(),
+                It.IsAny<Type>(),
+                It.IsAny<byte[]>(),
+                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(tcs.Task.ContinueWith(_ => { }));
+
+        var stream = new MessageBusWriteStream(stalledProducer.Object, "dest", typeof(FakeStreamMsg));
+
+        // Fire off a write that will never complete, keeping _inFlightWrites > 0.
+        _ = stream.WriteAsync([1], 0, 1);
+
+        // CloseAsync must abort the drain when the token is cancelled rather than
+        // waiting up to the full 30-second CloseDrainTimeout.
+        // Task.Delay surfaces cancellation as TaskCanceledException (subtype of OperationCanceledException).
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => stream.CloseAsync(cts.Token));
+
+        // Unblock the stalled write so the background task can complete cleanly.
+        tcs.SetResult(true);
+    }
 }
 
 file class FakeStreamMsg : Message

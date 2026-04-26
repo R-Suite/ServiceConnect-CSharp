@@ -11,10 +11,12 @@ public interface IMessageBusWriteStream : IAsyncDisposable
     /// <param name="buffer">The source buffer.</param>
     /// <param name="offset">The starting offset within the buffer.</param>
     /// <param name="count">The number of bytes to write.</param>
-    Task WriteAsync(byte[] buffer, int offset, int count);
+    /// <param name="cancellationToken">Token that cancels the write before it is dispatched to the producer.</param>
+    Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Flushes any remaining data and marks the stream as complete.
     /// </summary>
-    Task CloseAsync();
+    /// <param name="cancellationToken">Token that aborts the in-flight drain wait and the close send.</param>
+    Task CloseAsync(CancellationToken cancellationToken = default);
 }
