@@ -620,6 +620,90 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         var operation = activity!.GetTagItem(MessagingOperation);
         Assert.Equal("publish", operation);
     }
+
+    [Fact]
+    public void Publish_WithLinkedContext_AttachesAsLinkNotParent()
+    {
+        using var ambient = new Activity("ambient").Start();
+        var ambientTraceId = ambient.TraceId;
+
+        var linked = new ActivityContext(
+            ActivityTraceId.CreateRandom(),
+            ActivitySpanId.CreateRandom(),
+            ActivityTraceFlags.Recorded);
+
+        var args = new PublishEventArgs
+        {
+            Exchange = "ex",
+            Headers = new Dictionary<string, string>(),
+            Message = null,
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args, linked);
+
+        Assert.NotNull(activity);
+        // Producer span inherits ambient trace, NOT the linked trace.
+        Assert.Equal(ambientTraceId, activity!.TraceId);
+        // The linked context is exposed as an Activity link.
+        var links = activity.Links.ToList();
+        Assert.Single(links);
+        Assert.Equal(linked.TraceId, links[0].Context.TraceId);
+    }
+
+    [Fact]
+    public void Send_WithLinkedContext_AttachesAsLinkNotParent()
+    {
+        using var ambient = new Activity("ambient").Start();
+        var ambientTraceId = ambient.TraceId;
+
+        var linked = new ActivityContext(
+            ActivityTraceId.CreateRandom(),
+            ActivitySpanId.CreateRandom(),
+            ActivityTraceFlags.Recorded);
+
+        var args = new SendEventArgs
+        {
+            EndPoint = "queue-a",
+            Headers = new Dictionary<string, string>(),
+            Message = null,
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args, linked);
+
+        Assert.NotNull(activity);
+        Assert.Equal(ambientTraceId, activity!.TraceId);
+        var links = activity.Links.ToList();
+        Assert.Single(links);
+        Assert.Equal(linked.TraceId, links[0].Context.TraceId);
+    }
+
+    [Fact]
+    public void Consume_WithTraceParent_KeepsParentSemantics()
+    {
+        // Consume legitimately wants parent-context: the W3C traceparent header is
+        // the actual upstream span, and the consume span IS its child.
+        var producerTraceId = ActivityTraceId.CreateRandom();
+        var producerSpanId = ActivitySpanId.CreateRandom();
+        var traceParent = $"00-{producerTraceId}-{producerSpanId}-01";
+
+        var args = new ConsumeEventArgs
+        {
+            Headers = new Dictionary<string, object>
+            {
+                ["traceparent"] = traceParent,
+                [HeaderKeys.DestinationAddress] = "queue-a",
+            },
+            Message = new byte[] { 1 },
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.NotNull(activity);
+        // Consume IS a child of the producer — same trace.
+        Assert.Equal(producerTraceId, activity!.TraceId);
+        // Not exposed as a link; it's the actual parent.
+        Assert.Empty(activity.Links);
+    }
 }
 
 [Collection("ActivityListener")]

@@ -49,7 +49,7 @@ public static class ServiceConnectActivitySource
         // propagate across the broker even when ServiceConnect's own spans are disabled.
         InjectTraceContext(Activity.Current, eventArgs.Headers);
 
-        Activity? activity = StartActivity(
+        Activity? activity = StartActivityWithLink(
             _publishActivitySource,
             PublishActivitySourceName,
             ActivityKind.Producer,
@@ -100,7 +100,7 @@ public static class ServiceConnectActivitySource
         DistributedContextPropagator.Current.ExtractTraceIdAndState(eventArgs.Headers, ExtractTraceIdAndState, out string? traceId, out string? traceState);
         ActivityContext.TryParse(traceId, traceState, out ActivityContext parentContext);
 
-        Activity? activity = StartActivity(
+        Activity? activity = StartActivityWithParent(
             _consumeActivitySource,
             ConsumeActivitySourceName,
             ActivityKind.Consumer,
@@ -166,7 +166,7 @@ public static class ServiceConnectActivitySource
         // operation name. The point-to-point distinction is preserved by the dedicated
         // _sendActivitySource and the per-destination DisplayName ("<queue> send"), so
         // backends that need to disaggregate send from publish can do so by source name.
-        Activity? activity = StartActivity(
+        Activity? activity = StartActivityWithLink(
             _sendActivitySource,
             SendActivitySourceName,
             ActivityKind.Producer,
@@ -321,18 +321,46 @@ public static class ServiceConnectActivitySource
             headers[fieldName] = fieldValue;
     }
 
-    private static Activity? StartActivity(
+    private static Activity? StartActivityWithParent(
         ActivitySource activitySource,
         string activityName,
         ActivityKind kind,
         bool enabled,
         string operation,
-        ActivityContext context = default)
+        ActivityContext parentContext)
     {
         if (!enabled || !activitySource.HasListeners())
             return null;
 
-        Activity? activity = activitySource.StartActivity(activityName, kind, context);
+        Activity? activity = activitySource.StartActivity(activityName, kind, parentContext);
+        if (activity is null)
+            return null;
+
+        activity
+            .SetTag(MessagingAttributes.MessagingSystem, MessagingSystemAttributes.MessagingSystem)
+            .SetTag(MessagingAttributes.ProtocolName, MessagingSystemAttributes.ProtocolName)
+            .SetTag(MessagingAttributes.MessagingOperation, operation);
+
+        return activity;
+    }
+
+    private static Activity? StartActivityWithLink(
+        ActivitySource activitySource,
+        string activityName,
+        ActivityKind kind,
+        bool enabled,
+        string operation,
+        ActivityContext linkedContext)
+    {
+        if (!enabled || !activitySource.HasListeners())
+            return null;
+
+        ActivityLink[]? links = linkedContext == default
+            ? null
+            : [new ActivityLink(linkedContext)];
+
+        Activity? activity = activitySource.StartActivity(
+            activityName, kind, parentContext: default, tags: null, links: links);
         if (activity is null)
             return null;
 
