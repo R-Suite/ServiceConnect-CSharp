@@ -167,7 +167,34 @@ internal sealed class AggregatorProcessor(
 
     private async Task FlushAggregatorAsync(AggregatorDescriptor descriptor, IServiceProvider? ambientScope, CancellationToken cancellationToken)
     {
-        var flushLock = _flushLocks.GetOrAdd(descriptor.AggregatorName, _ => new SemaphoreSlim(1, 1));
+        // Fast-fail if already disposed before we touch _flushLocks at all.
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        SemaphoreSlim flushLock;
+        if (!_flushLocks.TryGetValue(descriptor.AggregatorName, out flushLock!))
+        {
+            // Re-check before allocating — DisposeAsync may have run between TryGetValue
+            // and here. This minimises wasted work in the common post-dispose path.
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+            var freshLock = new SemaphoreSlim(1, 1);
+            flushLock = _flushLocks.GetOrAdd(descriptor.AggregatorName, freshLock);
+
+            // If another thread won the GetOrAdd race, freshLock is surplus — dispose it.
+            if (!ReferenceEquals(flushLock, freshLock))
+                freshLock.Dispose();
+
+            // Re-check _disposed: DisposeAsync's _flushLocks.Clear() may have run between
+            // TryGetValue and GetOrAdd. Remove and dispose our (possibly just-inserted) lock
+            // so it does not leak past the disposal foreach.
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _flushLocks.TryRemove(new KeyValuePair<string, SemaphoreSlim>(descriptor.AggregatorName, flushLock));
+                flushLock.Dispose();
+                throw new ObjectDisposedException(nameof(AggregatorProcessor));
+            }
+        }
+
         await flushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
