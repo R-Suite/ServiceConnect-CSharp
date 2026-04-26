@@ -90,6 +90,16 @@ public sealed class Producer : IProducer
     // checking the flag alone would permanently suppress reconnect attempts.
     private bool IsHealthy() => _connected && (_model?.IsOpen ?? false);
 
+    // Return the cached exchange name for a type, keying on FullName so that
+    // assembly version churn or type forwarding (which changes AQN but not
+    // FullName) does not create duplicate entries for the same exchange.
+    private string GetExchangeName(Type type)
+    {
+        return _exchangeNameCache.GetOrAdd(
+            type.FullName ?? type.AssemblyQualifiedName!,
+            _ => ServiceConnect.Services.MessageTypeExchangeName.From(type));
+    }
+
     private Task EnsureConnectedAsync()
     {
         return EnsureConnectedAsync(CancellationToken.None);
@@ -242,7 +252,7 @@ public sealed class Producer : IProducer
 
             // Compute the exchange name once per type and cache it.
             // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
-            string exchangeName = _exchangeNameCache.GetOrAdd(type.AssemblyQualifiedName ?? type.FullName!, _ => ServiceConnect.Services.MessageTypeExchangeName.From(type));
+            string exchangeName = GetExchangeName(type);
 
             await ExecuteWithConnectionRetryAsync(async () =>
             {
