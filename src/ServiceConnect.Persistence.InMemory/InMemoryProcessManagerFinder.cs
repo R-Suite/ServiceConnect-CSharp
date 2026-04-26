@@ -95,8 +95,8 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             if (value is null) continue; // removed concurrently by an external IKeyValueStore caller
             if (value is MemoryData<T> typed)
             {
-                var candidate = new MemoryData<T> { Data = DeepClone.Clone(typed.Data), Version = typed.Version };
-                if (predicate(candidate, msgPropValue)) return candidate;
+                if (predicate(typed, msgPropValue))
+                    return new MemoryData<T> { Data = DeepClone.Clone(typed.Data), Version = typed.Version };
             }
             else
             {
@@ -115,8 +115,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 
                 if (accessors.Data(value) is T typedData && accessors.Version(value) is int version)
                 {
-                    var candidate = new MemoryData<T> { Data = DeepClone.Clone(typedData), Version = version };
-                    if (predicate(candidate, msgPropValue)) return candidate;
+                    var original = new MemoryData<T> { Data = typedData, Version = version };
+                    if (predicate(original, msgPropValue))
+                        return new MemoryData<T> { Data = DeepClone.Clone(typedData), Version = version };
                 }
             }
         }
