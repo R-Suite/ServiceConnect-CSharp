@@ -68,6 +68,9 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     /// <inheritdoc />
     public async Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(timeoutData);
+        if (timeoutData.Id == Guid.Empty)
+            throw new ArgumentException("TimeoutData.Id must not be Guid.Empty.", nameof(timeoutData));
         cancellationToken.ThrowIfCancellationRequested();
 
         try
