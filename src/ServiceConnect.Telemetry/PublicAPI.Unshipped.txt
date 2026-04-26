@@ -1,0 +1,41 @@
+#nullable enable
+const ServiceConnect.Telemetry.MessagingAttributes.MessageConversationId = "messaging.message.conversation_id" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.MessageId = "messaging.message.id" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.MessagingBodySize = "messaging.message.body.size" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.MessagingDestination = "messaging.destination.name" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.MessagingDestinationAnonymous = "messaging.destination.anonymous" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.MessagingDestinationRoutingKey = "messaging.rabbitmq.destination.routing_key" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.MessagingOperation = "messaging.operation" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.MessagingSystem = "messaging.system" -> string!
+const ServiceConnect.Telemetry.MessagingAttributes.ProtocolName = "network.protocol.name" -> string!
+ServiceConnect.Telemetry.IMessagingSystemAttributes
+ServiceConnect.Telemetry.IMessagingSystemAttributes.MessagingSystem.get -> string!
+ServiceConnect.Telemetry.IMessagingSystemAttributes.ProtocolName.get -> string!
+ServiceConnect.Telemetry.MessagingAttributes
+ServiceConnect.Telemetry.RabbitMqMessagingSystemAttributes
+ServiceConnect.Telemetry.RabbitMqMessagingSystemAttributes.MessagingSystem.get -> string!
+ServiceConnect.Telemetry.RabbitMqMessagingSystemAttributes.ProtocolName.get -> string!
+ServiceConnect.Telemetry.RabbitMqMessagingSystemAttributes.RabbitMqMessagingSystemAttributes() -> void
+ServiceConnect.Telemetry.ServiceConnectActivitySource
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnableConsumeTelemetry.get -> bool
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnableConsumeTelemetry.set -> void
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnablePublishTelemetry.get -> bool
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnablePublishTelemetry.set -> void
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnableSendTelemetry.get -> bool
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnableSendTelemetry.set -> void
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnrichWithMessage.get -> System.Action<System.Diagnostics.Activity!, ServiceConnect.Interfaces.Message!>?
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnrichWithMessage.set -> void
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnrichWithMessageBytes.get -> System.Action<System.Diagnostics.Activity!, byte[]!>?
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.EnrichWithMessageBytes.set -> void
+ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions.ServiceConnectInstrumentationOptions() -> void
+static readonly ServiceConnect.Telemetry.ServiceConnectActivitySource.ConsumeActivitySourceName -> string!
+static readonly ServiceConnect.Telemetry.ServiceConnectActivitySource.PublishActivitySourceName -> string!
+static readonly ServiceConnect.Telemetry.ServiceConnectActivitySource.SendActivitySourceName -> string!
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.Consume(ServiceConnect.Interfaces.ConsumeEventArgs! eventArgs) -> System.Diagnostics.Activity?
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.MessagingSystemAttributes.get -> ServiceConnect.Telemetry.IMessagingSystemAttributes!
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.Options.get -> ServiceConnect.Telemetry.ServiceConnectInstrumentationOptions!
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.Publish(ServiceConnect.Interfaces.PublishEventArgs! eventArgs, System.Diagnostics.ActivityContext linkedContext = default(System.Diagnostics.ActivityContext)) -> System.Diagnostics.Activity?
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.Send(ServiceConnect.Interfaces.SendEventArgs! eventArgs, System.Diagnostics.ActivityContext linkedContext = default(System.Diagnostics.ActivityContext)) -> System.Diagnostics.Activity?
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.SetError(System.Diagnostics.Activity? activity, System.Exception! exception) -> void
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.TryGetExistingContext(System.Collections.Generic.Dictionary<string!, string!>! headers, out System.Diagnostics.ActivityContext context) -> bool

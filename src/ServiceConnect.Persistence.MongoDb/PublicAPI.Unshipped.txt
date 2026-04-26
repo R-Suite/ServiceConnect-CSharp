@@ -1,0 +1,60 @@
+#nullable enable
+ServiceConnect.Persistence.MongoDb.MongoClientFactory
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.CountAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<int>!
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.GetDataAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IList<object!>!>!
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.GetSnapshotAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<ServiceConnect.Interfaces.IAggregatorSnapshot!>!
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.InsertDataAsync(object! data, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.MongoDbAggregatorPersistor(MongoDB.Driver.IMongoClient! mongoClient, ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions! options, Microsoft.Extensions.Logging.ILogger<ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor!>! logger, ServiceConnect.Interfaces.IMessageTypeRegistry! typeRegistry, System.TimeProvider? timeProvider = null) -> void
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.MongoDbAggregatorPersistor(MongoDB.Driver.IMongoClient! mongoClient, ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions! options, string! collectionName, Microsoft.Extensions.Logging.ILogger<ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor!>! logger, ServiceConnect.Interfaces.IMessageTypeRegistry! typeRegistry, System.TimeProvider? timeProvider = null) -> void
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.RemoveAllAsync(string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.RemoveDataAsync(string! name, System.Guid correlationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbAggregatorPersistor.RemoveSnapshotAsync(string! name, ServiceConnect.Interfaces.IAggregatorSnapshot! snapshot, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>.Data.get -> T!
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>.Data.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>.Id.get -> System.Guid
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>.Id.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>.MongoDbData() -> void
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>.Version.get -> int
+ServiceConnect.Persistence.MongoDb.MongoDbData<T>.Version.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceExtensions
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.ConnectionString.get -> string!
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.ConnectionString.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.DatabaseName.get -> string!
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.DatabaseName.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.MongoDbPersistenceOptions() -> void
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.Ssl.get -> ServiceConnect.Persistence.MongoDb.MongoDbSslOptions?
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.Ssl.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.TimeoutBatchSize.get -> int
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.TimeoutBatchSize.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.TimeoutLockLeaseDuration.get -> System.TimeSpan
+ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions.TimeoutLockLeaseDuration.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbProcessManagerFinder
+ServiceConnect.Persistence.MongoDb.MongoDbProcessManagerFinder.DeleteDataAsync<T>(ServiceConnect.Interfaces.IPersistenceData<T!>! persistenceData, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbProcessManagerFinder.FindDataAsync<T>(ServiceConnect.Interfaces.IProcessManagerPropertyMapper! mapper, ServiceConnect.Interfaces.Message! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<ServiceConnect.Interfaces.IPersistenceData<T!>?>!
+ServiceConnect.Persistence.MongoDb.MongoDbProcessManagerFinder.InsertDataAsync(ServiceConnect.Interfaces.IProcessManagerData! data, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbProcessManagerFinder.MongoDbProcessManagerFinder(MongoDB.Driver.IMongoClient! mongoClient, ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions! options, Microsoft.Extensions.Logging.ILogger<ServiceConnect.Persistence.MongoDb.MongoDbProcessManagerFinder!>! logger, System.TimeProvider? timeProvider = null) -> void
+ServiceConnect.Persistence.MongoDb.MongoDbProcessManagerFinder.UpdateDataAsync<T>(ServiceConnect.Interfaces.IPersistenceData<T!>! persistenceData, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.AllowInsecureTls.get -> bool
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.AllowInsecureTls.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.CertPassphrase.get -> string?
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.CertPassphrase.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.CertPath.get -> string?
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.CertPath.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.CheckCertificateRevocation.get -> bool
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.CheckCertificateRevocation.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.MongoDbSslOptions() -> void
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.SslProtocol.get -> System.Security.Authentication.SslProtocols
+ServiceConnect.Persistence.MongoDb.MongoDbSslOptions.SslProtocol.set -> void
+ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore
+ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore.GetTimeoutsBatchAsync(int? batchSize = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<ServiceConnect.Interfaces.TimeoutsBatch!>!
+ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore.InsertTimeoutAsync(ServiceConnect.Interfaces.TimeoutData! timeoutData, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore.MongoDbTimeoutStore(MongoDB.Driver.IMongoClient! mongoClient, ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions! options, Microsoft.Extensions.Logging.ILogger<ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore!>! logger, System.TimeProvider? timeProvider = null) -> void
+ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore.ReapStaleLeasesAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<long>!
+ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore.ReleaseDispatchedTimeoutAsync(System.Guid id, System.Guid? lockOwner = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Persistence.MongoDb.MongoDbTimeoutStore.RemoveDispatchedTimeoutAsync(System.Guid id, System.Guid? lockOwner = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+static ServiceConnect.Persistence.MongoDb.MongoClientFactory.Create(ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions! options) -> MongoDB.Driver.MongoClient!
+static ServiceConnect.Persistence.MongoDb.MongoDbPersistenceExtensions.UseMongoDbPersistence(this ServiceConnect.ServiceConnectBuilder! builder, System.Action<ServiceConnect.Persistence.MongoDb.MongoDbPersistenceOptions!>! configure) -> ServiceConnect.ServiceConnectBuilder!
