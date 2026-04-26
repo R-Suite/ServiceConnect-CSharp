@@ -10,7 +10,7 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests.Processors;
 
-public class AggregatorProcessor_FlushAfterDispose_Tests
+public class AggregatorProcessorFlushAfterDisposeTests
 {
     [Fact]
     public async Task FlushAggregator_AfterDisposed_DoesNotInsertNewLock()
@@ -23,7 +23,7 @@ public class AggregatorProcessor_FlushAfterDispose_Tests
             NullLogger<AggregatorRegistry>.Instance);
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         var scopeAccessor = new ConsumeScopeAccessor();
-        var persistor = new Mock<IAggregatorPersistor>(MockBehavior.Strict).Object;
+        var persistor = Mock.Of<IAggregatorPersistor>();
 
         var processor = new AggregatorProcessor(
             registry, scopeAccessor, scopeFactory,
@@ -54,10 +54,15 @@ public class AggregatorProcessor_FlushAfterDispose_Tests
             BuildTypedList: _ => new List<object>(),
             InvokeExecuteAsync: (_, _, _) => Task.CompletedTask);
 
+        // Drives FlushAggregatorAsync after _disposed has been pre-set, asserting the entry
+        // fast-fail throws ODE without inserting a _flushLocks entry. The deeper
+        // recovery branch (TryRemove + Dispose after a disposed-mid-GetOrAdd race)
+        // is correctness-by-inspection — not exercised here, since the synthetic
+        // precondition trips the entry guard before reaching it.
         var task = (Task)flushMethod.Invoke(processor,
             new object?[] { descriptor, null, CancellationToken.None })!;
 
-        await Assert.ThrowsAnyAsync<Exception>(async () => await task);
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await task);
 
         Assert.False(flushLocks.ContainsKey("post-dispose-aggregator"),
             "FlushAggregatorAsync must not install a new _flushLocks entry after Dispose");
