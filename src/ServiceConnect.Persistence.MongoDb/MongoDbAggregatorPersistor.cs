@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
@@ -264,6 +265,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// <summary>
     /// Internal document type for aggregator storage (not constrained by IProcessManagerData).
     /// </summary>
+    [BsonIgnoreExtraElements]
     private class AggregatorDocument
     {
         public Guid Id { get; set; }
