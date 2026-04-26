@@ -16,7 +16,7 @@ namespace ServiceConnect.UnitTests
         private string _name = "";
         public string Name
         {
-            get { System.Threading.Interlocked.Increment(ref GetterCount); return _name; }
+            get { Interlocked.Increment(ref GetterCount); return _name; }
             set => _name = value;
         }
     }
@@ -44,7 +44,7 @@ namespace ServiceConnect.UnitTests
 
             // Inserts deep-clone on store (one getter visit per insert via JSON serialization).
             // Reset so we measure only the work performed by FindDataAsync.
-            CountingProcessManagerData.GetterCount = 0;
+            Interlocked.Exchange(ref CountingProcessManagerData.GetterCount, 0);
 
             var found = await finder.FindDataAsync<IProcessManagerData>(
                 mapper, new Message(targetId), CancellationToken.None);
@@ -52,12 +52,10 @@ namespace ServiceConnect.UnitTests
             Assert.NotNull(found);
             Assert.Equal(targetId, ((CountingProcessManagerData)found!.Data).CorrelationId);
 
-            // Contract: FindDataAsync must not clone every candidate. With the bug, the
-            // counter reaches the partition size (one JSON serialization per candidate).
-            // After the fix, only the matched item is cloned, so the counter stays small.
+            // Post-fix: DeepClone.Clone runs exactly once on the matched item; Newtonsoft visits the Name getter once during serialization. Pre-fix: ~75-100 (one clone per candidate). The tight bound makes a partial regression visible.
             Assert.True(
-                CountingProcessManagerData.GetterCount <= 5,
-                $"Expected at most a handful of getter reads (clone of matched item only), got {CountingProcessManagerData.GetterCount}");
+                CountingProcessManagerData.GetterCount <= 2,
+                $"Expected at most 2 getter reads (clone of matched item only), got {CountingProcessManagerData.GetterCount}");
         }
     }
 }
