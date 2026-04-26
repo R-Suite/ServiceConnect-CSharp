@@ -44,20 +44,27 @@ public static class HandlerScanner
                     assembly.FullName ?? "<unknown>",
                     types.Length,
                     ex.Types.Length,
-                    string.Join(" | ", (ex.LoaderExceptions ?? Array.Empty<Exception?>())
+                    string.Join(" | ", (ex.LoaderExceptions ?? [])
                         .Where(e => e is not null).Select(e => e!.Message)));
             }
 
             foreach (var type in types)
             {
-                if (type.IsAbstract || type.IsInterface || type.IsGenericTypeDefinition) continue;
+                if (type.IsAbstract || type.IsInterface || type.IsGenericTypeDefinition)
+                {
+                    continue;
+                }
 
                 // Scan IMessageHandler<T>
                 foreach (var iface in type.GetInterfaces()
                     .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == messageHandlerType))
                 {
                     var messageType = iface.GetGenericArguments()[0];
-                    if (messageType.IsGenericParameter) continue;
+                    if (messageType.IsGenericParameter)
+                    {
+                        continue;
+                    }
+
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
@@ -70,7 +77,11 @@ public static class HandlerScanner
                     .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == processHandlerType))
                 {
                     var messageType = iface.GetGenericArguments()[1];
-                    if (messageType.IsGenericParameter) continue;
+                    if (messageType.IsGenericParameter)
+                    {
+                        continue;
+                    }
+
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
@@ -83,7 +94,11 @@ public static class HandlerScanner
                     .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == streamHandlerType))
                 {
                     var messageType = iface.GetGenericArguments()[0];
-                    if (messageType.IsGenericParameter) continue;
+                    if (messageType.IsGenericParameter)
+                    {
+                        continue;
+                    }
+
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,

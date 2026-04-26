@@ -40,12 +40,16 @@ internal static class TimeoutHeaderPersistence
         var persistedHeaders = new Dictionary<string, object>(StringComparer.Ordinal);
 
         if (headers is null)
+        {
             return persistedHeaders;
+        }
 
         foreach (var header in headers)
         {
             if (ReservedTimeoutHeaders.Contains(header.Key))
+            {
                 continue;
+            }
 
             persistedHeaders[header.Key] = header.Value;
         }
@@ -60,7 +64,9 @@ internal static class TimeoutHeaderPersistence
         foreach (var header in storedHeaders)
         {
             if (ReservedTimeoutHeaders.Contains(header.Key))
+            {
                 continue;
+            }
 
             var converted = ConvertOutgoingHeaderValue(header.Value);
             if (converted != null)

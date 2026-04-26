@@ -1,4 +1,4 @@
-﻿namespace ServiceConnect.Interfaces;
+namespace ServiceConnect.Interfaces;
 
 /// <summary>
 /// Base contract for persisted process-manager state.

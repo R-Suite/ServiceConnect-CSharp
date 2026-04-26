@@ -12,14 +12,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class AggregatorExceptionTests
+public class AggregatorExceptionTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public AggregatorExceptionTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -71,7 +66,7 @@ public class AggregatorExceptionTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -106,7 +101,10 @@ public class AggregatorExceptionTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

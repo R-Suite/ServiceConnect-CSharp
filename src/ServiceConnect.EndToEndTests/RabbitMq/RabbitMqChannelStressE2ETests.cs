@@ -16,11 +16,9 @@ namespace ServiceConnect.EndToEndTests;
 /// the error queue.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
-public class RabbitMqChannelStressE2ETests
+public class RabbitMqChannelStressE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public RabbitMqChannelStressE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -97,7 +95,11 @@ public class RabbitMqChannelStressE2ETests
             var reached = await TestPolling.WaitUntilAsync(async () =>
             {
                 var msg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
-                if (msg != null) errorCount++;
+                if (msg != null)
+                {
+                    errorCount++;
+                }
+
                 return errorCount >= messageCount;
             }, TimeSpan.FromSeconds(60), TimeSpan.FromMilliseconds(200));
 
@@ -106,7 +108,10 @@ public class RabbitMqChannelStressE2ETests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable ap) await ap.DisposeAsync();
+            if (provider is IAsyncDisposable ap)
+            {
+                await ap.DisposeAsync();
+            }
         }
     }
 }

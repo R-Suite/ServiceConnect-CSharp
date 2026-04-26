@@ -32,7 +32,9 @@ public sealed class FilterPipeline(IPipelineConfiguration config, ConsumeScopeAc
     private async Task<FilterAction> ExecuteFiltersAsync(IReadOnlyList<Type> filterTypes, Envelope envelope, CancellationToken cancellationToken)
     {
         if (filterTypes == null || filterTypes.Count == 0)
+        {
             return FilterAction.Continue;
+        }
 
         var serviceProvider = scopeAccessor.Current;
 
@@ -43,7 +45,9 @@ public sealed class FilterPipeline(IPipelineConfiguration config, ConsumeScopeAc
 
             FilterAction action = await filter.ProcessAsync(envelope, cancellationToken).ConfigureAwait(false);
             if (action == FilterAction.Stop)
+            {
                 return FilterAction.Stop;
+            }
         }
 
         return FilterAction.Continue;

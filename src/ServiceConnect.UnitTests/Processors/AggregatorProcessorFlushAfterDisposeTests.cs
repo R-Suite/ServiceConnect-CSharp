@@ -18,7 +18,7 @@ public class AggregatorProcessorFlushAfterDisposeTests
         var services = new ServiceCollection();
         var provider = services.BuildServiceProvider();
         var registry = new AggregatorRegistry(
-            new List<HandlerReference>(),
+            [],
             provider,
             NullLogger<AggregatorRegistry>.Instance);
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
@@ -60,7 +60,7 @@ public class AggregatorProcessorFlushAfterDisposeTests
         // is correctness-by-inspection — not exercised here, since the synthetic
         // precondition trips the entry guard before reaching it.
         var task = (Task)flushMethod.Invoke(processor,
-            new object?[] { descriptor, null, CancellationToken.None })!;
+            [descriptor, null, CancellationToken.None])!;
 
         await Assert.ThrowsAsync<ObjectDisposedException>(async () => await task);
 

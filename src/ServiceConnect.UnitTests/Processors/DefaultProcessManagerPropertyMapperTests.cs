@@ -120,9 +120,8 @@ file class FakePmData : IProcessManagerData
     public string Customer { get; set; } = "";
 }
 
-file class FakePmMsg : Message
+file class FakePmMsg(Guid c) : Message(c)
 {
-    public FakePmMsg(Guid c) : base(c) { }
     public Guid OrderId { get; set; }
     public string Customer { get; set; } = "";
 }

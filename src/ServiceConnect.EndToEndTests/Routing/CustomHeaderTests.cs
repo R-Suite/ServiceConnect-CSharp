@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class CustomHeaderTests
+public class CustomHeaderTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public CustomHeaderTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -28,8 +23,7 @@ public class CustomHeaderTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(HeaderCaptureHandler),
                 MessageType = typeof(TestMessage)
             }
@@ -61,7 +55,7 @@ public class CustomHeaderTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -87,7 +81,10 @@ public class CustomHeaderTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 
@@ -102,8 +99,7 @@ public class CustomHeaderTests
         // --- Responder bus setup ---
         var responderHandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(HeaderEchoReplyHandler),
                 MessageType = typeof(TestRequest)
             }
@@ -159,7 +155,7 @@ public class CustomHeaderTests
         var requesterBus = requesterProvider.GetRequiredService<IBus>();
         await requesterBus.StartConsumingAsync();
 
-        
+
 
         try
         {
@@ -181,20 +177,25 @@ public class CustomHeaderTests
         finally
         {
             await responderBus.DisposeAsync();
-            if (responderProvider is IAsyncDisposable asyncResponderProvider) await asyncResponderProvider.DisposeAsync();
+            if (responderProvider is IAsyncDisposable asyncResponderProvider)
+            {
+                await asyncResponderProvider.DisposeAsync();
+            }
+
             await requesterBus.DisposeAsync();
-            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider)
+            {
+                await asyncRequesterProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class HeaderCaptureHandler : IMessageHandler<TestMessage>
+file class HeaderCaptureHandler(Action<IReadOnlyDictionary<string, object>> callback) : IMessageHandler<TestMessage>
 {
-    private readonly Action<IReadOnlyDictionary<string, object>> _callback;
+    private readonly Action<IReadOnlyDictionary<string, object>> _callback = callback;
 
     public IConsumeContext Context { get; set; } = null!;
-
-    public HeaderCaptureHandler(Action<IReadOnlyDictionary<string, object>> callback) => _callback = callback;
 
     public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {

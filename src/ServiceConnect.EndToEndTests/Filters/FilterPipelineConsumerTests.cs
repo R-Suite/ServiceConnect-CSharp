@@ -16,12 +16,9 @@ file sealed class ConsumerBlockingFilter : IFilter
     }
 }
 
-file sealed class AfterConsumingSignalFilter : IFilter
+file sealed class AfterConsumingSignalFilter(TaskCompletionSource tcs) : IFilter
 {
-    private readonly TaskCompletionSource _tcs;
-
-    public AfterConsumingSignalFilter(TaskCompletionSource tcs) => _tcs = tcs;
-
+    private readonly TaskCompletionSource _tcs = tcs;
 
     public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
@@ -31,14 +28,9 @@ file sealed class AfterConsumingSignalFilter : IFilter
 }
 
 [Collection(nameof(MessagingCollection))]
-public class FilterPipelineConsumerTests
+public class FilterPipelineConsumerTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public FilterPipelineConsumerTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -82,7 +74,7 @@ public class FilterPipelineConsumerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -99,7 +91,10 @@ public class FilterPipelineConsumerTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 
@@ -148,7 +143,7 @@ public class FilterPipelineConsumerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -165,7 +160,10 @@ public class FilterPipelineConsumerTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

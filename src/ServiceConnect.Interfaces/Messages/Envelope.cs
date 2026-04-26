@@ -1,4 +1,4 @@
-﻿namespace ServiceConnect.Interfaces;
+namespace ServiceConnect.Interfaces;
 
 /// <summary>
 /// Represents a transport envelope containing headers and a raw body payload.

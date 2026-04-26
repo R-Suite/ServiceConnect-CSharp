@@ -22,24 +22,24 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
         var cloned = new JsonSerializerSettings
         {
             // Copy properties that callers commonly set
-            NullValueHandling     = settings?.NullValueHandling     ?? NullValueHandling.Include,
-            DefaultValueHandling  = settings?.DefaultValueHandling  ?? DefaultValueHandling.Include,
+            NullValueHandling = settings?.NullValueHandling ?? NullValueHandling.Include,
+            DefaultValueHandling = settings?.DefaultValueHandling ?? DefaultValueHandling.Include,
             ReferenceLoopHandling = settings?.ReferenceLoopHandling ?? ReferenceLoopHandling.Error,
-            DateFormatHandling    = settings?.DateFormatHandling    ?? DateFormatHandling.IsoDateFormat,
+            DateFormatHandling = settings?.DateFormatHandling ?? DateFormatHandling.IsoDateFormat,
             // RoundtripKind preserves DateTimeKind (Utc/Local/Unspecified) across
             // serialize → deserialize, so timestamps don't silently drift when a
             // message crosses a timezone boundary. Local caused cross-host drift.
-            DateTimeZoneHandling  = settings?.DateTimeZoneHandling  ?? DateTimeZoneHandling.RoundtripKind,
-            Formatting            = settings?.Formatting            ?? Formatting.None,
-            ContractResolver      = settings?.ContractResolver,
-            Converters            = settings?.Converters != null
-                                        ? new System.Collections.Generic.List<JsonConverter>(settings.Converters)
+            DateTimeZoneHandling = settings?.DateTimeZoneHandling ?? DateTimeZoneHandling.RoundtripKind,
+            Formatting = settings?.Formatting ?? Formatting.None,
+            ContractResolver = settings?.ContractResolver,
+            Converters = settings?.Converters != null
+                                        ? [.. settings.Converters]
                                         : new System.Collections.Generic.List<JsonConverter>(),
             // Prevent deserialization gadget attacks via $type metadata
-            TypeNameHandling      = TypeNameHandling.None,
+            TypeNameHandling = TypeNameHandling.None,
         };
 
-        _settings   = cloned;
+        _settings = cloned;
         _serializer = JsonSerializer.Create(cloned);
     }
 
@@ -47,8 +47,10 @@ public sealed class NewtonsoftJsonMessageSerializer : IMessageSerializer
     public byte[] Serialize<T>(T message) where T : Message
     {
         if (message is null)
+        {
             throw new Interfaces.Exceptions.SerializationException(
                 "Cannot serialize null message", typeof(T));
+        }
 
         try
         {

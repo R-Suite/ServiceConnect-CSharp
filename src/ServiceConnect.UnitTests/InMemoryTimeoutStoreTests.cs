@@ -206,6 +206,7 @@ public class InMemoryTimeoutStoreTests
         var time = new FakeTimeProvider(now);
         var store = new InMemoryTimeoutStore("", "", timeProvider: time);
         for (int i = 0; i < 50; i++)
+        {
             await store.InsertTimeoutAsync(new TimeoutData
             {
                 Id = Guid.NewGuid(),
@@ -214,6 +215,7 @@ public class InMemoryTimeoutStoreTests
                 Time = time.GetUtcNow().AddMinutes(-1),
                 Headers = new Dictionary<string, object>(),
             }, CancellationToken.None);
+        }
 
         var batch = await store.GetTimeoutsBatchAsync(batchSize: 10);
 
@@ -227,12 +229,14 @@ public class InMemoryTimeoutStoreTests
         var time = new FakeTimeProvider(now);
         var store = new InMemoryTimeoutStore("", "", timeProvider: time);
         for (int i = 0; i < 5; i++)
+        {
             await store.InsertTimeoutAsync(new TimeoutData
             {
                 Id = Guid.NewGuid(),
                 Time = time.GetUtcNow().AddMinutes(-1),
                 Headers = new Dictionary<string, object>(),
             });
+        }
 
         var batch = await store.GetTimeoutsBatchAsync();
 
@@ -246,12 +250,14 @@ public class InMemoryTimeoutStoreTests
         var time = new FakeTimeProvider(now);
         var store = new InMemoryTimeoutStore("", "", timeProvider: time);
         for (int i = 0; i < 5; i++)
+        {
             await store.InsertTimeoutAsync(new TimeoutData
             {
                 Id = Guid.NewGuid(),
                 Time = time.GetUtcNow().AddMinutes(-1),
                 Headers = new Dictionary<string, object>(),
             });
+        }
 
         var batch = await store.GetTimeoutsBatchAsync(batchSize: 100);
 

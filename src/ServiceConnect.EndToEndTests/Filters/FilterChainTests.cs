@@ -49,16 +49,11 @@ file sealed class ChainSecondFilter : IFilter
 }
 
 [Collection(nameof(MessagingCollection))]
-public class FilterChainTests
+public class FilterChainTests(MessagingFixture fixture)
 {
     internal static readonly ConcurrentQueue<string> ExecutionOrder = new();
 
-    private readonly MessagingFixture _fixture;
-
-    public FilterChainTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -105,7 +100,7 @@ public class FilterChainTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -127,7 +122,10 @@ public class FilterChainTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 
@@ -176,7 +174,7 @@ public class FilterChainTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -196,7 +194,10 @@ public class FilterChainTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

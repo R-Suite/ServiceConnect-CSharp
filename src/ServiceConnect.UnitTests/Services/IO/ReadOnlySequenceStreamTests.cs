@@ -9,7 +9,7 @@ public class ReadOnlySequenceStreamTests
     [Fact]
     public void Read_SingleSegment_ReturnsAllBytes()
     {
-        var seq = new ReadOnlySequence<byte>(new byte[] { 1, 2, 3, 4, 5 });
+        var seq = new ReadOnlySequence<byte>([1, 2, 3, 4, 5]);
         using var stream = new ReadOnlySequenceStream(seq);
         var buffer = new byte[5];
         Assert.Equal(5, stream.Read(buffer, 0, 5));
@@ -29,7 +29,7 @@ public class ReadOnlySequenceStreamTests
     [Fact]
     public void Read_AfterEnd_ReturnsZero()
     {
-        var seq = new ReadOnlySequence<byte>(new byte[] { 1, 2 });
+        var seq = new ReadOnlySequence<byte>([1, 2]);
         using var stream = new ReadOnlySequenceStream(seq);
         var buffer = new byte[2];
         Assert.Equal(2, stream.Read(buffer, 0, 2));

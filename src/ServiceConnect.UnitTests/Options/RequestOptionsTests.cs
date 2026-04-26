@@ -23,7 +23,10 @@ public class RequestOptionsShapeTests
         foreach (var p in typeof(RequestOptions).GetProperties())
         {
             var setter = p.GetSetMethod(nonPublic: true);
-            if (setter is null) continue;
+            if (setter is null)
+            {
+                continue;
+            }
             // init-only setters carry the IsExternalInit modreq.
             Assert.Contains(
                 setter.ReturnParameter.GetRequiredCustomModifiers(),

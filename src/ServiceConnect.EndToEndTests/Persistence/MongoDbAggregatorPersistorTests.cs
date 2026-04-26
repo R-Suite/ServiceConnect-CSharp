@@ -11,14 +11,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class MongoDbAggregatorPersistorTests
+public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PersistenceFixture _fixture = fixture;
 
     private MongoDbAggregatorPersistor CreatePersistor(string collectionName = "TestAggregator", MessageTypeRegistry? registry = null)
     {

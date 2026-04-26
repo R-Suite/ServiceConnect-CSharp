@@ -1,4 +1,4 @@
-﻿namespace ServiceConnect.Interfaces;
+namespace ServiceConnect.Interfaces;
 
 /// <summary>
 /// Carries the raw message data received by the telemetry consume pipeline.
@@ -8,7 +8,7 @@ public sealed class ConsumeEventArgs
     /// <summary>
     /// Gets the raw message body bytes.
     /// </summary>
-    public byte[] Message { get; init; } = Array.Empty<byte>();
+    public byte[] Message { get; init; } = [];
 
     /// <summary>
     /// Gets the message type name taken from transport headers.

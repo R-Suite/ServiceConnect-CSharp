@@ -12,9 +12,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class MongoDbProcessManagerFinderTests
+public class MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
+    private readonly PersistenceFixture _fixture = fixture;
 
     static MongoDbProcessManagerFinderTests()
     {
@@ -36,11 +36,6 @@ public class MongoDbProcessManagerFinderTests
                 cm.SetIsRootClass(true);
             });
         }
-    }
-
-    public MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
-    {
-        _fixture = fixture;
     }
 
     private (MongoDbProcessManagerFinder finder, string connectionString, string dbName) CreateFinder()

@@ -1,4 +1,4 @@
-﻿namespace ServiceConnect.Interfaces;
+namespace ServiceConnect.Interfaces;
 
 /// <summary>
 /// Defines an aggregator that batches related messages before handling them.

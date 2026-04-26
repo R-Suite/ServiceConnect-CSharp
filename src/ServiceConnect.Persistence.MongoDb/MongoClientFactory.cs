@@ -31,8 +31,10 @@ public static class MongoClientFactory
     {
         ArgumentNullException.ThrowIfNull(options);
         if (string.IsNullOrWhiteSpace(options.ConnectionString))
+        {
             throw new InvalidOperationException(
                 "MongoDbPersistenceOptions.ConnectionString is required. Configure via IOptions<MongoDbPersistenceOptions> or builder.");
+        }
 
         // Must register Guid serializer BEFORE any MongoClient reads/writes so data is
         // encoded as UUID subtype 4 (Standard) from the start. Direct callers of this
@@ -71,7 +73,7 @@ public static class MongoClientFactory
         if (!string.IsNullOrEmpty(sslOptions.CertPath))
         {
             var cert = GetOrLoadCertificate(sslOptions.CertPath, sslOptions.CertPassphrase);
-            ssl.ClientCertificates = new[] { cert };
+            ssl.ClientCertificates = [cert];
             ssl.ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0];
         }
 

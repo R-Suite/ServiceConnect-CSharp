@@ -1,23 +1,18 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
-using System.Collections.Concurrent;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(IsolatedCollection))]
-public class PriorityQueueTests
+public class PriorityQueueTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public PriorityQueueTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -51,7 +46,7 @@ public class PriorityQueueTests
         // Set up producer bus (its own queue, only sends)
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        producerServices.AddSingleton<IList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -71,7 +66,7 @@ public class PriorityQueueTests
 
         // Send 6 messages with alternating priorities: 1, 10, 1, 10, 1, 10
         // All messages are queued BEFORE the consumer starts to ensure RabbitMQ priority ordering.
-        int[] sendPriorities = { 1, 10, 1, 10, 1, 10 };
+        int[] sendPriorities = [1, 10, 1, 10, 1, 10];
         for (int i = 0; i < messageCount; i++)
         {
             var msg = new PriorityMessage(Guid.NewGuid())
@@ -85,13 +80,12 @@ public class PriorityQueueTests
             });
         }
 
-        
+
 
         // Set up consumer bus AFTER all messages are queued
         var handlerRefs = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<PriorityMessage>),
                 MessageType = typeof(PriorityMessage)
             }
@@ -105,7 +99,9 @@ public class PriorityQueueTests
             {
                 receivedPriorities.Enqueue(msg.Priority);
                 if (Interlocked.Increment(ref totalReceived) >= messageCount)
+                {
                     allReceived.TrySetResult(true);
+                }
             }));
 
         consumerServices.AddServiceConnect(builder =>
@@ -148,8 +144,15 @@ public class PriorityQueueTests
         {
             await consumerBus.DisposeAsync();
             await producerBus.DisposeAsync();
-            if (consumerProvider is IAsyncDisposable asyncConsumerProvider) await asyncConsumerProvider.DisposeAsync();
-            if (producerProvider is IAsyncDisposable asyncProducerProvider) await asyncProducerProvider.DisposeAsync();
+            if (consumerProvider is IAsyncDisposable asyncConsumerProvider)
+            {
+                await asyncConsumerProvider.DisposeAsync();
+            }
+
+            if (producerProvider is IAsyncDisposable asyncProducerProvider)
+            {
+                await asyncProducerProvider.DisposeAsync();
+            }
         }
     }
 }

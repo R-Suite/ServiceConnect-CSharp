@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class ConsumerCountE2ETests
+public class ConsumerCountE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ConsumerCountE2ETests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -68,7 +63,7 @@ public class ConsumerCountE2ETests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -87,34 +82,27 @@ public class ConsumerCountE2ETests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
+
             countdown.Dispose();
         }
     }
 }
 
-file class ConsumerCountHandlerState
+file class ConsumerCountHandlerState(ConcurrentBag<int> threadIds, CountdownEvent countdown)
 {
-    public readonly ConcurrentBag<int> ThreadIds;
-    public readonly CountdownEvent Countdown;
-
-    public ConsumerCountHandlerState(ConcurrentBag<int> threadIds, CountdownEvent countdown)
-    {
-        ThreadIds = threadIds;
-        Countdown = countdown;
-    }
+    public readonly ConcurrentBag<int> ThreadIds = threadIds;
+    public readonly CountdownEvent Countdown = countdown;
 }
 
-file class ConsumerCountHandler : IMessageHandler<TestMessage>
+file class ConsumerCountHandler(ConsumerCountHandlerState state) : IMessageHandler<TestMessage>
 {
-    private readonly ConsumerCountHandlerState _state;
+    private readonly ConsumerCountHandlerState _state = state;
 
     public IConsumeContext Context { get; set; } = null!;
-
-    public ConsumerCountHandler(ConsumerCountHandlerState state)
-    {
-        _state = state;
-    }
 
     public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {

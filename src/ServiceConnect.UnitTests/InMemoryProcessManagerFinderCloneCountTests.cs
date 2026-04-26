@@ -5,57 +5,60 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
-namespace ServiceConnect.UnitTests
+namespace ServiceConnect.UnitTests;
+
+public class CountingProcessManagerData : IProcessManagerData
 {
-    public class CountingProcessManagerData : IProcessManagerData
+    public static int GetterCount;
+
+    public Guid CorrelationId { get; set; }
+
+    private string _name = "";
+    public string Name
     {
-        public static int GetterCount;
-
-        public Guid CorrelationId { get; set; }
-
-        private string _name = "";
-        public string Name
-        {
-            get { Interlocked.Increment(ref GetterCount); return _name; }
-            set => _name = value;
-        }
+        get { Interlocked.Increment(ref GetterCount); return _name; }
+        set => _name = value;
     }
+}
 
-    public class InMemoryProcessManagerFinderCloneCountTests
+public class InMemoryProcessManagerFinderCloneCountTests
+{
+    [Fact]
+    public async Task FindDataAsync_ClonesOnlyMatchedItem_NotEveryCandidate()
     {
-        [Fact]
-        public async Task FindDataAsync_ClonesOnlyMatchedItem_NotEveryCandidate()
-        {
-            IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
-            const int partitionSize = 100;
-            Guid targetId = Guid.Empty;
-            for (int i = 0; i < partitionSize; i++)
+        const int partitionSize = 100;
+        Guid targetId = Guid.Empty;
+        for (int i = 0; i < partitionSize; i++)
+        {
+            var id = Guid.NewGuid();
+            if (i == 42)
             {
-                var id = Guid.NewGuid();
-                if (i == 42) targetId = id;
-                await finder.InsertDataAsync(
-                    new CountingProcessManagerData { CorrelationId = id, Name = $"item-{i}" },
-                    CancellationToken.None);
+                targetId = id;
             }
 
-            var mapper = new TestProcessManagerPropertyMapper();
-            mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
-
-            // Inserts deep-clone on store (one getter visit per insert via JSON serialization).
-            // Reset so we measure only the work performed by FindDataAsync.
-            Interlocked.Exchange(ref CountingProcessManagerData.GetterCount, 0);
-
-            var found = await finder.FindDataAsync<IProcessManagerData>(
-                mapper, new Message(targetId), CancellationToken.None);
-
-            Assert.NotNull(found);
-            Assert.Equal(targetId, ((CountingProcessManagerData)found!.Data).CorrelationId);
-
-            // Post-fix: DeepClone.Clone runs exactly once on the matched item; Newtonsoft visits the Name getter once during serialization. Pre-fix: ~75-100 (one clone per candidate). The tight bound makes a partial regression visible.
-            Assert.True(
-                CountingProcessManagerData.GetterCount <= 2,
-                $"Expected at most 2 getter reads (clone of matched item only), got {CountingProcessManagerData.GetterCount}");
+            await finder.InsertDataAsync(
+                new CountingProcessManagerData { CorrelationId = id, Name = $"item-{i}" },
+                CancellationToken.None);
         }
+
+        var mapper = new TestProcessManagerPropertyMapper();
+        mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
+
+        // Inserts deep-clone on store (one getter visit per insert via JSON serialization).
+        // Reset so we measure only the work performed by FindDataAsync.
+        Interlocked.Exchange(ref CountingProcessManagerData.GetterCount, 0);
+
+        var found = await finder.FindDataAsync<IProcessManagerData>(
+            mapper, new Message(targetId), CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Equal(targetId, ((CountingProcessManagerData)found!.Data).CorrelationId);
+
+        // Post-fix: DeepClone.Clone runs exactly once on the matched item; Newtonsoft visits the Name getter once during serialization. Pre-fix: ~75-100 (one clone per candidate). The tight bound makes a partial regression visible.
+        Assert.True(
+            CountingProcessManagerData.GetterCount <= 2,
+            $"Expected at most 2 getter reads (clone of matched item only), got {CountingProcessManagerData.GetterCount}");
     }
 }

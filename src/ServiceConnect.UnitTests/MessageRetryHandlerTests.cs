@@ -21,7 +21,7 @@ public class MessageRetryHandlerTests
             exchange: "",
             routingKey: "q",
             properties: props,
-            body: body ?? new byte[] { 1, 2, 3 });
+            body: body ?? [1, 2, 3]);
     }
 
     [Fact]

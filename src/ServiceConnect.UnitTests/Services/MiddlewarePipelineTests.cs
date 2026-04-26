@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -7,7 +8,6 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
-using System.Text;
 
 namespace ServiceConnect.UnitTests.Services;
 
@@ -18,14 +18,9 @@ file class TestMiddlewareMessage : Message
 
 #region Send middleware test types
 
-file class RecordingSendMiddleware : ISendMessageMiddleware
+file class RecordingSendMiddleware(List<string> log) : ISendMessageMiddleware
 {
-    private readonly List<string> _log;
-
-    public RecordingSendMiddleware(List<string> log)
-    {
-        _log = log;
-    }
+    private readonly List<string> _log = log;
 
     public async Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
@@ -48,14 +43,9 @@ file class ShortCircuitSendMiddleware : ISendMessageMiddleware
 
 #region Processing middleware test types
 
-file class RecordingProcessingMiddleware : IMessageProcessingMiddleware
+file class RecordingProcessingMiddleware(List<string> log) : IMessageProcessingMiddleware
 {
-    private readonly List<string> _log;
-
-    public RecordingProcessingMiddleware(List<string> log)
-    {
-        _log = log;
-    }
+    private readonly List<string> _log = log;
 
     public async Task<ConsumeEventResult> Process(ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
@@ -105,7 +95,7 @@ public class SendMiddlewarePipelineTests
 
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
         mockPipelineConfig.Setup(p => p.SendMessageMiddleware)
-            .Returns(new List<Type> { typeof(RecordingSendMiddleware) });
+            .Returns([typeof(RecordingSendMiddleware)]);
 
         _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
             .Returns(() => { log.Add("producer"); return Task.CompletedTask; });
@@ -113,7 +103,7 @@ public class SendMiddlewarePipelineTests
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), new byte[] { 1 }, new Dictionary<string, string>());
+        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1], []);
 
         // Assert
         Assert.Equal(new[] { "before", "producer", "after" }, log);
@@ -124,13 +114,13 @@ public class SendMiddlewarePipelineTests
     {
         // Arrange
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
-        mockPipelineConfig.Setup(p => p.SendMessageMiddleware).Returns(new List<Type>());
+        mockPipelineConfig.Setup(p => p.SendMessageMiddleware).Returns([]);
         var sp = new ServiceCollection().BuildServiceProvider();
 
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), new byte[] { 1 }, new Dictionary<string, string>());
+        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1], []);
 
         // Assert
         _mockProducer.Verify(p => p.PublishAsync(typeof(string), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
@@ -146,12 +136,12 @@ public class SendMiddlewarePipelineTests
 
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
         mockPipelineConfig.Setup(p => p.SendMessageMiddleware)
-            .Returns(new List<Type> { typeof(ShortCircuitSendMiddleware) });
+            .Returns([typeof(ShortCircuitSendMiddleware)]);
 
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), new byte[] { 1 }, new Dictionary<string, string>());
+        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1], []);
 
         // Assert
         _mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Never);
@@ -191,7 +181,7 @@ public class ProcessingMiddlewarePipelineTests
 
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
         mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware)
-            .Returns(new List<Type> { typeof(RecordingProcessingMiddleware) });
+            .Returns([typeof(RecordingProcessingMiddleware)]);
 
         var mockProcessor = new Mock<IMessageProcessor>();
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
@@ -207,7 +197,7 @@ public class ProcessingMiddlewarePipelineTests
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
-            new List<IMessageProcessor> { mockProcessor.Object },
+            [mockProcessor.Object],
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             mockPipelineConfig.Object,
@@ -235,7 +225,7 @@ public class ProcessingMiddlewarePipelineTests
 
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
         mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware)
-            .Returns(new List<Type> { typeof(ShortCircuitProcessingMiddleware) });
+            .Returns([typeof(ShortCircuitProcessingMiddleware)]);
 
         var mockProcessor = new Mock<IMessageProcessor>();
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
@@ -248,7 +238,7 @@ public class ProcessingMiddlewarePipelineTests
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
-            new List<IMessageProcessor> { mockProcessor.Object },
+            [mockProcessor.Object],
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             mockPipelineConfig.Object,

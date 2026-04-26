@@ -1,4 +1,4 @@
-﻿namespace ServiceConnect.Interfaces;
+namespace ServiceConnect.Interfaces;
 
 /// <summary>
 /// Base event payload for outgoing publish and send telemetry.

@@ -8,14 +8,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class MongoDbTimeoutStoreFacetTests
+public class MongoDbTimeoutStoreFacetTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public MongoDbTimeoutStoreFacetTests(PersistenceFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]

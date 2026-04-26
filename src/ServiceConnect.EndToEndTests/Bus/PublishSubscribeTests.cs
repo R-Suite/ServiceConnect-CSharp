@@ -7,13 +7,11 @@ using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
-public class CallbackHandler<T> : IMessageHandler<T> where T : Message
+public class CallbackHandler<T>(Action<T> callback) : IMessageHandler<T> where T : Message
 {
-    private readonly Action<T> _callback;
+    private readonly Action<T> _callback = callback;
 
     public IConsumeContext Context { get; set; } = null!;
-
-    public CallbackHandler(Action<T> callback) => _callback = callback;
 
     public Task HandleAsync(T message, CancellationToken cancellationToken = default)
     {
@@ -23,14 +21,9 @@ public class CallbackHandler<T> : IMessageHandler<T> where T : Message
 }
 
 [Collection(nameof(MessagingCollection))]
-public class PublishSubscribeTests
+public class PublishSubscribeTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public PublishSubscribeTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -42,8 +35,7 @@ public class PublishSubscribeTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(TestMessage)
             }
@@ -100,7 +92,10 @@ public class PublishSubscribeTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

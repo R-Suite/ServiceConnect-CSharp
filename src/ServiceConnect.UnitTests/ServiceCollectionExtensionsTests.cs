@@ -1,7 +1,7 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Reflection;
 using ServiceConnect;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
@@ -310,7 +310,7 @@ public class ServiceCollectionExtensionsTests
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
         var handlerRef = new HandlerReference { MessageType = messageType, HandlerType = handlerType };
-        method!.Invoke(null, new object[] { services, handlerRef });
+        method!.Invoke(null, [services, handlerRef]);
     }
 
     [Fact]

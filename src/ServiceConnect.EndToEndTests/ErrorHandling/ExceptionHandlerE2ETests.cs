@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class ExceptionHandlerE2ETests
+public class ExceptionHandlerE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ExceptionHandlerE2ETests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -71,7 +66,7 @@ public class ExceptionHandlerE2ETests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -100,7 +95,10 @@ public class ExceptionHandlerE2ETests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

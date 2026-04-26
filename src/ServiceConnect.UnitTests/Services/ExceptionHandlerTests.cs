@@ -41,7 +41,7 @@ public class ExceptionHandlerTests
     private MessageDispatcher CreateDispatcher(IList<IMessageProcessor> processors)
     {
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
-        mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware).Returns(new List<Type>());
+        mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware).Returns([]);
         var sp = new ServiceCollection().BuildServiceProvider();
         var registry = new MessageTypeRegistry();
         registry.Register(typeof(FakeMessage1));
@@ -80,7 +80,7 @@ public class ExceptionHandlerTests
         var message = new FakeMessage1(Guid.NewGuid());
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
-        var dispatcher = CreateDispatcher(new List<IMessageProcessor> { mockProcessor.Object });
+        var dispatcher = CreateDispatcher([mockProcessor.Object]);
         var headers = MakeHeaders();
 
         // Act
@@ -112,7 +112,7 @@ public class ExceptionHandlerTests
         var message = new FakeMessage1(Guid.NewGuid());
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
-        var dispatcher = CreateDispatcher(new List<IMessageProcessor> { mockProcessor.Object });
+        var dispatcher = CreateDispatcher([mockProcessor.Object]);
         var headers = MakeHeaders();
 
         // Act
@@ -143,7 +143,7 @@ public class ExceptionHandlerTests
         var message = new FakeMessage1(Guid.NewGuid());
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
 
-        var dispatcher = CreateDispatcher(new List<IMessageProcessor> { mockProcessor.Object });
+        var dispatcher = CreateDispatcher([mockProcessor.Object]);
         var headers = MakeHeaders();
 
         // Act — should not throw even though ExceptionHandler throws

@@ -45,7 +45,9 @@ public sealed class QueueConfiguration : IQueueConfiguration
     {
         ArgumentNullException.ThrowIfNull(messageType);
         if (string.IsNullOrWhiteSpace(queue))
+        {
             throw new ArgumentException("Queue must be a non-empty string.", nameof(queue));
+        }
 
         string key = GetMappingKey(messageType);
         _queueMappings.AddOrUpdate(
@@ -65,8 +67,10 @@ public sealed class QueueConfiguration : IQueueConfiguration
         for (int i = 0; i < queues.Count; i++)
         {
             if (string.IsNullOrWhiteSpace(queues[i]))
+            {
                 throw new ArgumentException(
                     $"Queue at index {i} must be a non-empty string.", nameof(queues));
+            }
         }
 
         string key = GetMappingKey(messageType);
@@ -93,14 +97,13 @@ public sealed class QueueConfiguration : IQueueConfiguration
             queues = entry.List;
             return true;
         }
-        queues = Array.Empty<string>();
+        queues = [];
         return false;
     }
 
-    private sealed class QueueMappingsView : IReadOnlyDictionary<string, IReadOnlyList<string>>
+    private sealed class QueueMappingsView(ConcurrentDictionary<string, QueueConfiguration.QueueMappingEntry> source) : IReadOnlyDictionary<string, IReadOnlyList<string>>
     {
-        private readonly ConcurrentDictionary<string, QueueMappingEntry> _source;
-        public QueueMappingsView(ConcurrentDictionary<string, QueueMappingEntry> source) => _source = source;
+        private readonly ConcurrentDictionary<string, QueueMappingEntry> _source = source;
 
         public IReadOnlyList<string> this[string key] => _source[key].List;
         public IEnumerable<string> Keys => _source.Keys;
@@ -114,13 +117,15 @@ public sealed class QueueConfiguration : IQueueConfiguration
                 value = entry.List;
                 return true;
             }
-            value = Array.Empty<string>();
+            value = [];
             return false;
         }
         public IEnumerator<KeyValuePair<string, IReadOnlyList<string>>> GetEnumerator()
         {
             foreach (var kvp in _source)
+            {
                 yield return new KeyValuePair<string, IReadOnlyList<string>>(kvp.Key, kvp.Value.List);
+            }
         }
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
@@ -133,7 +138,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
             Contains(queue) ? this : new QueueMappingEntry(List.Add(queue), Set.Add(queue));
 
         public static QueueMappingEntry Create(string queue) =>
-            new([queue], ImmutableHashSet.Create(queue));
+            new([queue], [queue]);
 
         public static QueueMappingEntry Create(IEnumerable<string> queues)
         {
@@ -143,7 +148,9 @@ public sealed class QueueConfiguration : IQueueConfiguration
             foreach (var queue in queues)
             {
                 if (set.Contains(queue))
+                {
                     continue;
+                }
 
                 list = list.Add(queue);
                 set = set.Add(queue);

@@ -26,10 +26,15 @@ internal sealed class ProcessManagerProcessor(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (message == null) return ProcessResult.NotHandled;
+        if (message == null)
+        {
+            return ProcessResult.NotHandled;
+        }
 
         if (!registry.TryGet(messageType, out var descriptor))
+        {
             return ProcessResult.NotHandled;
+        }
 
         var scope = scopeAccessor.Current;
 

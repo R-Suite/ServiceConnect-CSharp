@@ -82,7 +82,7 @@ public class ProducerRetryTests
             return Task.CompletedTask;
         };
 
-        await producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 });
+        await producer.PublishAsync(typeof(object), [1, 2, 3]);
 
         firstChannel.Verify(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -125,7 +125,7 @@ public class ProducerRetryTests
         };
 
         var ex = await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken));
+            producer.PublishAsync(typeof(object), [1, 2, 3], cancellationToken: cancellationToken));
 
         Assert.Equal(cancellationToken, ex.CancellationToken);
         Assert.Equal(0, reconnectCalls);
@@ -163,7 +163,7 @@ public class ProducerRetryTests
             await Task.Delay(Timeout.InfiniteTimeSpan, reconnectToken);
         };
 
-        var publishTask = producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken);
+        var publishTask = producer.PublishAsync(typeof(object), [1, 2, 3], cancellationToken: cancellationToken);
 
         await reconnectStarted.Task;
         cancellationSource.Cancel();
@@ -190,7 +190,7 @@ public class ProducerRetryTests
 
         try
         {
-            var publishTask = producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken);
+            var publishTask = producer.PublishAsync(typeof(object), [1, 2, 3], cancellationToken: cancellationToken);
 
             cancellationSource.Cancel();
 
@@ -243,7 +243,7 @@ public class ProducerRetryTests
             return Task.FromResult(connectionAttempts == 1 ? firstConnection.Object : secondConnection.Object);
         };
 
-        await producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }).WaitAsync(TimeSpan.FromSeconds(1));
+        await producer.PublishAsync(typeof(object), [1, 2, 3]).WaitAsync(TimeSpan.FromSeconds(1));
 
         Assert.Equal(2, connectionAttempts);
         firstConnection.Verify(c => c.CloseAsync(
@@ -283,7 +283,7 @@ public class ProducerRetryTests
         };
 
         var ex = await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken));
+            producer.PublishAsync(typeof(object), [1, 2, 3], cancellationToken: cancellationToken));
 
         Assert.Equal(cancellationToken, ex.CancellationToken);
         Assert.Null(GetField<IConnection?>(producer, "_connection"));
@@ -318,7 +318,7 @@ public class ProducerRetryTests
             return Task.FromResult(connection.Object);
         };
 
-        var publishTask = producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken);
+        var publishTask = producer.PublishAsync(typeof(object), [1, 2, 3], cancellationToken: cancellationToken);
 
         await createChannelStarted.Task;
         cancellationSource.Cancel();
@@ -365,7 +365,7 @@ public class ProducerRetryTests
             return Task.CompletedTask;
         };
 
-        await producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 });
+        await producer.PublishAsync(typeof(object), [1, 2, 3]);
 
         secondChannel.Verify(c => c.ExchangeDeclareAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(),
@@ -402,7 +402,7 @@ public class ProducerRetryTests
         };
 
         var ex = await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken));
+            producer.PublishAsync(typeof(object), [1, 2, 3], cancellationToken: cancellationToken));
 
         Assert.Equal(cancellationToken, ex.CancellationToken);
         Assert.Equal(0, reconnectCalls);
@@ -449,7 +449,7 @@ public class ProducerRetryTests
             return Task.FromResult(connectionAttempts == 1 ? firstConnection.Object : secondConnection.Object);
         };
 
-        await producer.SendAsync("target-endpoint", typeof(object), new byte[] { 1, 2, 3 })
+        await producer.SendAsync("target-endpoint", typeof(object), [1, 2, 3])
             .WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.Equal(2, connectionAttempts);
@@ -489,7 +489,7 @@ public class ProducerRetryTests
             return Task.CompletedTask;
         };
 
-        await producer.SendAsync("endpoint", typeof(object), new byte[] { 1, 2, 3 });
+        await producer.SendAsync("endpoint", typeof(object), [1, 2, 3]);
 
         secondChannel.Verify(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),

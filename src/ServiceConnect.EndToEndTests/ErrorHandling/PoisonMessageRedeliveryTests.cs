@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class PoisonMessageRedeliveryTests
+public class PoisonMessageRedeliveryTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public PoisonMessageRedeliveryTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -137,7 +132,10 @@ public class PoisonMessageRedeliveryTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

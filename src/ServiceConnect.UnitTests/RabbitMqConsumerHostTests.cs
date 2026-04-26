@@ -76,8 +76,16 @@ public class RabbitMqConsumerHostTests
         cfg.SetupGet(c => c.PrefetchCount).Returns(prefetch);
         cfg.SetupProperty(c => c.GracefulShutdownTimeoutMilliseconds, gracefulShutdownTimeoutMs ?? 5000);
         var settings = new Dictionary<string, object>();
-        if (autoDelete) settings[RabbitMQSettingKeys.AutoDelete] = true;
-        if (disablePrefetch) settings[RabbitMQSettingKeys.DisablePrefetch] = true;
+        if (autoDelete)
+        {
+            settings[RabbitMQSettingKeys.AutoDelete] = true;
+        }
+
+        if (disablePrefetch)
+        {
+            settings[RabbitMQSettingKeys.DisablePrefetch] = true;
+        }
+
         cfg.SetupGet(c => c.ClientSettings).Returns(settings);
         return cfg;
     }
@@ -237,11 +245,11 @@ public class RabbitMqConsumerHostTests
         var audit = new MessageAuditPublisher(qcfg.Object);
 
         CancellationToken observed = new CancellationToken(canceled: true);
-        ConsumerEventHandler handler = (body, type, headers, ct) =>
+        Task<ConsumeEventResult> handler(ReadOnlyMemory<byte> body, string type, IDictionary<string, object> headers, CancellationToken ct)
         {
             observed = ct;
             return Task.FromResult(new ConsumeEventResult { Success = true });
-        };
+        }
 
         var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
 
@@ -251,7 +259,7 @@ public class RabbitMqConsumerHostTests
         // Simulate the startup scope ending — caller cancels its startup CT.
         startupCts.Cancel();
 
-        await DeliverMessageAsync(host, new byte[] { 1 }, new Dictionary<string, object>
+        await DeliverMessageAsync(host, [1], new Dictionary<string, object>
         {
             [HeaderKeys.TypeName] = System.Text.Encoding.UTF8.GetBytes(typeof(object).FullName!),
         });
@@ -1011,13 +1019,19 @@ public class RabbitMqConsumerHostTests
         // Retrieve the private _consumer field via reflection.
         var consumerField = typeof(RabbitMqConsumerHost)
             .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var consumer = consumerField?.GetValue(host) as global::RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
-        if (consumer == null) throw new InvalidOperationException("_consumer field not found or host not started.");
+        if (consumerField?.GetValue(host) is not global::RabbitMQ.Client.Events.AsyncEventingBasicConsumer consumer)
+        {
+            throw new InvalidOperationException("_consumer field not found or host not started.");
+        }
 
         var props = new global::RabbitMQ.Client.BasicProperties();
         if (headers != null)
+        {
             foreach (var kvp in headers)
+            {
                 (props.Headers ??= new Dictionary<string, object?>())[kvp.Key] = kvp.Value;
+            }
+        }
 
         await consumer.HandleBasicDeliverAsync(
             consumerTag: "tag",
@@ -1106,7 +1120,9 @@ public class RabbitMqConsumerHostTests
         // Build a headers dict with more than DefaultMaxHeaderCount (64) entries.
         var tooManyHeaders = new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" };
         for (int i = 0; i < 65; i++)
+        {
             tooManyHeaders[$"X-Excess-{i}"] = "v";
+        }
 
         await DeliverMessageAsync(host, new byte[1], tooManyHeaders);
 
@@ -1174,7 +1190,7 @@ public class RabbitMqConsumerHostTests
             },
             "q");
 
-        await DeliverMessageAsync(host, new byte[] { 1, 2, 3 }, headers: null);
+        await DeliverMessageAsync(host, [1, 2, 3], headers: null);
 
         Assert.False(handlerInvoked);
         publishChannel.Verify(c => c.BasicPublishAsync(
@@ -1349,7 +1365,7 @@ public class RabbitMqConsumerHostTests
             "q");
 
         // TypeName key is present but value is null — simulates non-.NET client omitting the value.
-        await DeliverMessageAsync(host, new byte[] { 1, 2, 3 },
+        await DeliverMessageAsync(host, [1, 2, 3],
             new Dictionary<string, object> { [HeaderKeys.TypeName] = null! });
 
         Assert.False(handlerInvoked, "Handler must not be invoked when TypeName value is null.");
@@ -1388,7 +1404,7 @@ public class RabbitMqConsumerHostTests
             },
             "q");
 
-        await DeliverMessageAsync(host, new byte[] { 1, 2, 3 },
+        await DeliverMessageAsync(host, [1, 2, 3],
             new Dictionary<string, object> { [HeaderKeys.FullTypeName] = null! });
 
         Assert.False(handlerInvoked, "Handler must not be invoked when FullTypeName value is null.");
@@ -1453,7 +1469,9 @@ public class RabbitMqConsumerHostTests
         {
             if (level >= Microsoft.Extensions.Logging.LogLevel.Warning
                 && message.Contains("shutdown", StringComparison.OrdinalIgnoreCase))
+            {
                 shutdownObserved.TrySetResult(true);
+            }
         });
         var retry = new MessageRetryHandler(3, "err", testLogger);
         var audit = new MessageAuditPublisher(qcfg.Object);
@@ -1494,7 +1512,9 @@ public class RabbitMqConsumerHostTests
         {
             if (level >= Microsoft.Extensions.Logging.LogLevel.Warning
                 && message.Contains("shutdown", StringComparison.OrdinalIgnoreCase))
+            {
                 shutdownObserved.TrySetResult(true);
+            }
         });
         var retry = new MessageRetryHandler(3, "err", testLogger);
         var audit = new MessageAuditPublisher(qcfg.Object);
@@ -1539,8 +1559,8 @@ public class RabbitMqConsumerHostTests
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "test-queue");
 
-        Assert.Throws<ObjectDisposedException>(() => initialDeliveryCts.Cancel());
-        Assert.Throws<ObjectDisposedException>(() => initialShutdownCts.Cancel());
+        Assert.Throws<ObjectDisposedException>(initialDeliveryCts.Cancel);
+        Assert.Throws<ObjectDisposedException>(initialShutdownCts.Cancel);
 
         await host.DisposeAsync();
     }

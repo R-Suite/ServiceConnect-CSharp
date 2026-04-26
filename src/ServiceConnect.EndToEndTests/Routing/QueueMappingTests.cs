@@ -8,10 +8,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class QueueMappingTests
+public class QueueMappingTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-    public QueueMappingTests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -48,7 +47,7 @@ public class QueueMappingTests
         // Sender with QueueMapping configured (no explicit endpoint)
         var senderServices = new ServiceCollection();
         senderServices.AddLogging();
-        senderServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        senderServices.AddSingleton<IList<HandlerReference>>([]);
         senderServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -67,7 +66,7 @@ public class QueueMappingTests
         var senderProvider = senderServices.BuildServiceProvider();
         var senderBus = senderProvider.GetRequiredService<IBus>();
 
-        
+
 
         try
         {
@@ -82,8 +81,15 @@ public class QueueMappingTests
         }
         finally
         {
-            await consumerBus.DisposeAsync(); if (consumerProvider is IAsyncDisposable asyncConsumerProvider) await asyncConsumerProvider.DisposeAsync();
-            await senderBus.DisposeAsync(); if (senderProvider is IAsyncDisposable asyncSenderProvider) await asyncSenderProvider.DisposeAsync();
+            await consumerBus.DisposeAsync(); if (consumerProvider is IAsyncDisposable asyncConsumerProvider)
+            {
+                await asyncConsumerProvider.DisposeAsync();
+            }
+
+            await senderBus.DisposeAsync(); if (senderProvider is IAsyncDisposable asyncSenderProvider)
+            {
+                await asyncSenderProvider.DisposeAsync();
+            }
         }
     }
 }

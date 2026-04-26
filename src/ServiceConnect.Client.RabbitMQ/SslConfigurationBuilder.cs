@@ -16,7 +16,9 @@ public static class SslConfigurationBuilder
     public static SslOption BuildSslOptions(ITransportConfiguration transportSettings)
     {
         if (string.IsNullOrWhiteSpace(transportSettings.ServerName))
+        {
             throw new ArgumentException("ServerName is required when SSL is enabled. Configure ITransportConfiguration.ServerName.", nameof(transportSettings));
+        }
 
         var sslOption = new SslOption
         {
@@ -31,7 +33,9 @@ public static class SslConfigurationBuilder
         };
 
         if (transportSettings.CertificateValidationCallback != null)
+        {
             sslOption.CertificateValidationCallback = transportSettings.CertificateValidationCallback;
+        }
 
         return sslOption;
     }

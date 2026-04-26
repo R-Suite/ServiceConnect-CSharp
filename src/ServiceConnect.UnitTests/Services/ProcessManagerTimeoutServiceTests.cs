@@ -1,10 +1,10 @@
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
-using System.Reflection;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Services;
@@ -56,8 +56,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -67,7 +67,7 @@ public class ProcessManagerTimeoutServiceTests
                     Headers = new Dictionary<string, object>(),
                     Locked = false
                 }
-            },
+            ],
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -97,8 +97,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -107,7 +107,7 @@ public class ProcessManagerTimeoutServiceTests
                     Time = DateTimeOffset.UtcNow.AddMinutes(-1),
                     Headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 3 }
                 }
-            },
+            ],
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -166,8 +166,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -179,7 +179,7 @@ public class ProcessManagerTimeoutServiceTests
                         [HeaderKeys.RetryCount] = "3"
                     }
                 }
-            },
+            ],
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -206,7 +206,9 @@ public class ProcessManagerTimeoutServiceTests
         Assert.Equal("3", outgoingHeaders[HeaderKeys.RetryCount]);
 
         foreach (var reservedHeader in reservedHeaders.Keys)
+        {
             Assert.DoesNotContain(reservedHeader, outgoingHeaders.Keys);
+        }
     }
 
     [Fact]
@@ -217,8 +219,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -231,7 +233,7 @@ public class ProcessManagerTimeoutServiceTests
                         ["Unsupported"] = new object()
                     }
                 }
-            },
+            ],
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -263,8 +265,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -276,7 +278,7 @@ public class ProcessManagerTimeoutServiceTests
                     LockedBy = Guid.NewGuid(),
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
-            },
+            ],
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -304,8 +306,8 @@ public class ProcessManagerTimeoutServiceTests
         var store = new Mock<ITimeoutStore>();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -317,7 +319,7 @@ public class ProcessManagerTimeoutServiceTests
                     LockedBy = lockOwner,
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
-            },
+            ],
         };
 
         store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -346,8 +348,8 @@ public class ProcessManagerTimeoutServiceTests
         var store = new Mock<ITimeoutStore>();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -359,7 +361,7 @@ public class ProcessManagerTimeoutServiceTests
                     LockedBy = Guid.Empty,
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
-            },
+            ],
         };
 
         store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -389,8 +391,8 @@ public class ProcessManagerTimeoutServiceTests
         var store = new Mock<ITimeoutStore>();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -402,7 +404,7 @@ public class ProcessManagerTimeoutServiceTests
                     LockedBy = lockOwner,
                     LockExpiresAt = DateTimeOffset.UtcNow.AddMinutes(1)
                 }
-            },
+            ],
         };
 
         store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -449,8 +451,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -459,7 +461,7 @@ public class ProcessManagerTimeoutServiceTests
                     Time = DateTimeOffset.UtcNow.AddMinutes(-1),
                     Headers = new Dictionary<string, object>(),
                 }
-            },
+            ],
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
@@ -486,8 +488,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -496,7 +498,7 @@ public class ProcessManagerTimeoutServiceTests
                     Time = DateTimeOffset.UtcNow.AddMinutes(-1),
                     Headers = new Dictionary<string, object>()
                 }
-            },
+            ],
         };
 
         using var cts = new CancellationTokenSource();
@@ -505,7 +507,7 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<TimeoutMessage>(),
                 It.IsAny<SendOptions>(),
                 It.IsAny<CancellationToken>()))
-            .Callback(() => cts.Cancel())
+            .Callback(cts.Cancel)
             .Returns(Task.CompletedTask);
 
         CancellationToken removeToken = default;
@@ -528,8 +530,8 @@ public class ProcessManagerTimeoutServiceTests
         var timeoutId = Guid.NewGuid();
         var batch = new TimeoutsBatch
         {
-            DueTimeouts = new List<TimeoutData>
-            {
+            DueTimeouts =
+            [
                 new TimeoutData
                 {
                     Id = timeoutId,
@@ -538,7 +540,7 @@ public class ProcessManagerTimeoutServiceTests
                     Time = DateTimeOffset.UtcNow.AddMinutes(-1),
                     Headers = new Dictionary<string, object>(),
                 }
-            },
+            ],
         };
 
         _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);

@@ -16,11 +16,9 @@ namespace ServiceConnect.EndToEndTests;
 /// silently lost to a version conflict — the loser must reload, re-apply, and commit.
 /// </summary>
 [Collection(nameof(PersistenceCollection))]
-public class ProcessManagerConcurrencyE2ETests
+public class ProcessManagerConcurrencyE2ETests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public ProcessManagerConcurrencyE2ETests(PersistenceFixture fixture) => _fixture = fixture;
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -108,7 +106,10 @@ public class ProcessManagerConcurrencyE2ETests
         {
             gate.Set(); // safety
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable ap) await ap.DisposeAsync();
+            if (provider is IAsyncDisposable ap)
+            {
+                await ap.DisposeAsync();
+            }
         }
     }
 }
@@ -119,19 +120,13 @@ file class ConcurrentCounterData : IProcessManagerData
     public int Counter { get; set; }
 }
 
-file class ConcurrentIncrementHandler : IProcessHandler<ConcurrentCounterData, TestMessage>
+file class ConcurrentIncrementHandler(
+    TaskCompletionSource<bool> bothHandled,
+    ManualResetEventSlim gate) : IProcessHandler<ConcurrentCounterData, TestMessage>
 {
-    private readonly TaskCompletionSource<bool> _bothHandled;
-    private readonly ManualResetEventSlim _gate;
+    private readonly TaskCompletionSource<bool> _bothHandled = bothHandled;
+    private readonly ManualResetEventSlim _gate = gate;
     private static int _invokeCount;
-
-    public ConcurrentIncrementHandler(
-        TaskCompletionSource<bool> bothHandled,
-        ManualResetEventSlim gate)
-    {
-        _bothHandled = bothHandled;
-        _gate = gate;
-    }
 
     public IConsumeContext Context { get; set; } = null!;
 
@@ -144,10 +139,14 @@ file class ConcurrentIncrementHandler : IProcessHandler<ConcurrentCounterData, T
 
         // The first handler blocks to create a window for the second to race
         if (count == 1)
+        {
             _gate.Wait(TimeSpan.FromSeconds(5));
+        }
 
         if (count >= 2)
+        {
             _bothHandled.TrySetResult(true);
+        }
 
         return Task.CompletedTask;
     }

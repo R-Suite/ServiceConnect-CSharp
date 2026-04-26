@@ -20,11 +20,9 @@ namespace ServiceConnect.EndToEndTests;
 /// flush completes, so a later release that adds the missing type can still process it.
 /// </summary>
 [Collection(nameof(PersistenceCollection))]
-public class AggregatorUnresolvedTypeE2ETests
+public class AggregatorUnresolvedTypeE2ETests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public AggregatorUnresolvedTypeE2ETests(PersistenceFixture fixture) => _fixture = fixture;
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -101,8 +99,10 @@ public class AggregatorUnresolvedTypeE2ETests
         {
             // Act: publish 3 messages to an aggregator named "UnresolvedAggregator" to trigger flush
             for (var i = 0; i < 3; i++)
+            {
                 await bus.SendAsync(new TestMessage(Guid.NewGuid()) { Content = $"resolvable-{i}" },
                     new SendOptions { EndPoint = queueName });
+            }
 
             // Assert: the resolvable messages are delivered to Execute
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -125,15 +125,18 @@ public class AggregatorUnresolvedTypeE2ETests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable ap) await ap.DisposeAsync();
+            if (provider is IAsyncDisposable ap)
+            {
+                await ap.DisposeAsync();
+            }
         }
     }
 }
 
-file class UnresolvedBatchAggregator : Aggregator<TestMessage>
+file class UnresolvedBatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) : Aggregator<TestMessage>
 {
-    private readonly TaskCompletionSource<IList<TestMessage>> _tcs;
-    public UnresolvedBatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) => _tcs = tcs;
+    private readonly TaskCompletionSource<IList<TestMessage>> _tcs = tcs;
+
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
     public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)

@@ -11,14 +11,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class RetryAndErrorQueueTests
+public class RetryAndErrorQueueTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public RetryAndErrorQueueTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -75,7 +70,7 @@ public class RetryAndErrorQueueTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -118,7 +113,10 @@ public class RetryAndErrorQueueTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 
@@ -150,7 +148,10 @@ public class RetryAndErrorQueueTests
             {
                 int attempt = Interlocked.Increment(ref attemptCount);
                 if (attempt <= failuresBeforeSuccess)
+                {
                     throw new InvalidOperationException("Transient failure");
+                }
+
                 tcs.TrySetResult(msg);
             }));
 
@@ -179,7 +180,7 @@ public class RetryAndErrorQueueTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -215,7 +216,10 @@ public class RetryAndErrorQueueTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

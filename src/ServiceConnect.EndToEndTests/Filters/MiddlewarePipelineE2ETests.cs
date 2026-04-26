@@ -17,14 +17,9 @@ file sealed class HeaderAddingSendMiddleware : ISendMessageMiddleware
     }
 }
 
-file sealed class HeaderCapturingMiddleware : IMessageProcessingMiddleware
+file sealed class HeaderCapturingMiddleware(TaskCompletionSource<IDictionary<string, object>> tcs) : IMessageProcessingMiddleware
 {
-    private readonly TaskCompletionSource<IDictionary<string, object>> _tcs;
-
-    public HeaderCapturingMiddleware(TaskCompletionSource<IDictionary<string, object>> tcs)
-    {
-        _tcs = tcs;
-    }
+    private readonly TaskCompletionSource<IDictionary<string, object>> _tcs = tcs;
 
     public async Task<ConsumeEventResult> Process(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
@@ -36,14 +31,9 @@ file sealed class HeaderCapturingMiddleware : IMessageProcessingMiddleware
 }
 
 [Collection(nameof(MessagingCollection))]
-public class MiddlewarePipelineE2ETests
+public class MiddlewarePipelineE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public MiddlewarePipelineE2ETests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -55,8 +45,7 @@ public class MiddlewarePipelineE2ETests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(NoOpMessageHandler),
                 MessageType = typeof(TestMessage)
             }
@@ -92,7 +81,7 @@ public class MiddlewarePipelineE2ETests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -119,7 +108,10 @@ public class MiddlewarePipelineE2ETests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

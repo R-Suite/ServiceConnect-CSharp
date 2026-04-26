@@ -10,14 +10,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class AggregatorTests
+public class AggregatorTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public AggregatorTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -62,7 +57,7 @@ public class AggregatorTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -84,7 +79,10 @@ public class AggregatorTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 
@@ -131,7 +129,7 @@ public class AggregatorTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -153,15 +151,18 @@ public class AggregatorTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class BatchAggregator : Aggregator<TestMessage>
+file class BatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) : Aggregator<TestMessage>
 {
-    private readonly TaskCompletionSource<IList<TestMessage>> _tcs;
-    public BatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) => _tcs = tcs;
+    private readonly TaskCompletionSource<IList<TestMessage>> _tcs = tcs;
+
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
     public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)
@@ -171,10 +172,10 @@ file class BatchAggregator : Aggregator<TestMessage>
     }
 }
 
-file class TimeoutAggregator : Aggregator<TestMessage>
+file class TimeoutAggregator(TaskCompletionSource<IList<TestMessage>> tcs) : Aggregator<TestMessage>
 {
-    private readonly TaskCompletionSource<IList<TestMessage>> _tcs;
-    public TimeoutAggregator(TaskCompletionSource<IList<TestMessage>> tcs) => _tcs = tcs;
+    private readonly TaskCompletionSource<IList<TestMessage>> _tcs = tcs;
+
     public override int BatchSize() => 10;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(2);
     public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)

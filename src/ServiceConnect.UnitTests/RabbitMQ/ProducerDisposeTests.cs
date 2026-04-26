@@ -207,7 +207,7 @@ public class ProducerDisposeTests
 
         // Kick off PublishAsync — it passes EnsureConnectedAsync (since _connected = true
         // and _disposedInt = 0) and then blocks on _publishLock.WaitAsync.
-        var publishTask = producer.PublishAsync(typeof(TestPayload), new byte[] { 1, 2, 3 });
+        var publishTask = producer.PublishAsync(typeof(TestPayload), [1, 2, 3]);
 
         // Run DisposeAsync — sets _disposedInt = 1, waits for the lock with the short
         // test timeout, gives up, tears down channel/connection, releases nothing

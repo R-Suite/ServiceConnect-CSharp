@@ -27,7 +27,7 @@ namespace ServiceConnect.UnitTests
                 .Returns(Task.CompletedTask);
 
             _mockPipelineConfig = new Mock<IPipelineConfiguration>();
-            _mockPipelineConfig.Setup(p => p.SendMessageMiddleware).Returns(new List<Type>());
+            _mockPipelineConfig.Setup(p => p.SendMessageMiddleware).Returns([]);
             _serviceProvider = new ServiceCollection().BuildServiceProvider();
         }
 
@@ -129,11 +129,11 @@ namespace ServiceConnect.UnitTests
 
             var mockConfig = new Mock<IPipelineConfiguration>();
             mockConfig.Setup(c => c.SendMessageMiddleware)
-                .Returns(new List<Type> { typeof(BlockingSendMiddleware) });
+                .Returns([typeof(BlockingSendMiddleware)]);
 
             var pipeline = new SendMessagePipeline(_mockProducer.Object, mockConfig.Object, sp);
 
-            await pipeline.ExecuteSendMessagePipelineAsync(typeof(string), new byte[] { 1, 2, 3 });
+            await pipeline.ExecuteSendMessagePipelineAsync(typeof(string), [1, 2, 3]);
 
             _mockProducer.Verify(
                 p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()),

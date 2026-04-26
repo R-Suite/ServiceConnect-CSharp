@@ -12,20 +12,12 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// once max retries are exhausted, publishes to the configured error exchange with
 /// redacted exception info in the header.
 /// </summary>
-internal sealed class MessageRetryHandler
+internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, ILogger logger, TimeProvider? timeProvider = null)
 {
-    private readonly int _maxRetries;
-    private readonly string _errorExchange;
-    private readonly ILogger _logger;
-    private readonly TimeProvider _timeProvider;
-
-    public MessageRetryHandler(int maxRetries, string errorExchange, ILogger logger, TimeProvider? timeProvider = null)
-    {
-        _maxRetries = maxRetries;
-        _errorExchange = errorExchange ?? throw new ArgumentNullException(nameof(errorExchange));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _timeProvider = timeProvider ?? TimeProvider.System;
-    }
+    private readonly int _maxRetries = maxRetries;
+    private readonly string _errorExchange = errorExchange ?? throw new ArgumentNullException(nameof(errorExchange));
+    private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     public async Task HandleFailureAsync(
         IChannel channel,
@@ -112,9 +104,13 @@ internal sealed class MessageRetryHandler
         if (logAsMaxRetries)
         {
             if (ex != null)
+            {
                 _logger.LogError(ex, "Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
+            }
             else
+            {
                 _logger.LogError("Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
+            }
         }
         else
         {

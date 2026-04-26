@@ -6,7 +6,11 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Reassembles byte-stream packets for a single stream sequence into a readable payload.
 /// </summary>
-public sealed class MessageBusReadStream : IMessageBusReadStream
+/// <remarks>
+/// Creates a read stream for the supplied sequence identifier.
+/// </remarks>
+/// <param name="sequenceId">The identifier shared by all packets in the stream.</param>
+public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStream
 {
     private const long MaxTotalStreamSize = 100 * 1024 * 1024;
     private readonly ConcurrentDictionary<long, byte[]> _packets = new();
@@ -14,17 +18,8 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     // Track received packet count with an atomic counter so IsComplete() is O(1).
     private int _receivedCount;
 
-    /// <summary>
-    /// Creates a read stream for the supplied sequence identifier.
-    /// </summary>
-    /// <param name="sequenceId">The identifier shared by all packets in the stream.</param>
-    public MessageBusReadStream(string sequenceId)
-    {
-        SequenceId = sequenceId ?? throw new ArgumentNullException(nameof(sequenceId));
-    }
-
     /// <inheritdoc />
-    public string SequenceId { get; }
+    public string SequenceId { get; } = sequenceId ?? throw new ArgumentNullException(nameof(sequenceId));
     // -1 = unset. Writes are CAS-from-(-1) so a later (potentially duplicate) close
     // packet cannot shrink or alter an already-set LastPacketNumber; reads use
     // Volatile.Read so concurrent IsComplete checks never see a stale sentinel.
@@ -35,11 +30,17 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     /// <inheritdoc />
     public void SetLastPacketNumber(long lastPacketNumber)
     {
-        if (lastPacketNumber < 0) throw new ArgumentOutOfRangeException(nameof(lastPacketNumber));
+        if (lastPacketNumber < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lastPacketNumber));
+        }
+
         var previous = Interlocked.CompareExchange(ref _lastPacketNumber, lastPacketNumber, -1);
         if (previous != -1 && previous != lastPacketNumber)
+        {
             throw new InvalidOperationException(
                 $"LastPacketNumber already set to {previous}; refusing to overwrite with {lastPacketNumber} for stream {SequenceId}.");
+        }
 
         // Defense-in-depth: if any already-received packet carries a number greater than
         // the newly-established last-packet-number, the stream is in an inconsistent state
@@ -49,9 +50,11 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         foreach (var key in _packets.Keys)
         {
             if (key > lastPacketNumber)
+            {
                 throw new InvalidOperationException(
                     $"Packet number {key} already received for stream {SequenceId} but exceeds " +
                     $"the newly-set LastPacketNumber {lastPacketNumber}. The stream is inconsistent.");
+            }
         }
     }
 
@@ -59,8 +62,10 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     public void Write(byte[] data, long packetNumber)
     {
         if (packetNumber < 0)
+        {
             throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
                 "Packet number must be non-negative.");
+        }
         // Validate against LastPacketNumber when it is already set.  This is done
         // with Volatile.Read so we observe the latest CAS-committed value without
         // acquiring a separate lock — the worst case is that a concurrent
@@ -70,8 +75,10 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         // packet must always fail.
         var last = Volatile.Read(ref _lastPacketNumber);
         if (last >= 0 && packetNumber > last)
+        {
             throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
                 $"Packet number {packetNumber} exceeds LastPacketNumber {last} for stream {SequenceId}.");
+        }
 
         // Atomically reserve capacity: if the reservation pushes us past the cap,
         // roll it back before any concurrent writer can observe the inflated total
@@ -99,7 +106,9 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     public byte[] Read()
     {
         if (!IsComplete())
+        {
             throw new InvalidOperationException("Stream is not yet complete.");
+        }
 
         // Pre-size MemoryStream to avoid internal buffer doubling.
         var totalBytes = Interlocked.Read(ref _totalBytesWritten);
@@ -107,7 +116,9 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         for (long i = 0; i <= LastPacketNumber; i++)
         {
             if (_packets.TryGetValue(i, out var packet))
+            {
                 ms.Write(packet, 0, packet.Length);
+            }
         }
         return ms.ToArray();
     }
@@ -116,7 +127,9 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
     public System.Buffers.ReadOnlySequence<byte> ReadSequence()
     {
         if (!IsComplete())
+        {
             throw new InvalidOperationException("Stream is not yet complete.");
+        }
 
         // Walk packets 0..LastPacketNumber in order, linking them into a ReadOnlySequenceSegment chain.
         PacketSegment? first = null;
@@ -124,7 +137,10 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         for (long i = 0; i <= LastPacketNumber; i++)
         {
             if (!_packets.TryGetValue(i, out var packet))
+            {
                 continue;
+            }
+
             if (first is null)
             {
                 first = new PacketSegment(packet);
@@ -137,7 +153,9 @@ public sealed class MessageBusReadStream : IMessageBusReadStream
         }
 
         if (first is null)
+        {
             return System.Buffers.ReadOnlySequence<byte>.Empty;
+        }
 
         return new System.Buffers.ReadOnlySequence<byte>(first, 0, last!, last!.Memory.Length);
     }

@@ -28,8 +28,8 @@ public class RequestReplyManagerTimeoutValidationTests
 
         var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
-                Array.Empty<byte>(),
-                new Dictionary<string, string>(),
+                [],
+                [],
                 options,
                 CancellationToken.None));
 
@@ -44,8 +44,8 @@ public class RequestReplyManagerTimeoutValidationTests
 
         var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
-                Array.Empty<byte>(),
-                new Dictionary<string, string>(),
+                [],
+                [],
                 options,
                 CancellationToken.None));
 
@@ -60,8 +60,8 @@ public class RequestReplyManagerTimeoutValidationTests
 
         var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             manager.PublishRequestAsync<FakeMessage1, FakeMessage1>(
-                Array.Empty<byte>(),
-                new Dictionary<string, string>(),
+                [],
+                [],
                 options,
                 _ => { },
                 CancellationToken.None));
@@ -80,8 +80,8 @@ public class RequestReplyManagerTimeoutValidationTests
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
-                Array.Empty<byte>(),
-                new Dictionary<string, string>(),
+                [],
+                [],
                 options,
                 cts.Token));
     }

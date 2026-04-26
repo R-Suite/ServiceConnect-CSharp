@@ -8,8 +8,14 @@ internal static class HeaderHelpers
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void SetHeader<T>(IDictionary<string, object> headers, string key, T value)
     {
-        if (value is null) _ = headers.Remove(key);
-        else headers[key] = value;
+        if (value is null)
+        {
+            _ = headers.Remove(key);
+        }
+        else
+        {
+            headers[key] = value;
+        }
     }
 
     // foreach into a pre-sized dictionary avoids the LINQ ToDictionary allocation overhead.
@@ -17,7 +23,10 @@ internal static class HeaderHelpers
     {
         var result = new Dictionary<string, object?>(headers.Count, StringComparer.Ordinal);
         foreach (var kvp in headers)
+        {
             result[kvp.Key] = kvp.Value;
+        }
+
         return result;
     }
 
@@ -43,10 +52,16 @@ internal static class HeaderHelpers
         // Append a marker when the chain was deeper than we recorded so operators
         // know to check logs for the full inner-exception stack.
         if (ie != null)
+        {
             sb.Append(TruncationMarker);
+        }
 
         var s = sb.ToString();
-        if (s.Length <= MaxErrorMessageLength) return s;
+        if (s.Length <= MaxErrorMessageLength)
+        {
+            return s;
+        }
+
         return string.Concat(s.AsSpan(0, MaxErrorMessageLength - TruncationMarker.Length), TruncationMarker);
     }
 }

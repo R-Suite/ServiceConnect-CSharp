@@ -8,232 +8,231 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests
+namespace ServiceConnect.UnitTests;
+
+public abstract class FakeFilter1 : IFilter
 {
-    public abstract class FakeFilter1 : IFilter
+    public abstract Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
+}
+
+public abstract class FakeFilter2 : IFilter
+{
+    public abstract Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
+}
+
+public class FilterPipelineTests
+{
+    private readonly PipelineConfiguration _config;
+    private readonly Mock<IServiceProvider> _mockServiceProvider;
+    private readonly FilterPipeline _pipeline;
+
+    public FilterPipelineTests()
     {
-        public abstract Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
+        _config = new PipelineConfiguration();
+        _mockServiceProvider = new Mock<IServiceProvider>();
+        // ConsumeScopeAccessor flows the scope through AsyncLocal — each xUnit
+        // test instance runs in its own async flow, so pushing in the ctor and
+        // discarding the disposable is safe.
+        var scopeAccessor = new ConsumeScopeAccessor();
+        scopeAccessor.Push(_mockServiceProvider.Object);
+        _pipeline = new FilterPipeline(_config, scopeAccessor);
     }
 
-    public abstract class FakeFilter2 : IFilter
+    [Fact]
+    public async Task ExecuteOutgoingFiltersAsync_WithNoFilters_ReturnsContinue()
     {
-        public abstract Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default);
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
+        Assert.Equal(FilterAction.Continue, result);
     }
 
-    public class FilterPipelineTests
+    [Fact]
+    public async Task ExecuteOutgoingFiltersAsync_WhenFilterContinues_PipelineContinues()
     {
-        private readonly PipelineConfiguration _config;
-        private readonly Mock<IServiceProvider> _mockServiceProvider;
-        private readonly FilterPipeline _pipeline;
+        var mockFilter = new Mock<FakeFilter1>();
+        mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Continue);
 
-        public FilterPipelineTests()
-        {
-            _config = new PipelineConfiguration();
-            _mockServiceProvider = new Mock<IServiceProvider>();
-            // ConsumeScopeAccessor flows the scope through AsyncLocal — each xUnit
-            // test instance runs in its own async flow, so pushing in the ctor and
-            // discarding the disposable is safe.
-            var scopeAccessor = new ConsumeScopeAccessor();
-            scopeAccessor.Push(_mockServiceProvider.Object);
-            _pipeline = new FilterPipeline(_config, scopeAccessor);
-        }
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(mockFilter.Object);
 
-        [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_WithNoFilters_ReturnsContinue()
-        {
-            var envelope = new Envelope();
-            var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
-            Assert.Equal(FilterAction.Continue, result);
-        }
+        _config.OutgoingFilters.Add(typeof(FakeFilter1));
 
-        [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_WhenFilterContinues_PipelineContinues()
-        {
-            var mockFilter = new Mock<FakeFilter1>();
-            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Continue);
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
 
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter1)))
-                .Returns(mockFilter.Object);
+        Assert.Equal(FilterAction.Continue, result);
+    }
 
-            _config.OutgoingFilters.Add(typeof(FakeFilter1));
+    [Fact]
+    public async Task ExecuteOutgoingFiltersAsync_WhenFilterStops_PipelineStops()
+    {
+        var mockFilter = new Mock<FakeFilter1>();
+        mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
 
-            var envelope = new Envelope();
-            var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(mockFilter.Object);
 
-            Assert.Equal(FilterAction.Continue, result);
-        }
+        _config.OutgoingFilters.Add(typeof(FakeFilter1));
 
-        [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_WhenFilterStops_PipelineStops()
-        {
-            var mockFilter = new Mock<FakeFilter1>();
-            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Stop);
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
 
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter1)))
-                .Returns(mockFilter.Object);
+        Assert.Equal(FilterAction.Stop, result);
+    }
 
-            _config.OutgoingFilters.Add(typeof(FakeFilter1));
+    [Fact]
+    public async Task ExecuteOutgoingFiltersAsync_ExecutesFiltersInOrder()
+    {
+        var callOrder = new List<string>();
 
-            var envelope = new Envelope();
-            var result = await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
+        var mockFilter1 = new Mock<FakeFilter1>();
+        mockFilter1.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .Callback(() => callOrder.Add("filter1"))
+            .ReturnsAsync(FilterAction.Continue);
 
-            Assert.Equal(FilterAction.Stop, result);
-        }
+        var mockFilter2 = new Mock<FakeFilter2>();
+        mockFilter2.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .Callback(() => callOrder.Add("filter2"))
+            .ReturnsAsync(FilterAction.Continue);
 
-        [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_ExecutesFiltersInOrder()
-        {
-            var callOrder = new List<string>();
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(mockFilter1.Object);
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter2)))
+            .Returns(mockFilter2.Object);
 
-            var mockFilter1 = new Mock<FakeFilter1>();
-            mockFilter1.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .Callback(() => callOrder.Add("filter1"))
-                .ReturnsAsync(FilterAction.Continue);
+        _config.OutgoingFilters.Add(typeof(FakeFilter1));
+        _config.OutgoingFilters.Add(typeof(FakeFilter2));
 
-            var mockFilter2 = new Mock<FakeFilter2>();
-            mockFilter2.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .Callback(() => callOrder.Add("filter2"))
-                .ReturnsAsync(FilterAction.Continue);
+        var envelope = new Envelope();
+        await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
 
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter1)))
-                .Returns(mockFilter1.Object);
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter2)))
-                .Returns(mockFilter2.Object);
+        Assert.Equal(new[] { "filter1", "filter2" }, callOrder);
+    }
 
-            _config.OutgoingFilters.Add(typeof(FakeFilter1));
-            _config.OutgoingFilters.Add(typeof(FakeFilter2));
+    [Fact]
+    public async Task ExecuteOutgoingFiltersAsync_StopsAtFirstStoppingFilter()
+    {
+        var mockFilter1 = new Mock<FakeFilter1>();
+        mockFilter1.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
 
-            var envelope = new Envelope();
-            await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
+        var mockFilter2 = new Mock<FakeFilter2>();
+        mockFilter2.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Continue);
 
-            Assert.Equal(new[] { "filter1", "filter2" }, callOrder);
-        }
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(mockFilter1.Object);
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter2)))
+            .Returns(mockFilter2.Object);
 
-        [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_StopsAtFirstStoppingFilter()
-        {
-            var mockFilter1 = new Mock<FakeFilter1>();
-            mockFilter1.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Stop);
+        _config.OutgoingFilters.Add(typeof(FakeFilter1));
+        _config.OutgoingFilters.Add(typeof(FakeFilter2));
 
-            var mockFilter2 = new Mock<FakeFilter2>();
-            mockFilter2.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Continue);
+        var envelope = new Envelope();
+        await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
 
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter1)))
-                .Returns(mockFilter1.Object);
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter2)))
-                .Returns(mockFilter2.Object);
+        // Filter2 should never have been called once filter1 said Stop.
+        mockFilter2.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
-            _config.OutgoingFilters.Add(typeof(FakeFilter1));
-            _config.OutgoingFilters.Add(typeof(FakeFilter2));
+    [Fact]
+    public async Task ExecuteOutgoingFiltersAsync_ThrowsWhenFilterNotRegistered()
+    {
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(null!);
 
-            var envelope = new Envelope();
-            await _pipeline.ExecuteOutgoingFiltersAsync(envelope);
+        _config.OutgoingFilters.Add(typeof(FakeFilter1));
 
-            // Filter2 should never have been called once filter1 said Stop.
-            mockFilter2.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
+        var envelope = new Envelope();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _pipeline.ExecuteOutgoingFiltersAsync(envelope));
+    }
 
-        [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_ThrowsWhenFilterNotRegistered()
-        {
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter1)))
-                .Returns(null!);
+    [Fact]
+    public async Task ExecuteBeforeConsumingFiltersAsync_WithNoFilters_ReturnsContinue()
+    {
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteBeforeConsumingFiltersAsync(envelope);
+        Assert.Equal(FilterAction.Continue, result);
+    }
 
-            _config.OutgoingFilters.Add(typeof(FakeFilter1));
+    [Fact]
+    public async Task ExecuteAfterConsumingFiltersAsync_WithNoFilters_ReturnsContinue()
+    {
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteAfterConsumingFiltersAsync(envelope);
+        Assert.Equal(FilterAction.Continue, result);
+    }
 
-            var envelope = new Envelope();
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _pipeline.ExecuteOutgoingFiltersAsync(envelope));
-        }
+    [Fact]
+    public async Task ExecuteFilter_ResolvesFromCurrentScope()
+    {
+        // Filters must be resolved from the scope pushed onto ConsumeScopeAccessor,
+        // not from any previously captured provider. Swap the current scope mid-flight
+        // and verify the new provider is the one queried.
+        var firstFilter = new Mock<FakeFilter1>();
+        firstFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Continue);
+        _mockServiceProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(firstFilter.Object);
 
-        [Fact]
-        public async Task ExecuteBeforeConsumingFiltersAsync_WithNoFilters_ReturnsContinue()
-        {
-            var envelope = new Envelope();
-            var result = await _pipeline.ExecuteBeforeConsumingFiltersAsync(envelope);
-            Assert.Equal(FilterAction.Continue, result);
-        }
+        var otherProvider = new Mock<IServiceProvider>();
+        var swappedFilter = new Mock<FakeFilter1>();
+        swappedFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Continue);
+        otherProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(swappedFilter.Object);
 
-        [Fact]
-        public async Task ExecuteAfterConsumingFiltersAsync_WithNoFilters_ReturnsContinue()
-        {
-            var envelope = new Envelope();
-            var result = await _pipeline.ExecuteAfterConsumingFiltersAsync(envelope);
-            Assert.Equal(FilterAction.Continue, result);
-        }
+        _config.OutgoingFilters.Add(typeof(FakeFilter1));
 
-        [Fact]
-        public async Task ExecuteFilter_ResolvesFromCurrentScope()
-        {
-            // Filters must be resolved from the scope pushed onto ConsumeScopeAccessor,
-            // not from any previously captured provider. Swap the current scope mid-flight
-            // and verify the new provider is the one queried.
-            var firstFilter = new Mock<FakeFilter1>();
-            firstFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Continue);
-            _mockServiceProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(firstFilter.Object);
+        var accessor = new ConsumeScopeAccessor();
+        accessor.Push(otherProvider.Object);
+        var pipeline = new FilterPipeline(_config, accessor);
 
-            var otherProvider = new Mock<IServiceProvider>();
-            var swappedFilter = new Mock<FakeFilter1>();
-            swappedFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Continue);
-            otherProvider.Setup(sp => sp.GetService(typeof(FakeFilter1))).Returns(swappedFilter.Object);
+        await pipeline.ExecuteOutgoingFiltersAsync(new Envelope());
 
-            _config.OutgoingFilters.Add(typeof(FakeFilter1));
+        swappedFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
+        firstFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 
-            var accessor = new ConsumeScopeAccessor();
-            accessor.Push(otherProvider.Object);
-            var pipeline = new FilterPipeline(_config, accessor);
+    [Fact]
+    public async Task ExecuteFilter_ThrowsWhenNoScopePushed()
+    {
+        // Guard-rail: resolving a filter with no scope pushed is always a misuse.
+        // Throw loudly rather than silently falling back to a root provider.
+        var config = new PipelineConfiguration();
+        config.OutgoingFilters.Add(typeof(FakeFilter1));
+        var pipeline = new FilterPipeline(config, new ConsumeScopeAccessor());
 
-            await pipeline.ExecuteOutgoingFiltersAsync(new Envelope());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => pipeline.ExecuteOutgoingFiltersAsync(new Envelope()));
+    }
 
-            swappedFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
-            firstFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
+    [Fact]
+    public async Task ExecuteOutgoingFiltersAsync_PreCancelledToken_ThrowsOCEBeforeFilterRuns()
+    {
+        var mockFilter = new Mock<FakeFilter1>();
+        mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Continue);
 
-        [Fact]
-        public async Task ExecuteFilter_ThrowsWhenNoScopePushed()
-        {
-            // Guard-rail: resolving a filter with no scope pushed is always a misuse.
-            // Throw loudly rather than silently falling back to a root provider.
-            var config = new PipelineConfiguration();
-            config.OutgoingFilters.Add(typeof(FakeFilter1));
-            var pipeline = new FilterPipeline(config, new ConsumeScopeAccessor());
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(mockFilter.Object);
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => pipeline.ExecuteOutgoingFiltersAsync(new Envelope()));
-        }
+        _config.OutgoingFilters.Add(typeof(FakeFilter1));
 
-        [Fact]
-        public async Task ExecuteOutgoingFiltersAsync_PreCancelledToken_ThrowsOCEBeforeFilterRuns()
-        {
-            var mockFilter = new Mock<FakeFilter1>();
-            mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Continue);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-            _mockServiceProvider
-                .Setup(sp => sp.GetService(typeof(FakeFilter1)))
-                .Returns(mockFilter.Object);
+        var envelope = new Envelope();
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            _pipeline.ExecuteOutgoingFiltersAsync(envelope, cts.Token));
 
-            _config.OutgoingFilters.Add(typeof(FakeFilter1));
-
-            using var cts = new CancellationTokenSource();
-            cts.Cancel();
-
-            var envelope = new Envelope();
-            await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                _pipeline.ExecuteOutgoingFiltersAsync(envelope, cts.Token));
-
-            mockFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
-        }
+        mockFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

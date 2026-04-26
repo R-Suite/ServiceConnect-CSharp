@@ -53,7 +53,7 @@ public class MongoClientFactoryCertCacheTests
                 tasks[i] = Task.Run(() =>
                 {
                     gate.Wait();
-                    method!.Invoke(null, new object?[] { "/fake/path.pfx", "pw" });
+                    method!.Invoke(null, ["/fake/path.pfx", "pw"]);
                 });
             }
 
@@ -87,7 +87,10 @@ public class MongoClientFactoryCertCacheTests
         {
             var n = Interlocked.Increment(ref attempts);
             if (n == 1)
+            {
                 throw new IOException("transient");
+            }
+
             return realCert;
         };
 
@@ -100,11 +103,11 @@ public class MongoClientFactoryCertCacheTests
 
             // First call: loader throws; the Lazy should be evicted so the next call retries.
             var ex = Assert.Throws<TargetInvocationException>(
-                () => method!.Invoke(null, new object?[] { "/fake/retry.pfx", "pw" }));
+                () => method!.Invoke(null, ["/fake/retry.pfx", "pw"]));
             Assert.IsType<IOException>(ex.InnerException);
 
             // Second call: should succeed (loader returns realCert), proving the cache wasn't poisoned.
-            var result = method!.Invoke(null, new object?[] { "/fake/retry.pfx", "pw" });
+            var result = method!.Invoke(null, ["/fake/retry.pfx", "pw"]);
             Assert.Same(realCert, result);
             Assert.Equal(2, attempts);
         }

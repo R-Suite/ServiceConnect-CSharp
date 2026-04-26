@@ -41,10 +41,14 @@ internal static class ConnectionFactoryBuilder
         };
 
         if (!string.IsNullOrEmpty(transport.Username))
+        {
             factory.UserName = transport.Username;
+        }
 
         if (!string.IsNullOrEmpty(transport.Password))
+        {
             factory.Password = transport.Password;
+        }
 
         if (transport.SslEnabled)
         {
@@ -52,11 +56,15 @@ internal static class ConnectionFactoryBuilder
             // Only fall back to the default AMQPS port when the user didn't supply one.
             // Respecting an explicit port lets TLS deployments on non-default ports connect.
             if (!explicitPortConfigured)
+            {
                 factory.Port = AmqpTcpEndpoint.DefaultAmqpSslPort;
+            }
         }
 
         if (!string.IsNullOrEmpty(transport.VirtualHost))
+        {
             factory.VirtualHost = transport.VirtualHost;
+        }
 
         return factory;
     }

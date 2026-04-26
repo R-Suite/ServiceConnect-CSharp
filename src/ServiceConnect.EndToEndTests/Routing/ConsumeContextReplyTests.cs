@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(RequestReplyCollection))]
-public class ConsumeContextReplyTests
+public class ConsumeContextReplyTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ConsumeContextReplyTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -100,7 +95,7 @@ public class ConsumeContextReplyTests
         var requesterBus = requesterProvider.GetRequiredService<IBus>();
         await requesterBus.StartConsumingAsync();
 
-        
+
 
         try
         {
@@ -117,9 +112,16 @@ public class ConsumeContextReplyTests
         finally
         {
             await responderBus.DisposeAsync();
-            if (responderProvider is IAsyncDisposable asyncResponderProvider) await asyncResponderProvider.DisposeAsync();
+            if (responderProvider is IAsyncDisposable asyncResponderProvider)
+            {
+                await asyncResponderProvider.DisposeAsync();
+            }
+
             await requesterBus.DisposeAsync();
-            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider)
+            {
+                await asyncRequesterProvider.DisposeAsync();
+            }
         }
     }
 }

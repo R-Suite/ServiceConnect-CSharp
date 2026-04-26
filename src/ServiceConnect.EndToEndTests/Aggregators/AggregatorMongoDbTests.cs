@@ -10,14 +10,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class AggregatorMongoDbTests
+public class AggregatorMongoDbTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public AggregatorMongoDbTests(PersistenceFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -66,7 +61,7 @@ public class AggregatorMongoDbTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -88,15 +83,18 @@ public class AggregatorMongoDbTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class MongoBatchAggregator : Aggregator<TestMessage>
+file class MongoBatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) : Aggregator<TestMessage>
 {
-    private readonly TaskCompletionSource<IList<TestMessage>> _tcs;
-    public MongoBatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) => _tcs = tcs;
+    private readonly TaskCompletionSource<IList<TestMessage>> _tcs = tcs;
+
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
     public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)

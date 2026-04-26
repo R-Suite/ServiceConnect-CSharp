@@ -77,7 +77,11 @@ public static class Retry
     {
         ArgumentNullException.ThrowIfNull(action);
         ArgumentNullException.ThrowIfNull(exceptionAction);
-        if (retryCount < 0) throw new ArgumentOutOfRangeException(nameof(retryCount));
+        if (retryCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(retryCount));
+        }
+
         List<Exception>? exceptions = null;
 
         for (int attempt = 0; attempt <= retryCount; attempt++)
@@ -95,9 +99,9 @@ public static class Retry
             catch (Exception ex)
             {
                 if (shouldRetry != null && !shouldRetry(ex))
+                {
                     throw;
-
-                (exceptions ??= []).Add(ex);
+                } (exceptions ??= []).Add(ex);
                 try
                 {
                     await exceptionAction(ex).ConfigureAwait(false);

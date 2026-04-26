@@ -33,7 +33,7 @@ public class ProcessManagerProcessorTests
     }
 
     private static ProcessManagerHandlerRegistry BuildRegistry(params HandlerReference[] refs)
-        => new(refs.ToList(), NullLogger<ProcessManagerHandlerRegistry>.Instance);
+        => new([.. refs], NullLogger<ProcessManagerHandlerRegistry>.Instance);
 
     private static (ConsumeScopeAccessor accessor, IDisposable scope) BuildScopeAccessor(IServiceProvider provider)
     {
@@ -81,7 +81,8 @@ public class ProcessManagerProcessorTests
         services.AddSingleton(new Mock<IBus>().Object);
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTestHandler)
         });
         services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(new PmTestHandler());
         var provider = services.BuildServiceProvider();
@@ -102,7 +103,8 @@ public class ProcessManagerProcessorTests
         var (services, _, _) = CreateBaseServices();
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTestHandler)
         });
         var provider = services.BuildServiceProvider();
         var (accessor, scopeHandle) = BuildScopeAccessor(provider);
@@ -125,7 +127,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTestHandler)
         });
 
         mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
@@ -161,7 +164,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTestHandler)
         });
 
         var existingData = new PmTestData { CorrelationId = Guid.NewGuid(), Counter = 5 };
@@ -202,7 +206,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTestHandler)
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTestHandler)
         });
 
         var existingData = new PmTestData { CorrelationId = Guid.NewGuid(), Counter = 5 };
@@ -256,7 +261,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmThrowingHandler)
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmThrowingHandler)
         });
 
         mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
@@ -294,7 +300,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmMutableMessage), HandlerType = typeof(PmMutatingThrowingHandler)
+            MessageType = typeof(PmMutableMessage),
+            HandlerType = typeof(PmMutatingThrowingHandler)
         });
         var provider = services.BuildServiceProvider();
         var (accessor, scopeHandle) = BuildScopeAccessor(provider);
@@ -365,7 +372,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(ScopeProbePmMessage), HandlerType = typeof(ScopeProbePmHandler)
+            MessageType = typeof(ScopeProbePmMessage),
+            HandlerType = typeof(ScopeProbePmHandler)
         });
 
         var scopeAccessor = new ConsumeScopeAccessor();
@@ -405,7 +413,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(ScopeProbePmMessage), HandlerType = typeof(ScopeProbePmHandler)
+            MessageType = typeof(ScopeProbePmMessage),
+            HandlerType = typeof(ScopeProbePmHandler)
         });
 
         var scopeAccessor = new ConsumeScopeAccessor();
@@ -446,7 +455,8 @@ public class ProcessManagerProcessorTests
 
         var registry = BuildRegistry(new HandlerReference
         {
-            MessageType = typeof(PmTestMessage), HandlerType = typeof(PmTimeoutRequestingHandler)
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTimeoutRequestingHandler)
         });
 
         mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
@@ -475,9 +485,8 @@ public class ProcessManagerProcessorTests
     }
 }
 
-file class PmTestMessage : Message
+file class PmTestMessage(Guid correlationId) : Message(correlationId)
 {
-    public PmTestMessage(Guid correlationId) : base(correlationId) { }
     public string Content { get; set; } = string.Empty;
 }
 
@@ -519,9 +528,8 @@ file class PmThrowingHandler : IProcessHandler<PmTestData, PmTestMessage>
         => throw new InvalidOperationException("handler failure");
 }
 
-file class PmMutableMessage : Message
+file class PmMutableMessage(Guid correlationId) : Message(correlationId)
 {
-    public PmMutableMessage(Guid correlationId) : base(correlationId) { }
 }
 
 file class PmMutableData : IProcessManagerData
@@ -594,7 +602,7 @@ file static class PmTestBusFactory
         var logger = new Mock<ILogger<Bus>>();
         var dispatcher = new Mock<IMessageDispatcher>();
         var pipelineConfiguration = new Mock<IPipelineConfiguration>();
-        pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns(new List<Type>());
+        pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns([]);
 
         var rootProvider = new ServiceCollection().BuildServiceProvider();
         return new Bus(
@@ -605,7 +613,7 @@ file static class PmTestBusFactory
             logger.Object,
             queueConfiguration,
             dispatcher.Object,
-            new List<HandlerReference>(),
+            [],
             pipelineConfiguration.Object,
             rootProvider.GetRequiredService<IServiceScopeFactory>(),
             new ConsumeScopeAccessor(),
@@ -615,9 +623,8 @@ file static class PmTestBusFactory
 }
 
 // Fixtures used only by ProcessAsync_RunsConfigureMapperPerMessage.
-file class DummyPmMessage : Message
+file class DummyPmMessage(Guid correlationId) : Message(correlationId)
 {
-    public DummyPmMessage(Guid correlationId) : base(correlationId) { }
 }
 
 file class DummyPmData : IProcessManagerData

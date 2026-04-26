@@ -8,14 +8,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class MongoGuidSerializationTests
+public class MongoGuidSerializationTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public MongoGuidSerializationTests(PersistenceFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]

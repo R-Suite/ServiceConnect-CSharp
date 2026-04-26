@@ -1,5 +1,5 @@
-using RabbitMQ.Client;
 using Microsoft.Extensions.DependencyInjection;
+using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class MaxRetriesZeroTests
+public class MaxRetriesZeroTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public MaxRetriesZeroTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -70,7 +65,7 @@ public class MaxRetriesZeroTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -94,7 +89,10 @@ public class MaxRetriesZeroTests
             for (int i = 0; i < 30 && errorMsg == null; i++)
             {
                 errorMsg = await channel.BasicGetAsync(errorQueueName, autoAck: true);
-                if (errorMsg == null) await Task.Delay(500);
+                if (errorMsg == null)
+                {
+                    await Task.Delay(500);
+                }
             }
 
             Assert.NotNull(errorMsg);
@@ -105,7 +103,10 @@ public class MaxRetriesZeroTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

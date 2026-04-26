@@ -54,7 +54,7 @@ public class MessageHandlerRegistryTests
     public void TryGetOrBuild_LazilyBuilds_ForUnregisteredMessageType()
     {
         var registry = new MessageHandlerRegistry(
-            new List<HandlerReference>(),
+            [],
             NullLogger<MessageHandlerRegistry>.Instance);
 
         Assert.True(registry.TryGetOrBuild(typeof(MhrFooMsg), out var descriptor));
@@ -65,7 +65,7 @@ public class MessageHandlerRegistryTests
     public void TryGetOrBuild_ReturnsFalse_ForMessageBaseType()
     {
         var registry = new MessageHandlerRegistry(
-            new List<HandlerReference>(),
+            [],
             NullLogger<MessageHandlerRegistry>.Instance);
 
         Assert.False(registry.TryGetOrBuild(typeof(Message), out var descriptor));
@@ -76,7 +76,7 @@ public class MessageHandlerRegistryTests
     public void TryGetOrBuild_ReturnsFalse_ForObject()
     {
         var registry = new MessageHandlerRegistry(
-            new List<HandlerReference>(),
+            [],
             NullLogger<MessageHandlerRegistry>.Instance);
 
         Assert.False(registry.TryGetOrBuild(typeof(object), out _));
@@ -113,7 +113,7 @@ public class MessageHandlerRegistryTests
     public void TryGetOrBuild_CachesNegativeResults()
     {
         var registry = new MessageHandlerRegistry(
-            new List<HandlerReference>(),
+            [],
             NullLogger<MessageHandlerRegistry>.Instance);
 
         // Hit the unbuildable type twice; both return false without crashing
@@ -131,7 +131,8 @@ public class MessageHandlerRegistryTests
     }
 }
 
-file class MhrFooMsg : Message { public MhrFooMsg(Guid c) : base(c) { } }
+file class MhrFooMsg(Guid c) : Message(c) {
+}
 file class MhrBarData : IProcessManagerData { public Guid CorrelationId { get; set; } }
 
 file class MhrFooHandler : IMessageHandler<MhrFooMsg>

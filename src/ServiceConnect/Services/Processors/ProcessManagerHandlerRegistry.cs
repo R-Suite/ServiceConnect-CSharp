@@ -36,7 +36,9 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
             }
 
             if (processHandlerInterface == null)
+            {
                 continue;
+            }
 
             var dataType = processHandlerInterface.GetGenericArguments()[0];
             var descriptor = BuildDescriptor(href.MessageType, dataType, processHandlerInterface);
@@ -183,7 +185,7 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
 
         var method = handlerInterface.GetMethod(
             "HandleAsync",
-            new[] { messageType, dataType, typeof(CancellationToken) })!;
+            [messageType, dataType, typeof(CancellationToken)])!;
         var call = Expression.Call(handlerCast, method, messageCast, dataCast, ctParam);
 
         return Expression.Lambda<Func<object, Message, object, CancellationToken, Task>>(

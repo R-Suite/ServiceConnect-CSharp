@@ -15,20 +15,25 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private IConnection? _connection;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private volatile bool _disposed;
-    private TimeSpan _disposeLockTimeout = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _disposeLockTimeout = TimeSpan.FromSeconds(30);
 
     private readonly string[] _hosts = transportSettings.Host.Split(',');
 
     private async Task ConnectAsync(CancellationToken cancellationToken)
     {
-        if (Volatile.Read(ref _connection) != null) return;
+        if (Volatile.Read(ref _connection) != null)
+        {
+            return;
+        }
 
         await _connectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (Volatile.Read(ref _connection) == null)
+            {
                 await CreateConnectionCoreAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -93,13 +98,20 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        if (_disposed)
+        {
+            return;
+        }
 
         IConnection? conn = null;
         var acquired = await _connectionLock.WaitAsync(_disposeLockTimeout).ConfigureAwait(false);
         try
         {
-            if (_disposed) return;
+            if (_disposed)
+            {
+                return;
+            }
+
             if (!acquired)
             {
                 logger.LogWarning(
@@ -112,7 +124,10 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         }
         finally
         {
-            if (acquired) _connectionLock.Release();
+            if (acquired)
+            {
+                _connectionLock.Release();
+            }
         }
 
         if (conn != null)
@@ -120,7 +135,10 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
             try
             {
                 if (conn.IsOpen)
+                {
                     await conn.CloseAsync().ConfigureAwait(false);
+                }
+
                 conn.Dispose();
             }
             catch (Exception ex)

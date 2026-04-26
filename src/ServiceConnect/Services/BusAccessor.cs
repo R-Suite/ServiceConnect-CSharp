@@ -28,9 +28,7 @@ internal sealed class BusAccessor
 
     public IBus GetOrThrow()
     {
-        var bus = Volatile.Read(ref _bus);
-        if (bus == null)
-            throw new InvalidOperationException(
+        var bus = Volatile.Read(ref _bus) ?? throw new InvalidOperationException(
                 "IBus was accessed before it finished constructing. Components must not dereference Lazy<IBus>.Value during Bus construction.");
         return bus;
     }

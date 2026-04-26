@@ -8,14 +8,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class EmptyMessageTests
+public class EmptyMessageTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public EmptyMessageTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -27,8 +22,7 @@ public class EmptyMessageTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(TestMessage)
             }
@@ -61,7 +55,7 @@ public class EmptyMessageTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -82,7 +76,10 @@ public class EmptyMessageTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

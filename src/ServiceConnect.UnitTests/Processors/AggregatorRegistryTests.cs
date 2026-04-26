@@ -29,7 +29,7 @@ public class AggregatorRegistryTests
     {
         var sp = new ServiceCollection().BuildServiceProvider();
         var registry = new AggregatorRegistry(
-            new List<HandlerReference>(),
+            [],
             sp,
             NullLogger<AggregatorRegistry>.Instance);
 
@@ -161,7 +161,7 @@ public class AggregatorRegistryTests
     }
 }
 
-file class ArgFoo : Message { public ArgFoo(Guid c) : base(c) { } public string Val { get; set; } = ""; }
+file class ArgFoo(Guid c) : Message(c) { public string Val { get; set; } = ""; }
 
 file class ArgFooAggregator : Aggregator<ArgFoo>
 {

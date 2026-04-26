@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class MultiEndpointSendTests
+public class MultiEndpointSendTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public MultiEndpointSendTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -33,8 +28,7 @@ public class MultiEndpointSendTests
         // --- Consumer 1 bus setup ---
         var consumer1HandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(TestMessage)
             }
@@ -68,8 +62,7 @@ public class MultiEndpointSendTests
         // --- Consumer 2 bus setup ---
         var consumer2HandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(TestMessage)
             }
@@ -103,7 +96,7 @@ public class MultiEndpointSendTests
         // --- Sender bus setup (no handlers) ---
         var senderServices = new ServiceCollection();
         senderServices.AddLogging();
-        senderServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        senderServices.AddSingleton<IList<HandlerReference>>([]);
 
         senderServices.AddServiceConnect(builder =>
         {
@@ -124,7 +117,7 @@ public class MultiEndpointSendTests
         var senderBus = senderProvider.GetRequiredService<IBus>();
 
         // Give consumers time to set up
-        
+
 
         try
         {
@@ -133,7 +126,7 @@ public class MultiEndpointSendTests
             var message = new TestMessage(correlationId) { Content = "multi-endpoint send" };
             await senderBus.SendAsync(message, new SendOptions
             {
-                EndPoints = new List<string> { queue1, queue2 }
+                EndPoints = [queue1, queue2]
             });
 
             // Assert: wait up to 30 seconds for both handlers to be called
@@ -156,11 +149,22 @@ public class MultiEndpointSendTests
         finally
         {
             await consumer1Bus.DisposeAsync();
-            if (consumer1Provider is IAsyncDisposable asyncConsumer1Provider) await asyncConsumer1Provider.DisposeAsync();
+            if (consumer1Provider is IAsyncDisposable asyncConsumer1Provider)
+            {
+                await asyncConsumer1Provider.DisposeAsync();
+            }
+
             await consumer2Bus.DisposeAsync();
-            if (consumer2Provider is IAsyncDisposable asyncConsumer2Provider) await asyncConsumer2Provider.DisposeAsync();
+            if (consumer2Provider is IAsyncDisposable asyncConsumer2Provider)
+            {
+                await asyncConsumer2Provider.DisposeAsync();
+            }
+
             await senderBus.DisposeAsync();
-            if (senderProvider is IAsyncDisposable asyncSenderProvider) await asyncSenderProvider.DisposeAsync();
+            if (senderProvider is IAsyncDisposable asyncSenderProvider)
+            {
+                await asyncSenderProvider.DisposeAsync();
+            }
         }
     }
 }

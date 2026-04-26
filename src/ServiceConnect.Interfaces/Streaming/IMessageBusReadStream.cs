@@ -45,5 +45,5 @@ public interface IMessageBusReadStream
     /// </summary>
     /// <returns>The assembled payload sequence.</returns>
     System.Buffers.ReadOnlySequence<byte> ReadSequence()
-        => new System.Buffers.ReadOnlySequence<byte>(Read());
+        => new(Read());
 }

@@ -27,12 +27,17 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         {
             var aggregatorBaseType = FindAggregatorBaseType(href.HandlerType, href.MessageType);
             if (aggregatorBaseType == null)
+            {
                 continue;
+            }
 
             if (builder.TryGetValue(href.MessageType, out var existing))
             {
                 if (existing.HandlerType == href.HandlerType)
+                {
                     continue; // identical (MessageType, HandlerType) pair registered twice — dedupe silently
+                }
+
                 throw new InvalidOperationException(
                     $"Duplicate aggregator registration for message type '{href.MessageType.FullName}'. " +
                     $"Only one Aggregator<T> may be registered per message type; found '{existing.HandlerType.FullName}' and '{href.HandlerType.FullName}'.");
@@ -58,11 +63,20 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
     private static Type? FindAggregatorBaseType(Type handlerType, Type messageType)
     {
         if (handlerType.BaseType is not { IsGenericType: true } baseType)
+        {
             return null;
+        }
+
         if (baseType.GetGenericTypeDefinition() != typeof(Aggregator<>))
+        {
             return null;
+        }
+
         if (baseType.GetGenericArguments()[0] != messageType)
+        {
             return null;
+        }
+
         return baseType;
     }
 
@@ -86,9 +100,11 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
 
         // Dual-zero means messages would aggregate forever with no flush trigger.
         if (batchSize <= 0 && timeout <= TimeSpan.Zero)
+        {
             throw new InvalidOperationException(
                 $"Aggregator '{aggregatorBaseType.FullName}' has BatchSize={batchSize} and Timeout={timeout}. " +
                 "At least one of BatchSize (>0) or Timeout (>TimeSpan.Zero) must be configured, otherwise messages would buffer indefinitely without being flushed.");
+        }
 
         return new AggregatorDescriptor(
             MessageType: messageType,
@@ -118,7 +134,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
 
         var block = Expression.Block(
             typeof(IList),
-            new[] { listVar, indexVar },
+            [listVar, indexVar],
             Expression.Assign(listVar, Expression.New(listCtor)),
             Expression.Assign(indexVar, Expression.Constant(0)),
             Expression.Loop(

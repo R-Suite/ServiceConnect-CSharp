@@ -18,42 +18,29 @@ namespace ServiceConnect.Services;
 /// processors handle raw bytes without a resolved message instance and therefore bypass middleware by design.
 /// </para>
 /// </summary>
-public sealed class MessageDispatcher : IMessageDispatcher
+/// <remarks>
+/// Creates a dispatcher for incoming broker messages.
+/// </remarks>
+public sealed class MessageDispatcher(
+    IMessageSerializer serializer,
+    IFilterPipeline filterPipeline,
+    IList<IMessageProcessor> processors,
+    ILogger<MessageDispatcher> logger,
+    IBusConfiguration config,
+    IPipelineConfiguration pipelineConfig,
+    IServiceScopeFactory scopeFactory,
+    ConsumeScopeAccessor scopeAccessor,
+    IMessageTypeRegistry typeRegistry) : IMessageDispatcher
 {
-    private readonly IMessageSerializer _serializer;
-    private readonly IFilterPipeline _filterPipeline;
-    private readonly IList<IMessageProcessor> _processors;
-    private readonly ILogger<MessageDispatcher> _logger;
-    private readonly IBusConfiguration _config;
-    private readonly IPipelineConfiguration _pipelineConfig;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ConsumeScopeAccessor _scopeAccessor;
-    private readonly IMessageTypeRegistry _typeRegistry;
-
-    /// <summary>
-    /// Creates a dispatcher for incoming broker messages.
-    /// </summary>
-    public MessageDispatcher(
-        IMessageSerializer serializer,
-        IFilterPipeline filterPipeline,
-        IList<IMessageProcessor> processors,
-        ILogger<MessageDispatcher> logger,
-        IBusConfiguration config,
-        IPipelineConfiguration pipelineConfig,
-        IServiceScopeFactory scopeFactory,
-        ConsumeScopeAccessor scopeAccessor,
-        IMessageTypeRegistry typeRegistry)
-    {
-        _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-        _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
-        _processors = processors ?? throw new ArgumentNullException(nameof(processors));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _config = config ?? throw new ArgumentNullException(nameof(config));
-        _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
-        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
-        _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
-        _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
-    }
+    private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+    private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
+    private readonly IList<IMessageProcessor> _processors = processors ?? throw new ArgumentNullException(nameof(processors));
+    private readonly ILogger<MessageDispatcher> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly IBusConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
+    private readonly IPipelineConfiguration _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+    private readonly ConsumeScopeAccessor _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
+    private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
 
     /// <inheritdoc />
     public async Task<ConsumeEventResult> Dispatch(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
@@ -78,7 +65,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
                 ? HeaderDecoder.Decode(typeNameRaw) : null;
 
             if (primaryCandidate is null && fullTypeNameCandidate is null && typeNameCandidate is null)
+            {
                 throw new InvalidOperationException("Message is missing type information: messageType parameter is empty and neither FullTypeName nor TypeName header is present.");
+            }
 
             fullTypeName = primaryCandidate ?? fullTypeNameCandidate ?? typeNameCandidate!;
 
@@ -94,7 +83,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
             FilterAction beforeAction = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
             beforeFiltersRan = true;
             if (beforeAction == FilterAction.Stop)
+            {
                 return new ConsumeEventResult { Success = true };
+            }
 
             ReplyProcessor? replyProcessor = null;
 
@@ -106,10 +97,16 @@ public sealed class MessageDispatcher : IMessageDispatcher
                     continue;
                 }
 
-                if (!proc.RunBeforeDeserialization) continue;
+                if (!proc.RunBeforeDeserialization)
+                {
+                    continue;
+                }
+
                 var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope, cancellationToken).ConfigureAwait(false);
                 if (preResult == ProcessResult.Handled)
+                {
                     return new ConsumeEventResult { Success = true };
+                }
             }
 
             Type? type = null;
@@ -132,7 +129,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
             {
                 var replyResult = await replyProcessor.ProcessAsync(messageBytes, type!, null, headers, envelope, cancellationToken).ConfigureAwait(false);
                 if (replyResult == ProcessResult.Handled)
+                {
                     return new ConsumeEventResult { Success = true };
+                }
 
                 // No pending request matched this reply — the caller timed out or this is a
                 // duplicate delivery. Returning Success=false would drive nack/requeue and
@@ -146,7 +145,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
             }
 
             if (!typeResolvedFromRegistry)
+            {
                 return new ConsumeEventResult { Success = false };
+            }
 
             var message = _serializer.Deserialize(messageBytes, type!);
 
@@ -189,10 +190,16 @@ public sealed class MessageDispatcher : IMessageDispatcher
     {
         foreach (var proc in _processors)
         {
-            if (proc.RunBeforeDeserialization) continue;
+            if (proc.RunBeforeDeserialization)
+            {
+                continue;
+            }
+
             var result = await proc.ProcessAsync(mb, mt, m, h, e, ct).ConfigureAwait(false);
             if (result == ProcessResult.Handled)
+            {
                 return new ConsumeEventResult { Success = true };
+            }
         }
 
         _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
@@ -203,7 +210,9 @@ public sealed class MessageDispatcher : IMessageDispatcher
     {
         var middlewareTypes = _pipelineConfig.MessageProcessingMiddleware;
         if (middlewareTypes.Count == 0)
+        {
             return RunProcessors;
+        }
 
         MessageProcessingDelegate chain = RunProcessors;
         for (int i = middlewareTypes.Count - 1; i >= 0; i--)

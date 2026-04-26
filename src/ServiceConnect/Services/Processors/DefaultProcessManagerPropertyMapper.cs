@@ -16,7 +16,10 @@ internal sealed class DefaultProcessManagerPropertyMapper : IProcessManagerPrope
         var propertiesHierarchy = new Dictionary<string, Type>();
 
         var body = processManagerProperty.Body;
-        if (body is System.Linq.Expressions.UnaryExpression unary) body = unary.Operand;
+        if (body is System.Linq.Expressions.UnaryExpression unary)
+        {
+            body = unary.Operand;
+        }
 
         // Only support a direct property access on the lambda parameter (e.g. d => d.OrderId).
         // Anything else — nested chains (d => d.Inner.Id), method calls, constants — silently

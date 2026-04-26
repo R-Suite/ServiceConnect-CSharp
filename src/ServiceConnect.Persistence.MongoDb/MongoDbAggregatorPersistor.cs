@@ -22,7 +22,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     // Mongo returns these codes when concurrent index creation detects that an index with
     // the same keys (86) or options (85) already exists. Either way the index is present,
     // so the ensure call has succeeded as far as the caller is concerned.
-    private static readonly HashSet<int> BenignIndexCodes = new() { 85, 86 };
+    private static readonly HashSet<int> BenignIndexCodes = [85, 86];
 
     static MongoDbAggregatorPersistor()
     {
@@ -107,7 +107,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         var snapshot = await GetSnapshotAsync(name, cancellationToken).ConfigureAwait(false);
         // Preserve legacy signature: return only the resolved messages.
-        return snapshot.ResolvedMessages.ToList();
+        return [.. snapshot.ResolvedMessages];
     }
 
     /// <inheritdoc />
@@ -185,8 +185,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             // M17's choice and raise ConcurrencyException so the caller can distinguish the race
             // from a structural persistence failure (which would have surfaced as MongoException).
             if (result.IsAcknowledged && result.DeletedCount == 0)
+            {
                 throw new ConcurrencyException(
                     $"Aggregator row not found: Name='{name}', CorrelationId='{correlationId}'. Row was concurrently removed or caller passed a mismatched key.");
+            }
         }
         catch (MongoException ex)
         {
@@ -213,7 +215,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     public async Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.ResolvedIds.Count == 0) return;
+        if (snapshot.ResolvedIds.Count == 0)
+        {
+            return;
+        }
 
         try
         {

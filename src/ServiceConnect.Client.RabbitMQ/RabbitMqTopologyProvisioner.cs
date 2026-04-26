@@ -4,22 +4,17 @@ using RabbitMQ.Client.Exceptions;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
-    /// <summary>
-    /// Encapsulates RabbitMQ topology provisioning (exchanges, queues, bindings).
-    /// Catches AMQP PRECONDITION_FAILED errors and re-throws them on initial setup.
-    /// </summary>
-public sealed class RabbitMqTopologyProvisioner
+/// <summary>
+/// Encapsulates RabbitMQ topology provisioning (exchanges, queues, bindings).
+/// Catches AMQP PRECONDITION_FAILED errors and re-throws them on initial setup.
+/// </summary>
+/// <remarks>
+/// Initializes a new topology provisioner.
+/// </remarks>
+/// <param name="logger">The logger used for topology provisioning warnings.</param>
+public sealed class RabbitMqTopologyProvisioner(ILogger logger)
 {
-    private readonly ILogger _logger;
-
-    /// <summary>
-    /// Initializes a new topology provisioner.
-    /// </summary>
-    /// <param name="logger">The logger used for topology provisioning warnings.</param>
-    public RabbitMqTopologyProvisioner(ILogger logger)
-    {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
+    private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Declares an exchange with standard durable/non-auto-delete settings.
@@ -45,7 +40,10 @@ public sealed class RabbitMqTopologyProvisioner
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring exchange {ExchangeName}: {Message}", exchangeName, ex.Message);
-            if (isInitialSetup) throw;
+            if (isInitialSetup)
+            {
+                throw;
+            }
         }
     }
 
@@ -76,7 +74,10 @@ public sealed class RabbitMqTopologyProvisioner
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring queue {QueueName}: {Message}", queueName, ex.Message);
-            if (isInitialSetup) throw;
+            if (isInitialSetup)
+            {
+                throw;
+            }
         }
     }
 
@@ -105,7 +106,10 @@ public sealed class RabbitMqTopologyProvisioner
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring exchange {ExchangeName}: {Message}", name, ex.Message);
-            if (isInitialSetup) throw;
+            if (isInitialSetup)
+            {
+                throw;
+            }
         }
 
         try
@@ -115,7 +119,10 @@ public sealed class RabbitMqTopologyProvisioner
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring queue {QueueName}: {Message}", name, ex.Message);
-            if (isInitialSetup) throw;
+            if (isInitialSetup)
+            {
+                throw;
+            }
         }
 
         if (!string.IsNullOrEmpty(name))
@@ -127,7 +134,10 @@ public sealed class RabbitMqTopologyProvisioner
             catch (OperationInterruptedException ex)
             {
                 _logger.LogWarning("Error binding queue {QueueName}: {Message}", name, ex.Message);
-                if (isInitialSetup) throw;
+                if (isInitialSetup)
+                {
+                    throw;
+                }
             }
         }
     }
@@ -156,7 +166,10 @@ public sealed class RabbitMqTopologyProvisioner
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring dead letter exchange - {Message}", ex.Message);
-            if (isInitialSetup) throw;
+            if (isInitialSetup)
+            {
+                throw;
+            }
         }
 
         try
@@ -166,7 +179,10 @@ public sealed class RabbitMqTopologyProvisioner
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error binding dead letter queue - {Message}", ex.Message);
-            if (isInitialSetup) throw;
+            if (isInitialSetup)
+            {
+                throw;
+            }
         }
 
         Dictionary<string, object?> arguments = new(retryQueueArguments)
@@ -182,7 +198,10 @@ public sealed class RabbitMqTopologyProvisioner
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring queue {Message}", ex.Message);
-            if (isInitialSetup) throw;
+            if (isInitialSetup)
+            {
+                throw;
+            }
         }
     }
 }

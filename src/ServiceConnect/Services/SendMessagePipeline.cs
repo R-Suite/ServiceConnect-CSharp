@@ -56,14 +56,14 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     private SendMessageDelegate BuildPublishChain()
     {
         var producer = _producer;
-        SendMessageDelegate terminal = (t, b, h, ep, ct) => producer.PublishAsync(t, b, h, ct);
+        Task terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct) => producer.PublishAsync(t, b, h, ct);
         return WrapMiddleware(terminal);
     }
 
     private SendMessageDelegate BuildSendChain()
     {
         var producer = _producer;
-        SendMessageDelegate terminal = (t, b, h, ep, ct) =>
+        Task terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct) =>
             !string.IsNullOrEmpty(ep)
                 ? producer.SendAsync(ep, t, b, h, ct)
                 : producer.SendAsync(t, b, h, ct);
@@ -74,7 +74,9 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     {
         var middlewareTypes = _pipelineConfig.SendMessageMiddleware;
         if (middlewareTypes.Count == 0)
+        {
             return terminal;
+        }
 
         var chain = terminal;
         for (int i = middlewareTypes.Count - 1; i >= 0; i--)
@@ -89,7 +91,11 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
-        if (_disposed) return ValueTask.CompletedTask;
+        if (_disposed)
+        {
+            return ValueTask.CompletedTask;
+        }
+
         _disposed = true;
         // Producer lifetime is managed by the DI container — do not dispose it here
         return ValueTask.CompletedTask;

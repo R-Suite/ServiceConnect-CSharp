@@ -11,14 +11,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class ProcessManagerMongoDbTests
+public class ProcessManagerMongoDbTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public ProcessManagerMongoDbTests(PersistenceFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -68,7 +63,7 @@ public class ProcessManagerMongoDbTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -101,17 +96,17 @@ public class ProcessManagerMongoDbTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class MongoCounterProcessHandler : IProcessHandler<TestProcessData, TestMessage>
+file class MongoCounterProcessHandler(TaskCompletionSource<bool> secondHandled) : IProcessHandler<TestProcessData, TestMessage>
 {
-    private readonly TaskCompletionSource<bool> _secondHandled;
-
-    public MongoCounterProcessHandler(TaskCompletionSource<bool> secondHandled) =>
-        _secondHandled = secondHandled;
+    private readonly TaskCompletionSource<bool> _secondHandled = secondHandled;
 
     public IConsumeContext Context { get; set; } = null!;
 
@@ -119,7 +114,11 @@ file class MongoCounterProcessHandler : IProcessHandler<TestProcessData, TestMes
     {
         data.Counter++;
         data.LastContent = message.Content;
-        if (data.Counter >= 2) _secondHandled.TrySetResult(true);
+        if (data.Counter >= 2)
+        {
+            _secondHandled.TrySetResult(true);
+        }
+
         return Task.CompletedTask;
     }
 }

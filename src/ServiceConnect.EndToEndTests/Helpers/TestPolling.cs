@@ -17,7 +17,11 @@ internal static class TestPolling
         {
             cancellationToken.ThrowIfCancellationRequested();
             var result = await probe().ConfigureAwait(false);
-            if (result is not null) return result;
+            if (result is not null)
+            {
+                return result;
+            }
+
             await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
         }
         return null;
@@ -34,7 +38,11 @@ internal static class TestPolling
         while (DateTime.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (await condition().ConfigureAwait(false)) return true;
+            if (await condition().ConfigureAwait(false))
+            {
+                return true;
+            }
+
             await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
         }
         return false;

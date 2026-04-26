@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -5,7 +6,6 @@ using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
-using System.Reflection;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Processors;
@@ -32,7 +32,7 @@ public class StreamProcessorTests
             accessor,
             NullLogger<StreamProcessor>.Instance,
             new MessageTypeRegistry(),
-            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance),
+            new StreamHandlerRegistry([], NullLogger<StreamHandlerRegistry>.Instance),
             Mock.Of<IMessageSerializer>(),
             TimeProvider.System);
     }
@@ -311,9 +311,9 @@ public class StreamProcessorTests
             [HeaderKeys.SequenceId] = sequenceId,
             [HeaderKeys.PacketNumber] = "99"
         };
-        var poisonEnv = new Envelope { Headers = poisonHeaders, Body = new byte[] { 9 } };
+        var poisonEnv = new Envelope { Headers = poisonHeaders, Body = "\t"u8.ToArray() };
 
-        var result = await processor.ProcessAsync(new byte[] { 9 }, typeof(object), null, poisonHeaders, poisonEnv);
+        var result = await processor.ProcessAsync("\t"u8.ToArray(), typeof(object), null, poisonHeaders, poisonEnv);
 
         // Handled to drop the poison packet without requeue.
         Assert.Equal(ProcessResult.Handled, result);
@@ -433,7 +433,7 @@ public class StreamProcessorTests
             accessor,
             NullLogger<StreamProcessor>.Instance,
             new MessageTypeRegistry(),
-            new StreamHandlerRegistry(new List<HandlerReference>(), NullLogger<StreamHandlerRegistry>.Instance),
+            new StreamHandlerRegistry([], NullLogger<StreamHandlerRegistry>.Instance),
             Mock.Of<IMessageSerializer>(),
             fakeTime);
 
@@ -585,17 +585,15 @@ public class StreamProcessorTests
     }
 }
 
-file sealed class ScopeProbeMessage : Message
+file sealed class ScopeProbeMessage(Guid correlationId) : Message(correlationId)
 {
-    public ScopeProbeMessage(Guid correlationId) : base(correlationId) { }
 }
 
-file sealed class ScopeProbeStreamHandler : IStreamHandler<ScopeProbeMessage>
+file sealed class ScopeProbeStreamHandler(string label) : IStreamHandler<ScopeProbeMessage>
 {
     private int _count;
-    public ScopeProbeStreamHandler(string label) { Label = label; }
-    public string Label { get; }
-    public int InvocationCount => Volatile.Read(ref _count);
+
+    public string Label { get; } = label; public int InvocationCount => Volatile.Read(ref _count);
     public IMessageBusReadStream Stream { get; set; } = null!;
     public Task ExecuteAsync(ScopeProbeMessage message, CancellationToken cancellationToken = default)
     {
@@ -604,7 +602,8 @@ file sealed class ScopeProbeStreamHandler : IStreamHandler<ScopeProbeMessage>
     }
 }
 
-file class SptMsg : Message { public SptMsg(Guid c) : base(c) { } }
+file class SptMsg(Guid c) : Message(c) {
+}
 
 file class SptThrowingHandler : IStreamHandler<SptMsg>
 {
@@ -636,10 +635,10 @@ file sealed class SptCounter
     public void Increment() => Interlocked.Increment(ref _count);
 }
 
-file sealed class SptCountingHandler : IStreamHandler<SptMsg>
+file sealed class SptCountingHandler(SptCounter counter) : IStreamHandler<SptMsg>
 {
-    private readonly SptCounter _counter;
-    public SptCountingHandler(SptCounter counter) => _counter = counter;
+    private readonly SptCounter _counter = counter;
+
     public IMessageBusReadStream Stream { get; set; } = null!;
     public Task ExecuteAsync(SptMsg stream, CancellationToken cancellationToken = default)
     {

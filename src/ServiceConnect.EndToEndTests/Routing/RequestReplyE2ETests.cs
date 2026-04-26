@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(RequestReplyCollection))]
-public class RequestReplyE2ETests
+public class RequestReplyE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public RequestReplyE2ETests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -29,8 +24,7 @@ public class RequestReplyE2ETests
         // --- Responder bus setup ---
         var responderHandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(ReplyHandler),
                 MessageType = typeof(TestRequest)
             }
@@ -87,7 +81,7 @@ public class RequestReplyE2ETests
         await requesterBus.StartConsumingAsync();
 
         // Give consumers time to set up
-        
+
 
         try
         {
@@ -104,9 +98,16 @@ public class RequestReplyE2ETests
         finally
         {
             await responderBus.DisposeAsync();
-            if (responderProvider is IAsyncDisposable asyncResponderProvider) await asyncResponderProvider.DisposeAsync();
+            if (responderProvider is IAsyncDisposable asyncResponderProvider)
+            {
+                await asyncResponderProvider.DisposeAsync();
+            }
+
             await requesterBus.DisposeAsync();
-            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider)
+            {
+                await asyncRequesterProvider.DisposeAsync();
+            }
         }
     }
 }

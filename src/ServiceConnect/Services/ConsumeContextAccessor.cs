@@ -24,7 +24,9 @@ internal sealed class ConsumeContextAccessor
         public void Dispose()
         {
             if (_disposed)
+            {
                 return;
+            }
 
             _owner._currentHeaders.Value = _previous;
             _disposed = true;

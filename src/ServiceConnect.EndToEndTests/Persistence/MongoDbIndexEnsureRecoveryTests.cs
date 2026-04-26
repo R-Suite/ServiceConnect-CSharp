@@ -11,11 +11,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class MongoDbIndexEnsureRecoveryTests
+public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture) => _fixture = fixture;
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -102,6 +100,6 @@ public class MongoDbIndexEnsureRecoveryTests
             .GetCollection<BsonDocument>(coll)
             .Indexes.ListAsync();
         var indexes = await cursor.ToListAsync();
-        return indexes.Select(idx => idx["name"].AsString).ToList();
+        return [.. indexes.Select(idx => idx["name"].AsString)];
     }
 }

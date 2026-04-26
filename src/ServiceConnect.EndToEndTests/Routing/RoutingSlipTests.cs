@@ -38,7 +38,7 @@ public class RoutingSlipTests
 
         var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
-        await bus.RouteAsync(message, new List<string> { "Step1", "Step2", "Step3" });
+        await bus.RouteAsync(message, ["Step1", "Step2", "Step3"]);
 
         Assert.Equal("Step1", capturedEndpoint);
         Assert.NotNull(capturedHeaders);
@@ -76,7 +76,7 @@ public class RoutingSlipTests
 
         var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
-        await bus.RouteAsync(message, new List<string> { "OnlyDest" });
+        await bus.RouteAsync(message, ["OnlyDest"]);
 
         Assert.Equal("OnlyDest", capturedEndpoint);
         Assert.NotNull(capturedHeaders);
@@ -102,6 +102,6 @@ public class RoutingSlipTests
 
         var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Start" };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => bus.RouteAsync(message, new List<string>()));
+        await Assert.ThrowsAsync<ArgumentException>(() => bus.RouteAsync(message, []));
     }
 }

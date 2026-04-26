@@ -86,9 +86,8 @@ public class ReplyProcessorTests
     }
 }
 
-file class TestReplyMsg : Message
+file class TestReplyMsg(Guid correlationId) : Message(correlationId)
 {
-    public TestReplyMsg(Guid correlationId) : base(correlationId) { }
 }
 
 file sealed class TestReplyStatusRequestReplyManager(bool shouldHandle) : IReplyStatusRequestReplyManager

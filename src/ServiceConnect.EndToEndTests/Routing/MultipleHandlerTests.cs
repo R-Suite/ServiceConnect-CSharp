@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class MultipleHandlerTests
+public class MultipleHandlerTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public MultipleHandlerTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -29,13 +24,11 @@ public class MultipleHandlerTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(TaggedHandlerA),
                 MessageType = typeof(TestMessage)
             },
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(TaggedHandlerB),
                 MessageType = typeof(TestMessage)
             }
@@ -69,7 +62,7 @@ public class MultipleHandlerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -90,51 +83,48 @@ public class MultipleHandlerTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class TaggedHandlerA : IMessageHandler<TestMessage>
+file class TaggedHandlerA(ConcurrentBag<string> bag, TaskCompletionSource<bool> tcs) : IMessageHandler<TestMessage>
 {
-    private readonly ConcurrentBag<string> _bag;
-    private readonly TaskCompletionSource<bool> _tcs;
+    private readonly ConcurrentBag<string> _bag = bag;
+    private readonly TaskCompletionSource<bool> _tcs = tcs;
 
     public IConsumeContext Context { get; set; } = null!;
-
-    public TaggedHandlerA(ConcurrentBag<string> bag, TaskCompletionSource<bool> tcs)
-    {
-        _bag = bag;
-        _tcs = tcs;
-    }
 
     public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         _bag.Add("HandlerA");
         if (_bag.Count >= 2)
+        {
             _tcs.TrySetResult(true);
+        }
+
         return Task.CompletedTask;
     }
 }
 
-file class TaggedHandlerB : IMessageHandler<TestMessage>
+file class TaggedHandlerB(ConcurrentBag<string> bag, TaskCompletionSource<bool> tcs) : IMessageHandler<TestMessage>
 {
-    private readonly ConcurrentBag<string> _bag;
-    private readonly TaskCompletionSource<bool> _tcs;
+    private readonly ConcurrentBag<string> _bag = bag;
+    private readonly TaskCompletionSource<bool> _tcs = tcs;
 
     public IConsumeContext Context { get; set; } = null!;
-
-    public TaggedHandlerB(ConcurrentBag<string> bag, TaskCompletionSource<bool> tcs)
-    {
-        _bag = bag;
-        _tcs = tcs;
-    }
 
     public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
         _bag.Add("HandlerB");
         if (_bag.Count >= 2)
+        {
             _tcs.TrySetResult(true);
+        }
+
         return Task.CompletedTask;
     }
 }

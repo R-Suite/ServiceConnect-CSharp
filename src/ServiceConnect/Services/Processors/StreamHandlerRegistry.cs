@@ -23,12 +23,17 @@ internal sealed class StreamHandlerRegistry : IHandlerRegistry
         {
             var streamInterface = FindStreamHandlerInterface(href.HandlerType, href.MessageType);
             if (streamInterface == null)
+            {
                 continue;
+            }
 
             if (builder.TryGetValue(href.MessageType, out var existing))
             {
                 if (existing.HandlerType == href.HandlerType)
+                {
                     continue; // identical (MessageType, HandlerType) pair registered twice — dedupe silently
+                }
+
                 throw new InvalidOperationException(
                     $"Duplicate stream-handler registration for message type '{href.MessageType.FullName}'. " +
                     $"Only one IStreamHandler<T> may be registered per message type; found '{existing.HandlerType.FullName}' and '{href.HandlerType.FullName}'.");

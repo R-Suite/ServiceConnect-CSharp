@@ -8,14 +8,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(IsolatedCollection))]
-public class RoutingSlipForwardingTests
+public class RoutingSlipForwardingTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public RoutingSlipForwardingTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -102,13 +97,13 @@ public class RoutingSlipForwardingTests
 
         await step1Bus.StartConsumingAsync();
         await step2Bus.StartConsumingAsync();
-        
+
 
         try
         {
             // Act: send message to step1 with routing slip pointing to step2
             var message = new StepMessage(Guid.NewGuid()) { CurrentStep = "Origin" };
-            await step1Bus.RouteAsync(message, new List<string> { step1Queue, step2Queue });
+            await step1Bus.RouteAsync(message, [step1Queue, step2Queue]);
 
             // Assert: step1 handler was called
             var cts1 = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -125,18 +120,23 @@ public class RoutingSlipForwardingTests
         {
             await step1Bus.DisposeAsync();
             await step2Bus.DisposeAsync();
-            if (step1Provider is IAsyncDisposable asyncStep1Provider) await asyncStep1Provider.DisposeAsync();
-            if (step2Provider is IAsyncDisposable asyncStep2Provider) await asyncStep2Provider.DisposeAsync();
+            if (step1Provider is IAsyncDisposable asyncStep1Provider)
+            {
+                await asyncStep1Provider.DisposeAsync();
+            }
+
+            if (step2Provider is IAsyncDisposable asyncStep2Provider)
+            {
+                await asyncStep2Provider.DisposeAsync();
+            }
         }
     }
 }
 
-file class Step1Handler : IMessageHandler<StepMessage>
+file class Step1Handler(Action onHandled) : IMessageHandler<StepMessage>
 {
-    private readonly Action _onHandled;
+    private readonly Action _onHandled = onHandled;
     public IConsumeContext Context { get; set; } = null!;
-
-    public Step1Handler(Action onHandled) => _onHandled = onHandled;
 
     public Task HandleAsync(StepMessage message, CancellationToken cancellationToken = default)
     {
@@ -146,12 +146,10 @@ file class Step1Handler : IMessageHandler<StepMessage>
     }
 }
 
-file class Step2Handler : IMessageHandler<StepMessage>
+file class Step2Handler(Action<string> onHandled) : IMessageHandler<StepMessage>
 {
-    private readonly Action<string> _onHandled;
+    private readonly Action<string> _onHandled = onHandled;
     public IConsumeContext Context { get; set; } = null!;
-
-    public Step2Handler(Action<string> onHandled) => _onHandled = onHandled;
 
     public Task HandleAsync(StepMessage message, CancellationToken cancellationToken = default)
     {

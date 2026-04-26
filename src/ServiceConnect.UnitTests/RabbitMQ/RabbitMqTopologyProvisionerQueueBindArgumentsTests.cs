@@ -36,7 +36,7 @@ public class RabbitMqTopologyProvisionerQueueBindArgumentsTests
         await provisioner.ConfigureDeclareUtilityQueueAsync(channel.Object, "some-queue", queueArguments, isInitialSetup: false);
 
         Assert.NotEmpty(capturedArgs);
-        Assert.All(capturedArgs, args => Assert.Null(args));
+        Assert.All(capturedArgs, Assert.Null);
     }
 
     [Fact]
@@ -64,6 +64,6 @@ public class RabbitMqTopologyProvisionerQueueBindArgumentsTests
             isInitialSetup: false);
 
         Assert.NotEmpty(capturedArgs);
-        Assert.All(capturedArgs, args => Assert.Null(args));
+        Assert.All(capturedArgs, Assert.Null);
     }
 }

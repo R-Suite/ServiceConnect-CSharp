@@ -38,7 +38,11 @@ public sealed class ConsumeScopeAccessor
 
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
             _current.Value = previous;
         }
     }

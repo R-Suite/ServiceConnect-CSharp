@@ -52,10 +52,14 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
     internal bool TryGetOrBuild(Type messageType, [NotNullWhen(true)] out MessageHandlerDescriptor? descriptor)
     {
         if (_knownDescriptors.TryGetValue(messageType, out descriptor))
+        {
             return descriptor != null;
+        }
 
         if (_lazyDescriptors.TryGetValue(messageType, out descriptor))
+        {
             return descriptor != null;
+        }
 
         descriptor = _lazyDescriptors.GetOrAdd(messageType, TryBuild);
         return descriptor != null;
@@ -64,7 +68,9 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
     private static MessageHandlerDescriptor? TryBuild(Type messageType)
     {
         if (messageType == typeof(Message) || messageType == typeof(object))
+        {
             return null;
+        }
 
         var handlerInterfaceType = typeof(IMessageHandler<>).MakeGenericType(messageType);
         return BuildDescriptor(messageType, handlerInterfaceType);
@@ -116,7 +122,7 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
 
         var method = handlerInterface.GetMethod(
             "HandleAsync",
-            new[] { messageType, typeof(CancellationToken) })!;
+            [messageType, typeof(CancellationToken)])!;
         var call = Expression.Call(handlerCast, method, messageCast, ctParam);
 
         return Expression.Lambda<Func<object, object, CancellationToken, Task>>(

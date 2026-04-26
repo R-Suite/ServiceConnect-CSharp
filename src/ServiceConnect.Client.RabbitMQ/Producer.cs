@@ -1,9 +1,9 @@
+using System.Collections.Concurrent;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
-using System.Collections.Concurrent;
-using System.Reflection;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
@@ -76,8 +76,8 @@ public sealed class Producer : IProducer
         _publisherAcks = GetSetting(settings, RabbitMQSettingKeys.PublisherAcknowledgements, false, Convert.ToBoolean);
         _publishTimeout = GetSetting(settings, RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromSeconds(30), v => (TimeSpan)v);
         _hosts = transportConfiguration.Host.Split(',');
-        _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, DefaultRetryCount, v => Convert.ToUInt16(v));
-        _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, DefaultRetryTimeInSeconds, v => Convert.ToUInt16(v));
+        _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, DefaultRetryCount, Convert.ToUInt16);
+        _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, DefaultRetryTimeInSeconds, Convert.ToUInt16);
     }
 
     private static T GetSetting<T>(IReadOnlyDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)
@@ -108,12 +108,18 @@ public sealed class Producer : IProducer
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
-        if (IsHealthy()) return;
+        if (IsHealthy())
+        {
+            return;
+        }
 
         await _connectionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (IsHealthy()) return;
+            if (IsHealthy())
+            {
+                return;
+            }
 
             await Retry.DoAsync(() => CreateConnectionAsync(cancellationToken), async ex =>
             {
@@ -203,9 +209,21 @@ public sealed class Producer : IProducer
     // propagate immediately so callers can decide whether to retry at a higher level.
     private static bool IsRetriablePublishException(Exception ex)
     {
-        if (ex is global::RabbitMQ.Client.Exceptions.PublishException) return false;
-        if (ex is OperationCanceledException) return false;
-        if (ex is TimeoutException) return false;
+        if (ex is global::RabbitMQ.Client.Exceptions.PublishException)
+        {
+            return false;
+        }
+
+        if (ex is OperationCanceledException)
+        {
+            return false;
+        }
+
+        if (ex is TimeoutException)
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -236,8 +254,11 @@ public sealed class Producer : IProducer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (message.Length > MaximumMessageSize)
+        {
             throw new InvalidOperationException(
                 $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
+        }
+
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -257,7 +278,9 @@ public sealed class Producer : IProducer
             await ExecuteWithConnectionRetryAsync(async () =>
             {
                 if (!_declaredExchanges.ContainsKey(exchangeName))
+                {
                     await ConfigureExchangeAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
+                }
 
                 await PublishWithTimeoutAsync(
                     _model!,
@@ -283,8 +306,11 @@ public sealed class Producer : IProducer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (message.Length > MaximumMessageSize)
+        {
             throw new InvalidOperationException(
                 $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
+        }
+
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -293,7 +319,9 @@ public sealed class Producer : IProducer
             ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
             if (!_queueConfiguration.TryGetQueueMapping(type, out IReadOnlyList<string>? endPoints))
+            {
                 throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
+            }
 
             // Build base headers once outside the loop; only DestinationAddress varies per endpoint.
             var baseHeaders = GetHeaders(type, headers, string.Empty, "Send");
@@ -328,10 +356,15 @@ public sealed class Producer : IProducer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
+        {
             throw new ArgumentException($"Cannot send message of type {type} to empty endpoint");
+        }
+
         if (message.Length > MaximumMessageSize)
+        {
             throw new InvalidOperationException(
                 $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
+        }
 
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -368,10 +401,16 @@ public sealed class Producer : IProducer
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
+        {
             throw new ArgumentException($"Cannot send packet of type {type} to empty endpoint");
+        }
+
         if (packet.Length > MaximumMessageSize)
+        {
             throw new InvalidOperationException(
                 $"Message size {packet.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
+        }
+
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -412,7 +451,10 @@ public sealed class Producer : IProducer
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposedInt, 1) != 0) return;
+        if (Interlocked.Exchange(ref _disposedInt, 1) != 0)
+        {
+            return;
+        }
 
         // Wait for in-flight publishes and (re)connections to complete before tearing down
         // the channel/connection. The two waits SHARE a single stopwatch budget so worst-case
@@ -427,7 +469,11 @@ public sealed class Producer : IProducer
             publishLockAcquired = await _publishLock.WaitAsync(disposeTimeout).ConfigureAwait(false);
 
             var remaining = disposeTimeout - stopwatch.Elapsed;
-            if (remaining < TimeSpan.Zero) remaining = TimeSpan.Zero;
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
             connectionLockAcquired = await _connectionSemaphore.WaitAsync(remaining).ConfigureAwait(false);
 
             if (!publishLockAcquired || !connectionLockAcquired)
@@ -449,8 +495,15 @@ public sealed class Producer : IProducer
             try { await TearDownChannelAndConnectionAsync().ConfigureAwait(false); }
             catch (Exception ex) { _logger.LogWarning(ex, "Producer channel/connection close failed during dispose"); }
 
-            if (publishLockAcquired) _publishLock.Release();
-            if (connectionLockAcquired) _connectionSemaphore.Release();
+            if (publishLockAcquired)
+            {
+                _publishLock.Release();
+            }
+
+            if (connectionLockAcquired)
+            {
+                _connectionSemaphore.Release();
+            }
 
             // _publishLock and _connectionSemaphore are intentionally NOT Disposed:
             // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and
@@ -480,7 +533,9 @@ public sealed class Producer : IProducer
         // foreach avoids the LINQ Select + enumerator allocation per message.
         var headersCopy = new Dictionary<string, object?>(messageHeaders.Count);
         foreach (var kvp in messageHeaders)
+        {
             headersCopy[kvp.Key] = kvp.Value;
+        }
 
         var basicProperties = new BasicProperties
         {
@@ -489,7 +544,9 @@ public sealed class Producer : IProducer
         };
 
         if (messageHeaders.TryGetValue(HeaderKeys.MessageId, out var messageId))
+        {
             basicProperties.MessageId = messageId?.ToString();
+        }
 
         if (messageHeaders.TryGetValue(HeaderKeys.Priority, out var priority))
         {
@@ -517,20 +574,27 @@ public sealed class Producer : IProducer
         if (headers is not null)
         {
             foreach (var kvp in headers)
+            {
                 result[kvp.Key] = kvp.Value;
+            }
         }
 
         result[HeaderKeys.DestinationAddress] = queueName;
         // MessageId is now Bus-authoritative; preserve the Bus-minted value.
         // Only mint one here for callers that invoke the Producer directly (bypassing Bus).
         if (!result.ContainsKey(HeaderKeys.MessageId))
+        {
             result[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+        }
+
         result[HeaderKeys.MessageType] = messageType;
 
         result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
         result[HeaderKeys.TimeSent] = FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
         if (_busConfiguration.IncludeMachineNameInHeaders)
+        {
             result[HeaderKeys.SourceMachine] = Environment.MachineName;
+        }
 
         var (fullName, aqn) = _typeNameCache.GetOrAdd(type, static t => (t.FullName!, t.AssemblyQualifiedName!));
         result[HeaderKeys.TypeName] = fullName;
@@ -603,7 +667,10 @@ public sealed class Producer : IProducer
             {
                 _logger.LogDebug("Disposing Model");
                 if (model.IsOpen)
+                {
                     await model.CloseAsync();
+                }
+
                 model.Dispose();
             }
             catch (ObjectDisposedException) { }
@@ -622,7 +689,10 @@ public sealed class Producer : IProducer
             {
                 _logger.LogDebug("Disposing connection");
                 if (connection.IsOpen)
+                {
                     await connection.CloseAsync();
+                }
+
                 connection.Dispose();
             }
             catch (ObjectDisposedException) { }

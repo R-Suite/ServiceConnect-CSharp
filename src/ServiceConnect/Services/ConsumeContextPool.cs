@@ -11,7 +11,7 @@ internal sealed class ConsumeContextPool
     private const int MaxPoolSize = 512;
 
     private static readonly Dictionary<string, object> EmptyHeaders = [];
-    private readonly ConcurrentBag<PooledConsumeContext> _pool = new();
+    private readonly ConcurrentBag<PooledConsumeContext> _pool = [];
 
     public RentalHandle Rent(
         IBus bus,
@@ -22,7 +22,9 @@ internal sealed class ConsumeContextPool
         CancellationToken cancellationToken)
     {
         if (!_pool.TryTake(out var context))
+        {
             context = new PooledConsumeContext(this);
+        }
 
         var token = context.Initialize(bus, headers, queueConfig, busConfig, replyStatusRequestReplyManager, cancellationToken);
         return new RentalHandle(context, token);
@@ -33,7 +35,11 @@ internal sealed class ConsumeContextPool
         // Cheap upper bound: ConcurrentBag has no Count that is both fast and exact, but
         // the Count property is O(n) over segments. For our pool sizes this is acceptable
         // and a rare cost compared to burst arrivals.
-        if (_pool.Count >= MaxPoolSize) return;
+        if (_pool.Count >= MaxPoolSize)
+        {
+            return;
+        }
+
         _pool.Add(context);
     }
 
@@ -87,7 +93,6 @@ internal sealed class ConsumeContextPool
     {
         private readonly ConsumeContextPool _owner = owner;
         private Dictionary<string, object> _headers = EmptyHeaders;
-        private IBus _bus = null!;
         private IQueueConfiguration _queueConfig = null!;
         private IBusConfiguration _busConfig = null!;
         private IReplyStatusRequestReplyManager? _replyStatusRequestReplyManager;
@@ -103,10 +108,9 @@ internal sealed class ConsumeContextPool
         private long _rentToken;
 
         // Unsafe accessors — callers MUST call EnsureActive(_token) before using these.
-        internal IBus BusUnsafe => _bus;
+        internal IBus BusUnsafe { get; private set; } = null!;
         internal IReadOnlyDictionary<string, object> HeadersUnsafe => _headers;
-        internal CancellationToken CancellationTokenUnsafe => _cancellationToken;
-        private CancellationToken _cancellationToken;
+        internal CancellationToken CancellationTokenUnsafe { get; private set; }
 
         // IConsumeContext explicit implementation routes through RentalHandle; direct use
         // of the pooled instance (without a captured token) is intentionally unsupported.
@@ -131,12 +135,9 @@ internal sealed class ConsumeContextPool
 
         internal Guid GetOrCacheCorrelationId()
         {
-            if (_correlationId is null)
-            {
-                _correlationId = _headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
+            _correlationId ??= _headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
                     && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
                     ? id : Guid.Empty;
-            }
             return _correlationId.Value;
         }
 
@@ -149,11 +150,11 @@ internal sealed class ConsumeContextPool
             CancellationToken cancellationToken)
         {
             var token = Interlocked.Increment(ref _rentToken);
-            _bus = bus;
+            BusUnsafe = bus;
             _queueConfig = queueConfig;
             _busConfig = busConfig;
             _replyStatusRequestReplyManager = replyStatusRequestReplyManager;
-            _cancellationToken = cancellationToken;
+            CancellationTokenUnsafe = cancellationToken;
             _headers = headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers);
             _messageId = null;
             _messageIdCached = false;
@@ -164,9 +165,11 @@ internal sealed class ConsumeContextPool
         internal void EnsureActive(long expectedToken)
         {
             if (Volatile.Read(ref _rentToken) != expectedToken)
+            {
                 throw new InvalidOperationException(
                     "IConsumeContext is no longer valid — it was released when the handler returned. "
                     + "Do not capture it beyond the handler lifetime.");
+            }
         }
 
         internal Task ReplyAsyncCore<TReply>(TReply message, Dictionary<string, string>? headers, CancellationToken cancellationToken)
@@ -174,7 +177,9 @@ internal sealed class ConsumeContextPool
         {
             var sourceAddress = ConsumeContext.GetDecodedHeader(_headers, HeaderKeys.SourceAddress);
             if (string.IsNullOrEmpty(sourceAddress))
+            {
                 throw new InvalidOperationException("Cannot reply: incoming message has no SourceAddress header.");
+            }
 
             var requestMessageId = ConsumeContext.GetDecodedHeader(_headers, HeaderKeys.RequestMessageId);
             var isTrustedRequestReply = ConsumeContext.IsTrustedRequestReplyEnvelope(
@@ -193,10 +198,12 @@ internal sealed class ConsumeContextPool
 
             var replyHeaders = headers ?? [];
             if (!string.IsNullOrEmpty(requestMessageId))
+            {
                 replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;
+            }
 
             var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
-            return _bus.SendAsync(message, options, cancellationToken);
+            return BusUnsafe.SendAsync(message, options, cancellationToken);
         }
 
         public void Release()

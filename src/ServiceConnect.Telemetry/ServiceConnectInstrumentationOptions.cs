@@ -1,5 +1,5 @@
-using ServiceConnect.Interfaces;
 using System.Diagnostics;
+using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Telemetry;
 

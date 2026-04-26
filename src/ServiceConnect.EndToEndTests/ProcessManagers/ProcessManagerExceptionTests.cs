@@ -13,14 +13,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class ProcessManagerExceptionTests
+public class ProcessManagerExceptionTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ProcessManagerExceptionTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -77,7 +72,7 @@ public class ProcessManagerExceptionTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -111,7 +106,10 @@ public class ProcessManagerExceptionTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

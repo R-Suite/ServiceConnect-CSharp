@@ -21,13 +21,18 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     private static Guid? GetCorrelationId(object data)
     {
         if (data is Message message)
+        {
             return message.CorrelationId;
+        }
 
         var accessor = CorrelationIdAccessors.GetOrAdd(data.GetType(), static type =>
         {
             var prop = type.GetProperty("CorrelationId", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
             if (prop is null || prop.PropertyType != typeof(Guid) || prop.GetMethod is null)
+            {
                 return static _ => null;
+            }
+
             return obj => (Guid?)prop.GetValue(obj);
         });
         return accessor(data);
@@ -77,12 +82,17 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         lock (_memoryCacheLock)
         {
             if (!_provider.Contains(name))
+            {
                 return Task.FromResult<IList<object>>([]);
+            }
 
             var source = (List<Entry>)_provider.Get<string, object>(name);
             var copy = new List<object>(source.Count);
             foreach (var entry in source)
+            {
                 copy.Add(DeepClone.Clone(entry.Data));
+            }
+
             return Task.FromResult<IList<object>>(copy);
         }
     }
@@ -96,7 +106,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         lock (_memoryCacheLock)
         {
             if (!_provider.Contains(name))
+            {
                 return Task.FromResult<IAggregatorSnapshot>(AggregatorSnapshot.Empty);
+            }
 
             var source = (List<Entry>)_provider.Get<string, object>(name);
             var messages = new List<object>(source.Count);
@@ -144,8 +156,11 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         // already raises ConcurrencyException on DeleteDataAsync no-ops; keeping aggregator behaviour
         // aligned prevents a silent divergence between persistor families.
         if (!removed)
+        {
             throw new ConcurrencyException(
                 $"Aggregator row not found: Name='{name}', CorrelationId='{correlationId}'. Row was concurrently removed or caller passed a mismatched key.");
+        }
+
         return Task.CompletedTask;
     }
 
@@ -158,7 +173,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         lock (_memoryCacheLock)
         {
             if (_provider.Contains(name))
+            {
                 _provider.Remove(name);
+            }
         }
         return Task.CompletedTask;
     }
@@ -170,18 +187,26 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         cancellationToken.ThrowIfCancellationRequested();
-        if (snapshot.ResolvedIds.Count == 0) return Task.CompletedTask;
+        if (snapshot.ResolvedIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
 
         lock (_memoryCacheLock)
         {
-            if (!_provider.Contains(name)) return Task.CompletedTask;
+            if (!_provider.Contains(name))
+            {
+                return Task.CompletedTask;
+            }
 
             var list = (List<Entry>)_provider.Get<string, object>(name);
             var idsToRemove = new HashSet<Guid>(snapshot.ResolvedIds);
             list.RemoveAll(entry => idsToRemove.Contains(entry.Id));
 
             if (list.Count == 0)
+            {
                 _provider.Remove(name);
+            }
         }
         return Task.CompletedTask;
     }
@@ -209,14 +234,20 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     /// </summary>
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         _provider.Dispose();
     }
 
     private List<Entry> GetOrCreateEntries(string name)
     {
         if (_provider.Contains(name))
+        {
             return (List<Entry>)_provider.Get<string, object>(name);
+        }
 
         var list = new List<Entry>();
         // Aggregator buffers have no TTL: flush is caller-driven via RemoveSnapshot /

@@ -27,7 +27,7 @@ internal sealed class InMemoryPersistenceState : IDisposable
     public ICacheProvider Provider { get; }
     public ReaderWriterLockSlim SyncRoot { get; } = new();
     public SortedSet<TimeoutEntry> TimeoutIndex { get; } = new(TimeoutEntryComparer.Instance);
-    public Dictionary<Guid, TimeoutEntry> TimeoutsById { get; } = new();
+    public Dictionary<Guid, TimeoutEntry> TimeoutsById { get; } = [];
 
     /// <summary>
     /// Disposes the owned <see cref="CacheProvider"/> (which holds <see cref="ITimer"/>
@@ -36,7 +36,11 @@ internal sealed class InMemoryPersistenceState : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         _ownedProvider?.Dispose();
         SyncRoot.Dispose();
     }

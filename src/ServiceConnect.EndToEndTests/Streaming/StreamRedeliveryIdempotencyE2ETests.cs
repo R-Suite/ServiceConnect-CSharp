@@ -16,11 +16,9 @@ namespace ServiceConnect.EndToEndTests;
 /// dispatch-gating paths.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
-public class StreamRedeliveryIdempotencyE2ETests
+public class StreamRedeliveryIdempotencyE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public StreamRedeliveryIdempotencyE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -72,7 +70,7 @@ public class StreamRedeliveryIdempotencyE2ETests
 
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        producerServices.AddSingleton<IList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -115,8 +113,15 @@ public class StreamRedeliveryIdempotencyE2ETests
         {
             await consumerBus.DisposeAsync();
             await producerBus.DisposeAsync();
-            if (consumerProvider is IAsyncDisposable a) await a.DisposeAsync();
-            if (producerProvider is IAsyncDisposable b) await b.DisposeAsync();
+            if (consumerProvider is IAsyncDisposable a)
+            {
+                await a.DisposeAsync();
+            }
+
+            if (producerProvider is IAsyncDisposable b)
+            {
+                await b.DisposeAsync();
+            }
         }
     }
 }
@@ -128,16 +133,10 @@ file sealed class IdempotencyCounter
     public void Increment() => Interlocked.Increment(ref _count);
 }
 
-file sealed class IdempotencyCheckHandler : IStreamHandler<TestMessage>
+file sealed class IdempotencyCheckHandler(IdempotencyCounter counter, TaskCompletionSource<byte[]> firstResult) : IStreamHandler<TestMessage>
 {
-    private readonly IdempotencyCounter _counter;
-    private readonly TaskCompletionSource<byte[]> _firstResult;
-
-    public IdempotencyCheckHandler(IdempotencyCounter counter, TaskCompletionSource<byte[]> firstResult)
-    {
-        _counter = counter;
-        _firstResult = firstResult;
-    }
+    private readonly IdempotencyCounter _counter = counter;
+    private readonly TaskCompletionSource<byte[]> _firstResult = firstResult;
 
     public IMessageBusReadStream Stream { get; set; } = null!;
 

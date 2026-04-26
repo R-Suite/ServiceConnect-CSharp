@@ -17,11 +17,9 @@ namespace ServiceConnect.EndToEndTests;
 /// ones the first Execute callback actually saw.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
-public class AggregatorFlushRaceE2ETests
+public class AggregatorFlushRaceE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public AggregatorFlushRaceE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -78,8 +76,10 @@ public class AggregatorFlushRaceE2ETests
         {
             // Act: publish 3 messages to trigger a flush (BatchSize = 3)
             for (var i = 0; i < 3; i++)
+            {
                 await bus.SendAsync(new TestMessage(Guid.NewGuid()) { Content = $"first-{i}" },
                     new SendOptions { EndPoint = queueName });
+            }
 
             // Wait until the handler is blocking inside Execute
             using var cts30 = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -92,8 +92,10 @@ public class AggregatorFlushRaceE2ETests
             // serializes delivery). Using 3 guarantees a batch-size flush will fire
             // once the gate releases and the queued messages are processed.
             for (var i = 0; i < 3; i++)
+            {
                 await bus.SendAsync(new TestMessage(Guid.NewGuid()) { Content = $"second-{i}" },
                     new SendOptions { EndPoint = queueName });
+            }
 
             // Release the handler. The first flush completes and deletes only the
             // three snapshot ids it saw (not every document in the buffer), so the
@@ -113,7 +115,10 @@ public class AggregatorFlushRaceE2ETests
         {
             gate.Mre.Set(); // safety in case test aborts before release
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable ap) await ap.DisposeAsync();
+            if (provider is IAsyncDisposable ap)
+            {
+                await ap.DisposeAsync();
+            }
         }
     }
 }
@@ -140,18 +145,11 @@ file sealed class FlushGate
     public int Increment() => Interlocked.Increment(ref _invokeCount);
 }
 
-file class FlushRaceAggregator : Aggregator<TestMessage>
+file class FlushRaceAggregator(FirstFlushSignal first, SecondFlushSignal second, FlushGate gate) : Aggregator<TestMessage>
 {
-    private readonly FirstFlushSignal _first;
-    private readonly SecondFlushSignal _second;
-    private readonly FlushGate _gate;
-
-    public FlushRaceAggregator(FirstFlushSignal first, SecondFlushSignal second, FlushGate gate)
-    {
-        _first = first;
-        _second = second;
-        _gate = gate;
-    }
+    private readonly FirstFlushSignal _first = first;
+    private readonly SecondFlushSignal _second = second;
+    private readonly FlushGate _gate = gate;
 
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(60);

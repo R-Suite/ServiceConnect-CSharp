@@ -8,14 +8,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class PolymorphicMessageTests
+public class PolymorphicMessageTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public PolymorphicMessageTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -27,16 +22,14 @@ public class PolymorphicMessageTests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(TestMessage)
             },
             // HandlerReference for DerivedTestMessage is needed so the bus subscribes
             // to this message type's exchange in RabbitMQ. Handler resolution happens
             // via DI + type hierarchy walking in the dispatcher.
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(DerivedTestMessage)
             }
@@ -73,7 +66,7 @@ public class PolymorphicMessageTests
         // Start consuming
         await bus.StartConsumingAsync();
 
-        
+
 
         try
         {
@@ -100,7 +93,10 @@ public class PolymorphicMessageTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

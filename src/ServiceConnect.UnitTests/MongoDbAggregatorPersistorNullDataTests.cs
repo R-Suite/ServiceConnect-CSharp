@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using Moq;
 using MongoDB.Driver;
+using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;

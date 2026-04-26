@@ -42,18 +42,26 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             state.Close(() =>
             {
                 if (cancellationToken.IsCancellationRequested)
+                {
                     tcs.TrySetCanceled(cancellationToken);
+                }
                 else
+                {
                     tcs.TrySetException(new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout)));
+                }
             });
         });
 
         try
         {
             if (!string.IsNullOrEmpty(options.EndPoint))
+            {
                 await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, options.EndPoint, linkedCts.Token).ConfigureAwait(false);
+            }
             else
+            {
                 await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, null, linkedCts.Token).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && linkedCts.IsCancellationRequested)
         {
@@ -116,9 +124,13 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             state.Close(() =>
             {
                 if (cancellationToken.IsCancellationRequested)
+                {
                     tcs.TrySetCanceled(cancellationToken);
+                }
                 else
+                {
                     tcs.TrySetResult(null!); // timeout returns what we have
+                }
             });
         });
 
@@ -127,7 +139,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             if (options.EndPoints is { Count: > 0 })
             {
                 foreach (string endPoint in options.EndPoints)
+                {
                     await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, endPoint, linkedCts.Token).ConfigureAwait(false);
+                }
             }
             else if (!string.IsNullOrEmpty(options.EndPoint))
             {
@@ -263,14 +277,18 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     public bool TryProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type)
     {
         if (!Guid.TryParse(messageId, out var requestId) || !_pendingRequests.TryGetValue(requestId, out var state))
+        {
             return false;
+        }
 
         lock (state.SyncRoot)
         {
             try
             {
                 if (!state.TryAcceptReply(out var completesRequest))
+                {
                     return false;
+                }
 
                 // Use the expected reply type stored at request time, not the wire-provided type.
                 // This prevents deserialization into attacker-controlled types via crafted reply messages.
@@ -332,14 +350,15 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
     private static void ValidateOptions(RequestOptions options)
     {
-        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
+        if (options.Timeout is < 0 and not Timeout.Infinite)
+        {
             throw new ArgumentOutOfRangeException(nameof(options),
                 $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
+        }
     }
 
     private sealed class RequestState(TaskCompletionSource<object> tcs, int expectedCount, Type replyType, Action<object>? onReply = null)
     {
-        private readonly object _syncRoot = new();
         private readonly object _stateLock = new();
         private bool _closed;
         private bool _hasAcceptedReplies;
@@ -351,7 +370,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         public int ExpectedCount { get; } = expectedCount;
         public Type ReplyType { get; } = replyType;
         public Action<object>? OnReply { get; } = onReply;
-        public object SyncRoot => _syncRoot;
+        public object SyncRoot { get; } = new();
         public bool HasAcceptedReplies
         {
             get
@@ -403,13 +422,19 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             lock (_stateLock)
             {
                 if (_closed)
+                {
                     return;
+                }
 
                 _closed = true;
                 if (_inFlightReplies == 0)
+                {
                     closeAction = onClose;
+                }
                 else
+                {
                     _pendingCloseAction = onClose;
+                }
             }
 
             closeAction?.Invoke();

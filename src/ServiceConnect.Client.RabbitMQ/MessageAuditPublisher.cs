@@ -46,14 +46,20 @@ internal sealed class MessageAuditPublisher
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!_queueConfiguration.AuditingEnabled)
+        {
             return;
+        }
 
         string? messageType = null;
         if (headers.TryGetValue(HeaderKeys.MessageType, out var raw))
+        {
             messageType = HeaderDecoder.Decode(raw);
+        }
 
         if (messageType == HeaderKeys.ByteStream)
+        {
             return;
+        }
 
         var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
         await channel.BasicPublishAsync(

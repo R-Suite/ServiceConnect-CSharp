@@ -1,9 +1,9 @@
+using System.Collections.Concurrent;
+using System.Linq;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
-using System.Collections.Concurrent;
-using System.Linq;
 
 namespace ServiceConnect.Client.RabbitMQ;
 
@@ -22,7 +22,7 @@ public sealed class Consumer : IConsumer
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
     private readonly IBusConfiguration _busConfiguration;
-    private readonly ConcurrentBag<IAsyncDisposable> _clients = new();
+    private readonly ConcurrentBag<IAsyncDisposable> _clients = [];
     private int _started; // 0 = not started, 1 = started; access only via Interlocked
     private readonly bool _durable;
     private readonly int _retryDelay;
@@ -80,8 +80,10 @@ public sealed class Consumer : IConsumer
     public async Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default)
     {
         if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
+        {
             throw new InvalidOperationException(
                 "Consumer is already consuming. Call DisposeAsync before starting again.");
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -146,10 +148,15 @@ public sealed class Consumer : IConsumer
         {
             // Always close the setup channel once topology provisioning completes or fails.
             if (setupChannel is { IsOpen: true })
+            {
                 await setupChannel.CloseAsync().ConfigureAwait(false);
+            }
+
             setupChannel?.Dispose();
             if (ReferenceEquals(_model, setupChannel))
+            {
                 _model = null;
+            }
         }
 
         int clientCount = _busConfiguration.ConsumerCount;
@@ -233,7 +240,10 @@ public sealed class Consumer : IConsumer
         // to Dictionary<,> broke for callers using ReadOnlyDictionary / SortedDictionary /
         // ImmutableDictionary.
         if (!settings.TryGetValue(key, out var raw) || raw is null)
-            return new Dictionary<string, object?>();
+        {
+            return [];
+        }
+
         return raw switch
         {
             Dictionary<string, object?> d => d,

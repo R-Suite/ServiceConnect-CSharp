@@ -25,9 +25,20 @@ public static class HeaderDecoder
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string? Decode(object? value)
     {
-        if (value is null) return null;
-        if (value is byte[] bytes) return Encoding.UTF8.GetString(bytes);
-        if (value is string str) return str;
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value is byte[] bytes)
+        {
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        if (value is string str)
+        {
+            return str;
+        }
 
         try
         {
@@ -61,7 +72,11 @@ public static class HeaderDecoder
         bool first = true;
         foreach (var kv in dict)
         {
-            if (!first) sb.Append(',');
+            if (!first)
+            {
+                sb.Append(',');
+            }
+
             first = false;
             sb.Append('"').Append(kv.Key.Replace("\"", "\\\"")).Append("\":").Append(Render(kv.Value));
         }
@@ -74,7 +89,11 @@ public static class HeaderDecoder
         bool first = true;
         foreach (DictionaryEntry kv in dict)
         {
-            if (!first) sb.Append(',');
+            if (!first)
+            {
+                sb.Append(',');
+            }
+
             first = false;
             var keyStr = kv.Key?.ToString() ?? "null";
             sb.Append('"').Append(keyStr.Replace("\"", "\\\"")).Append("\":").Append(Render(kv.Value!));
@@ -88,7 +107,11 @@ public static class HeaderDecoder
         bool first = true;
         foreach (var item in seq)
         {
-            if (!first) sb.Append(',');
+            if (!first)
+            {
+                sb.Append(',');
+            }
+
             first = false;
             sb.Append(Render(item!));
         }

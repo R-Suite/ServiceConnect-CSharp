@@ -39,12 +39,22 @@ internal sealed class ProcessManagerPredicateCache
 
         public bool Equals(PredicateCacheKey other)
         {
-            if (T != other.T || PropertyType != other.PropertyType) return false;
-            if (PropertiesHierarchy.Count != other.PropertiesHierarchy.Count) return false;
+            if (T != other.T || PropertyType != other.PropertyType)
+            {
+                return false;
+            }
+
+            if (PropertiesHierarchy.Count != other.PropertiesHierarchy.Count)
+            {
+                return false;
+            }
+
             foreach (var kvp in PropertiesHierarchy)
             {
                 if (!other.PropertiesHierarchy.TryGetValue(kvp.Key, out var otherType) || otherType != kvp.Value)
+                {
                     return false;
+                }
             }
             return true;
         }
@@ -61,7 +71,10 @@ internal sealed class ProcessManagerPredicateCache
             // could be true while GetHashCode disagreed, violating the contract.
             int entryHash = 0;
             foreach (var kvp in PropertiesHierarchy)
+            {
                 entryHash ^= HashCode.Combine(kvp.Key, kvp.Value);
+            }
+
             hash.Add(entryHash);
             return hash.ToHashCode();
         }

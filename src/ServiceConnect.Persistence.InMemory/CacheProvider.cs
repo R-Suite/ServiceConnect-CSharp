@@ -5,9 +5,12 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Provides an in-memory cache with absolute and sliding expiration support.
 /// </summary>
-public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
+/// <remarks>
+/// Initializes a new <see cref="CacheProvider"/> using the supplied clock.
+/// </remarks>
+public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICacheProvider, IKeyValueStore, IDisposable
 {
-    private readonly TimeProvider _timeProvider;
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly ConcurrentDictionary<object, CacheItem> _cache = new();
     private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new();
     private readonly ConcurrentDictionary<object, ITimer> _timers = new();
@@ -17,14 +20,6 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     // effectively extending the stale value's TTL.
     private readonly object _addLock = new();
     private int _disposed;
-
-    /// <summary>
-    /// Initializes a new <see cref="CacheProvider"/> using the supplied clock.
-    /// </summary>
-    public CacheProvider(TimeProvider? timeProvider = null)
-    {
-        _timeProvider = timeProvider ?? TimeProvider.System;
-    }
 
     #region Implementation of ICacheProvider
 
@@ -49,7 +44,9 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (absoluteExpiry < _timeProvider.GetUtcNow())
+        {
             throw new ArgumentOutOfRangeException(nameof(absoluteExpiry), "Absolute expiry must be in the future.");
+        }
 
         var diff = absoluteExpiry - _timeProvider.GetUtcNow();
         Add(key, value, diff, priority, false);
@@ -81,10 +78,14 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     public TValue Get<TKey, TValue>(TKey key)
     {
         if (!_cache.TryGetValue(key!, out var cacheItem))
+        {
             return default!;
+        }
 
         if (cacheItem.RelativeExpiry.HasValue && _slidingTime.TryGetValue(key!, out var sliding))
+        {
             sliding.Slide();
+        }
 
         return (TValue)cacheItem.Value!;
     }
@@ -95,7 +96,10 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     public void Remove<TKey>(TKey key)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        if (Equals(key, null)) return;
+        if (Equals(key, null))
+        {
+            return;
+        }
 
         var removed = _cache.TryRemove(key!, out _);
         _slidingTime.TryRemove(key!, out _);
@@ -129,7 +133,11 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
         }
         _timers.Clear();
 
-        if (KeyRemoved is null) return;
+        if (KeyRemoved is null)
+        {
+            return;
+        }
+
         foreach (var key in removedKeys)
         {
             KeyRemoved.Invoke(key, EventArgs.Empty);
@@ -146,7 +154,10 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
         var typeOfKey = typeof(TKey);
         foreach (var k in _cache.Keys)
         {
-            if (typeOfKey.IsAssignableFrom(k.GetType())) yield return (TKey)k;
+            if (typeOfKey.IsAssignableFrom(k.GetType()))
+            {
+                yield return (TKey)k;
+            }
         }
     }
 
@@ -174,7 +185,9 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
         foreach (var cacheItem in _cache)
         {
             if (cacheItem.Value.Priority != CacheItemPriority.Normal)
+            {
                 continue;
+            }
 
             // KVP-overload TryRemove succeeds only when the value reference still
             // matches the one observed during the scan. A concurrent re-Add that
@@ -207,12 +220,18 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     public void Update<TKey, TValue>(TKey key, TValue value)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        if (key is null) return;
+        if (key is null)
+        {
+            return;
+        }
+
         while (_cache.TryGetValue(key!, out var existing))
         {
             var replacement = new CacheItem(value!, existing.Priority, existing.RelativeExpiry);
             if (_cache.TryUpdate(key!, replacement, existing))
+            {
                 break;
+            }
         }
     }
 
@@ -225,8 +244,16 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        foreach (var kvp in _timers) kvp.Value.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        foreach (var kvp in _timers)
+        {
+            kvp.Value.Dispose();
+        }
+
         _timers.Clear();
     }
 

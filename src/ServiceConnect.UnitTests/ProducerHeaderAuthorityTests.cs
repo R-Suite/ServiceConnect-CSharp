@@ -75,7 +75,7 @@ public class ProducerHeaderAuthorityTests
             [hostileKey] = hostileValue
         };
 
-        await producer.SendAsync(endPoint, typeof(object), new byte[] { 1 }, headers: hostileHeaders);
+        await producer.SendAsync(endPoint, typeof(object), [1], headers: hostileHeaders);
 
         Assert.NotNull(captured);
         return captured!;
@@ -124,7 +124,7 @@ public class ProducerHeaderAuthorityTests
             [hostileKey] = hostileValue
         };
 
-        await producer.SendBytesAsync("target-queue", logicalType, new byte[] { 1 }, headers: hostileHeaders);
+        await producer.SendBytesAsync("target-queue", logicalType, [1], headers: hostileHeaders);
 
         Assert.NotNull(captured);
         return captured!;

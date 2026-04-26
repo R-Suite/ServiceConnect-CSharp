@@ -404,9 +404,8 @@ public class HandlerProcessorTests
     }
 }
 
-file class TestHpMsg : Message
+file class TestHpMsg(Guid correlationId) : Message(correlationId)
 {
-    public TestHpMsg(Guid correlationId) : base(correlationId) { }
 }
 
 // Throws a fixed exception message on every invocation — used to verify fault collection.
@@ -520,7 +519,7 @@ file static class TestBusFactory
         var logger = new Mock<ILogger<Bus>>();
         var dispatcher = new Mock<IMessageDispatcher>();
         var pipelineConfiguration = new Mock<IPipelineConfiguration>();
-        pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns(new List<Type>());
+        pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns([]);
 
         var rootProvider = new ServiceCollection().BuildServiceProvider();
         return new Bus(
@@ -531,7 +530,7 @@ file static class TestBusFactory
             logger.Object,
             queueConfiguration,
             dispatcher.Object,
-            new List<HandlerReference>(),
+            [],
             pipelineConfiguration.Object,
             rootProvider.GetRequiredService<IServiceScopeFactory>(),
             new ConsumeScopeAccessor(),

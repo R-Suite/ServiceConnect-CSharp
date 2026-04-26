@@ -1,5 +1,5 @@
-using Moq;
 using System.Reflection;
+using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using Xunit;
@@ -9,7 +9,7 @@ namespace ServiceConnect.UnitTests;
 public class MessageBusWriteStreamTests
 {
     private readonly Mock<IProducer> _producer = new();
-    private readonly List<(string Endpoint, Type Type, byte[] Payload, Dictionary<string, string>? Headers)> _sends = new();
+    private readonly List<(string Endpoint, Type Type, byte[] Payload, Dictionary<string, string>? Headers)> _sends = [];
 
     public MessageBusWriteStreamTests()
     {

@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(IsolatedCollection))]
-public class PointToPointTests
+public class PointToPointTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public PointToPointTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     private IBus CreateBus(string queueName)
     {

@@ -1,23 +1,18 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
-using System.Collections.Concurrent;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class CompetingConsumersTests
+public class CompetingConsumersTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public CompetingConsumersTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -45,7 +40,9 @@ public class CompetingConsumersTests
                 {
                     allReceived.Add(msg.Content);
                     if (Interlocked.Increment(ref totalReceived) >= messageCount)
+                    {
                         allDone.TrySetResult(true);
+                    }
                 }));
 
             services.AddServiceConnect(builder =>
@@ -72,12 +69,12 @@ public class CompetingConsumersTests
 
         await bus1.StartConsumingAsync();
         await bus2.StartConsumingAsync();
-        
+
 
         // We need a separate producer bus (its own queue) to send messages
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        producerServices.AddSingleton<IList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -120,9 +117,20 @@ public class CompetingConsumersTests
             await bus1.DisposeAsync();
             await bus2.DisposeAsync();
             await producerBus.DisposeAsync();
-            if (consumerProvider1 is IAsyncDisposable asyncConsumerProvider1) await asyncConsumerProvider1.DisposeAsync();
-            if (consumerProvider2 is IAsyncDisposable asyncConsumerProvider2) await asyncConsumerProvider2.DisposeAsync();
-            if (producerProvider is IAsyncDisposable asyncProducerProvider) await asyncProducerProvider.DisposeAsync();
+            if (consumerProvider1 is IAsyncDisposable asyncConsumerProvider1)
+            {
+                await asyncConsumerProvider1.DisposeAsync();
+            }
+
+            if (consumerProvider2 is IAsyncDisposable asyncConsumerProvider2)
+            {
+                await asyncConsumerProvider2.DisposeAsync();
+            }
+
+            if (producerProvider is IAsyncDisposable asyncProducerProvider)
+            {
+                await asyncProducerProvider.DisposeAsync();
+            }
         }
     }
 }

@@ -48,7 +48,9 @@ public sealed class ProcessManagerTimeoutService(
         var configured = config.ProcessManagerTimeoutPollInterval;
         var interval = configured <= TimeSpan.Zero ? DefaultPollInterval : configured;
         if (configured <= TimeSpan.Zero)
+        {
             logger.LogWarning("ProcessManagerTimeoutPollInterval {Configured} is not positive; falling back to {Fallback}.", configured, DefaultPollInterval);
+        }
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _pollingTask = PollLoop(interval, _cts.Token);
@@ -80,12 +82,18 @@ public sealed class ProcessManagerTimeoutService(
 
     internal async Task PollOnceAsync(CancellationToken cancellationToken = default)
     {
-        if (_finder == null) return;
+        if (_finder == null)
+        {
+            return;
+        }
 
         try
         {
             var batch = await _finder.GetTimeoutsBatchAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (batch.DueTimeouts == null || batch.DueTimeouts.Count == 0) return;
+            if (batch.DueTimeouts == null || batch.DueTimeouts.Count == 0)
+            {
+                return;
+            }
 
             foreach (var timeout in batch.DueTimeouts)
             {

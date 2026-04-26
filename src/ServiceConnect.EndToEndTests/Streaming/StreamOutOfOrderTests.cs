@@ -10,14 +10,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class StreamOutOfOrderTests
+public class StreamOutOfOrderTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public StreamOutOfOrderTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -74,12 +69,12 @@ public class StreamOutOfOrderTests
         var consumerProvider = consumerServices.BuildServiceProvider();
         var consumerBus = consumerProvider.GetRequiredService<IBus>();
         await consumerBus.StartConsumingAsync();
-        
+
 
         // Producer bus
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        producerServices.AddSingleton<IList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -121,17 +116,22 @@ public class StreamOutOfOrderTests
         {
             await consumerBus.DisposeAsync();
             await producerBus.DisposeAsync();
-            if (consumerProvider is IAsyncDisposable asyncConsumerProvider) await asyncConsumerProvider.DisposeAsync();
-            if (producerProvider is IAsyncDisposable asyncProducerProvider) await asyncProducerProvider.DisposeAsync();
+            if (consumerProvider is IAsyncDisposable asyncConsumerProvider)
+            {
+                await asyncConsumerProvider.DisposeAsync();
+            }
+
+            if (producerProvider is IAsyncDisposable asyncProducerProvider)
+            {
+                await asyncProducerProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class StreamCaptureHandler : IStreamHandler<TestMessage>
+file class StreamCaptureHandler(TaskCompletionSource<byte[]> tcs) : IStreamHandler<TestMessage>
 {
-    private readonly TaskCompletionSource<byte[]> _tcs;
-
-    public StreamCaptureHandler(TaskCompletionSource<byte[]> tcs) => _tcs = tcs;
+    private readonly TaskCompletionSource<byte[]> _tcs = tcs;
 
     public IMessageBusReadStream Stream { get; set; } = null!;
 

@@ -32,7 +32,10 @@ internal static class MessageTypeExchangeName
         builder.Append(sanitized);
         builder.Append('_');
         for (int i = 0; i < 4; i++)
+        {
             builder.Append(hash[i].ToString("x2", CultureInfo.InvariantCulture));
+        }
+
         return builder.ToString();
     }
 }

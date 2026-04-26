@@ -19,11 +19,9 @@ namespace ServiceConnect.EndToEndTests;
 /// as "base64:..." so receivers can decode them back to the original UTF-8 content.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
-public class TimeoutHeaderRoundtripE2ETests
+public class TimeoutHeaderRoundtripE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public TimeoutHeaderRoundtripE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -102,12 +100,12 @@ public class TimeoutHeaderRoundtripE2ETests
                 Headers = new Dictionary<string, string>
                 {
                     // Guid and date/time encoded as standard ISO formats
-                    ["X-Guid"]             = originalGuid.ToString("D", CultureInfo.InvariantCulture),
-                    ["X-DateTime"]         = originalDateTime.ToString("O", CultureInfo.InvariantCulture),
-                    ["X-DateTimeOffset"]   = originalDateTimeOffset.ToString("O", CultureInfo.InvariantCulture),
+                    ["X-Guid"] = originalGuid.ToString("D", CultureInfo.InvariantCulture),
+                    ["X-DateTime"] = originalDateTime.ToString("O", CultureInfo.InvariantCulture),
+                    ["X-DateTimeOffset"] = originalDateTimeOffset.ToString("O", CultureInfo.InvariantCulture),
                     // byte[] round-trip: sent as base64 string; arrives as byte[] of that string;
                     // re-emitted by BuildOutgoingHeaders as "base64:<base64 of those bytes>"
-                    ["X-Bytes"]            = Convert.ToBase64String(originalBytes)
+                    ["X-Bytes"] = Convert.ToBase64String(originalBytes)
                 }
             });
 
@@ -179,17 +177,12 @@ file class TimeoutHeaderData : IProcessManagerData
     public bool TimeoutScheduled { get; set; }
 }
 
-file class TimeoutHeaderPmHandler :
+file class TimeoutHeaderPmHandler(
+    TaskCompletionSource<IReadOnlyDictionary<string, object>> headersCaptured) :
     IProcessHandler<TimeoutHeaderData, TestMessage>,
     IProcessHandler<TimeoutHeaderData, TimeoutMessage>
 {
-    private readonly TaskCompletionSource<IReadOnlyDictionary<string, object>> _headersCaptured;
-
-    public TimeoutHeaderPmHandler(
-        TaskCompletionSource<IReadOnlyDictionary<string, object>> headersCaptured)
-    {
-        _headersCaptured = headersCaptured;
-    }
+    private readonly TaskCompletionSource<IReadOnlyDictionary<string, object>> _headersCaptured = headersCaptured;
 
     public IConsumeContext Context { get; set; } = null!;
 

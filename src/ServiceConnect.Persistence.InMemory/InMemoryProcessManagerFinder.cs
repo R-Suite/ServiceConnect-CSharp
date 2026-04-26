@@ -51,13 +51,18 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         foreach (var m in mapper.Mappings)
         {
             if (m.MessageType == exactMessageType) { mapping = m; break; }
-            if (fallback == null && m.MessageType == typeof(Message)) fallback = m;
+            if (fallback == null && m.MessageType == typeof(Message))
+            {
+                fallback = m;
+            }
         }
         mapping ??= fallback;
 
         if (mapping == null)
+        {
             throw new InvalidOperationException(
                 $"No property mapping configured for message type '{message.GetType().FullName}' or the base Message type.");
+        }
 
         object? msgPropValue;
         try
@@ -71,7 +76,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         }
 
         if (msgPropValue is null)
+        {
             throw new ArgumentException("Message property expression evaluates to null");
+        }
 
         var predicate = GetPredicate<T>(mapping.PropertiesHierarchy, msgPropValue.GetType());
 
@@ -92,11 +99,17 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         foreach (var key in _state.Provider.Keys())
         {
             var value = _state.Provider.Get<string, object>(key.ToString()!);
-            if (value is null) continue; // removed concurrently by an external IKeyValueStore caller
+            if (value is null)
+            {
+                continue; // removed concurrently by an external IKeyValueStore caller
+            }
+
             if (value is MemoryData<T> typed)
             {
                 if (predicate(typed, msgPropValue))
+                {
                     return new MemoryData<T> { Data = DeepClone.Clone(typed.Data), Version = typed.Version };
+                }
             }
             else
             {
@@ -117,7 +130,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                 {
                     var original = new MemoryData<T> { Data = typedData, Version = version };
                     if (predicate(original, msgPropValue))
+                    {
                         return new MemoryData<T> { Data = DeepClone.Clone(typedData), Version = version };
+                    }
                 }
             }
         }
@@ -167,7 +182,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         {
             string key = data.CorrelationId.ToString();
             if (_state.Provider.Contains(key))
+            {
                 throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
+            }
 
             // Saga state has no TTL: lifetime is managed explicitly via Delete.
             // Background expiry must never silently drop a live saga.
@@ -223,11 +240,8 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 
             // Read version via a typed IVersioned interface so the cast is
             // compile-time-checked rather than the old dynamic dispatch.
-            var storedData = _state.Provider.Get<string, object>(key);
-            if (storedData is null)
-                throw new ConcurrencyException(
+            var storedData = _state.Provider.Get<string, object>(key) ?? throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
-
             int currentVersion = storedData is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(
@@ -252,7 +266,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             // using the same MemoryData<T> instance don't fail concurrency check. Mongo
             // persistor returns the post-update document via FindOneAndUpdate; InMemory
             // previously diverged.
-            newData.Version = newData.Version + 1;
+            newData.Version++;
         }
         finally
         {
@@ -285,11 +299,8 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} does not exist and cannot be deleted.");
             }
 
-            var stored = _state.Provider.Get<string, object>(key);
-            if (stored is null)
-                throw new ConcurrencyException(
+            var stored = _state.Provider.Get<string, object>(key) ?? throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
-
             int currentVersion = stored is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(

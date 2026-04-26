@@ -16,11 +16,9 @@ namespace ServiceConnect.EndToEndTests;
 /// outward-visible bus shape across lifecycles on shared broker state.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
-public class ConsumerRestartE2ETests
+public class ConsumerRestartE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ConsumerRestartE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -73,7 +71,7 @@ public class ConsumerRestartE2ETests
 
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        producerServices.AddSingleton<IList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -107,7 +105,10 @@ public class ConsumerRestartE2ETests
         finally
         {
             await firstBus.DisposeAsync();
-            if (firstProvider is IAsyncDisposable a) await a.DisposeAsync();
+            if (firstProvider is IAsyncDisposable a)
+            {
+                await a.DisposeAsync();
+            }
         }
 
         // Second lifecycle: rebuild the bus and start a fresh consumer on the same queue,
@@ -129,42 +130,49 @@ public class ConsumerRestartE2ETests
         finally
         {
             await secondBus.DisposeAsync();
-            if (secondProvider is IAsyncDisposable b) await b.DisposeAsync();
+            if (secondProvider is IAsyncDisposable b)
+            {
+                await b.DisposeAsync();
+            }
+
             await producerBus.DisposeAsync();
-            if (producerProvider is IAsyncDisposable c) await c.DisposeAsync();
+            if (producerProvider is IAsyncDisposable c)
+            {
+                await c.DisposeAsync();
+            }
         }
     }
 }
 
-file sealed class PhaseHolder
+file sealed class PhaseHolder(Func<int> phase)
 {
-    private readonly Func<int> _phase;
-    public PhaseHolder(Func<int> phase) => _phase = phase;
+    private readonly Func<int> _phase = phase;
+
     public int Current => _phase();
 }
 
-file sealed class RestartCheckHandler : IMessageHandler<TestMessage>
+file sealed class RestartCheckHandler(
+    TaskCompletionSource<TestMessage> first,
+    TaskCompletionSource<TestMessage> second,
+    PhaseHolder phase) : IMessageHandler<TestMessage>
 {
-    private readonly TaskCompletionSource<TestMessage> _first;
-    private readonly TaskCompletionSource<TestMessage> _second;
-    private readonly PhaseHolder _phase;
-
-    public RestartCheckHandler(
-        TaskCompletionSource<TestMessage> first,
-        TaskCompletionSource<TestMessage> second,
-        PhaseHolder phase)
-    {
-        _first = first;
-        _second = second;
-        _phase = phase;
-    }
+    private readonly TaskCompletionSource<TestMessage> _first = first;
+    private readonly TaskCompletionSource<TestMessage> _second = second;
+    private readonly PhaseHolder _phase = phase;
 
     public IConsumeContext Context { get; set; } = null!;
 
     public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {
-        if (_phase.Current == 0) _first.TrySetResult(message);
-        else _second.TrySetResult(message);
+        if (_phase.Current == 0)
+        {
+            _first.TrySetResult(message);
+        }
+        else
+        {
+            _second.TrySetResult(message);
+        }
+
         return Task.CompletedTask;
     }
 }

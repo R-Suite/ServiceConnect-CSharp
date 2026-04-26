@@ -29,7 +29,9 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
         {
             var cached = Volatile.Read(ref _types);
             if (cached != null)
+            {
                 return cached.TryGetValue(typeName, out type);
+            }
 
             var v0 = Volatile.Read(ref _version);
             var snapshot = _registeredTypes.ToFrozenDictionary();
@@ -43,7 +45,10 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
                 // so the next lookup takes a fresh snapshot. A Register that runs purely after
                 // our CAS will itself Volatile.Write _types = null and we don't need to do it.
                 if (Volatile.Read(ref _version) != v0)
+                {
                     Volatile.Write(ref _types, null);
+                }
+
                 return snapshot.TryGetValue(typeName, out type);
             }
             // Lost the CAS race; loop and read the winning cache.
@@ -61,9 +66,14 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
         // collision with a clear signal. Re-registering the exact same Type is
         // idempotent.
         if (type.AssemblyQualifiedName is not null)
+        {
             AddOrReject(type.AssemblyQualifiedName, type);
+        }
+
         if (type.FullName is not null)
+        {
             AddOrReject(type.FullName, type);
+        }
 
         // Bump version first so a racing TryResolve that has already taken its snapshot
         // observes the advance and skips caching. Only then clear the cached snapshot.

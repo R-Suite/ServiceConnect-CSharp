@@ -15,14 +15,9 @@ namespace ServiceConnect.EndToEndTests.Consumers;
 /// Corresponds to M13: missing ShutdownAsync / ChannelShutdownAsync subscriptions.
 /// </summary>
 [Collection(nameof(IsolatedCollection))]
-public class BrokerInitiatedCancelTests
+public class BrokerInitiatedCancelTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public BrokerInitiatedCancelTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     /// <summary>
     /// When the broker deletes the queue the consumer is active on, the consumer host
@@ -41,7 +36,9 @@ public class BrokerInitiatedCancelTests
             (level, message) =>
             {
                 if (level >= LogLevel.Warning && message.Contains("shutdown", StringComparison.OrdinalIgnoreCase))
+                {
                     shutdownLogged.TrySetResult(message);
+                }
             });
 
         var handlerReferences = new List<HandlerReference>
@@ -122,7 +119,9 @@ public class BrokerInitiatedCancelTests
         await disposeTask; // surface any exceptions
 
         if (provider is IAsyncDisposable asyncProvider)
+        {
             await asyncProvider.DisposeAsync();
+        }
     }
 
     /// <summary>

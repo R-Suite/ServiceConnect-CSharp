@@ -59,7 +59,7 @@ public class TryEnrichTests : IDisposable
         using var activity = new Activity("t").Start();
 
         Assert.Throws<OperationCanceledException>(
-            () => ServiceConnectActivitySource.InvokeTryEnrichForTest(activity, new byte[] { 1 }));
+            () => ServiceConnectActivitySource.InvokeTryEnrichForTest(activity, [1]));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class TryEnrichTests : IDisposable
             throw new InvalidOperationException("PII-from-payload");
 
         using var activity = new Activity("t").Start();
-        ServiceConnectActivitySource.InvokeTryEnrichForTest(activity, new byte[] { 1 });
+        ServiceConnectActivitySource.InvokeTryEnrichForTest(activity, [1]);
 
         var tag = activity.GetTagItem("enrichment.exception") as string;
         Assert.NotNull(tag);

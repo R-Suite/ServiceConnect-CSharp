@@ -63,7 +63,11 @@ public sealed class Bus : IBus
         _queueConfig = queueConfig ?? throw new ArgumentNullException(nameof(queueConfig));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _handlerReferences = handlerReferences ?? throw new ArgumentNullException(nameof(handlerReferences));
-        if (pipelineConfig == null) throw new ArgumentNullException(nameof(pipelineConfig));
+        if (pipelineConfig == null)
+        {
+            throw new ArgumentNullException(nameof(pipelineConfig));
+        }
+
         _hasOutgoingFilters = pipelineConfig.OutgoingFilters.Count > 0;
         _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
@@ -89,7 +93,10 @@ public sealed class Bus : IBus
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
                 return;
+            }
+
             headers = ExtractHeaders(envelope);
         }
         else
@@ -98,7 +105,9 @@ public sealed class Bus : IBus
         }
 
         if (options?.RoutingKey is { } routingKey)
+        {
             headers[HeaderKeys.RoutingKey] = routingKey;
+        }
 
         await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(T), messageBytes, headers, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
@@ -114,7 +123,7 @@ public sealed class Bus : IBus
         // reroute traffic (for example, after a typo in the option name or a
         // merge of two config paths) with no exception and no log. Require the
         // caller to pick one.
-        if (options is { EndPoint.Length: > 0, EndPoints: { Count: > 0 } })
+        if (options is { EndPoint.Length: > 0, EndPoints.Count: > 0 })
         {
             throw new ArgumentException(
                 "SendOptions.EndPoint and SendOptions.EndPoints cannot both be set. Provide one or the other.",
@@ -128,7 +137,10 @@ public sealed class Bus : IBus
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
                 return;
+            }
+
             headers = ExtractHeaders(envelope);
         }
         else
@@ -163,7 +175,10 @@ public sealed class Bus : IBus
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
+            }
+
             headers = ExtractHeaders(envelope);
         }
         else
@@ -192,7 +207,10 @@ public sealed class Bus : IBus
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
+            }
+
             headers = ExtractHeaders(envelope);
         }
         else
@@ -227,7 +245,10 @@ public sealed class Bus : IBus
         {
             var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
+            }
+
             headers = ExtractHeaders(envelope);
         }
         else
@@ -249,7 +270,9 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         if (destinations == null || destinations.Count == 0)
+        {
             throw new ArgumentException("At least one destination is required.", nameof(destinations));
+        }
 
         var firstDestination = destinations[0];
         var messageBytes = _serializer.Serialize(message);
@@ -259,7 +282,10 @@ public sealed class Bus : IBus
         {
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
                 return;
+            }
+
             headers = ExtractHeaders(envelope);
         }
         else
@@ -280,7 +306,10 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         if (_producer == null)
+        {
             throw new InvalidOperationException("No producer registered. Cannot create stream.");
+        }
+
         return new MessageBusWriteStream(_producer, endpoint, typeof(T));
     }
 
@@ -289,8 +318,10 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(_queueConfig.QueueName))
+        {
             throw new InvalidOperationException(
                 "QueueName is not set. Configure via ServiceConnectBuilder.ConfigureQueues(q => q.QueueName = \"...\") before starting consumption (E-07).");
+        }
 
         try
         {
@@ -313,16 +344,27 @@ public sealed class Bus : IBus
             lock (_stateLock)
             {
                 if (_stopped)
+                {
                     throw new InvalidOperationException(
                         "Bus has been stopped; dispose it and create a new Bus instance to resume consuming.");
+                }
+
                 if (_consuming)
+                {
                     throw new InvalidOperationException("Already consuming.");
+                }
+
                 if (_consumer == null)
+                {
                     throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
+                }
 
                 var typeNameSet = new HashSet<string>(_handlerReferences.Count);
                 foreach (var h in _handlerReferences)
+                {
                     typeNameSet.Add(MessageTypeExchangeName.From(h.MessageType));
+                }
+
                 messageTypeNames = [.. typeNameSet];
 
                 localConsumer = _consumer;
@@ -358,9 +400,14 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         if (_timeoutStore is null)
+        {
             throw new InvalidOperationException("No ITimeoutStore is registered. Add persistence via UseInMemoryPersistence() or UseMongoDbPersistence() and set BusConfiguration.EnableProcessManagerTimeouts = true.");
+        }
+
         if (delay <= TimeSpan.Zero)
+        {
             throw new ArgumentOutOfRangeException(nameof(delay), "Timeout delay must be positive.");
+        }
 
         var data = new TimeoutData
         {
@@ -469,26 +516,35 @@ public sealed class Bus : IBus
         }
 
         if (pendingCancellation != null)
+        {
             throw pendingCancellation;
+        }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
             return;
+        }
 
         await StopConsumingCoreAsync().ConfigureAwait(false);
         await _sendPipeline.DisposeAsync().ConfigureAwait(false);
         if (_producer != null)
+        {
             await _producer.DisposeAsync().ConfigureAwait(false);
+        }
+
         _lifecycleSemaphore.Dispose();
     }
 
     private void ThrowIfDisposed()
     {
         if (Volatile.Read(ref _disposed) != 0)
+        {
             throw new ObjectDisposedException(typeof(Bus).FullName);
+        }
     }
 
     // Outgoing filters share the scoped-pipeline contract with inbound filters and
@@ -520,7 +576,7 @@ public sealed class Bus : IBus
         // dictionary can't throw "Collection was modified" inside the foreach
         // below. The type parameter being IReadOnlyDictionary signals intent
         // but doesn't prevent external mutation through the original reference.
-        var snapshot = additionalHeaders is null ? null : additionalHeaders.ToArray();
+        var snapshot = additionalHeaders?.ToArray();
 
         var envelope = new Envelope
         {
@@ -570,7 +626,9 @@ public sealed class Bus : IBus
     private static string BuildRoutingSlip(IList<string> destinations)
     {
         if (destinations.Count <= 1)
+        {
             return string.Empty;
+        }
 
         // destinations[0] is the immediate send target; the routing slip describes
         // the *subsequent* hops, so the loop deliberately starts at index 1.
@@ -578,7 +636,9 @@ public sealed class Bus : IBus
         for (var index = 1; index < destinations.Count; index++)
         {
             if (index > 1)
+            {
                 builder.Append(',');
+            }
 
             builder.Append(destinations[index]);
         }
@@ -599,7 +659,7 @@ public sealed class Bus : IBus
         // underlying dictionary, so a concurrent mutation during the foreach
         // below would throw "Collection was modified". ToArray grabs a stable
         // copy with a single enumeration.
-        var snapshot = additionalHeaders is null ? null : additionalHeaders.ToArray();
+        var snapshot = additionalHeaders?.ToArray();
         var capacity = ReservedHeaders.Count + (snapshot?.Length ?? 0);
         var headers = new Dictionary<string, string>(capacity);
 

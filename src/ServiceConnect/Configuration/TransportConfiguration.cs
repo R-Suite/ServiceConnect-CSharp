@@ -68,7 +68,7 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// </summary>
     /// <remarks>WARNING: Setting this to a callback that always returns true disables all certificate validation.</remarks>
     public RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
-    private readonly Dictionary<string, object> _clientSettings = new();
+    private readonly Dictionary<string, object> _clientSettings = [];
     /// <inheritdoc />
     public IReadOnlyDictionary<string, object> ClientSettings => _clientSettings;
 

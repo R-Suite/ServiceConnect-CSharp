@@ -26,7 +26,7 @@ public class StreamHandlerRegistryTests
     public void TryGet_ReturnsFalse_ForUnregisteredType()
     {
         var registry = new StreamHandlerRegistry(
-            new List<HandlerReference>(),
+            [],
             NullLogger<StreamHandlerRegistry>.Instance);
 
         Assert.False(registry.TryGet(typeof(ShrFoo), out var descriptor));
@@ -112,7 +112,8 @@ public class StreamHandlerRegistryTests
     }
 }
 
-file class ShrFoo : Message { public ShrFoo(Guid c) : base(c) { } }
+file class ShrFoo(Guid c) : Message(c) {
+}
 
 file class ShrFooStreamHandler : IStreamHandler<ShrFoo>
 {

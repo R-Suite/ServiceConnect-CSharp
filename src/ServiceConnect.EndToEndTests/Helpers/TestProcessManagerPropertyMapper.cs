@@ -6,7 +6,7 @@ namespace ServiceConnect.EndToEndTests.Helpers;
 
 public class TestProcessManagerPropertyMapper : IProcessManagerPropertyMapper
 {
-    private readonly List<ProcessManagerToMessageMap> _mappings = new();
+    private readonly List<ProcessManagerToMessageMap> _mappings = [];
     public IReadOnlyList<ProcessManagerToMessageMap> Mappings => _mappings;
 
     public void ConfigureMapping<TProcessManagerData, TMessage>(
@@ -17,7 +17,11 @@ public class TestProcessManagerPropertyMapper : IProcessManagerPropertyMapper
         var propertiesHierarchy = new Dictionary<string, Type>();
 
         var body = processManagerProperty.Body;
-        if (body is UnaryExpression unary) body = unary.Operand;
+        if (body is UnaryExpression unary)
+        {
+            body = unary.Operand;
+        }
+
         if (body is MemberExpression member)
         {
             var propInfo = (PropertyInfo)member.Member;

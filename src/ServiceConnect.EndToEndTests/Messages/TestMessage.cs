@@ -2,41 +2,35 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.EndToEndTests.Messages;
 
-public class TestMessage : Message
+public class TestMessage(Guid correlationId) : Message(correlationId)
 {
-    public TestMessage(Guid correlationId) : base(correlationId) { }
     public string Content { get; set; } = string.Empty;
 }
 
-public class TestRequest : Message
+public class TestRequest(Guid correlationId) : Message(correlationId)
 {
-    public TestRequest(Guid correlationId) : base(correlationId) { }
     public string Question { get; set; } = string.Empty;
 }
 
-public class TestResponse : Message
+public class TestResponse(Guid correlationId) : Message(correlationId)
 {
-    public TestResponse(Guid correlationId) : base(correlationId) { }
     public string Answer { get; set; } = string.Empty;
 }
 
-public class PriorityMessage : Message
+public class PriorityMessage(Guid correlationId) : Message(correlationId)
 {
-    public PriorityMessage(Guid correlationId) : base(correlationId) { }
     public int Priority { get; set; }
     public int Order { get; set; }
 }
 
-public class StepMessage : Message
+public class StepMessage(Guid correlationId) : Message(correlationId)
 {
-    public StepMessage(Guid correlationId) : base(correlationId) { }
-    public List<string> VisitedSteps { get; set; } = new();
+    public List<string> VisitedSteps { get; set; } = [];
     public string CurrentStep { get; set; } = string.Empty;
 }
 
-public class DerivedTestMessage : TestMessage
+public class DerivedTestMessage(Guid correlationId) : TestMessage(correlationId)
 {
-    public DerivedTestMessage(Guid correlationId) : base(correlationId) { }
     public string Extra { get; set; } = string.Empty;
 }
 

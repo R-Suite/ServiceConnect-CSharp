@@ -2,14 +2,9 @@ using System.Buffers;
 
 namespace ServiceConnect.Services.IO;
 
-internal sealed class ReadOnlySequenceStream : Stream
+internal sealed class ReadOnlySequenceStream(ReadOnlySequence<byte> sequence) : Stream
 {
-    private ReadOnlySequence<byte> _remaining;
-
-    public ReadOnlySequenceStream(ReadOnlySequence<byte> sequence)
-    {
-        _remaining = sequence;
-    }
+    private ReadOnlySequence<byte> _remaining = sequence;
 
     public override bool CanRead => true;
     public override bool CanSeek => false;
@@ -25,7 +20,11 @@ internal sealed class ReadOnlySequenceStream : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        if (_remaining.IsEmpty) return 0;
+        if (_remaining.IsEmpty)
+        {
+            return 0;
+        }
+
         int toRead = (int)Math.Min(count, _remaining.Length);
         _remaining.Slice(0, toRead).CopyTo(buffer.AsSpan(offset, toRead));
         _remaining = _remaining.Slice(toRead);
@@ -34,9 +33,13 @@ internal sealed class ReadOnlySequenceStream : Stream
 
     public override int Read(Span<byte> buffer)
     {
-        if (_remaining.IsEmpty) return 0;
+        if (_remaining.IsEmpty)
+        {
+            return 0;
+        }
+
         int toRead = (int)Math.Min(buffer.Length, _remaining.Length);
-        _remaining.Slice(0, toRead).CopyTo(buffer.Slice(0, toRead));
+        _remaining.Slice(0, toRead).CopyTo(buffer[..toRead]);
         _remaining = _remaining.Slice(toRead);
         return toRead;
     }

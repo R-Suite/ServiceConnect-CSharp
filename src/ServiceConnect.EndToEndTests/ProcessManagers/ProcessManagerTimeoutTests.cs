@@ -12,11 +12,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class ProcessManagerTimeoutTests
+public class ProcessManagerTimeoutTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ProcessManagerTimeoutTests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -111,13 +109,11 @@ file class TimeoutProcessData : IProcessManagerData
     public bool TimeoutHandled { get; set; }
 }
 
-file class TimeoutProcessHandler :
+file class TimeoutProcessHandler(TaskCompletionSource<bool> timeoutHandled) :
     IProcessHandler<TimeoutProcessData, TestMessage>,
     IProcessHandler<TimeoutProcessData, TimeoutMessage>
 {
-    private readonly TaskCompletionSource<bool> _timeoutHandled;
-
-    public TimeoutProcessHandler(TaskCompletionSource<bool> timeoutHandled) => _timeoutHandled = timeoutHandled;
+    private readonly TaskCompletionSource<bool> _timeoutHandled = timeoutHandled;
 
     public IConsumeContext Context { get; set; } = null!;
 

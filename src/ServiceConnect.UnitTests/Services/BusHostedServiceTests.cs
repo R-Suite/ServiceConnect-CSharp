@@ -16,7 +16,7 @@ public class BusHostedServiceTests
     private ILogger<BusHostedService> Logger => _mockLogger.Object;
 
     private BusHostedService CreateSut() =>
-        new BusHostedService(_mockBus.Object, _mockConfig.Object, Logger);
+        new(_mockBus.Object, _mockConfig.Object, Logger);
 
     [Fact]
     public async Task StartAsync_ValidateReplyDestinationsDisabled_LogsWarning()

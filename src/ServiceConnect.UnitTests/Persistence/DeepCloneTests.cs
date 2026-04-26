@@ -11,7 +11,7 @@ public class DeepCloneTests
     public class Owner
     {
         public Guid Id { get; set; }
-        public List<Animal> Pets { get; set; } = new();
+        public List<Animal> Pets { get; set; } = [];
     }
 
     [Fact]

@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(RequestReplyCollection))]
-public class ScatterGatherPartialTests
+public class ScatterGatherPartialTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ScatterGatherPartialTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -30,8 +25,7 @@ public class ScatterGatherPartialTests
         // --- Responder bus setup (replies to requests) ---
         var responderHandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(PartialScatterReplyHandler),
                 MessageType = typeof(TestRequest)
             }
@@ -64,8 +58,7 @@ public class ScatterGatherPartialTests
         // --- Silent consumer bus setup (consumes but never replies) ---
         var silentHandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestRequest>),
                 MessageType = typeof(TestRequest)
             }
@@ -122,7 +115,7 @@ public class ScatterGatherPartialTests
         await requesterBus.StartConsumingAsync();
 
         // Give consumers time to set up
-        
+
 
         try
         {
@@ -132,7 +125,7 @@ public class ScatterGatherPartialTests
                 request,
                 new RequestOptions
                 {
-                    EndPoints = new List<string> { responderQueue, silentQueue },
+                    EndPoints = [responderQueue, silentQueue],
                     ExpectedReplyCount = 2,
                     Timeout = 5000
                 });
@@ -145,20 +138,29 @@ public class ScatterGatherPartialTests
         finally
         {
             await responderBus.DisposeAsync();
-            if (responderProvider is IAsyncDisposable asyncResponderProvider) await asyncResponderProvider.DisposeAsync();
+            if (responderProvider is IAsyncDisposable asyncResponderProvider)
+            {
+                await asyncResponderProvider.DisposeAsync();
+            }
+
             await silentBus.DisposeAsync();
-            if (silentProvider is IAsyncDisposable asyncSilentProvider) await asyncSilentProvider.DisposeAsync();
+            if (silentProvider is IAsyncDisposable asyncSilentProvider)
+            {
+                await asyncSilentProvider.DisposeAsync();
+            }
+
             await requesterBus.DisposeAsync();
-            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider)
+            {
+                await asyncRequesterProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class PartialScatterReplyHandler : IMessageHandler<TestRequest>
+file class PartialScatterReplyHandler(string prefix) : IMessageHandler<TestRequest>
 {
-    private readonly string _prefix;
-
-    public PartialScatterReplyHandler(string prefix) => _prefix = prefix;
+    private readonly string _prefix = prefix;
 
     public IConsumeContext Context { get; set; } = null!;
 

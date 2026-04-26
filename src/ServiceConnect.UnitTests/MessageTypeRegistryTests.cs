@@ -35,7 +35,11 @@ public class MessageTypeRegistryTests
                 var deadline = DateTime.UtcNow.AddSeconds(3);
                 while (DateTime.UtcNow < deadline)
                 {
-                    if (registry.TryResolve(bName, out _)) return;
+                    if (registry.TryResolve(bName, out _))
+                    {
+                        return;
+                    }
+
                     Thread.Yield();
                 }
             });

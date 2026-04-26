@@ -34,13 +34,19 @@ public static class MongoDbPersistenceExtensions
         // Fast path: lock-free observation for hot-path callers on already-initialised
         // processes. A volatile read is enough to see the write that committed the flag
         // under the lock — a matching release/acquire pair — without acquiring the lock.
-        if (Volatile.Read(ref _guidSerializerRegistered) != 0) return;
+        if (Volatile.Read(ref _guidSerializerRegistered) != 0)
+        {
+            return;
+        }
 
         lock (GuidSerializerInitLock)
         {
             // Re-check under the lock: if a concurrent first caller won the race and
             // completed setup while we were waiting, there is nothing left to do.
-            if (_guidSerializerRegistered != 0) return;
+            if (_guidSerializerRegistered != 0)
+            {
+                return;
+            }
 
             Exception? modeToggleError = null;
             try

@@ -38,7 +38,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         try
         {
             if (_state.TimeoutsById.ContainsKey(storedTimeout.Id))
+            {
                 throw new PersistenceException($"TimeoutData with Id {storedTimeout.Id} already exists.");
+            }
 
             var entry = new TimeoutEntry(storedTimeout.Time, storedTimeout.Id, storedTimeout);
             _state.TimeoutsById[storedTimeout.Id] = entry;
@@ -59,7 +61,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     public Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
     {
         if (batchSize.HasValue && batchSize.Value <= 0)
+        {
             throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize.Value, "batchSize must be greater than zero when supplied.");
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -73,7 +77,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
             foreach (var entry in _state.TimeoutIndex)
             {
                 if (entry.Time > utcNow)
+                {
                     break;
+                }
 
                 if (!entry.Data.Locked || entry.Data.LockExpiresAt <= utcNow)
                 {
@@ -83,7 +89,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                     retval.DueTimeouts.Add(Clone(entry.Data));
 
                     if (batchSize is { } cap && retval.DueTimeouts.Count >= cap)
+                    {
                         break;
+                    }
                 }
                 // Due-but-leased rows are skipped this poll; the next fixed-cadence poll
                 // (or the lease reaper if one is configured) will reclaim them once the
@@ -144,8 +152,10 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 // so parity with Mongo is preserved and callers don't silently miss
                 // invalidations.
                 if (!found || !entry!.Data.Locked || entry.Data.LockedBy != owner)
+                {
                     throw new ConcurrencyException(
                         $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
+                }
             }
             else if (!found)
             {
@@ -181,8 +191,10 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 // so parity with Mongo is preserved and callers don't silently miss
                 // invalidations.
                 if (!found || !entry!.Data.Locked || entry.Data.LockedBy != owner)
+                {
                     throw new ConcurrencyException(
                         $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
+                }
             }
             else if (!found)
             {

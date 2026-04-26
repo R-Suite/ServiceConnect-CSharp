@@ -88,12 +88,9 @@ public sealed class ConsumeContext : IConsumeContext
     {
         get
         {
-            if (_correlationId is null)
-            {
-                _correlationId = Headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
+            _correlationId ??= Headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
                     && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
                     ? id : Guid.Empty;
-            }
 
             return _correlationId.Value;
         }
@@ -105,7 +102,9 @@ public sealed class ConsumeContext : IConsumeContext
     {
         var sourceAddress = GetDecodedHeader(Headers, HeaderKeys.SourceAddress);
         if (string.IsNullOrEmpty(sourceAddress))
+        {
             throw new InvalidOperationException("Cannot reply: incoming message has no SourceAddress header.");
+        }
 
         var requestMessageId = GetDecodedHeader(Headers, HeaderKeys.RequestMessageId);
         var isTrustedRequestReply = IsTrustedRequestReplyEnvelope(Headers, _queueConfig, _replyStatusRequestReplyManager, requestMessageId, sourceAddress);
@@ -119,7 +118,9 @@ public sealed class ConsumeContext : IConsumeContext
 
         var replyHeaders = headers ?? [];
         if (!string.IsNullOrEmpty(requestMessageId))
+        {
             replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;
+        }
 
         var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
         await Bus.SendAsync(message, options, cancellationToken).ConfigureAwait(false);
@@ -128,18 +129,28 @@ public sealed class ConsumeContext : IConsumeContext
     internal static bool IsKnownQueue(string address, IQueueConfiguration queueConfig)
     {
         if (string.Equals(address, queueConfig.QueueName, StringComparison.OrdinalIgnoreCase))
+        {
             return true;
+        }
+
         if (string.Equals(address, queueConfig.ErrorQueueName, StringComparison.OrdinalIgnoreCase))
+        {
             return true;
+        }
+
         if (string.Equals(address, queueConfig.AuditQueueName, StringComparison.OrdinalIgnoreCase))
+        {
             return true;
+        }
 
         foreach (var kvp in queueConfig.QueueMappings)
         {
             foreach (var queue in kvp.Value)
             {
                 if (string.Equals(address, queue, StringComparison.OrdinalIgnoreCase))
+                {
                     return true;
+                }
             }
         }
 
@@ -155,10 +166,14 @@ public sealed class ConsumeContext : IConsumeContext
     {
         requestMessageId ??= GetDecodedHeader(headers, HeaderKeys.RequestMessageId);
         if (string.IsNullOrEmpty(requestMessageId))
+        {
             return false;
+        }
 
         if (replyStatusRequestReplyManager?.IsTrackedRequest(requestMessageId) == true)
+        {
             return true;
+        }
 
         sourceAddress ??= GetDecodedHeader(headers, HeaderKeys.SourceAddress);
         var responseMessageId = GetDecodedHeader(headers, HeaderKeys.ResponseMessageId);

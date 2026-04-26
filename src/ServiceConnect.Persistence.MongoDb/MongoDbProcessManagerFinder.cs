@@ -18,7 +18,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
     private readonly SemaphoreSlim _indexCreationSemaphore = new(1, 1);
-    private static readonly HashSet<int> BenignIndexCodes = new() { 85, 86 }; // IndexOptionsConflict, IndexKeySpecsConflict
+    private static readonly HashSet<int> BenignIndexCodes = [85, 86]; // IndexOptionsConflict, IndexKeySpecsConflict
 
     // Under WriteConcern.Unacknowledged the driver does not report MatchedCount/DeletedCount.
     // Accessing those properties on an unacknowledged result throws NotSupportedException.
@@ -79,13 +79,9 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
-                      ?? mapper.Mappings.FirstOrDefault(m => m.MessageType == typeof(Message));
-
-        if (mapping == null)
-            throw new InvalidOperationException(
+        var mapping = (mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType())
+                      ?? mapper.Mappings.FirstOrDefault(m => m.MessageType == typeof(Message))) ?? throw new InvalidOperationException(
                 $"No property mapping configured for message type '{message.GetType().FullName}' or the base Message type.");
-
         var collectionName = GetCollectionName<T>();
         var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
         await EnsureCorrelationIdIndexAsync(collection, collectionName, cancellationToken).ConfigureAwait(false);
@@ -165,10 +161,10 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
                 .GetMethod(nameof(InsertDataTypedAsync), BindingFlags.NonPublic | BindingFlags.Instance)!
                 .MakeGenericMethod(t);
 
-            var finderParam    = Expression.Parameter(typeof(MongoDbProcessManagerFinder), "finder");
-            var dataParam      = Expression.Parameter(typeof(IProcessManagerData), "data");
+            var finderParam = Expression.Parameter(typeof(MongoDbProcessManagerFinder), "finder");
+            var dataParam = Expression.Parameter(typeof(IProcessManagerData), "data");
             var collectionParam = Expression.Parameter(typeof(string), "collectionName");
-            var ctParam        = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
+            var ctParam = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
 
             // Cast IProcessManagerData → T so the call matches the typed parameter.
             var castedData = Expression.Convert(dataParam, t);
@@ -300,14 +296,20 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private async Task EnsureCorrelationIdIndexAsync<T>(IMongoCollection<MongoDbData<T>> collection, string collectionName, CancellationToken cancellationToken) where T : class, IProcessManagerData
     {
         // Fast path: index already confirmed by this process instance.
-        if (_indexedCollections.ContainsKey(collectionName)) return;
+        if (_indexedCollections.ContainsKey(collectionName))
+        {
+            return;
+        }
 
         await _indexCreationSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Double-check under the semaphore so a thread that was waiting while another
             // thread created the index does not issue a redundant CreateOneAsync.
-            if (_indexedCollections.ContainsKey(collectionName)) return;
+            if (_indexedCollections.ContainsKey(collectionName))
+            {
+                return;
+            }
 
             var indexKeys = Builders<MongoDbData<T>>.IndexKeys.Ascending(x => x.Data.CorrelationId);
             var indexModel = new CreateIndexModel<MongoDbData<T>>(indexKeys, new CreateIndexOptions { Unique = true });

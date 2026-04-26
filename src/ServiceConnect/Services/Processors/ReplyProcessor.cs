@@ -17,18 +17,26 @@ internal sealed class ReplyProcessor(IReplyStatusRequestReplyManager? replyManag
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!headers.TryGetValue(HeaderKeys.ResponseMessageId, out var responseMessageIdRaw))
+        {
             return NotHandledTask;
+        }
 
         var responseMessageId = HeaderDecoder.Decode(responseMessageIdRaw);
 
         if (string.IsNullOrEmpty(responseMessageId))
+        {
             return NotHandledTask;
+        }
 
         if (replyManager == null)
+        {
             return NotHandledTask;
+        }
 
         if (replyManager.TryProcessReply(responseMessageId, messageBytes, messageType))
+        {
             return HandledTask;
+        }
 
         return NotHandledTask;
     }

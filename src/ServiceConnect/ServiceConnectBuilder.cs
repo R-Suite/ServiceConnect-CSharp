@@ -36,7 +36,9 @@ public sealed class ServiceConnectBuilder
         for (int i = 0; i < assemblies.Length; i++)
         {
             if (assemblies[i] is null)
+            {
                 throw new ArgumentNullException($"{nameof(assemblies)}[{i}]", "Assembly array element is null.");
+            }
         }
         ScanAssembliesList.AddRange(assemblies);
         return this;
@@ -72,13 +74,24 @@ public sealed class ServiceConnectBuilder
     private static void ValidateTransport(ITransportConfiguration transport)
     {
         if (string.IsNullOrWhiteSpace(transport.Host))
+        {
             throw new InvalidOperationException("TransportConfiguration.Host must be a non-empty host or comma-separated host list.");
+        }
+
         if (transport.RetryDelay < 0)
+        {
             throw new InvalidOperationException($"TransportConfiguration.RetryDelay must be non-negative (got {transport.RetryDelay}).");
+        }
+
         if (transport.MaxRetries < 0)
+        {
             throw new InvalidOperationException($"TransportConfiguration.MaxRetries must be non-negative (got {transport.MaxRetries}).");
+        }
+
         if (transport.GracefulShutdownTimeoutMilliseconds < 0)
+        {
             throw new InvalidOperationException($"TransportConfiguration.GracefulShutdownTimeoutMilliseconds must be non-negative (got {transport.GracefulShutdownTimeoutMilliseconds}).");
+        }
     }
 
     /// <summary>

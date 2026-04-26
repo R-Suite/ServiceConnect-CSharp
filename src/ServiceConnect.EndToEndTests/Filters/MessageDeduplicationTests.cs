@@ -21,21 +21,29 @@ file sealed class TestDeduplicationFilter : IFilter
     public Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
         if (!envelope.Headers.TryGetValue(BusinessIdHeader, out var rawId))
+        {
             return Task.FromResult(FilterAction.Continue);
+        }
 
         var messageId = rawId is byte[] bytes
             ? Encoding.UTF8.GetString(bytes)
             : rawId?.ToString() ?? string.Empty;
 
         if (string.IsNullOrEmpty(messageId))
+        {
             return Task.FromResult(FilterAction.Continue);
+        }
 
         if (_seen.TryAdd(messageId, 0))
+        {
             return Task.FromResult(FilterAction.Continue);
+        }
 
         // Already seen — block if this is a redelivery
         if (!envelope.Headers.TryGetValue(HeaderKeys.Redelivered, out var rawRedelivered))
+        {
             return Task.FromResult(FilterAction.Continue);
+        }
 
         var redeliveredStr = rawRedelivered is byte[] redeliveredBytes
             ? Encoding.UTF8.GetString(redeliveredBytes)
@@ -47,14 +55,9 @@ file sealed class TestDeduplicationFilter : IFilter
 }
 
 [Collection(nameof(MessagingCollection))]
-public class MessageDeduplicationTests
+public class MessageDeduplicationTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public MessageDeduplicationTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -110,7 +113,7 @@ public class MessageDeduplicationTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -150,7 +153,10 @@ public class MessageDeduplicationTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }

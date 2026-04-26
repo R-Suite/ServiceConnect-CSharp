@@ -69,9 +69,14 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         ArgumentNullException.ThrowIfNull(buffer);
 
         if ((uint)offset > (uint)buffer.Length)
+        {
             throw new ArgumentOutOfRangeException(nameof(offset));
+        }
+
         if ((uint)count > (uint)(buffer.Length - offset))
+        {
             throw new ArgumentOutOfRangeException(nameof(count));
+        }
 
         // Reserve the in-flight slot BEFORE checking the close flag so that a concurrent
         // CloseAsync observing _inFlightWrites == 0 cannot race past us. Rolled back below
@@ -80,10 +85,15 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         try
         {
             if (Volatile.Read(ref _closedFlag) == 1)
+            {
                 throw new ObjectDisposedException(nameof(MessageBusWriteStream));
+            }
+
             if (Volatile.Read(ref _faulted) == 1)
+            {
                 throw new InvalidOperationException(
                     $"Stream {_sequenceId} is faulted from a previous send failure; create a new stream.");
+            }
 
             var packet = new byte[count];
             Array.Copy(buffer, offset, packet, 0, count);
@@ -94,7 +104,11 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
             // per packet is required because the producer may mutate / enqueue the
             // dictionary asynchronously, so reuse would race with concurrent writes.
             var headers = new Dictionary<string, string>(_baseHeaders.Count + 1);
-            foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
+            foreach (var kvp in _baseHeaders)
+            {
+                headers[kvp.Key] = kvp.Value;
+            }
+
             headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
 
             try
@@ -120,13 +134,19 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     public async Task CloseAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (Interlocked.CompareExchange(ref _closedFlag, 1, 0) != 0) return;
+        if (Interlocked.CompareExchange(ref _closedFlag, 1, 0) != 0)
+        {
+            return;
+        }
 
         // A faulted stream has a stranded packet number; emitting a close packet would
         // declare a LastPacketNumber the reader can never reach. Swallow the close
         // request silently — the caller already received an exception from the failing
         // write that set the fault flag.
-        if (Volatile.Read(ref _faulted) == 1) return;
+        if (Volatile.Read(ref _faulted) == 1)
+        {
+            return;
+        }
 
         // Drain in-flight writes before reading _packetNumber. Any WriteAsync that passed
         // its closed-flag check must complete (either successfully or with an exception)
@@ -139,13 +159,19 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
             cancellationToken.ThrowIfCancellationRequested();
 
             if (spin.NextSpinWillYield && _timeProvider.GetUtcNow().UtcDateTime >= deadline)
+            {
                 throw new TimeoutException(
                     $"Timed out waiting for {Volatile.Read(ref _inFlightWrites)} in-flight write(s) to drain before closing stream {_sequenceId}.");
+            }
 
             if (spin.NextSpinWillYield)
+            {
                 await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+            }
             else
+            {
                 spin.SpinOnce();
+            }
         }
 
         // _packetNumber was post-incremented on each WriteAsync, so after N data
@@ -157,7 +183,11 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         var packetNum = Interlocked.Read(ref _packetNumber);
 
         var headers = new Dictionary<string, string>(_baseHeaders.Count + 2);
-        foreach (var kvp in _baseHeaders) headers[kvp.Key] = kvp.Value;
+        foreach (var kvp in _baseHeaders)
+        {
+            headers[kvp.Key] = kvp.Value;
+        }
+
         var packetNumString = FormatInt64(packetNum);
         headers[HeaderKeys.PacketNumber] = packetNumString;
         headers[HeaderKeys.LastPacketNumber] = packetNumString;

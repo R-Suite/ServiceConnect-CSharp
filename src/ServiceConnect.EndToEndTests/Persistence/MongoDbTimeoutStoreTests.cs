@@ -10,14 +10,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(PersistenceCollection))]
-public class MongoDbTimeoutStoreTests
+public class MongoDbTimeoutStoreTests(PersistenceFixture fixture)
 {
-    private readonly PersistenceFixture _fixture;
-
-    public MongoDbTimeoutStoreTests(PersistenceFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly PersistenceFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -210,11 +205,13 @@ public class MongoDbTimeoutStoreTests
             timeProvider);
 
         for (int i = 0; i < 10; i++)
+        {
             await store.InsertTimeoutAsync(new TimeoutData
             {
                 Id = Guid.NewGuid(),
                 Time = timeProvider.GetUtcNow().AddMinutes(-1),
             });
+        }
 
         var batch = await store.GetTimeoutsBatchAsync(batchSize: 3);
 

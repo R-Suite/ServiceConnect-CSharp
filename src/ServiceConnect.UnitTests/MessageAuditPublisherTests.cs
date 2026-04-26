@@ -55,7 +55,7 @@ public class MessageAuditPublisherTests
         var channel = new Mock<IChannel>();
         var publisher = new MessageAuditPublisher(MakeQueueCfg(false).Object);
 
-        await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), new Dictionary<string, object>());
+        await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), []);
 
         channel.Verify(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -114,7 +114,7 @@ public class MessageAuditPublisherTests
 
         var publisher = new MessageAuditPublisher(MakeQueueCfg(true).Object);
 
-        await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), new Dictionary<string, object>());
+        await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), []);
 
         channel.Verify(c => c.BasicPublishAsync(
             "audit", string.Empty, false,

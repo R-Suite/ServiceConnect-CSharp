@@ -45,14 +45,20 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         _mongoClient = mongoClient;
         _timeProvider = timeProvider ?? TimeProvider.System;
         if (options.TimeoutBatchSize <= 0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(options), options.TimeoutBatchSize,
                 $"{nameof(MongoDbPersistenceOptions.TimeoutBatchSize)} must be positive.");
+        }
+
         _batchSize = options.TimeoutBatchSize;
         if (options.TimeoutLockLeaseDuration <= TimeSpan.Zero)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(options), options.TimeoutLockLeaseDuration,
                 $"{nameof(MongoDbPersistenceOptions.TimeoutLockLeaseDuration)} must be positive.");
+        }
+
         _lockLeaseDuration = options.TimeoutLockLeaseDuration;
 
         try
@@ -70,7 +76,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     {
         ArgumentNullException.ThrowIfNull(timeoutData);
         if (timeoutData.Id == Guid.Empty)
+        {
             throw new ArgumentException("TimeoutData.Id must not be Guid.Empty.", nameof(timeoutData));
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         try
@@ -90,7 +99,9 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     public async Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
     {
         if (batchSize is { } cap && cap <= 0)
+        {
             throw new ArgumentOutOfRangeException(nameof(batchSize), cap, "batchSize must be greater than zero when supplied.");
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -133,14 +144,20 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 .ConfigureAwait(false);
 
             if (candidateIds.Count == 0)
+            {
                 return retval;
+            }
 
             var batchFilter = dueUnlockedFilter &
                               Builders<TimeoutData>.Filter.In(x => x.Id, candidateIds);
             if (session is not null)
+            {
                 await collection.UpdateManyAsync(session, batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
             else
+            {
                 await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
 
             // Read back exactly the rows we just claimed (LockedBy == sessionId).
             var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
@@ -148,7 +165,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             using var cursor = session is not null
                 ? await collection.FindAsync(session, ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false)
                 : await collection.FindAsync(ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false);
-            await cursor.ForEachAsync(doc => retval.DueTimeouts.Add(doc), cancellationToken).ConfigureAwait(false);
+            await cursor.ForEachAsync(retval.DueTimeouts.Add, cancellationToken).ConfigureAwait(false);
 
             return retval;
         }

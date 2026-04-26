@@ -9,11 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class AutoStartConsumingE2ETests
+public class AutoStartConsumingE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public AutoStartConsumingE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -24,8 +22,7 @@ public class AutoStartConsumingE2ETests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(TestMessage)
             }
@@ -103,8 +100,7 @@ public class AutoStartConsumingE2ETests
 
         var handlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(CallbackHandler<TestMessage>),
                 MessageType = typeof(TestMessage)
             }

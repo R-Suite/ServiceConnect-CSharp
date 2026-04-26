@@ -30,11 +30,11 @@ public class AggregatorProcessorTests
     public async Task ProcessAsync_NoAggregator_ReturnsNotHandled()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        services.AddSingleton<IList<HandlerReference>>([]);
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(
-            new List<HandlerReference>(),
+            [],
             provider,
             NullLogger<AggregatorRegistry>.Instance);
         var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
@@ -158,7 +158,9 @@ public class AggregatorProcessorTests
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
         foreach (var msg in messages)
+        {
             await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), msg, headers, envelope);
+        }
 
         persistorMock.Verify(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()), Times.Once);
         persistorMock.Verify(p => p.RemoveAllAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -213,7 +215,9 @@ public class AggregatorProcessorTests
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
         foreach (var msg in messages)
+        {
             await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), msg, headers, envelope);
+        }
 
         var waited = await Task.WhenAny(executed.Task, Task.Delay(2000));
         Assert.Same(executed.Task, waited);
@@ -308,7 +312,9 @@ public class AggregatorProcessorTests
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
         foreach (var msg in messages)
+        {
             await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), msg, headers, envelope);
+        }
 
         var executed = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.Equal(3, executed.Count);
@@ -334,12 +340,12 @@ public class AggregatorProcessorTests
             {
                 flushStarted.TrySetResult();
                 await flushCanProceed.Task.WaitAsync(ct);
-                return SnapshotOf(new object[]
-                {
+                return SnapshotOf(
+                [
                     new AggTestMessage(Guid.NewGuid()) { Value = "A" },
                     new AggTestMessage(Guid.NewGuid()) { Value = "B" },
                     new AggTestMessage(Guid.NewGuid()) { Value = "C" },
-                });
+                ]);
             });
         persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -373,7 +379,7 @@ public class AggregatorProcessorTests
         await processor.DisposeAsync();
 
         var ex = await Record.ExceptionAsync(async () => await processTask);
-        Assert.True(ex == null || ex is OperationCanceledException || ex is ObjectDisposedException,
+        Assert.True(ex is null or OperationCanceledException or ObjectDisposedException,
             $"Expected null, OperationCanceledException, or ObjectDisposedException but got: {ex?.GetType().Name}: {ex?.Message}");
     }
 
@@ -381,10 +387,10 @@ public class AggregatorProcessorTests
     public async Task DisposeAsync_CanBeCalledMultipleTimes()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        services.AddSingleton<IList<HandlerReference>>([]);
         var provider = services.BuildServiceProvider();
 
-        var registry = new AggregatorRegistry(new List<HandlerReference>(), provider, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry([], provider, NullLogger<AggregatorRegistry>.Instance);
         var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
         using var _scopeAgg = scopeHandle;
         var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance);
@@ -410,7 +416,9 @@ public class AggregatorProcessorTests
             new AggTestMessage(Guid.NewGuid()) { Value = "a3" },
         };
         foreach (var m in initial)
+        {
             await persistor.InsertDataAsync(m, name);
+        }
 
         var snapshot = await persistor.GetSnapshotAsync(name);
 
@@ -464,7 +472,7 @@ public class AggregatorProcessorTests
             {
                 // The snapshot captures only the initial 3 messages.
                 var ids = initial.Select(_ => Guid.NewGuid()).ToList();
-                return (IAggregatorSnapshot)new AggregatorSnapshot(initial.Cast<object>().ToList(), ids, 0);
+                return (IAggregatorSnapshot)new AggregatorSnapshot([.. initial.Cast<object>()], ids, 0);
                 // NOTE: the late message is NOT in this snapshot — it would be inserted
                 // by a concurrent producer between snapshot and remove.
             });
@@ -495,7 +503,9 @@ public class AggregatorProcessorTests
 
         // Send exactly BatchSize (3) messages to trigger a flush.
         foreach (var msg in initial)
+        {
             await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), msg, headers, envelope);
+        }
 
         // Aggregator must have run with the 3 initial messages.
         var executed = await tcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
@@ -590,7 +600,7 @@ public class AggregatorProcessorTests
         // The processor is fully live at this point except _disposed=1.
 
         // Simulate a late timer callback: call OnTimerFired with _disposed already set.
-        onTimerFiredMethod.Invoke(processor, new object[] { descriptor });
+        onTimerFiredMethod.Invoke(processor, [descriptor]);
 
         // Give the background RunFlushAsync task time to run if the guard is missing.
         // With the fix: OnTimerFired returns immediately, nothing runs, _flushLocks stays empty.
@@ -708,7 +718,7 @@ public class AggregatorProcessorTests
         var processorType = typeof(AggregatorProcessor);
         var runFlushMethod = processorType.GetMethod("RunFlushAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var runTask = (Task)runFlushMethod.Invoke(processor, new object[] { 42, tcs, descriptor })!;
+        var runTask = (Task)runFlushMethod.Invoke(processor, [42, tcs, descriptor])!;
         await runTask;
 
         // With the fix: RunFlushAsync catches the race quietly, no ERROR logged.
@@ -911,7 +921,7 @@ public class AggregatorProcessorTests
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => SnapshotOf(new object[] { probeMessage }));
+            .ReturnsAsync(() => SnapshotOf([probeMessage]));
         persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
@@ -970,7 +980,7 @@ public class AggregatorProcessorTests
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() => SnapshotOf(new object[] { probeMessage }));
+            .ReturnsAsync(() => SnapshotOf([probeMessage]));
         persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
@@ -993,7 +1003,9 @@ public class AggregatorProcessorTests
         // Wait up to 2s for the 50ms timer to fire and complete the flush.
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
         while (DateTime.UtcNow < deadline && freshAggregator.Hits == 0 && staleAggregator.Hits == 0)
+        {
             await Task.Delay(20);
+        }
 
         Assert.Equal(0, staleAggregator.Hits);
         Assert.Equal(1, freshAggregator.Hits);
@@ -1025,20 +1037,14 @@ file sealed class AptCapturingLogger : ILogger<AggregatorProcessor>
     }
 }
 
-file class AggTestMessage : Message
+file class AggTestMessage(Guid correlationId) : Message(correlationId)
 {
-    public AggTestMessage(Guid correlationId) : base(correlationId) { }
     public string Value { get; set; } = "";
 }
 
-file class AggTestAggregator : Aggregator<AggTestMessage>
+file class AggTestAggregator(TaskCompletionSource<IList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
 {
-    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs;
-
-    public AggTestAggregator(TaskCompletionSource<IList<AggTestMessage>> tcs)
-    {
-        _tcs = tcs;
-    }
+    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
 
@@ -1049,16 +1055,10 @@ file class AggTestAggregator : Aggregator<AggTestMessage>
     }
 }
 
-file class OrderRecordingAggregator : Aggregator<AggTestMessage>
+file class OrderRecordingAggregator(List<string> order, TaskCompletionSource<IList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
 {
-    private readonly List<string> _order;
-    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs;
-
-    public OrderRecordingAggregator(List<string> order, TaskCompletionSource<IList<AggTestMessage>> tcs)
-    {
-        _order = order;
-        _tcs = tcs;
-    }
+    private readonly List<string> _order = order;
+    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
 
@@ -1070,14 +1070,9 @@ file class OrderRecordingAggregator : Aggregator<AggTestMessage>
     }
 }
 
-file class AggTestTimedAggregator : Aggregator<AggTestMessage>
+file class AggTestTimedAggregator(TaskCompletionSource<IList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
 {
-    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs;
-
-    public AggTestTimedAggregator(TaskCompletionSource<IList<AggTestMessage>> tcs)
-    {
-        _tcs = tcs;
-    }
+    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 0;
     public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(200);

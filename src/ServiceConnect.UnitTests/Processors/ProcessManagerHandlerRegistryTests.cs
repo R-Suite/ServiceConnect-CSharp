@@ -28,7 +28,7 @@ public class ProcessManagerHandlerRegistryTests
     public void TryGet_ReturnsFalse_ForUnknownMessageType()
     {
         var registry = new ProcessManagerHandlerRegistry(
-            new List<HandlerReference>(),
+            [],
             NullLogger<ProcessManagerHandlerRegistry>.Instance);
 
         Assert.False(registry.TryGet(typeof(FooMessage), out var descriptor));

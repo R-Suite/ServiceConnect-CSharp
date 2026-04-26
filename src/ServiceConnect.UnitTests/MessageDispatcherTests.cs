@@ -16,29 +16,25 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests;
 
-file class TestDispatchHandler : IMessageHandler<FakeMessage1>
+file class TestDispatchHandler(
+    Action<FakeMessage1>? onHandle = null,
+    Action<IConsumeContext?>? onContextSet = null,
+    Exception? throwOnHandle = null) : IMessageHandler<FakeMessage1>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    private readonly Action<FakeMessage1>? _onHandle;
-    private readonly Action<IConsumeContext?>? _onContextSet;
-    private readonly Exception? _throwOnHandle;
-
-    public TestDispatchHandler(
-        Action<FakeMessage1>? onHandle = null,
-        Action<IConsumeContext?>? onContextSet = null,
-        Exception? throwOnHandle = null)
-    {
-        _onHandle = onHandle;
-        _onContextSet = onContextSet;
-        _throwOnHandle = throwOnHandle;
-    }
+    private readonly Action<FakeMessage1>? _onHandle = onHandle;
+    private readonly Action<IConsumeContext?>? _onContextSet = onContextSet;
+    private readonly Exception? _throwOnHandle = throwOnHandle;
 
     public Task HandleAsync(FakeMessage1 message, CancellationToken cancellationToken = default)
     {
         _onContextSet?.Invoke(Context);
         if (_throwOnHandle != null)
+        {
             throw _throwOnHandle;
+        }
+
         _onHandle?.Invoke(message);
         return Task.CompletedTask;
     }
@@ -58,7 +54,10 @@ public class MessageDispatcherTests
             [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes(typeof(FakeMessage1).AssemblyQualifiedName!)
         };
         if (responseMessageId != null)
+        {
             headers["ResponseMessageId"] = Encoding.UTF8.GetBytes(responseMessageId);
+        }
+
         return headers;
     }
 
@@ -77,7 +76,7 @@ public class MessageDispatcherTests
     private static Mock<IPipelineConfiguration> CreateEmptyPipelineConfig()
     {
         var mock = new Mock<IPipelineConfiguration>();
-        mock.Setup(p => p.MessageProcessingMiddleware).Returns(new List<Type>());
+        mock.Setup(p => p.MessageProcessingMiddleware).Returns([]);
         return mock;
     }
 
@@ -85,7 +84,10 @@ public class MessageDispatcherTests
     {
         var registry = new MessageTypeRegistry();
         foreach (var t in types)
+        {
             registry.Register(t);
+        }
+
         return registry;
     }
 
@@ -106,7 +108,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(() => serviceProvider.GetRequiredService<IBus>()), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
+            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(serviceProvider.GetRequiredService<IBus>), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
         };
 
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
@@ -292,7 +294,7 @@ public class MessageDispatcherTests
             .ReturnsAsync(FilterAction.Continue);
 
         var preDeser = new OrderRecordingPreDeserProcessor(order);
-        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+        var dispatcher = CreateDispatcherWithProcessors([preDeser]);
 
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(new FakeMessage1(Guid.NewGuid()));
@@ -313,8 +315,8 @@ public class MessageDispatcherTests
             .Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(FilterAction.Stop);
 
-        var preDeser = new OrderRecordingPreDeserProcessor(new List<string>());
-        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+        var preDeser = new OrderRecordingPreDeserProcessor([]);
+        var dispatcher = CreateDispatcherWithProcessors([preDeser]);
 
         var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
@@ -328,8 +330,8 @@ public class MessageDispatcherTests
         // When a pre-deser processor reports Handled (e.g., stream packet accepted),
         // after-consuming filters must still fire — they were being skipped when
         // the processor returned before the before-filter step.
-        var preDeser = new OrderRecordingPreDeserProcessor(new List<string>()) { ReturnHandled = true };
-        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+        var preDeser = new OrderRecordingPreDeserProcessor([]) { ReturnHandled = true };
+        var dispatcher = CreateDispatcherWithProcessors([preDeser]);
 
         var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
@@ -344,8 +346,8 @@ public class MessageDispatcherTests
     {
         // Pre-deser Handled return short-circuits dispatch before deserialization,
         // keeping the middleware asymmetry (middleware requires a deserialized message).
-        var preDeser = new OrderRecordingPreDeserProcessor(new List<string>()) { ReturnHandled = true };
-        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { preDeser });
+        var preDeser = new OrderRecordingPreDeserProcessor([]) { ReturnHandled = true };
+        var dispatcher = CreateDispatcherWithProcessors([preDeser]);
 
         await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
@@ -536,7 +538,7 @@ public class MessageDispatcherTests
             .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(new FakeMessage1(Guid.NewGuid()));
 
-        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor>());
+        var dispatcher = CreateDispatcherWithProcessors([]);
         var headers = MakeHeaders();
 
         var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
@@ -553,7 +555,7 @@ public class MessageDispatcherTests
             .Returns(new FakeMessage1(Guid.NewGuid()));
 
         var processor = new AlwaysHandledProcessor();
-        var dispatcher = CreateDispatcherWithProcessors(new List<IMessageProcessor> { processor });
+        var dispatcher = CreateDispatcherWithProcessors([processor]);
         var headers = MakeHeaders();
 
         var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
@@ -718,7 +720,7 @@ public class MessageDispatcherTests
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
-            new List<IMessageProcessor> { captureProcessor },
+            [captureProcessor],
             NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
@@ -758,7 +760,7 @@ public class MessageDispatcherTests
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
-            new List<IMessageProcessor> { captureProcessor },
+            [captureProcessor],
             NullLogger<MessageDispatcher>.Instance,
             new Mock<IBusConfiguration>().Object,
             CreateEmptyPipelineConfig().Object,
@@ -788,15 +790,13 @@ file class AlwaysHandledProcessor : IMessageProcessor
         => Task.FromResult(ProcessResult.Handled);
 }
 
-file class PolyBaseMessage : Message
+file class PolyBaseMessage(Guid correlationId) : Message(correlationId)
 {
-    public PolyBaseMessage(Guid correlationId) : base(correlationId) { }
     public string Content { get; set; } = string.Empty;
 }
 
-file class PolyDerivedMessage : PolyBaseMessage
+file class PolyDerivedMessage(Guid correlationId) : PolyBaseMessage(correlationId)
 {
-    public PolyDerivedMessage(Guid correlationId) : base(correlationId) { }
     public string Extra { get; set; } = string.Empty;
 }
 
@@ -807,9 +807,8 @@ file class PolyBaseHandler : IMessageHandler<PolyBaseMessage>
     public Task HandleAsync(PolyBaseMessage message, CancellationToken cancellationToken = default) { Invoked = true; return Task.CompletedTask; }
 }
 
-file sealed class UnregisteredReplyMessage : Message
+file sealed class UnregisteredReplyMessage(Guid correlationId) : Message(correlationId)
 {
-    public UnregisteredReplyMessage(Guid correlationId) : base(correlationId) { }
 }
 
 file sealed class DisposableMarker : IDisposable
@@ -818,16 +817,10 @@ file sealed class DisposableMarker : IDisposable
     public void Dispose() => Disposed = true;
 }
 
-file sealed class CapturingProcessor : IMessageProcessor
+file sealed class CapturingProcessor(Action<IServiceProvider> capture, ConsumeScopeAccessor scopeAccessor) : IMessageProcessor
 {
-    private readonly Action<IServiceProvider> _capture;
-    private readonly ConsumeScopeAccessor _scopeAccessor;
-
-    public CapturingProcessor(Action<IServiceProvider> capture, ConsumeScopeAccessor scopeAccessor)
-    {
-        _capture = capture;
-        _scopeAccessor = scopeAccessor;
-    }
+    private readonly Action<IServiceProvider> _capture = capture;
+    private readonly ConsumeScopeAccessor _scopeAccessor = scopeAccessor;
 
     public bool RunBeforeDeserialization => false;
 
@@ -862,14 +855,9 @@ file sealed class TestDispatcherReplyManager : IReplyStatusRequestReplyManager
     public bool IsTrackedRequest(string messageId) => false;
 }
 
-file sealed class OrderRecordingPreDeserProcessor : IMessageProcessor
+file sealed class OrderRecordingPreDeserProcessor(List<string> order) : IMessageProcessor
 {
-    private readonly List<string> _order;
-
-    public OrderRecordingPreDeserProcessor(List<string> order)
-    {
-        _order = order;
-    }
+    private readonly List<string> _order = order;
 
     public bool RunBeforeDeserialization => true;
     public bool ReturnHandled { get; set; }

@@ -8,20 +8,15 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(IsolatedCollection))]
-public class CancellationE2ETests
+public class CancellationE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public CancellationE2ETests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     private ServiceProvider BuildBus(string queueName, out IBus bus)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        services.AddSingleton<IList<HandlerReference>>([]);
 
         services.AddServiceConnect(builder =>
         {
@@ -106,12 +101,10 @@ public class CancellationE2ETests
     }
 }
 
-public class CancellationTestRequest : Message
+public class CancellationTestRequest(Guid correlationId) : Message(correlationId)
 {
-    public CancellationTestRequest(Guid correlationId) : base(correlationId) { }
 }
 
-public class CancellationTestReply : Message
+public class CancellationTestReply(Guid correlationId) : Message(correlationId)
 {
-    public CancellationTestReply(Guid correlationId) : base(correlationId) { }
 }

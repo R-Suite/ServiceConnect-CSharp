@@ -15,11 +15,9 @@ namespace ServiceConnect.EndToEndTests;
 /// collected rather than escape unobserved.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
-public class ProducerDisposeConcurrencyE2ETests
+public class ProducerDisposeConcurrencyE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ProducerDisposeConcurrencyE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -31,7 +29,7 @@ public class ProducerDisposeConcurrencyE2ETests
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        services.AddSingleton<IList<HandlerReference>>([]);
 
         services.AddServiceConnect(builder =>
         {
@@ -58,7 +56,9 @@ public class ProducerDisposeConcurrencyE2ETests
         void OnUnhandled(object? sender, UnhandledExceptionEventArgs args)
         {
             if (args.ExceptionObject is Exception ex)
+            {
                 strayExceptions.Add(ex);
+            }
         }
         AppDomain.CurrentDomain.UnhandledException += OnUnhandled;
 
@@ -92,11 +92,14 @@ public class ProducerDisposeConcurrencyE2ETests
 
         AppDomain.CurrentDomain.UnhandledException -= OnUnhandled;
 
-        if (provider is IAsyncDisposable ap) await ap.DisposeAsync();
+        if (provider is IAsyncDisposable ap)
+        {
+            await ap.DisposeAsync();
+        }
 
         // Filter out acceptable exceptions (ObjectDisposedException / OperationCanceledException)
         var unexpectedExceptions = strayExceptions
-            .Where(ex => ex is not ObjectDisposedException && ex is not OperationCanceledException)
+            .Where(ex => ex is not ObjectDisposedException and not OperationCanceledException)
             .ToList();
 
         Assert.Empty(unexpectedExceptions);

@@ -10,14 +10,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(RequestReplyCollection))]
-public class PublishRequestAsyncTests
+public class PublishRequestAsyncTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public PublishRequestAsyncTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -31,8 +26,7 @@ public class PublishRequestAsyncTests
         // --- Responder 1 bus setup ---
         var responder1HandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(PubReqReplyHandler),
                 MessageType = typeof(TestRequest)
             }
@@ -65,8 +59,7 @@ public class PublishRequestAsyncTests
         // --- Responder 2 bus setup ---
         var responder2HandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(PubReqReplyHandler),
                 MessageType = typeof(TestRequest)
             }
@@ -123,7 +116,7 @@ public class PublishRequestAsyncTests
         await requesterBus.StartConsumingAsync();
 
         // Give consumers time to set up
-        
+
 
         try
         {
@@ -133,7 +126,7 @@ public class PublishRequestAsyncTests
 
             await requesterBus.PublishRequestAsync<TestRequest, TestResponse>(
                 request,
-                reply => replies.Add(reply),
+                replies.Add,
                 new RequestOptions
                 {
                     Timeout = 30000,
@@ -147,11 +140,22 @@ public class PublishRequestAsyncTests
         finally
         {
             await responder1Bus.DisposeAsync();
-            if (responder1Provider is IAsyncDisposable asyncResponder1Provider) await asyncResponder1Provider.DisposeAsync();
+            if (responder1Provider is IAsyncDisposable asyncResponder1Provider)
+            {
+                await asyncResponder1Provider.DisposeAsync();
+            }
+
             await responder2Bus.DisposeAsync();
-            if (responder2Provider is IAsyncDisposable asyncResponder2Provider) await asyncResponder2Provider.DisposeAsync();
+            if (responder2Provider is IAsyncDisposable asyncResponder2Provider)
+            {
+                await asyncResponder2Provider.DisposeAsync();
+            }
+
             await requesterBus.DisposeAsync();
-            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider)
+            {
+                await asyncRequesterProvider.DisposeAsync();
+            }
         }
     }
 }

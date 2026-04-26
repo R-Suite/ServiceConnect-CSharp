@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(RequestReplyCollection))]
-public class ScatterGatherTests
+public class ScatterGatherTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ScatterGatherTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -30,8 +25,7 @@ public class ScatterGatherTests
         // --- Responder 1 bus setup ---
         var responder1HandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(ScatterReplyHandler),
                 MessageType = typeof(TestRequest)
             }
@@ -64,8 +58,7 @@ public class ScatterGatherTests
         // --- Responder 2 bus setup ---
         var responder2HandlerReferences = new List<HandlerReference>
         {
-            new HandlerReference
-            {
+            new() {
                 HandlerType = typeof(ScatterReplyHandler),
                 MessageType = typeof(TestRequest)
             }
@@ -122,7 +115,7 @@ public class ScatterGatherTests
         await requesterBus.StartConsumingAsync();
 
         // Give consumers time to set up
-        
+
 
         try
         {
@@ -132,7 +125,7 @@ public class ScatterGatherTests
                 request,
                 new RequestOptions
                 {
-                    EndPoints = new List<string> { responder1Queue, responder2Queue },
+                    EndPoints = [responder1Queue, responder2Queue],
                     ExpectedReplyCount = 2,
                     Timeout = 30000
                 });
@@ -148,20 +141,29 @@ public class ScatterGatherTests
         finally
         {
             await responder1Bus.DisposeAsync();
-            if (responder1Provider is IAsyncDisposable asyncResponder1Provider) await asyncResponder1Provider.DisposeAsync();
+            if (responder1Provider is IAsyncDisposable asyncResponder1Provider)
+            {
+                await asyncResponder1Provider.DisposeAsync();
+            }
+
             await responder2Bus.DisposeAsync();
-            if (responder2Provider is IAsyncDisposable asyncResponder2Provider) await asyncResponder2Provider.DisposeAsync();
+            if (responder2Provider is IAsyncDisposable asyncResponder2Provider)
+            {
+                await asyncResponder2Provider.DisposeAsync();
+            }
+
             await requesterBus.DisposeAsync();
-            if (requesterProvider is IAsyncDisposable asyncRequesterProvider) await asyncRequesterProvider.DisposeAsync();
+            if (requesterProvider is IAsyncDisposable asyncRequesterProvider)
+            {
+                await asyncRequesterProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class ScatterReplyHandler : IMessageHandler<TestRequest>
+file class ScatterReplyHandler(string prefix) : IMessageHandler<TestRequest>
 {
-    private readonly string _prefix;
-
-    public ScatterReplyHandler(string prefix) => _prefix = prefix;
+    private readonly string _prefix = prefix;
 
     public IConsumeContext Context { get; set; } = null!;
 

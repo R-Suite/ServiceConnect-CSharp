@@ -35,8 +35,15 @@ public class MongoClientFactoryTests : IDisposable
 
     public void Dispose()
     {
-        if (File.Exists(_certPath)) File.Delete(_certPath);
-        if (File.Exists(_pfxPath)) File.Delete(_pfxPath);
+        if (File.Exists(_certPath))
+        {
+            File.Delete(_certPath);
+        }
+
+        if (File.Exists(_pfxPath))
+        {
+            File.Delete(_pfxPath);
+        }
     }
 
     [Fact]

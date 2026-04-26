@@ -11,14 +11,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class ProcessManagerTests
+public class ProcessManagerTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ProcessManagerTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -64,7 +59,7 @@ public class ProcessManagerTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -97,17 +92,17 @@ public class ProcessManagerTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class CounterProcessHandler : IProcessHandler<TestProcessData, TestMessage>
+file class CounterProcessHandler(TaskCompletionSource<bool> secondHandled) : IProcessHandler<TestProcessData, TestMessage>
 {
-    private readonly TaskCompletionSource<bool> _secondHandled;
-
-    public CounterProcessHandler(TaskCompletionSource<bool> secondHandled) =>
-        _secondHandled = secondHandled;
+    private readonly TaskCompletionSource<bool> _secondHandled = secondHandled;
 
     public IConsumeContext Context { get; set; } = null!;
 
@@ -115,7 +110,11 @@ file class CounterProcessHandler : IProcessHandler<TestProcessData, TestMessage>
     {
         data.Counter++;
         data.LastContent = message.Content;
-        if (data.Counter >= 2) _secondHandled.TrySetResult(true);
+        if (data.Counter >= 2)
+        {
+            _secondHandled.TrySetResult(true);
+        }
+
         return Task.CompletedTask;
     }
 }

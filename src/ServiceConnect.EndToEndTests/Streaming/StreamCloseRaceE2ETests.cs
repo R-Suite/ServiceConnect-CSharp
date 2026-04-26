@@ -14,11 +14,9 @@ namespace ServiceConnect.EndToEndTests;
 /// throwing, and the reader must observe a consistent LastPacketNumber.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
-public class StreamCloseRaceE2ETests
+public class StreamCloseRaceE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public StreamCloseRaceE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -39,7 +37,7 @@ public class StreamCloseRaceE2ETests
         // valid TestMessage, so a consumer-side assertion would never fire.
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+        producerServices.AddSingleton<IList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -77,7 +75,7 @@ public class StreamCloseRaceE2ETests
                     try
                     {
                         await stream.WriteAsync(payload, 0, payload.Length);
-                        accepted.Add(w * packetsPerWriter + p);
+                        accepted.Add((w * packetsPerWriter) + p);
 
                         // When 95% accepted, close the stream from one writer
                         if (accepted.Count >= closeAfter &&
@@ -99,7 +97,9 @@ public class StreamCloseRaceE2ETests
 
             // Ensure CloseAsync was called at least once
             if (Interlocked.CompareExchange(ref closedOnce, 1, 0) == 0)
+            {
                 await stream.CloseAsync();
+            }
 
             // Assert: no unexpected exceptions escaped the write loop. The write path must
             // reject writes-after-close cleanly (ObjectDisposedException / InvalidOperationException)
@@ -111,7 +111,10 @@ public class StreamCloseRaceE2ETests
         finally
         {
             await producerBus.DisposeAsync();
-            if (producerProvider is IAsyncDisposable ap) await ap.DisposeAsync();
+            if (producerProvider is IAsyncDisposable ap)
+            {
+                await ap.DisposeAsync();
+            }
         }
     }
 }

@@ -14,79 +14,1247 @@ using ServiceConnect.Services;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests
+namespace ServiceConnect.UnitTests;
+
+public class BusTests
 {
-    public class BusTests
+    private readonly Mock<IMessageSerializer> _mockSerializer;
+    private readonly Mock<IFilterPipeline> _mockFilterPipeline;
+    private readonly Mock<ISendMessagePipeline> _mockSendPipeline;
+    private readonly Mock<IRequestReplyManager> _mockRequestReplyManager;
+    private readonly Mock<IBusConfiguration> _mockConfig;
+    private readonly Mock<IPipelineConfiguration> _mockPipelineConfig;
+    private readonly Mock<ILogger<Bus>> _mockLogger;
+    private readonly Mock<IQueueConfiguration> _mockQueueConfig;
+    private readonly Mock<IMessageDispatcher> _mockDispatcher;
+    private readonly IList<HandlerReference> _handlerReferences;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ConsumeScopeAccessor _scopeAccessor;
+    private readonly Bus _bus;
+
+    public BusTests()
     {
-        private readonly Mock<IMessageSerializer> _mockSerializer;
-        private readonly Mock<IFilterPipeline> _mockFilterPipeline;
-        private readonly Mock<ISendMessagePipeline> _mockSendPipeline;
-        private readonly Mock<IRequestReplyManager> _mockRequestReplyManager;
-        private readonly Mock<IBusConfiguration> _mockConfig;
-        private readonly Mock<IPipelineConfiguration> _mockPipelineConfig;
-        private readonly Mock<ILogger<Bus>> _mockLogger;
-        private readonly Mock<IQueueConfiguration> _mockQueueConfig;
-        private readonly Mock<IMessageDispatcher> _mockDispatcher;
-        private readonly IList<HandlerReference> _handlerReferences;
-        private readonly IServiceScopeFactory _scopeFactory;
-        private readonly ConsumeScopeAccessor _scopeAccessor;
-        private readonly Bus _bus;
+        _mockSerializer = new Mock<IMessageSerializer>();
+        _mockFilterPipeline = new Mock<IFilterPipeline>();
+        _mockSendPipeline = new Mock<ISendMessagePipeline>();
+        _mockRequestReplyManager = new Mock<IRequestReplyManager>();
+        _mockConfig = new Mock<IBusConfiguration>();
+        _mockPipelineConfig = new Mock<IPipelineConfiguration>();
+        // Default: no outgoing filters registered — Bus takes the fast path
+        _mockPipelineConfig.Setup(x => x.OutgoingFilters).Returns([]);
+        _mockLogger = new Mock<ILogger<Bus>>();
+        _mockQueueConfig = new Mock<IQueueConfiguration>();
+        _mockQueueConfig.Setup(x => x.QueueName).Returns("test-queue");
 
-        public BusTests()
+        // Default: filters pass through
+        _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
+        _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+
+        _mockDispatcher = new Mock<IMessageDispatcher>();
+        _handlerReferences = [];
+        _scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        _scopeAccessor = new ConsumeScopeAccessor();
+
+        _bus = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            _mockPipelineConfig.Object,
+            _scopeFactory,
+            _scopeAccessor);
+    }
+
+    [Fact]
+    public void IsConsuming_ShouldBeFalse_WhenNotConsuming()
+    {
+        Assert.False(_bus.IsConsuming);
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_ShouldThrow_WhenNoConsumerRegistered()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _bus.StartConsumingAsync());
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_ShouldSetIsConsumingToTrue_WhenConsumerRegistered()
+    {
+        // Arrange
+        var mockConsumer = new Mock<IConsumer>();
+        mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Returns(Task.CompletedTask);
+
+        var bus = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            _mockPipelineConfig.Object,
+            _scopeFactory,
+            _scopeAccessor,
+            mockConsumer.Object);
+
+        // Act
+        await bus.StartConsumingAsync();
+
+        // Assert
+        Assert.True(bus.IsConsuming);
+    }
+
+    [Fact]
+    public async Task StopConsumingAsync_ShouldSetIsConsumingToFalse()
+    {
+        // StopConsuming can be called even without starting (no consumer needed)
+        await _bus.StopConsumingAsync();
+        Assert.False(_bus.IsConsuming);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ShouldSetIsConsumingToFalse()
+    {
+        await _bus.DisposeAsync();
+        Assert.False(_bus.IsConsuming);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_CompletesWhenConsumerDisposeStalls()
+    {
+        var releaseDispose = new TaskCompletionSource();
+        var mockConsumer = new Mock<IConsumer>();
+        mockConsumer
+            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Returns(Task.CompletedTask);
+        mockConsumer
+            .Setup(x => x.DisposeAsync())
+            .Returns(new ValueTask(releaseDispose.Task));
+
+        var bus = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            _mockPipelineConfig.Object,
+            _scopeFactory,
+            _scopeAccessor,
+            mockConsumer.Object,
+            null,
+            TimeSpan.FromMilliseconds(50));
+
+        await bus.StartConsumingAsync();
+
+        var disposeTask = bus.DisposeAsync().AsTask();
+        await Task.WhenAny(disposeTask, Task.Delay(500));
+
+        Assert.True(disposeTask.IsCompleted);
+    }
+
+    [Fact]
+    public async Task PublishAsync_ShouldSerializeAndPublish()
+    {
+        // Arrange — no outgoing filters (fast path; filter pipeline is not called)
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var messageBytes = new byte[] { 1, 2, 3 };
+        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
+            typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _bus.PublishAsync(message);
+
+        // Assert
+        _mockSerializer.Verify(x => x.Serialize(message), Times.Once);
+        _mockFilterPipeline.Verify(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+            typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WithOutgoingFilters_ShouldExecuteFilterPipeline()
+    {
+        // Arrange — bus created with outgoing filters registered; filter pipeline must be invoked
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var messageBytes = new byte[] { 1, 2, 3 };
+        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
+            typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await busWithFilters.PublishAsync(message);
+
+        // Assert
+        _mockFilterPipeline.Verify(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+            typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_ShouldNotPublish_WhenFilterBlocksMessage()
+    {
+        // Arrange — must have outgoing filters registered so the filter pipeline is invoked
+        _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        _mockSerializer.Setup(x => x.Serialize(message)).Returns([1, 2, 3]);
+
+        // Act
+        await busWithFilters.PublishAsync(message);
+
+        // Assert
+        _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WithRoutingKey_ShouldIncludeRoutingKeyInHeaders()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new PublishOptions { RoutingKey = "my-routing-key" };
+
+        _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _bus.PublishAsync(message, options);
+
+        // Assert
+        _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+            typeof(FakeMessage1),
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h => h.ContainsKey("RoutingKey") && h["RoutingKey"] == "my-routing-key"),
+            null), Times.Once);
+    }
+
+    [Fact]
+    public void PublishOptions_IsReadonlyRecordStruct()
+    {
+        // PublishOptions is a readonly record struct so each PublishAsync call
+        // captures a snapshot by value. A mutable sealed class would let a
+        // caller mutate Headers/RoutingKey on a shared instance while a
+        // concurrent PublishAsync was reading them mid-flight.
+        var type = typeof(PublishOptions);
+
+        Assert.True(type.IsValueType);
+        Assert.True(type.GetMethod("<Clone>$", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) is null
+                    || type.GetMethods().Any(m => m.Name == "Equals" && m.ReturnType == typeof(bool)),
+            "record semantics expected");
+        foreach (var prop in type.GetProperties())
         {
-            _mockSerializer = new Mock<IMessageSerializer>();
-            _mockFilterPipeline = new Mock<IFilterPipeline>();
-            _mockSendPipeline = new Mock<ISendMessagePipeline>();
-            _mockRequestReplyManager = new Mock<IRequestReplyManager>();
-            _mockConfig = new Mock<IBusConfiguration>();
-            _mockPipelineConfig = new Mock<IPipelineConfiguration>();
-            // Default: no outgoing filters registered — Bus takes the fast path
-            _mockPipelineConfig.Setup(x => x.OutgoingFilters).Returns(new List<Type>());
-            _mockLogger = new Mock<ILogger<Bus>>();
-            _mockQueueConfig = new Mock<IQueueConfiguration>();
-            _mockQueueConfig.Setup(x => x.QueueName).Returns("test-queue");
-
-            // Default: filters pass through
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
-            _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns(new byte[] { 1, 2, 3 });
-
-            _mockDispatcher = new Mock<IMessageDispatcher>();
-            _handlerReferences = new List<HandlerReference>();
-            _scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
-            _scopeAccessor = new ConsumeScopeAccessor();
-
-            _bus = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                _mockPipelineConfig.Object,
-                _scopeFactory,
-                _scopeAccessor);
+            var setter = prop.SetMethod;
+            Assert.NotNull(setter);
+            var modreqs = setter!.ReturnParameter.GetRequiredCustomModifiers();
+            Assert.Contains(modreqs, t => t.Name == "IsExternalInit");
         }
+    }
 
-        [Fact]
-        public void IsConsuming_ShouldBeFalse_WhenNotConsuming()
-        {
-            Assert.False(_bus.IsConsuming);
-        }
+    [Fact]
+    public void SendAndPublishOptions_HeadersTypedAsReadOnlyDictionary()
+    {
+        // The Headers contract is IReadOnlyDictionary<string,string>? so the
+        // type system prevents callers from sharing a mutable instance and
+        // concurrently mutating it during BuildHeadersDirect's foreach, which
+        // would throw "Collection was modified" from inside the send path.
+        Assert.Equal(
+            typeof(IReadOnlyDictionary<string, string>),
+            typeof(SendOptions).GetProperty(nameof(SendOptions.Headers))!.PropertyType);
+        Assert.Equal(
+            typeof(IReadOnlyDictionary<string, string>),
+            typeof(PublishOptions).GetProperty(nameof(PublishOptions.Headers))!.PropertyType);
+    }
 
-        [Fact]
-        public async Task StartConsumingAsync_ShouldThrow_WhenNoConsumerRegistered()
-        {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => _bus.StartConsumingAsync());
-        }
+    [Fact]
+    public async Task PublishAsync_HeadersPostMutationDoesNotAffectInFlightSend()
+    {
+        // BuildHeadersDirect must snapshot the caller's headers before handing
+        // them to the send pipeline. Mutations to the caller's dictionary after
+        // PublishAsync returns must not reach the transport. Verify by capturing
+        // the dictionary the pipeline receives, then mutating the source and
+        // asserting the captured view is unchanged.
+        var sharedHeaders = new Dictionary<string, string> { ["caller-header"] = "original" };
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
-        [Fact]
-        public async Task StartConsumingAsync_ShouldSetIsConsumingToTrue_WhenConsumerRegistered()
+        Dictionary<string, string>? captured = null;
+        _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, h, _, _) => captured = h)
+            .Returns(Task.CompletedTask);
+
+        await _bus.PublishAsync(message, new PublishOptions { Headers = sharedHeaders });
+
+        Assert.NotNull(captured);
+        Assert.Equal("original", captured!["caller-header"]);
+
+        // caller mutation post-publish must not reach back into the captured map
+        sharedHeaders["caller-header"] = "after-send";
+        sharedHeaders["new-key"] = "late";
+
+        Assert.Equal("original", captured["caller-header"]);
+        Assert.False(captured.ContainsKey("new-key"));
+    }
+
+    [Fact]
+    public async Task PublishAsync_FastPath_StampsCorrelationIdHeader()
+    {
+        var correlationId = Guid.NewGuid();
+        var message = new FakeMessage1(correlationId) { Username = "Tim" };
+
+        await _bus.PublishAsync(message);
+
+        _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+            typeof(FakeMessage1),
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h =>
+                h.ContainsKey(HeaderKeys.CorrelationId) &&
+                h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_FilterPath_StampsCorrelationIdHeader()
+    {
+        var correlationId = Guid.NewGuid();
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+        var message = new FakeMessage1(correlationId) { Username = "Tim" };
+
+        await busWithFilters.PublishAsync(message);
+
+        _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
+            typeof(FakeMessage1),
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h =>
+                h.ContainsKey(HeaderKeys.CorrelationId) &&
+                h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WithOutgoingFilters_RunsFilterInOwnScope()
+    {
+        // Each outbound call must establish a fresh per-call DI scope so filters
+        // can resolve scoped services. The accessor must see a non-null Current
+        // during filter execution and revert once the filter returns.
+        var services = new ServiceCollection();
+        var serviceProvider = services.BuildServiceProvider();
+        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var scopeAccessor = new ConsumeScopeAccessor();
+
+        IServiceProvider? providerDuringFilter = null;
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                providerDuringFilter = scopeAccessor.Current;
+                return FilterAction.Continue;
+            });
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            scopeFactory,
+            scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        await busWithFilters.PublishAsync(message);
+
+        Assert.NotNull(providerDuringFilter);
+        // Accessor must revert to no-scope once the filter returns.
+        Assert.Throws<InvalidOperationException>(() => _ = scopeAccessor.Current);
+    }
+
+    [Fact]
+    public async Task PublishAsync_TwoCalls_CreateDistinctOutgoingFilterScopes()
+    {
+        // Per-call isolation: the second call must not share a scope with the first.
+        var services = new ServiceCollection();
+        services.AddScoped<MarkerProbe>();
+        var serviceProvider = services.BuildServiceProvider();
+        var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
+        var scopeAccessor = new ConsumeScopeAccessor();
+
+        var seenMarkers = new List<MarkerProbe>();
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() =>
+            {
+                seenMarkers.Add(scopeAccessor.Current.GetRequiredService<MarkerProbe>());
+                return FilterAction.Continue;
+            });
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            scopeFactory,
+            scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        await busWithFilters.PublishAsync(message);
+        await busWithFilters.PublishAsync(message);
+
+        Assert.Equal(2, seenMarkers.Count);
+        Assert.NotSame(seenMarkers[0], seenMarkers[1]);
+    }
+
+    [Fact]
+    public async Task SendAsync_StampsCorrelationIdHeader()
+    {
+        var correlationId = Guid.NewGuid();
+        var message = new FakeMessage1(correlationId) { Username = "Tim" };
+
+        await _bus.SendAsync(message);
+
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1),
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h =>
+                h.ContainsKey(HeaderKeys.CorrelationId) &&
+                h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendRequestAsync_StampsCorrelationIdHeader()
+    {
+        var correlationId = Guid.NewGuid();
+        var message = new FakeMessage1(correlationId) { Username = "Tim" };
+        _mockRequestReplyManager.Setup(x => x.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                It.IsAny<byte[]>(),
+                It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<RequestOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(message);
+
+        await _bus.SendRequestAsync<FakeMessage1, FakeMessage1>(message);
+
+        _mockRequestReplyManager.Verify(x => x.SendRequestAsync<FakeMessage1, FakeMessage1>(
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h =>
+                h.ContainsKey(HeaderKeys.CorrelationId) &&
+                h[HeaderKeys.CorrelationId] == correlationId.ToString()),
+            It.IsAny<RequestOptions>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendAsync_ShouldSerializeAndSend()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var messageBytes = new byte[] { 1, 2, 3 };
+        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _bus.SendAsync(message);
+
+        // Assert
+        _mockSerializer.Verify(x => x.Serialize(message), Times.Once);
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendAsync_WithEndPoint_ShouldSendToEndPoint()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new SendOptions { EndPoint = "MyEndPoint" };
+
+        _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "MyEndPoint"))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _bus.SendAsync(message, options);
+
+        // Assert
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "MyEndPoint"), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendAsync_WithMultipleEndPoints_ShouldSendToEach()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new SendOptions { EndPoints = ["EP1", "EP2"] };
+
+        _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _bus.SendAsync(message, options);
+
+        // Assert
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "EP1"), Times.Once);
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "EP2"), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenBothEndPointAndEndPointsSet_ThrowsArgumentException()
+    {
+        // Setting both EndPoint and EndPoints is ambiguous — the caller has
+        // expressed two different routing intents. The bus must reject the
+        // call up front rather than pick one and silently discard the other.
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new SendOptions
         {
-            // Arrange
+            EndPoint = "single",
+            EndPoints = ["many-1", "many-2"],
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _bus.SendAsync(message, options));
+
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendAsync_ShouldNotSend_WhenFilterBlocksMessage()
+    {
+        // Arrange — must have outgoing filters registered so the filter pipeline is invoked
+        _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        _mockSerializer.Setup(x => x.Serialize(message)).Returns([1, 2, 3]);
+
+        // Act
+        await busWithFilters.SendAsync(message);
+
+        // Assert
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishRequestAsync_DelegatesToRequestReplyManagerPublishMethod()
+    {
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var messageBytes = new byte[] { 1, 2, 3 };
+        var options = new RequestOptions
+        {
+            Headers = new Dictionary<string, string>
+            {
+                ["CustomHeader"] = "CustomValue"
+            }
+        };
+
+        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                messageBytes,
+                It.Is<Dictionary<string, string>>(h => h.ContainsKey("CustomHeader") && h["CustomHeader"] == "CustomValue"),
+                options,
+                It.IsAny<Action<FakeMessage1>>(),
+                CancellationToken.None))
+            .Returns(Task.CompletedTask);
+
+        await _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options);
+
+        _mockRequestReplyManager.Verify(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                messageBytes,
+                It.Is<Dictionary<string, string>>(h => h.ContainsKey("CustomHeader") && h["CustomHeader"] == "CustomValue"),
+                options,
+                It.IsAny<Action<FakeMessage1>>(),
+                CancellationToken.None),
+            Times.Once);
+        _mockRequestReplyManager.Verify(x => x.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
+                It.IsAny<byte[]>(),
+                It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<RequestOptions>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishRequestAsync_WithEndPoint_ThrowsArgumentException()
+    {
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new RequestOptions { EndPoint = "MyEndPoint" };
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options));
+
+        Assert.Equal("options", ex.ParamName);
+    }
+
+    [Fact]
+    public async Task PublishRequestAsync_WithEmptyEndPoint_DelegatesToRequestReplyManagerPublishMethod()
+    {
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var messageBytes = new byte[] { 1, 2, 3 };
+        var options = new RequestOptions { EndPoint = string.Empty };
+
+        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                messageBytes,
+                It.IsAny<Dictionary<string, string>>(),
+                options,
+                It.IsAny<Action<FakeMessage1>>(),
+                CancellationToken.None))
+            .Returns(Task.CompletedTask);
+
+        await _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options);
+
+        _mockRequestReplyManager.Verify(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+                messageBytes,
+                It.IsAny<Dictionary<string, string>>(),
+                options,
+                It.IsAny<Action<FakeMessage1>>(),
+                CancellationToken.None),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishRequestAsync_WithEndPoints_ThrowsArgumentException()
+    {
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new RequestOptions { EndPoints = ["EP1", "EP2"] };
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options));
+
+        Assert.Equal("options", ex.ParamName);
+    }
+
+    [Fact]
+    public async Task PublishRequestAsync_WhenFilterBlocksMessage_ThrowsInvalidOperationException()
+    {
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => busWithFilters.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }));
+    }
+
+    [Fact]
+    public async Task RequestTimeoutAsync_WithAmbientConsumeHeaders_PreservesCustomHeadersOnly()
+    {
+        TimeoutData? captured = null;
+        var timeoutStore = new Mock<ITimeoutStore>();
+        timeoutStore
+            .Setup(x => x.InsertTimeoutAsync(It.IsAny<TimeoutData>(), It.IsAny<CancellationToken>()))
+            .Callback<TimeoutData, CancellationToken>((data, _) => captured = data)
+            .Returns(Task.CompletedTask);
+
+        var incomingHeaders = new Dictionary<string, object>
+        {
+            ["Custom"] = "value",
+            [HeaderKeys.RetryCount] = 3,
+            [HeaderKeys.MessageId] = "managed-message-id",
+            [HeaderKeys.SourceAddress] = "reply-queue"
+        };
+
+        var accessor = CreateConsumeContextAccessorOrFail();
+        await using var bus = CreateBusWithTimeoutStoreAndAccessorOrFail(timeoutStore.Object, accessor);
+        using var scope = PushConsumeContextOrFail(accessor, incomingHeaders);
+
+        await bus.RequestTimeoutAsync(Guid.NewGuid(), TimeSpan.FromMinutes(1));
+
+        Assert.NotNull(captured);
+        Assert.Equal("test-queue", captured!.Destination);
+        Assert.Equal("value", captured.Headers["Custom"]);
+        Assert.Equal(3, captured.Headers[HeaderKeys.RetryCount]);
+        Assert.False(captured.Headers.ContainsKey(HeaderKeys.MessageId));
+        Assert.False(captured.Headers.ContainsKey(HeaderKeys.SourceAddress));
+    }
+
+    [Fact]
+    public async Task RouteAsync_ShouldSendToFirstDestination_WithRoutingSlipForRemaining()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var destinations = new List<string> { "Dest1", "Dest2", "Dest3" };
+
+        _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "Dest1"))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _bus.RouteAsync(message, destinations);
+
+        // Assert
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1),
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h => h.ContainsKey("RoutingSlip") && h["RoutingSlip"] == "Dest2,Dest3"),
+            "Dest1"), Times.Once);
+    }
+
+    [Fact]
+    public async Task RouteAsync_ShouldThrow_WhenNoDestinations()
+    {
+        // Arrange
+        var message = new FakeMessage1(Guid.NewGuid());
+
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => _bus.RouteAsync(message, []));
+    }
+
+    [Fact]
+    public void Constructor_ShouldThrow_WhenDependencyIsNull()
+    {
+        var p = _mockPipelineConfig.Object;
+        var sf = _scopeFactory;
+        var sa = _scopeAccessor;
+        Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, null!, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, (IMessageDispatcher)null!, _handlerReferences, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, null!, p, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, null!, sf, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, null!, sa));
+        Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, null!));
+    }
+
+    // --- MessageId authority tests ---
+
+    [Fact]
+    public async Task SendAsync_FastPath_StampsMessageIdHeader()
+    {
+        // Bus is Bus-authoritative for MessageId; the fast path (no outgoing filters)
+        // must stamp a non-empty MessageId even when the caller does not supply one.
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        await _bus.SendAsync(message);
+
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1),
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h =>
+                h.ContainsKey(HeaderKeys.MessageId) &&
+                !string.IsNullOrEmpty(h[HeaderKeys.MessageId])),
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task SendAsync_FastPath_CallerCannotOverride_MessageId()
+    {
+        // Bus stamps MessageId last, so a caller-supplied value in options.Headers
+        // must be replaced by the Bus-minted GUID.
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var hostile = "00000000-0000-0000-0000-000000000000";
+        var options = new SendOptions
+        {
+            Headers = new Dictionary<string, string> { [HeaderKeys.MessageId] = hostile }
+        };
+
+        await _bus.SendAsync(message, options);
+
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            typeof(FakeMessage1),
+            It.IsAny<byte[]>(),
+            It.Is<Dictionary<string, string>>(h =>
+                h.ContainsKey(HeaderKeys.MessageId) &&
+                h[HeaderKeys.MessageId] != hostile),
+            null), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_FilterPath_OutgoingFilterSeesNonEmptyMessageId()
+    {
+        // Regression guard for the original bug: outgoing filters must be able to
+        // read envelope.Headers["MessageId"] without a KeyNotFoundException.
+        Envelope? capturedEnvelope = null;
+
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Envelope env, CancellationToken _) =>
+            {
+                capturedEnvelope = env;
+                return FilterAction.Continue;
+            });
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        await busWithFilters.PublishAsync(message);
+
+        Assert.NotNull(capturedEnvelope);
+        Assert.True(capturedEnvelope!.Headers.ContainsKey(HeaderKeys.MessageId));
+        var messageId = capturedEnvelope.Headers[HeaderKeys.MessageId]?.ToString();
+        Assert.NotNull(messageId);
+        Assert.NotEmpty(messageId!);
+    }
+
+    [Fact]
+    public async Task PublishAsync_FilterPath_CallerCannotOverride_MessageId()
+    {
+        // Even on the filter path, the Bus must stamp MessageId last so a caller
+        // cannot spoof it via options.Headers.
+        var hostile = "00000000-0000-0000-0000-000000000000";
+        string? seenMessageId = null;
+
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Envelope env, CancellationToken _) =>
+            {
+                seenMessageId = env.Headers[HeaderKeys.MessageId]?.ToString();
+                return FilterAction.Continue;
+            });
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new PublishOptions
+        {
+            Headers = new Dictionary<string, string> { [HeaderKeys.MessageId] = hostile }
+        };
+
+        await busWithFilters.PublishAsync(message, options);
+
+        Assert.NotNull(seenMessageId);
+        Assert.NotEqual(hostile, seenMessageId);
+    }
+
+    // --- M1: Reserved header spoof-proofing ---
+
+    [Fact]
+    public async Task SendAsync_CallerCannotOverrideSystemHeaders()
+    {
+        // M1: MessageType/CorrelationId in options.Headers must not overwrite the system values
+        var spoofedMessageId = Guid.NewGuid().ToString();
+        var options = new SendOptions
+        {
+            Headers = new Dictionary<string, string>
+            {
+                [HeaderKeys.MessageType] = "SomeoneElsesType",
+                [HeaderKeys.CorrelationId] = "spoofed-correlation",
+                [HeaderKeys.MessageId] = spoofedMessageId,
+            }
+        };
+
+        Dictionary<string, string>? captured = null;
+        _mockSendPipeline
+            .Setup(x => x.ExecuteSendMessagePipelineAsync(
+                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback<Type, byte[], Dictionary<string, string>, string?, CancellationToken>((_, _, h, _, _) => captured = h)
+            .Returns(Task.CompletedTask);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        await _bus.SendAsync(message, options, CancellationToken.None);
+
+        Assert.NotNull(captured);
+        Assert.Equal(typeof(FakeMessage1).FullName, captured![HeaderKeys.MessageType]);
+        Assert.NotEqual("spoofed-correlation", captured[HeaderKeys.CorrelationId]);
+        Assert.NotEqual(spoofedMessageId, captured[HeaderKeys.MessageId]);
+    }
+
+    [Fact]
+    public async Task SendAsync_CallerSuppliesReservedHeader_LogsWarningForDroppedKey()
+    {
+        // M1 observability: warn operators when a caller-supplied reserved header is dropped.
+        var options = new SendOptions
+        {
+            Headers = new Dictionary<string, string>
+            {
+                [HeaderKeys.MessageType] = "SomeoneElsesType",
+            }
+        };
+
+        _mockSendPipeline
+            .Setup(x => x.ExecuteSendMessagePipelineAsync(
+                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        await _bus.SendAsync(message, options, CancellationToken.None);
+
+        _mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(HeaderKeys.MessageType)),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    // --- M3: Semaphore dispose race ---
+
+    // Regression guard for the ThrowIfDisposed()-before-semaphore ordering;
+    // the concurrent variant of this race was audited and disconfirmed.
+    [Fact]
+    public async Task StartConsumingAsync_AfterDispose_ThrowsObjectDisposedException()
+    {
+        // M3: after DisposeAsync, all lifecycle calls must throw ObjectDisposedException
+        // (not NullReferenceException or succeed silently)
+        var mockConsumer = new Mock<IConsumer>();
+        var bus = CreateBusWithConsumer(mockConsumer.Object);
+        await bus.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => bus.StartConsumingAsync(CancellationToken.None));
+    }
+
+    // --- M4: OperationCanceledException in StopConsumingCoreAsync must still dispose consumer ---
+
+    [Fact]
+    public async Task StopConsumingAsync_WhenCancellationRequested_StillDisposesConsumer()
+    {
+        // M4: cancellation during StopConsuming must not skip consumer teardown
+        var mockConsumer = new Mock<IConsumer>();
+        mockConsumer
+            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Returns(Task.CompletedTask);
+        mockConsumer
+            .Setup(x => x.DisposeAsync())
+            .Returns(ValueTask.CompletedTask);
+
+        var bus = CreateBusWithConsumer(mockConsumer.Object);
+        await bus.StartConsumingAsync(CancellationToken.None);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel(); // pre-cancel so WaitAsync sees cancellation immediately
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => bus.StopConsumingAsync(cts.Token));
+
+        // Consumer dispose must have been called despite the cancellation
+        mockConsumer.Verify(x => x.DisposeAsync(), Times.Once);
+
+        // Explicit dispose to clean up (no consumer left to call DisposeAsync on since
+        // the fix set _consuming=false during the cancelled stop)
+        await bus.DisposeAsync();
+    }
+
+    // --- M2: StopConsuming before start must not poison _stopped ---
+
+    [Fact]
+    public async Task StopConsumingAsync_BeforeStart_AllowsSubsequentStart()
+    {
+        // M2: a defensive stop on an unstarted bus must leave it restartable
+        var mockConsumer = new Mock<IConsumer>();
+        mockConsumer
+            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Returns(Task.CompletedTask);
+
+        await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+
+        // Defensive stop before any start
+        await bus.StopConsumingAsync(CancellationToken.None);
+
+        // Must not throw "bus has been stopped"
+        await bus.StartConsumingAsync(CancellationToken.None);
+        await bus.StopConsumingAsync(CancellationToken.None); // cleanup
+    }
+
+    // --- Helper ---
+
+    private Bus CreateBusWithConsumer(IConsumer consumer) =>
+        new(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            _mockPipelineConfig.Object,
+            _scopeFactory,
+            _scopeAccessor,
+            consumer);
+
+    // Lifecycle serialization tests.
+
+    [Fact]
+    public async Task StartConsumingAsync_ConcurrentWithStop_SerializesState()
+    {
+        var consumerStarted = new TaskCompletionSource();
+        var releaseStart = new TaskCompletionSource();
+        var mockConsumer = new Mock<IConsumer>();
+        mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Returns(async () =>
+            {
+                consumerStarted.SetResult();
+                await releaseStart.Task;
+            });
+
+        await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+
+        var startTask = bus.StartConsumingAsync();
+        await consumerStarted.Task;
+        var stopTask = bus.StopConsumingAsync();
+
+        // Stop must not complete before Start releases the semaphore
+        await Task.Delay(50);
+        Assert.False(stopTask.IsCompleted);
+
+        releaseStart.SetResult();
+        await startTask;
+        await stopTask;
+
+        Assert.False(bus.IsConsuming);
+    }
+
+    [Fact]
+    public async Task StartConsumingAsync_PreCancelledToken_ThrowsOCE()
+    {
+        var mockConsumer = new Mock<IConsumer>();
+        await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => bus.StartConsumingAsync(cts.Token));
+        mockConsumer.Verify(c => c.StartConsumingAsync(
+            It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task StopConsumingAsync_WhileStartInFlight_WaitsForStartToComplete()
+    {
+        var consumerStarted = new TaskCompletionSource();
+        var releaseStart = new TaskCompletionSource();
+        var startCompleted = new TaskCompletionSource();
+
+        var mockConsumer = new Mock<IConsumer>();
+        mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Returns(async () =>
+            {
+                consumerStarted.SetResult();
+                await releaseStart.Task;
+            });
+
+        await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+
+        var startTask = Task.Run(async () =>
+        {
+            await bus.StartConsumingAsync();
+            startCompleted.SetResult();
+        });
+
+        await consumerStarted.Task;
+
+        // Fire Stop while Start is blocked inside the consumer call
+        var stopTask = bus.StopConsumingAsync();
+
+        // Stop is behind Start on the semaphore -- it cannot complete first
+        var firstCompleted = await Task.WhenAny(stopTask, startCompleted.Task, Task.Delay(100));
+        Assert.NotSame(stopTask, firstCompleted);
+
+        // Release Start; both tasks complete cleanly
+        releaseStart.SetResult();
+        await startTask;
+        await stopTask;
+    }
+
+    private object CreateConsumeContextAccessorOrFail()
+    {
+        var accessorType = typeof(Bus).Assembly.GetType("ServiceConnect.Services.ConsumeContextAccessor");
+        Assert.NotNull(accessorType);
+
+        var accessor = Activator.CreateInstance(accessorType!);
+        Assert.NotNull(accessor);
+        return accessor!;
+    }
+
+    private static IDisposable PushConsumeContextOrFail(object accessor, IReadOnlyDictionary<string, object> headers)
+    {
+        var pushMethod = accessor.GetType()
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .SingleOrDefault(m => m.Name == "Push" && m.GetParameters().Length == 1);
+
+        Assert.NotNull(pushMethod);
+
+        var scope = pushMethod!.Invoke(accessor, [headers]);
+        Assert.IsAssignableFrom<IDisposable>(scope);
+        return (IDisposable)scope!;
+    }
+
+    private Bus CreateBusWithTimeoutStoreAndAccessorOrFail(ITimeoutStore timeoutStore, object accessor)
+    {
+        var constructor = typeof(Bus)
+            .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .SingleOrDefault(ctor => ctor.GetParameters().Any(p => p.ParameterType == accessor.GetType()));
+
+        Assert.NotNull(constructor);
+
+        var args = constructor!.GetParameters().Select(parameter => parameter.Name switch
+        {
+            "serializer" => _mockSerializer.Object,
+            "filterPipeline" => _mockFilterPipeline.Object,
+            "sendPipeline" => _mockSendPipeline.Object,
+            "requestReplyManager" => _mockRequestReplyManager.Object,
+            "logger" => _mockLogger.Object,
+            "queueConfig" => _mockQueueConfig.Object,
+            "dispatcher" => _mockDispatcher.Object,
+            "handlerReferences" => _handlerReferences,
+            "pipelineConfig" => _mockPipelineConfig.Object,
+            "scopeFactory" => _scopeFactory,
+            "scopeAccessor" => _scopeAccessor,
+            "consumer" => null,
+            "producer" => null,
+            "disposeTimeout" => null,
+            "timeoutStore" => timeoutStore,
+            "consumeContextAccessor" => accessor,
+            _ => throw new InvalidOperationException($"Unexpected Bus constructor parameter '{parameter.Name}'.")
+        }).ToArray();
+
+        return (Bus)constructor.Invoke(args);
+    }
+
+    [Fact]
+    public async Task ConcurrentStartAndDispose_DoesNotThrowSemaphoreDisposedException()
+    {
+        int iterations = 100;
+        int unexpected = 0;
+        for (int i = 0; i < iterations; i++)
+        {
             var mockConsumer = new Mock<IConsumer>();
-            mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             var bus = new Bus(
@@ -103,1198 +1271,29 @@ namespace ServiceConnect.UnitTests
                 _scopeAccessor,
                 mockConsumer.Object);
 
-            // Act
-            await bus.StartConsumingAsync();
-
-            // Assert
-            Assert.True(bus.IsConsuming);
-        }
-
-        [Fact]
-        public async Task StopConsumingAsync_ShouldSetIsConsumingToFalse()
-        {
-            // StopConsuming can be called even without starting (no consumer needed)
-            await _bus.StopConsumingAsync();
-            Assert.False(_bus.IsConsuming);
-        }
-
-        [Fact]
-        public async Task DisposeAsync_ShouldSetIsConsumingToFalse()
-        {
-            await _bus.DisposeAsync();
-            Assert.False(_bus.IsConsuming);
-        }
-
-        [Fact]
-        public async Task DisposeAsync_CompletesWhenConsumerDisposeStalls()
-        {
-            var releaseDispose = new TaskCompletionSource();
-            var mockConsumer = new Mock<IConsumer>();
-            mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
-                .Returns(Task.CompletedTask);
-            mockConsumer
-                .Setup(x => x.DisposeAsync())
-                .Returns(new ValueTask(releaseDispose.Task));
-
-            var bus = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                _mockPipelineConfig.Object,
-                _scopeFactory,
-                _scopeAccessor,
-                mockConsumer.Object,
-                null,
-                TimeSpan.FromMilliseconds(50));
-
-            await bus.StartConsumingAsync();
-
-            var disposeTask = bus.DisposeAsync().AsTask();
-            await Task.WhenAny(disposeTask, Task.Delay(500));
-
-            Assert.True(disposeTask.IsCompleted);
-        }
-
-        [Fact]
-        public async Task PublishAsync_ShouldSerializeAndPublish()
-        {
-            // Arrange — no outgoing filters (fast path; filter pipeline is not called)
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var messageBytes = new byte[] { 1, 2, 3 };
-            _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
-            _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
-                typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null))
-                .Returns(Task.CompletedTask);
-
-            // Act
-            await _bus.PublishAsync(message);
-
-            // Assert
-            _mockSerializer.Verify(x => x.Serialize(message), Times.Once);
-            _mockFilterPipeline.Verify(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
-            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
-                typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null), Times.Once);
-        }
-
-        [Fact]
-        public async Task PublishAsync_WithOutgoingFilters_ShouldExecuteFilterPipeline()
-        {
-            // Arrange — bus created with outgoing filters registered; filter pipeline must be invoked
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                _scopeFactory,
-                _scopeAccessor);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var messageBytes = new byte[] { 1, 2, 3 };
-            _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
-            _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
-                typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null))
-                .Returns(Task.CompletedTask);
-
-            // Act
-            await busWithFilters.PublishAsync(message);
-
-            // Assert
-            _mockFilterPipeline.Verify(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
-            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
-                typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null), Times.Once);
-        }
-
-        [Fact]
-        public async Task PublishAsync_ShouldNotPublish_WhenFilterBlocksMessage()
-        {
-            // Arrange — must have outgoing filters registered so the filter pipeline is invoked
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                _scopeFactory,
-                _scopeAccessor);
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            _mockSerializer.Setup(x => x.Serialize(message)).Returns(new byte[] { 1, 2, 3 });
-
-            // Act
-            await busWithFilters.PublishAsync(message);
-
-            // Assert
-            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public async Task PublishAsync_WithRoutingKey_ShouldIncludeRoutingKeyInHeaders()
-        {
-            // Arrange
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var options = new PublishOptions { RoutingKey = "my-routing-key" };
-
-            _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), null))
-                .Returns(Task.CompletedTask);
-
-            // Act
-            await _bus.PublishAsync(message, options);
-
-            // Assert
-            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
-                typeof(FakeMessage1),
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h => h.ContainsKey("RoutingKey") && h["RoutingKey"] == "my-routing-key"),
-                null), Times.Once);
-        }
-
-        [Fact]
-        public void PublishOptions_IsReadonlyRecordStruct()
-        {
-            // PublishOptions is a readonly record struct so each PublishAsync call
-            // captures a snapshot by value. A mutable sealed class would let a
-            // caller mutate Headers/RoutingKey on a shared instance while a
-            // concurrent PublishAsync was reading them mid-flight.
-            var type = typeof(PublishOptions);
-
-            Assert.True(type.IsValueType);
-            Assert.True(type.GetMethod("<Clone>$", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) is null
-                        || type.GetMethods().Any(m => m.Name == "Equals" && m.ReturnType == typeof(bool)),
-                "record semantics expected");
-            foreach (var prop in type.GetProperties())
-            {
-                var setter = prop.SetMethod;
-                Assert.NotNull(setter);
-                var modreqs = setter!.ReturnParameter.GetRequiredCustomModifiers();
-                Assert.Contains(modreqs, t => t.Name == "IsExternalInit");
-            }
-        }
-
-        [Fact]
-        public void SendAndPublishOptions_HeadersTypedAsReadOnlyDictionary()
-        {
-            // The Headers contract is IReadOnlyDictionary<string,string>? so the
-            // type system prevents callers from sharing a mutable instance and
-            // concurrently mutating it during BuildHeadersDirect's foreach, which
-            // would throw "Collection was modified" from inside the send path.
-            Assert.Equal(
-                typeof(IReadOnlyDictionary<string, string>),
-                typeof(SendOptions).GetProperty(nameof(SendOptions.Headers))!.PropertyType);
-            Assert.Equal(
-                typeof(IReadOnlyDictionary<string, string>),
-                typeof(PublishOptions).GetProperty(nameof(PublishOptions.Headers))!.PropertyType);
-        }
-
-        [Fact]
-        public async Task PublishAsync_HeadersPostMutationDoesNotAffectInFlightSend()
-        {
-            // BuildHeadersDirect must snapshot the caller's headers before handing
-            // them to the send pipeline. Mutations to the caller's dictionary after
-            // PublishAsync returns must not reach the transport. Verify by capturing
-            // the dictionary the pipeline receives, then mutating the source and
-            // asserting the captured view is unchanged.
-            var sharedHeaders = new Dictionary<string, string> { ["caller-header"] = "original" };
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-
-            Dictionary<string, string>? captured = null;
-            _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-                .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, h, _, _) => captured = h)
-                .Returns(Task.CompletedTask);
-
-            await _bus.PublishAsync(message, new PublishOptions { Headers = sharedHeaders });
-
-            Assert.NotNull(captured);
-            Assert.Equal("original", captured!["caller-header"]);
-
-            // caller mutation post-publish must not reach back into the captured map
-            sharedHeaders["caller-header"] = "after-send";
-            sharedHeaders["new-key"] = "late";
-
-            Assert.Equal("original", captured["caller-header"]);
-            Assert.False(captured.ContainsKey("new-key"));
-        }
-
-        [Fact]
-        public async Task PublishAsync_FastPath_StampsCorrelationIdHeader()
-        {
-            var correlationId = Guid.NewGuid();
-            var message = new FakeMessage1(correlationId) { Username = "Tim" };
-
-            await _bus.PublishAsync(message);
-
-            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
-                typeof(FakeMessage1),
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h =>
-                    h.ContainsKey(HeaderKeys.CorrelationId) &&
-                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
-                null), Times.Once);
-        }
-
-        [Fact]
-        public async Task PublishAsync_FilterPath_StampsCorrelationIdHeader()
-        {
-            var correlationId = Guid.NewGuid();
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                _scopeFactory,
-                _scopeAccessor);
-            var message = new FakeMessage1(correlationId) { Username = "Tim" };
-
-            await busWithFilters.PublishAsync(message);
-
-            _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
-                typeof(FakeMessage1),
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h =>
-                    h.ContainsKey(HeaderKeys.CorrelationId) &&
-                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
-                null), Times.Once);
-        }
-
-        [Fact]
-        public async Task PublishAsync_WithOutgoingFilters_RunsFilterInOwnScope()
-        {
-            // Each outbound call must establish a fresh per-call DI scope so filters
-            // can resolve scoped services. The accessor must see a non-null Current
-            // during filter execution and revert once the filter returns.
-            var services = new ServiceCollection();
-            var serviceProvider = services.BuildServiceProvider();
-            var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-            var scopeAccessor = new ConsumeScopeAccessor();
-
-            IServiceProvider? providerDuringFilter = null;
-            _mockFilterPipeline
-                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() =>
-                {
-                    providerDuringFilter = scopeAccessor.Current;
-                    return FilterAction.Continue;
-                });
-
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                scopeFactory,
-                scopeAccessor);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-
-            await busWithFilters.PublishAsync(message);
-
-            Assert.NotNull(providerDuringFilter);
-            // Accessor must revert to no-scope once the filter returns.
-            Assert.Throws<InvalidOperationException>(() => _ = scopeAccessor.Current);
-        }
-
-        [Fact]
-        public async Task PublishAsync_TwoCalls_CreateDistinctOutgoingFilterScopes()
-        {
-            // Per-call isolation: the second call must not share a scope with the first.
-            var services = new ServiceCollection();
-            services.AddScoped<MarkerProbe>();
-            var serviceProvider = services.BuildServiceProvider();
-            var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-            var scopeAccessor = new ConsumeScopeAccessor();
-
-            var seenMarkers = new List<MarkerProbe>();
-            _mockFilterPipeline
-                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() =>
-                {
-                    seenMarkers.Add(scopeAccessor.Current.GetRequiredService<MarkerProbe>());
-                    return FilterAction.Continue;
-                });
-
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                scopeFactory,
-                scopeAccessor);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-
-            await busWithFilters.PublishAsync(message);
-            await busWithFilters.PublishAsync(message);
-
-            Assert.Equal(2, seenMarkers.Count);
-            Assert.NotSame(seenMarkers[0], seenMarkers[1]);
-        }
-
-        [Fact]
-        public async Task SendAsync_StampsCorrelationIdHeader()
-        {
-            var correlationId = Guid.NewGuid();
-            var message = new FakeMessage1(correlationId) { Username = "Tim" };
-
-            await _bus.SendAsync(message);
-
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1),
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h =>
-                    h.ContainsKey(HeaderKeys.CorrelationId) &&
-                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
-                null), Times.Once);
-        }
-
-        [Fact]
-        public async Task SendRequestAsync_StampsCorrelationIdHeader()
-        {
-            var correlationId = Guid.NewGuid();
-            var message = new FakeMessage1(correlationId) { Username = "Tim" };
-            _mockRequestReplyManager.Setup(x => x.SendRequestAsync<FakeMessage1, FakeMessage1>(
-                    It.IsAny<byte[]>(),
-                    It.IsAny<Dictionary<string, string>>(),
-                    It.IsAny<RequestOptions>(),
-                    It.IsAny<CancellationToken>()))
-                .ReturnsAsync(message);
-
-            await _bus.SendRequestAsync<FakeMessage1, FakeMessage1>(message);
-
-            _mockRequestReplyManager.Verify(x => x.SendRequestAsync<FakeMessage1, FakeMessage1>(
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h =>
-                    h.ContainsKey(HeaderKeys.CorrelationId) &&
-                    h[HeaderKeys.CorrelationId] == correlationId.ToString()),
-                It.IsAny<RequestOptions>(),
-                It.IsAny<CancellationToken>()), Times.Once);
-        }
-
-        [Fact]
-        public async Task SendAsync_ShouldSerializeAndSend()
-        {
-            // Arrange
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var messageBytes = new byte[] { 1, 2, 3 };
-            _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
-            _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null))
-                .Returns(Task.CompletedTask);
-
-            // Act
-            await _bus.SendAsync(message);
-
-            // Assert
-            _mockSerializer.Verify(x => x.Serialize(message), Times.Once);
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1), messageBytes, It.IsAny<Dictionary<string, string>>(), null), Times.Once);
-        }
-
-        [Fact]
-        public async Task SendAsync_WithEndPoint_ShouldSendToEndPoint()
-        {
-            // Arrange
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var options = new SendOptions { EndPoint = "MyEndPoint" };
-
-            _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "MyEndPoint"))
-                .Returns(Task.CompletedTask);
-
-            // Act
-            await _bus.SendAsync(message, options);
-
-            // Assert
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "MyEndPoint"), Times.Once);
-        }
-
-        [Fact]
-        public async Task SendAsync_WithMultipleEndPoints_ShouldSendToEach()
-        {
-            // Arrange
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var options = new SendOptions { EndPoints = new List<string> { "EP1", "EP2" } };
-
-            _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>()))
-                .Returns(Task.CompletedTask);
-
-            // Act
-            await _bus.SendAsync(message, options);
-
-            // Assert
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "EP1"), Times.Once);
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "EP2"), Times.Once);
-        }
-
-        [Fact]
-        public async Task SendAsync_WhenBothEndPointAndEndPointsSet_ThrowsArgumentException()
-        {
-            // Setting both EndPoint and EndPoints is ambiguous — the caller has
-            // expressed two different routing intents. The bus must reject the
-            // call up front rather than pick one and silently discard the other.
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var options = new SendOptions
-            {
-                EndPoint = "single",
-                EndPoints = new List<string> { "many-1", "many-2" },
-            };
-
-            await Assert.ThrowsAsync<ArgumentException>(() => _bus.SendAsync(message, options));
-
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public async Task SendAsync_ShouldNotSend_WhenFilterBlocksMessage()
-        {
-            // Arrange — must have outgoing filters registered so the filter pipeline is invoked
-            _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                _scopeFactory,
-                _scopeAccessor);
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            _mockSerializer.Setup(x => x.Serialize(message)).Returns(new byte[] { 1, 2, 3 });
-
-            // Act
-            await busWithFilters.SendAsync(message);
-
-            // Assert
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public async Task PublishRequestAsync_DelegatesToRequestReplyManagerPublishMethod()
-        {
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var messageBytes = new byte[] { 1, 2, 3 };
-            var options = new RequestOptions
-            {
-                Headers = new Dictionary<string, string>
-                {
-                    ["CustomHeader"] = "CustomValue"
-                }
-            };
-
-            _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
-            _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
-                    messageBytes,
-                    It.Is<Dictionary<string, string>>(h => h.ContainsKey("CustomHeader") && h["CustomHeader"] == "CustomValue"),
-                    options,
-                    It.IsAny<Action<FakeMessage1>>(),
-                    CancellationToken.None))
-                .Returns(Task.CompletedTask);
-
-            await _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options);
-
-            _mockRequestReplyManager.Verify(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
-                    messageBytes,
-                    It.Is<Dictionary<string, string>>(h => h.ContainsKey("CustomHeader") && h["CustomHeader"] == "CustomValue"),
-                    options,
-                    It.IsAny<Action<FakeMessage1>>(),
-                    CancellationToken.None),
-                Times.Once);
-            _mockRequestReplyManager.Verify(x => x.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
-                    It.IsAny<byte[]>(),
-                    It.IsAny<Dictionary<string, string>>(),
-                    It.IsAny<RequestOptions>(),
-                    It.IsAny<CancellationToken>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public async Task PublishRequestAsync_WithEndPoint_ThrowsArgumentException()
-        {
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var options = new RequestOptions { EndPoint = "MyEndPoint" };
-
-            var ex = await Assert.ThrowsAsync<ArgumentException>(
-                () => _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options));
-
-            Assert.Equal("options", ex.ParamName);
-        }
-
-        [Fact]
-        public async Task PublishRequestAsync_WithEmptyEndPoint_DelegatesToRequestReplyManagerPublishMethod()
-        {
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var messageBytes = new byte[] { 1, 2, 3 };
-            var options = new RequestOptions { EndPoint = string.Empty };
-
-            _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
-            _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
-                    messageBytes,
-                    It.IsAny<Dictionary<string, string>>(),
-                    options,
-                    It.IsAny<Action<FakeMessage1>>(),
-                    CancellationToken.None))
-                .Returns(Task.CompletedTask);
-
-            await _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options);
-
-            _mockRequestReplyManager.Verify(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
-                    messageBytes,
-                    It.IsAny<Dictionary<string, string>>(),
-                    options,
-                    It.IsAny<Action<FakeMessage1>>(),
-                    CancellationToken.None),
-                Times.Once);
-        }
-
-        [Fact]
-        public async Task PublishRequestAsync_WithEndPoints_ThrowsArgumentException()
-        {
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var options = new RequestOptions { EndPoints = new List<string> { "EP1", "EP2" } };
-
-            var ex = await Assert.ThrowsAsync<ArgumentException>(
-                () => _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options));
-
-            Assert.Equal("options", ex.ParamName);
-        }
-
-        [Fact]
-        public async Task PublishRequestAsync_WhenFilterBlocksMessage_ThrowsInvalidOperationException()
-        {
-            _mockFilterPipeline
-                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(FilterAction.Stop);
-
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                _scopeFactory,
-                _scopeAccessor);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-
-            await Assert.ThrowsAsync<InvalidOperationException>(
-                () => busWithFilters.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }));
-        }
-
-        [Fact]
-        public async Task RequestTimeoutAsync_WithAmbientConsumeHeaders_PreservesCustomHeadersOnly()
-        {
-            TimeoutData? captured = null;
-            var timeoutStore = new Mock<ITimeoutStore>();
-            timeoutStore
-                .Setup(x => x.InsertTimeoutAsync(It.IsAny<TimeoutData>(), It.IsAny<CancellationToken>()))
-                .Callback<TimeoutData, CancellationToken>((data, _) => captured = data)
-                .Returns(Task.CompletedTask);
-
-            var incomingHeaders = new Dictionary<string, object>
-            {
-                ["Custom"] = "value",
-                [HeaderKeys.RetryCount] = 3,
-                [HeaderKeys.MessageId] = "managed-message-id",
-                [HeaderKeys.SourceAddress] = "reply-queue"
-            };
-
-            var accessor = CreateConsumeContextAccessorOrFail();
-            await using var bus = CreateBusWithTimeoutStoreAndAccessorOrFail(timeoutStore.Object, accessor);
-            using var scope = PushConsumeContextOrFail(accessor, incomingHeaders);
-
-            await bus.RequestTimeoutAsync(Guid.NewGuid(), TimeSpan.FromMinutes(1));
-
-            Assert.NotNull(captured);
-            Assert.Equal("test-queue", captured!.Destination);
-            Assert.Equal("value", captured.Headers["Custom"]);
-            Assert.Equal(3, captured.Headers[HeaderKeys.RetryCount]);
-            Assert.False(captured.Headers.ContainsKey(HeaderKeys.MessageId));
-            Assert.False(captured.Headers.ContainsKey(HeaderKeys.SourceAddress));
-        }
-
-        [Fact]
-        public async Task RouteAsync_ShouldSendToFirstDestination_WithRoutingSlipForRemaining()
-        {
-            // Arrange
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var destinations = new List<string> { "Dest1", "Dest2", "Dest3" };
-
-            _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), "Dest1"))
-                .Returns(Task.CompletedTask);
-
-            // Act
-            await _bus.RouteAsync(message, destinations);
-
-            // Assert
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1),
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h => h.ContainsKey("RoutingSlip") && h["RoutingSlip"] == "Dest2,Dest3"),
-                "Dest1"), Times.Once);
-        }
-
-        [Fact]
-        public async Task RouteAsync_ShouldThrow_WhenNoDestinations()
-        {
-            // Arrange
-            var message = new FakeMessage1(Guid.NewGuid());
-
-            // Act & Assert
-            await Assert.ThrowsAsync<ArgumentException>(() => _bus.RouteAsync(message, new List<string>()));
-        }
-
-        [Fact]
-        public void Constructor_ShouldThrow_WhenDependencyIsNull()
-        {
-            var p = _mockPipelineConfig.Object;
-            var sf = _scopeFactory;
-            var sa = _scopeAccessor;
-            Assert.Throws<ArgumentNullException>(() => new Bus(null!, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, null!, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, null!, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, null!, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, null!, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, null!, _mockDispatcher.Object, _handlerReferences, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, (IMessageDispatcher)null!, _handlerReferences, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, null!, p, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, null!, sf, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, null!, sa));
-            Assert.Throws<ArgumentNullException>(() => new Bus(_mockSerializer.Object, _mockFilterPipeline.Object, _mockSendPipeline.Object, _mockRequestReplyManager.Object, _mockLogger.Object, _mockQueueConfig.Object, _mockDispatcher.Object, _handlerReferences, p, sf, null!));
-        }
-
-        // --- MessageId authority tests ---
-
-        [Fact]
-        public async Task SendAsync_FastPath_StampsMessageIdHeader()
-        {
-            // Bus is Bus-authoritative for MessageId; the fast path (no outgoing filters)
-            // must stamp a non-empty MessageId even when the caller does not supply one.
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-
-            await _bus.SendAsync(message);
-
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1),
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h =>
-                    h.ContainsKey(HeaderKeys.MessageId) &&
-                    !string.IsNullOrEmpty(h[HeaderKeys.MessageId])),
-                null), Times.Once);
-        }
-
-        [Fact]
-        public async Task SendAsync_FastPath_CallerCannotOverride_MessageId()
-        {
-            // Bus stamps MessageId last, so a caller-supplied value in options.Headers
-            // must be replaced by the Bus-minted GUID.
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var hostile = "00000000-0000-0000-0000-000000000000";
-            var options = new SendOptions
-            {
-                Headers = new Dictionary<string, string> { [HeaderKeys.MessageId] = hostile }
-            };
-
-            await _bus.SendAsync(message, options);
-
-            _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-                typeof(FakeMessage1),
-                It.IsAny<byte[]>(),
-                It.Is<Dictionary<string, string>>(h =>
-                    h.ContainsKey(HeaderKeys.MessageId) &&
-                    h[HeaderKeys.MessageId] != hostile),
-                null), Times.Once);
-        }
-
-        [Fact]
-        public async Task PublishAsync_FilterPath_OutgoingFilterSeesNonEmptyMessageId()
-        {
-            // Regression guard for the original bug: outgoing filters must be able to
-            // read envelope.Headers["MessageId"] without a KeyNotFoundException.
-            Envelope? capturedEnvelope = null;
-
-            _mockFilterPipeline
-                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((Envelope env, CancellationToken _) =>
-                {
-                    capturedEnvelope = env;
-                    return FilterAction.Continue;
-                });
-
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                _scopeFactory,
-                _scopeAccessor);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-
-            await busWithFilters.PublishAsync(message);
-
-            Assert.NotNull(capturedEnvelope);
-            Assert.True(capturedEnvelope!.Headers.ContainsKey(HeaderKeys.MessageId));
-            var messageId = capturedEnvelope.Headers[HeaderKeys.MessageId]?.ToString();
-            Assert.NotNull(messageId);
-            Assert.NotEmpty(messageId!);
-        }
-
-        [Fact]
-        public async Task PublishAsync_FilterPath_CallerCannotOverride_MessageId()
-        {
-            // Even on the filter path, the Bus must stamp MessageId last so a caller
-            // cannot spoof it via options.Headers.
-            var hostile = "00000000-0000-0000-0000-000000000000";
-            string? seenMessageId = null;
-
-            _mockFilterPipeline
-                .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((Envelope env, CancellationToken _) =>
-                {
-                    seenMessageId = env.Headers[HeaderKeys.MessageId]?.ToString();
-                    return FilterAction.Continue;
-                });
-
-            var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
-            pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns(new List<Type> { typeof(object) });
-
-            var busWithFilters = new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                pipelineConfigWithFilter.Object,
-                _scopeFactory,
-                _scopeAccessor);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            var options = new PublishOptions
-            {
-                Headers = new Dictionary<string, string> { [HeaderKeys.MessageId] = hostile }
-            };
-
-            await busWithFilters.PublishAsync(message, options);
-
-            Assert.NotNull(seenMessageId);
-            Assert.NotEqual(hostile, seenMessageId);
-        }
-
-        // --- M1: Reserved header spoof-proofing ---
-
-        [Fact]
-        public async Task SendAsync_CallerCannotOverrideSystemHeaders()
-        {
-            // M1: MessageType/CorrelationId in options.Headers must not overwrite the system values
-            var spoofedMessageId = Guid.NewGuid().ToString();
-            var options = new SendOptions
-            {
-                Headers = new Dictionary<string, string>
-                {
-                    [HeaderKeys.MessageType] = "SomeoneElsesType",
-                    [HeaderKeys.CorrelationId] = "spoofed-correlation",
-                    [HeaderKeys.MessageId] = spoofedMessageId,
-                }
-            };
-
-            Dictionary<string, string>? captured = null;
-            _mockSendPipeline
-                .Setup(x => x.ExecuteSendMessagePipelineAsync(
-                    It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(),
-                    It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .Callback<Type, byte[], Dictionary<string, string>, string?, CancellationToken>((_, _, h, _, _) => captured = h)
-                .Returns(Task.CompletedTask);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            await _bus.SendAsync(message, options, CancellationToken.None);
-
-            Assert.NotNull(captured);
-            Assert.Equal(typeof(FakeMessage1).FullName, captured![HeaderKeys.MessageType]);
-            Assert.NotEqual("spoofed-correlation", captured[HeaderKeys.CorrelationId]);
-            Assert.NotEqual(spoofedMessageId, captured[HeaderKeys.MessageId]);
-        }
-
-        [Fact]
-        public async Task SendAsync_CallerSuppliesReservedHeader_LogsWarningForDroppedKey()
-        {
-            // M1 observability: warn operators when a caller-supplied reserved header is dropped.
-            var options = new SendOptions
-            {
-                Headers = new Dictionary<string, string>
-                {
-                    [HeaderKeys.MessageType] = "SomeoneElsesType",
-                }
-            };
-
-            _mockSendPipeline
-                .Setup(x => x.ExecuteSendMessagePipelineAsync(
-                    It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(),
-                    It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.CompletedTask);
-
-            var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-            await _bus.SendAsync(message, options, CancellationToken.None);
-
-            _mockLogger.Verify(
-                x => x.Log(
-                    LogLevel.Warning,
-                    It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(HeaderKeys.MessageType)),
-                    null,
-                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
-        }
-
-        // --- M3: Semaphore dispose race ---
-
-        // Regression guard for the ThrowIfDisposed()-before-semaphore ordering;
-        // the concurrent variant of this race was audited and disconfirmed.
-        [Fact]
-        public async Task StartConsumingAsync_AfterDispose_ThrowsObjectDisposedException()
-        {
-            // M3: after DisposeAsync, all lifecycle calls must throw ObjectDisposedException
-            // (not NullReferenceException or succeed silently)
-            var mockConsumer = new Mock<IConsumer>();
-            var bus = CreateBusWithConsumer(mockConsumer.Object);
-            await bus.DisposeAsync();
-
-            await Assert.ThrowsAsync<ObjectDisposedException>(
-                () => bus.StartConsumingAsync(CancellationToken.None));
-        }
-
-        // --- M4: OperationCanceledException in StopConsumingCoreAsync must still dispose consumer ---
-
-        [Fact]
-        public async Task StopConsumingAsync_WhenCancellationRequested_StillDisposesConsumer()
-        {
-            // M4: cancellation during StopConsuming must not skip consumer teardown
-            var mockConsumer = new Mock<IConsumer>();
-            mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
-                .Returns(Task.CompletedTask);
-            mockConsumer
-                .Setup(x => x.DisposeAsync())
-                .Returns(ValueTask.CompletedTask);
-
-            var bus = CreateBusWithConsumer(mockConsumer.Object);
-            await bus.StartConsumingAsync(CancellationToken.None);
-
-            using var cts = new CancellationTokenSource();
-            cts.Cancel(); // pre-cancel so WaitAsync sees cancellation immediately
-
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => bus.StopConsumingAsync(cts.Token));
-
-            // Consumer dispose must have been called despite the cancellation
-            mockConsumer.Verify(x => x.DisposeAsync(), Times.Once);
-
-            // Explicit dispose to clean up (no consumer left to call DisposeAsync on since
-            // the fix set _consuming=false during the cancelled stop)
-            await bus.DisposeAsync();
-        }
-
-        // --- M2: StopConsuming before start must not poison _stopped ---
-
-        [Fact]
-        public async Task StopConsumingAsync_BeforeStart_AllowsSubsequentStart()
-        {
-            // M2: a defensive stop on an unstarted bus must leave it restartable
-            var mockConsumer = new Mock<IConsumer>();
-            mockConsumer
-                .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
-                .Returns(Task.CompletedTask);
-
-            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
-
-            // Defensive stop before any start
-            await bus.StopConsumingAsync(CancellationToken.None);
-
-            // Must not throw "bus has been stopped"
-            await bus.StartConsumingAsync(CancellationToken.None);
-            await bus.StopConsumingAsync(CancellationToken.None); // cleanup
-        }
-
-        // --- Helper ---
-
-        private Bus CreateBusWithConsumer(IConsumer consumer) =>
-            new Bus(
-                _mockSerializer.Object,
-                _mockFilterPipeline.Object,
-                _mockSendPipeline.Object,
-                _mockRequestReplyManager.Object,
-                _mockLogger.Object,
-                _mockQueueConfig.Object,
-                _mockDispatcher.Object,
-                _handlerReferences,
-                _mockPipelineConfig.Object,
-                _scopeFactory,
-                _scopeAccessor,
-                consumer);
-
-        // Lifecycle serialization tests.
-
-        [Fact]
-        public async Task StartConsumingAsync_ConcurrentWithStop_SerializesState()
-        {
-            var consumerStarted = new TaskCompletionSource();
-            var releaseStart = new TaskCompletionSource();
-            var mockConsumer = new Mock<IConsumer>();
-            mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
-                .Returns(async () =>
-                {
-                    consumerStarted.SetResult();
-                    await releaseStart.Task;
-                });
-
-            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
-
-            var startTask = bus.StartConsumingAsync();
-            await consumerStarted.Task;
-            var stopTask = bus.StopConsumingAsync();
-
-            // Stop must not complete before Start releases the semaphore
-            await Task.Delay(50);
-            Assert.False(stopTask.IsCompleted);
-
-            releaseStart.SetResult();
-            await startTask;
-            await stopTask;
-
-            Assert.False(bus.IsConsuming);
-        }
-
-        [Fact]
-        public async Task StartConsumingAsync_PreCancelledToken_ThrowsOCE()
-        {
-            var mockConsumer = new Mock<IConsumer>();
-            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
-            using var cts = new CancellationTokenSource();
-            cts.Cancel();
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => bus.StartConsumingAsync(cts.Token));
-            mockConsumer.Verify(c => c.StartConsumingAsync(
-                It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()),
-                Times.Never);
-        }
-
-        [Fact]
-        public async Task StopConsumingAsync_WhileStartInFlight_WaitsForStartToComplete()
-        {
-            var consumerStarted = new TaskCompletionSource();
-            var releaseStart = new TaskCompletionSource();
-            var startCompleted = new TaskCompletionSource();
-
-            var mockConsumer = new Mock<IConsumer>();
-            mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
-                .Returns(async () =>
-                {
-                    consumerStarted.SetResult();
-                    await releaseStart.Task;
-                });
-
-            await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+            using var barrier = new Barrier(2);
 
             var startTask = Task.Run(async () =>
             {
-                await bus.StartConsumingAsync();
-                startCompleted.SetResult();
+                barrier.SignalAndWait();
+                try { await bus.StartConsumingAsync(); }
+                catch (ObjectDisposedException ode) when (ode.ObjectName == typeof(Bus).FullName) { /* expected */ }
+                catch (ObjectDisposedException) { Interlocked.Increment(ref unexpected); }
+                catch (InvalidOperationException) { /* race-acceptable */ }
+            });
+            var disposeTask = Task.Run(async () =>
+            {
+                barrier.SignalAndWait();
+                await bus.DisposeAsync();
             });
 
-            await consumerStarted.Task;
-
-            // Fire Stop while Start is blocked inside the consumer call
-            var stopTask = bus.StopConsumingAsync();
-
-            // Stop is behind Start on the semaphore -- it cannot complete first
-            var firstCompleted = await Task.WhenAny(stopTask, startCompleted.Task, Task.Delay(100));
-            Assert.NotSame(stopTask, firstCompleted);
-
-            // Release Start; both tasks complete cleanly
-            releaseStart.SetResult();
-            await startTask;
-            await stopTask;
+            await Task.WhenAll(startTask, disposeTask).WaitAsync(TimeSpan.FromSeconds(10));
         }
 
-        private object CreateConsumeContextAccessorOrFail()
-        {
-            var accessorType = typeof(Bus).Assembly.GetType("ServiceConnect.Services.ConsumeContextAccessor");
-            Assert.NotNull(accessorType);
-
-            var accessor = Activator.CreateInstance(accessorType!);
-            Assert.NotNull(accessor);
-            return accessor!;
-        }
-
-        private static IDisposable PushConsumeContextOrFail(object accessor, IReadOnlyDictionary<string, object> headers)
-        {
-            var pushMethod = accessor.GetType()
-                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .SingleOrDefault(m => m.Name == "Push" && m.GetParameters().Length == 1);
-
-            Assert.NotNull(pushMethod);
-
-            var scope = pushMethod!.Invoke(accessor, [headers]);
-            Assert.IsAssignableFrom<IDisposable>(scope);
-            return (IDisposable)scope!;
-        }
-
-        private Bus CreateBusWithTimeoutStoreAndAccessorOrFail(ITimeoutStore timeoutStore, object accessor)
-        {
-            var constructor = typeof(Bus)
-                .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .SingleOrDefault(ctor => ctor.GetParameters().Any(p => p.ParameterType == accessor.GetType()));
-
-            Assert.NotNull(constructor);
-
-            var args = constructor!.GetParameters().Select(parameter => parameter.Name switch
-            {
-                "serializer" => _mockSerializer.Object,
-                "filterPipeline" => _mockFilterPipeline.Object,
-                "sendPipeline" => _mockSendPipeline.Object,
-                "requestReplyManager" => _mockRequestReplyManager.Object,
-                "logger" => _mockLogger.Object,
-                "queueConfig" => _mockQueueConfig.Object,
-                "dispatcher" => _mockDispatcher.Object,
-                "handlerReferences" => _handlerReferences,
-                "pipelineConfig" => _mockPipelineConfig.Object,
-                "scopeFactory" => _scopeFactory,
-                "scopeAccessor" => _scopeAccessor,
-                "consumer" => null,
-                "producer" => null,
-                "disposeTimeout" => null,
-                "timeoutStore" => timeoutStore,
-                "consumeContextAccessor" => accessor,
-                _ => throw new InvalidOperationException($"Unexpected Bus constructor parameter '{parameter.Name}'.")
-            }).ToArray();
-
-            return (Bus)constructor.Invoke(args);
-        }
-
-        [Fact]
-        public async Task ConcurrentStartAndDispose_DoesNotThrowSemaphoreDisposedException()
-        {
-            int iterations = 100;
-            int unexpected = 0;
-            for (int i = 0; i < iterations; i++)
-            {
-                var mockConsumer = new Mock<IConsumer>();
-                mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
-                    .Returns(Task.CompletedTask);
-
-                var bus = new Bus(
-                    _mockSerializer.Object,
-                    _mockFilterPipeline.Object,
-                    _mockSendPipeline.Object,
-                    _mockRequestReplyManager.Object,
-                    _mockLogger.Object,
-                    _mockQueueConfig.Object,
-                    _mockDispatcher.Object,
-                    _handlerReferences,
-                    _mockPipelineConfig.Object,
-                    _scopeFactory,
-                    _scopeAccessor,
-                    mockConsumer.Object);
-
-                using var barrier = new Barrier(2);
-
-                var startTask = Task.Run(async () =>
-                {
-                    barrier.SignalAndWait();
-                    try { await bus.StartConsumingAsync(); }
-                    catch (ObjectDisposedException ode) when (ode.ObjectName == typeof(Bus).FullName) { /* expected */ }
-                    catch (ObjectDisposedException) { Interlocked.Increment(ref unexpected); }
-                    catch (InvalidOperationException) { /* race-acceptable */ }
-                });
-                var disposeTask = Task.Run(async () =>
-                {
-                    barrier.SignalAndWait();
-                    await bus.DisposeAsync();
-                });
-
-                await Task.WhenAll(startTask, disposeTask).WaitAsync(TimeSpan.FromSeconds(10));
-            }
-
-            Assert.Equal(0, unexpected);
-        }
+        Assert.Equal(0, unexpected);
     }
+}
 
-    file sealed class MarkerProbe
-    {
-    }
+file sealed class MarkerProbe
+{
 }

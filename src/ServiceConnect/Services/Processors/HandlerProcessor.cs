@@ -27,7 +27,10 @@ internal sealed class HandlerProcessor(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (message == null) return ProcessResult.NotHandled;
+        if (message == null)
+        {
+            return ProcessResult.NotHandled;
+        }
 
         var scopedProvider = scopeAccessor.Current;
 
@@ -43,14 +46,18 @@ internal sealed class HandlerProcessor(
                 foreach (var h in scopedProvider.GetServices(descriptor.HandlerInterfaceType))
                 {
                     if (h != null)
+                    {
                         (invocations ??= new(capacity: 1)).Add((h, descriptor));
+                    }
                 }
             }
             checkedType = checkedType.BaseType;
         }
 
         if (invocations is null)
+        {
             return ProcessResult.NotHandled;
+        }
 
         var resolvedBus = bus.Value;
         var trustQuery = replyStatusRequestReplyManager
@@ -85,14 +92,16 @@ internal sealed class HandlerProcessor(
                     {
                         // Collect handler faults so independent handlers for the same message
                         // all get a chance to run; aggregate at end of loop.
-                        (handlerExceptions ??= new List<Exception>()).Add(ex);
+                        (handlerExceptions ??= []).Add(ex);
                     }
                 }
 
                 if (handlerExceptions is not null)
+                {
                     throw new AggregateException(
                         $"{handlerExceptions.Count} handler(s) threw while dispatching {message.GetType().Name}.",
                         handlerExceptions);
+                }
 
                 await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
             }
@@ -143,32 +152,46 @@ internal sealed class HandlerProcessor(
         CancellationToken cancellationToken)
     {
         if (!busConfig.EnableRoutingSlipProcessing)
+        {
             return;
+        }
 
         if (!headers.TryGetValue(HeaderKeys.RoutingSlip, out var routingSlipRaw))
+        {
             return;
+        }
 
         var routingSlip = HeaderDecoder.Decode(routingSlipRaw);
 
         if (string.IsNullOrWhiteSpace(routingSlip))
+        {
             return;
+        }
 
         var destinations = new List<string>();
         foreach (var raw in routingSlip.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var trimmed = raw.Trim();
             if (!IsValidRoutingSlipDestination(trimmed))
+            {
                 throw new InvalidOperationException(
                     $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {MaxRoutingSlipDestinationLength} characters, and must not contain AMQP wildcards or control characters.");
+            }
+
             if (!ConsumeContext.IsKnownQueue(trimmed, queueConfig))
+            {
                 throw new InvalidOperationException(
                     $"Routing-slip destination '{trimmed}' is not a recognized queue. " +
                     "Configure queue mappings to allow this destination.");
+            }
+
             destinations.Add(trimmed);
         }
 
         if (destinations.Count == 0)
+        {
             return;
+        }
 
         var routeDelegate = RouteAsyncDelegateCache.GetOrAdd(messageType, BuildRouteAsyncDelegate);
         await routeDelegate(bus, message, destinations, cancellationToken).ConfigureAwait(false);
@@ -177,9 +200,21 @@ internal sealed class HandlerProcessor(
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsValidRoutingSlipDestination(string destination)
     {
-        if (string.IsNullOrWhiteSpace(destination)) return false;
-        if (destination.Length > MaxRoutingSlipDestinationLength) return false;
-        if (destination.IndexOfAny(ForbiddenRoutingSlipChars) >= 0) return false;
+        if (string.IsNullOrWhiteSpace(destination))
+        {
+            return false;
+        }
+
+        if (destination.Length > MaxRoutingSlipDestinationLength)
+        {
+            return false;
+        }
+
+        if (destination.IndexOfAny(ForbiddenRoutingSlipChars) >= 0)
+        {
+            return false;
+        }
+
         return true;
     }
 }

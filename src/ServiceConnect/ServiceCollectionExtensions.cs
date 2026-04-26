@@ -182,7 +182,10 @@ public static class ServiceCollectionExtensions
         {
             var registry = new MessageTypeRegistry();
             foreach (var handlerRef in sp.GetRequiredService<IList<HandlerReference>>())
+            {
                 registry.Register(handlerRef.MessageType);
+            }
+
             return registry;
         });
     }
@@ -261,9 +264,11 @@ public static class ServiceCollectionExtensions
         {
             var registered = services.Any(d => d.ServiceType == type || d.ImplementationType == type);
             if (!registered)
+            {
                 throw new InvalidOperationException(
                     $"{role} '{type.FullName}' is referenced by the pipeline but is not registered in the service collection. "
                     + "Register the type via services.AddScoped/AddTransient/AddSingleton before calling AddServiceConnect.");
+            }
         }
     }
 
@@ -306,10 +311,14 @@ public static class ServiceCollectionExtensions
         // When ScanForMessageHandlers=false, assemblies supplied via ScanAssemblies(...)
         // are still scanned; only the fallback AppDomain scan is suppressed.
         if (builder.ScanAssembliesList.Count > 0)
-            return HandlerScanner.ScanForHandlers(builder.ScanAssembliesList.ToArray());
+        {
+            return HandlerScanner.ScanForHandlers([.. builder.ScanAssembliesList]);
+        }
 
         if (!builder.BusConfig.ScanForMessageHandlers)
+        {
             return [];
+        }
 
         return HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies());
     }
@@ -332,10 +341,12 @@ public static class ServiceCollectionExtensions
         foreach (var descriptor in services.Where(d => d.ImplementationType == handlerType).ToArray())
         {
             if (descriptor.Lifetime == ServiceLifetime.Singleton)
+            {
                 throw new InvalidOperationException(
                     $"Message handler '{handlerType.FullName}' must not be registered as a singleton. "
                     + "Handler instances hold per-message IConsumeContext state and must be transient or scoped. "
                     + "Remove the singleton registration and let AddServiceConnect register the handler as transient.");
+            }
         }
 
         // TryAddEnumerable dedupes on (ServiceType, ImplementationType) regardless of
@@ -355,7 +366,10 @@ public static class ServiceCollectionExtensions
         if (messageHandlerInterface != null)
         {
             if (services.Any(d => d.ServiceType == messageHandlerInterface))
+            {
                 return; // user-registered handler exists; respect their registration
+            }
+
             services.TryAddEnumerable(ServiceDescriptor.Transient(messageHandlerInterface, handlerType));
             return;
         }

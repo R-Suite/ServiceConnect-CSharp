@@ -36,10 +36,15 @@ internal sealed class AggregatorProcessor(
         cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
-        if (message == null) return ProcessResult.NotHandled;
+        if (message == null)
+        {
+            return ProcessResult.NotHandled;
+        }
 
         if (!registry.TryGet(messageType, out var descriptor))
+        {
             return ProcessResult.NotHandled;
+        }
 
         if (persistor == null)
         {
@@ -109,7 +114,10 @@ internal sealed class AggregatorProcessor(
         // Fast path: dispose has started. Short-circuit so the callback doesn't re-add to
         // _activeFlushes or re-create a SemaphoreSlim in _flushLocks that DisposeAsync already
         // cleared — such a lock would be unreachable and never disposed (bounded leak).
-        if (Volatile.Read(ref _disposed) != 0) return;
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
 
         // Fire and forget from timer callback — log any errors.
         // Use _disposeCts.Token so timer-fired flushes cancel on dispose.
@@ -182,7 +190,9 @@ internal sealed class AggregatorProcessor(
 
             // If another thread won the GetOrAdd race, freshLock is surplus — dispose it.
             if (!ReferenceEquals(flushLock, freshLock))
+            {
                 freshLock.Dispose();
+            }
 
             // Re-check _disposed: DisposeAsync's _flushLocks.Clear() may have run between
             // TryGetValue and GetOrAdd. Remove and dispose our (possibly just-inserted) lock
@@ -199,9 +209,14 @@ internal sealed class AggregatorProcessor(
         try
         {
             if (_timers.TryRemove(descriptor.AggregatorName, out var activeTimer))
+            {
                 activeTimer.Dispose();
+            }
 
-            if (persistor == null) return;
+            if (persistor == null)
+            {
+                return;
+            }
 
             // Use the snapshot API so we can (a) remove only the specific records we dispatched,
             // leaving concurrently-inserted messages intact (closes the Get/RemoveAll race), and
@@ -210,15 +225,18 @@ internal sealed class AggregatorProcessor(
             if (snapshot.ResolvedMessages.Count == 0)
             {
                 if (snapshot.UnresolvedCount > 0)
+                {
                     logger.LogWarning(
                         "Aggregator {AggregatorName} has {UnresolvedCount} record(s) with unresolvable types; skipping dispatch until type is available",
                         descriptor.AggregatorName, snapshot.UnresolvedCount);
+                }
+
                 return;
             }
 
             // BuildTypedList expects IList<object>; wrap the read-only snapshot as a list copy.
             // The snapshot itself stays immutable; the copy is the handler-facing payload.
-            var resolvedList = snapshot.ResolvedMessages as IList<object> ?? snapshot.ResolvedMessages.ToList();
+            var resolvedList = snapshot.ResolvedMessages as IList<object> ?? [.. snapshot.ResolvedMessages];
             var typedList = descriptor.BuildTypedList(resolvedList);
 
             // The batch path passes its dispatcher-pushed scope through ambientScope. The timer
@@ -230,7 +248,10 @@ internal sealed class AggregatorProcessor(
                 var resolverProvider = ambientScope ?? (localScope = scopeFactory.CreateScope()).ServiceProvider;
 
                 var aggregator = resolverProvider.GetService(descriptor.AggregatorBaseType);
-                if (aggregator == null) return;
+                if (aggregator == null)
+                {
+                    return;
+                }
 
                 // Execute first, then remove on success. On handler exception we propagate
                 // without removing so the broker redelivers and the snapshot is re-flushable.
@@ -240,9 +261,11 @@ internal sealed class AggregatorProcessor(
                 await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
 
                 if (snapshot.UnresolvedCount > 0)
+                {
                     logger.LogWarning(
                         "Aggregator {AggregatorName} dispatched {Count} record(s); {UnresolvedCount} unresolved record(s) retained for a later flush",
                         descriptor.AggregatorName, snapshot.ResolvedMessages.Count, snapshot.UnresolvedCount);
+                }
             }
             finally
             {
@@ -258,7 +281,9 @@ internal sealed class AggregatorProcessor(
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
             return;
+        }
 
         // Signal all in-flight flushes to cancel.
         _disposeCts.Cancel();
@@ -282,11 +307,17 @@ internal sealed class AggregatorProcessor(
         }
 
         foreach (var kvp in _timers)
+        {
             kvp.Value.Dispose();
+        }
+
         _timers.Clear();
 
         foreach (var kvp in _flushLocks)
+        {
             kvp.Value.Dispose();
+        }
+
         _flushLocks.Clear();
 
         _disposeCts.Dispose();

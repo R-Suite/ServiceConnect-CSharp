@@ -72,14 +72,21 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!headers.TryGetValue(HeaderKeys.MessageType, out var msgTypeRaw))
+        {
             return NotHandledTask;
+        }
 
         var msgType = HeaderDecoder.Decode(msgTypeRaw);
         if (msgType != HeaderKeys.ByteStream)
+        {
             return NotHandledTask;
+        }
 
         if (!headers.TryGetValue(HeaderKeys.SequenceId, out var seqIdRaw))
+        {
             return NotHandledTask;
+        }
+
         var sequenceId = HeaderDecoder.Decode(seqIdRaw)!;
 
         // SequenceId must be a valid GUID to prevent arbitrary-string abuse.
@@ -90,7 +97,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         }
 
         if (!headers.TryGetValue(HeaderKeys.PacketNumber, out var pnRaw))
+        {
             return NotHandledTask;
+        }
+
         var pnString = HeaderDecoder.Decode(pnRaw);
         if (!long.TryParse(pnString, out var packetNumber))
         {
@@ -192,7 +202,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             // sequence is poisoned regardless of which state instance is currently in the
             // dict, so we evict by key rather than by reference.
             if (_activeStreams.TryRemove(sequenceId, out _))
+            {
                 Interlocked.Decrement(ref _streamCount);
+            }
+
             return HandledTask;
         }
 
@@ -202,7 +215,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             // Only the caller that wins TryRemove transitions the dict entry from
             // "present" to "removed"; the loser sees a stale state and must idempotent-ack.
             if (!_activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state)))
+            {
                 return HandledTask;
+            }
+
             Interlocked.Decrement(ref _streamCount);
 
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))

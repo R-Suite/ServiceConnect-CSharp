@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
-using Moq;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
@@ -121,7 +121,7 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
             .Setup(m => m.CreateManyAsync(
                 It.IsAny<IEnumerable<CreateIndexModel<MongoDbAggregatorPersistor.AggregatorDocument>>>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<string>());
+            .ReturnsAsync([]);
 
         var persistor = new MongoDbAggregatorPersistor(
             mockClient.Object,
@@ -135,25 +135,31 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
     /// <summary>
     /// Single-batch in-memory cursor that returns all items in one MoveNext call.
     /// </summary>
-    private sealed class FakeAsyncCursor<T> : IAsyncCursor<T>
+    private sealed class FakeAsyncCursor<T>(List<T> items) : IAsyncCursor<T>
     {
-        private readonly List<T> _items;
+        private readonly List<T> _items = items;
         private bool _moved;
-
-        public FakeAsyncCursor(List<T> items) { _items = items; }
 
         public IEnumerable<T> Current => _items;
 
         public bool MoveNext(CancellationToken cancellationToken = default)
         {
-            if (_moved) return false;
+            if (_moved)
+            {
+                return false;
+            }
+
             _moved = true;
             return true;
         }
 
         public Task<bool> MoveNextAsync(CancellationToken cancellationToken = default)
         {
-            if (_moved) return Task.FromResult(false);
+            if (_moved)
+            {
+                return Task.FromResult(false);
+            }
+
             _moved = true;
             return Task.FromResult(true);
         }

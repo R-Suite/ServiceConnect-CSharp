@@ -28,7 +28,10 @@ public class RetryTests
             {
                 attempts++;
                 if (attempts < 3)
+                {
                     throw new InvalidOperationException("transient");
+                }
+
                 return Task.CompletedTask;
             },
             _ => Task.CompletedTask,
@@ -137,7 +140,10 @@ public class RetryTests
             {
                 attempts++;
                 if (attempts < 2)
+                {
                     throw new InvalidOperationException("transient");
+                }
+
                 return Task.FromResult(attempts);
             },
             _ => Task.CompletedTask,

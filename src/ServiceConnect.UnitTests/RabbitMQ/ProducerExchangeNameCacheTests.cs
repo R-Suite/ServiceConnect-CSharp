@@ -44,7 +44,7 @@ public class ProducerExchangeNameCacheTests
 
         var method = typeof(Producer).GetMethod("GetExchangeName",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-        method.Invoke(producer, new object[] { typeof(string) });
+        method.Invoke(producer, [typeof(string)]);
 
         var cacheField = typeof(Producer).GetField("_exchangeNameCache",
             BindingFlags.NonPublic | BindingFlags.Instance)!;

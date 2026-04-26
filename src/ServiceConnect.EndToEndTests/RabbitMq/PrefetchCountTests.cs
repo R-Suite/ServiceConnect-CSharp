@@ -9,14 +9,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(MessagingCollection))]
-public class PrefetchCountTests
+public class PrefetchCountTests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public PrefetchCountTests(MessagingFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -65,7 +60,7 @@ public class PrefetchCountTests
         var bus = provider.GetRequiredService<IBus>();
 
         await bus.StartConsumingAsync();
-        
+
 
         try
         {
@@ -88,37 +83,28 @@ public class PrefetchCountTests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }
 
-file class SlowHandlerState
+file class SlowHandlerState(ConcurrentBag<int> concurrencyLog, int messageCount, TaskCompletionSource<bool> allDone)
 {
-    public readonly ConcurrentBag<int> ConcurrencyLog;
-    public readonly int MessageCount;
-    public readonly TaskCompletionSource<bool> AllDone;
+    public readonly ConcurrentBag<int> ConcurrencyLog = concurrencyLog;
+    public readonly int MessageCount = messageCount;
+    public readonly TaskCompletionSource<bool> AllDone = allDone;
     public int CurrentConcurrency;
     public int ProcessedCount;
-
-    public SlowHandlerState(ConcurrentBag<int> concurrencyLog, int messageCount, TaskCompletionSource<bool> allDone)
-    {
-        ConcurrencyLog = concurrencyLog;
-        MessageCount = messageCount;
-        AllDone = allDone;
-    }
 }
 
-file class SlowHandler : IMessageHandler<TestMessage>
+file class SlowHandler(SlowHandlerState state) : IMessageHandler<TestMessage>
 {
-    private readonly SlowHandlerState _state;
+    private readonly SlowHandlerState _state = state;
 
     public IConsumeContext Context { get; set; } = null!;
-
-    public SlowHandler(SlowHandlerState state)
-    {
-        _state = state;
-    }
 
     public async Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
     {

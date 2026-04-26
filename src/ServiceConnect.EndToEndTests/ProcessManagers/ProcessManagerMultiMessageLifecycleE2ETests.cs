@@ -10,11 +10,9 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 [Collection(nameof(IsolatedCollection))]
-public class ProcessManagerMultiMessageLifecycleE2ETests
+public class ProcessManagerMultiMessageLifecycleE2ETests(MessagingFixture fixture)
 {
-    private readonly MessagingFixture _fixture;
-
-    public ProcessManagerMultiMessageLifecycleE2ETests(MessagingFixture fixture) => _fixture = fixture;
+    private readonly MessagingFixture _fixture = fixture;
 
     [Fact]
     [Trait("Category", "Docker")]
@@ -100,7 +98,10 @@ public class ProcessManagerMultiMessageLifecycleE2ETests
         finally
         {
             await bus.DisposeAsync();
-            if (provider is IAsyncDisposable asyncProvider) await asyncProvider.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
         }
     }
 }
@@ -130,14 +131,12 @@ file sealed class ProcessFinishedMessage(Guid correlationId) : Message(correlati
     public string StepName { get; set; } = string.Empty;
 }
 
-file class LifecycleProcessHandler :
+file class LifecycleProcessHandler(TaskCompletionSource<bool> finished) :
     IProcessHandler<LifecycleProcessData, ProcessStartedMessage>,
     IProcessHandler<LifecycleProcessData, ProcessResumedMessage>,
     IProcessHandler<LifecycleProcessData, ProcessFinishedMessage>
 {
-    private readonly TaskCompletionSource<bool> _finished;
-
-    public LifecycleProcessHandler(TaskCompletionSource<bool> finished) => _finished = finished;
+    private readonly TaskCompletionSource<bool> _finished = finished;
 
     public IConsumeContext Context { get; set; } = null!;
 

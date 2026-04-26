@@ -57,7 +57,10 @@ public static class ServiceConnectActivitySource
             "publish",
             linkedContext);
 
-        if (activity is null) return null;
+        if (activity is null)
+        {
+            return null;
+        }
 
         activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
 
@@ -108,7 +111,10 @@ public static class ServiceConnectActivitySource
             "receive",
             parentContext);
 
-        if (activity is null) return null;
+        if (activity is null)
+        {
+            return null;
+        }
 
         // Targeted header lookups — decode only the headers actually used here
         // rather than allocating a full decode dictionary for all 15-20 headers.
@@ -174,7 +180,10 @@ public static class ServiceConnectActivitySource
             "publish",
             linkedContext);
 
-        if (activity is null) return null;
+        if (activity is null)
+        {
+            return null;
+        }
 
         // L14: compute the effective destination from EndPoint (singular) first, then fall back
         // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
@@ -237,7 +246,11 @@ public static class ServiceConnectActivitySource
     /// </remarks>
     public static void SetError(Activity? activity, Exception exception)
     {
-        if (activity is null) return;
+        if (activity is null)
+        {
+            return;
+        }
+
         activity.SetStatus(ActivityStatusCode.Error, exception.Message);
 #if NET9_0_OR_GREATER
         // AddException is available on .NET 9+; it records the OTel "exception" event.
@@ -246,8 +259,8 @@ public static class ServiceConnectActivitySource
         // .NET 8 fallback: record the OTel semantic-convention "exception" event manually.
         activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
         {
-            ["exception.type"]       = exception.GetType().FullName,
-            ["exception.message"]    = exception.Message,
+            ["exception.type"] = exception.GetType().FullName,
+            ["exception.message"] = exception.Message,
             ["exception.stacktrace"] = exception.ToString(),
         }));
 #endif
@@ -311,14 +324,20 @@ public static class ServiceConnectActivitySource
     /// </summary>
     private static void InjectTraceContext(Activity? activity, Dictionary<string, string> headers)
     {
-        if (activity is null) return;
+        if (activity is null)
+        {
+            return;
+        }
+
         DistributedContextPropagator.Current.Inject(activity, headers, InjectHeader);
     }
 
     private static void InjectHeader(object? carrier, string fieldName, string fieldValue)
     {
         if (carrier is Dictionary<string, string> headers)
+        {
             headers[fieldName] = fieldValue;
+        }
     }
 
     private static Activity? StartActivityWithParent(
@@ -330,11 +349,15 @@ public static class ServiceConnectActivitySource
         ActivityContext parentContext)
     {
         if (!enabled || !activitySource.HasListeners())
+        {
             return null;
+        }
 
         Activity? activity = activitySource.StartActivity(activityName, kind, parentContext);
         if (activity is null)
+        {
             return null;
+        }
 
         activity
             .SetTag(MessagingAttributes.MessagingSystem, MessagingSystemAttributes.MessagingSystem)
@@ -353,7 +376,9 @@ public static class ServiceConnectActivitySource
         ActivityContext linkedContext)
     {
         if (!enabled || !activitySource.HasListeners())
+        {
             return null;
+        }
 
         ActivityLink[]? links = linkedContext == default
             ? null
@@ -362,7 +387,9 @@ public static class ServiceConnectActivitySource
         Activity? activity = activitySource.StartActivity(
             activityName, kind, parentContext: default, tags: null, links: links);
         if (activity is null)
+        {
             return null;
+        }
 
         activity
             .SetTag(MessagingAttributes.MessagingSystem, MessagingSystemAttributes.MessagingSystem)
@@ -375,7 +402,9 @@ public static class ServiceConnectActivitySource
     private static void TryEnrich(Activity activity, Message? message)
     {
         if (message is null)
+        {
             return;
+        }
 
         try
         {
@@ -398,7 +427,9 @@ public static class ServiceConnectActivitySource
     private static void TryEnrich(Activity activity, byte[]? message)
     {
         if (message is null)
+        {
             return;
+        }
 
         try
         {

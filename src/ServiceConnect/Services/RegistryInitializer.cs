@@ -2,14 +2,9 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services;
 
-internal sealed class RegistryInitializer : IRegistryInitializer
+internal sealed class RegistryInitializer(IEnumerable<IHandlerRegistry> registries) : IRegistryInitializer
 {
-    private readonly IEnumerable<IHandlerRegistry> _registries;
-
-    public RegistryInitializer(IEnumerable<IHandlerRegistry> registries)
-    {
-        _registries = registries ?? throw new ArgumentNullException(nameof(registries));
-    }
+    private readonly IEnumerable<IHandlerRegistry> _registries = registries ?? throw new ArgumentNullException(nameof(registries));
 
     public void Initialize()
     {
