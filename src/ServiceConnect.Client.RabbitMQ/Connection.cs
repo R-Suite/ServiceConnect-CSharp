@@ -15,6 +15,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private IConnection? _connection;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private volatile bool _disposed;
+    private TimeSpan _disposeLockTimeout = TimeSpan.FromSeconds(30);
 
     private readonly string[] _hosts = transportSettings.Host.Split(',');
 
@@ -94,18 +95,24 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     {
         if (_disposed) return;
 
-        IConnection? conn;
-        await _connectionLock.WaitAsync().ConfigureAwait(false);
+        IConnection? conn = null;
+        var acquired = await _connectionLock.WaitAsync(_disposeLockTimeout).ConfigureAwait(false);
         try
         {
             if (_disposed) return;
+            if (!acquired)
+            {
+                logger.LogWarning(
+                    "Connection.DisposeAsync timed out waiting for the connection lock after {Timeout}; forcing disposal.",
+                    _disposeLockTimeout);
+            }
             _disposed = true;
             conn = _connection;
             _connection = null;
         }
         finally
         {
-            _connectionLock.Release();
+            if (acquired) _connectionLock.Release();
         }
 
         if (conn != null)
