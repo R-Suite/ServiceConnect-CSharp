@@ -18,19 +18,19 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
         private IncomingDeduplicationFilter CreateFilter() => new(_persistor.Object);
 
         [Fact]
-        public async Task ProcessAsync_NotRedelivered_ReturnsTrue()
+        public async Task ProcessAsync_NotRedelivered_Continues()
         {
             var filter = CreateFilter();
             var envelope = new Envelope { Headers = new Dictionary<string, object>() };
 
             var result = await filter.ProcessAsync(envelope);
 
-            Assert.True(result);
+            Assert.Equal(FilterAction.Continue, result);
             _persistor.Verify(p => p.GetMessageExistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
-        public async Task ProcessAsync_RedeliveredButNotInPersistor_ReturnsTrue()
+        public async Task ProcessAsync_RedeliveredButNotInPersistor_Continues()
         {
             var id = Guid.NewGuid();
             _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(false);
@@ -45,11 +45,11 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
                 }
             };
 
-            Assert.True(await filter.ProcessAsync(envelope));
+            Assert.Equal(FilterAction.Continue, await filter.ProcessAsync(envelope));
         }
 
         [Fact]
-        public async Task ProcessAsync_RedeliveredAndInPersistor_ReturnsFalse()
+        public async Task ProcessAsync_RedeliveredAndInPersistor_Stops()
         {
             var id = Guid.NewGuid();
             _persistor.Setup(p => p.GetMessageExistsAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(true);
@@ -64,7 +64,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
                 }
             };
 
-            Assert.False(await filter.ProcessAsync(envelope));
+            Assert.Equal(FilterAction.Stop, await filter.ProcessAsync(envelope));
         }
 
         [Fact]

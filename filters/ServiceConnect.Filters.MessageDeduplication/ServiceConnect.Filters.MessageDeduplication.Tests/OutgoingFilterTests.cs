@@ -24,7 +24,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
             new() { Headers = new Dictionary<string, object> { { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) } } };
 
         [Fact]
-        public async Task ProcessAsync_HappyPath_CallsInsertAndReturnsTrue()
+        public async Task ProcessAsync_HappyPath_CallsInsertAndContinues()
         {
             var id = Guid.NewGuid();
             _persistor.Setup(p => p.InsertAsync(id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
@@ -33,7 +33,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Tests
             var filter = CreateFilter();
             var result = await filter.ProcessAsync(EnvelopeWithMessageId(id));
 
-            Assert.True(result);
+            Assert.Equal(FilterAction.Continue, result);
             _persistor.VerifyAll();
         }
 

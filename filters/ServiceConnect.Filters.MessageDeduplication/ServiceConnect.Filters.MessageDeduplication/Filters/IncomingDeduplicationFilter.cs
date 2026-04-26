@@ -18,12 +18,12 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             _persistor = persistor ?? throw new ArgumentNullException(nameof(persistor));
         }
 
-        public async Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+        public async Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (!envelope.Headers.TryGetValue("Redelivered", out var redeliveredRaw))
-                return true;
+                return FilterAction.Continue;
 
             // RabbitMQ consumer code writes Redelivered as a raw bool, while other
             // callers may still provide the legacy string/byte[] forms.
@@ -32,18 +32,18 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
                 : bool.TryParse(HeaderDecoder.Decode(redeliveredRaw), out var parsed) && parsed;
 
             if (!redelivered)
-                return true;
+                return FilterAction.Continue;
 
             // Use TryParse to tolerate malformed MessageId headers rather than throwing
             // FormatException on arbitrary input. Missing or malformed id: let
             // the message through; deduplication cannot apply without a valid key.
             if (!envelope.Headers.TryGetValue("MessageId", out var messageIdRaw) ||
                 !Guid.TryParse(HeaderDecoder.Decode(messageIdRaw), out var messageId))
-                return true;
+                return FilterAction.Continue;
 
             var exists = await _persistor.GetMessageExistsAsync(messageId, cancellationToken).ConfigureAwait(false);
 
-            return !exists;
+            return exists ? FilterAction.Stop : FilterAction.Continue;
         }
     }
 }

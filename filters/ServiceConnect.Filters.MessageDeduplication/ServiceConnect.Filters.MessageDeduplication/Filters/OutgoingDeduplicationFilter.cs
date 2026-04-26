@@ -25,7 +25,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             _settings = options.Value;
         }
 
-        public async Task<bool> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+        public async Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -36,7 +36,7 @@ namespace ServiceConnect.Filters.MessageDeduplication.Filters
             // the caller can retry. Silently swallowing would break the dedup guarantee.
             await _persistor.InsertAsync(messageId, expiry, cancellationToken).ConfigureAwait(false);
 
-            return true; // continue pipeline (true = continue, false = block)
+            return FilterAction.Continue;
         }
     }
 }
