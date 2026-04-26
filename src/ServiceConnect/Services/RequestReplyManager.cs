@@ -23,9 +23,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         where TRequest : Message
         where TReply : Message
     {
-        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
-            throw new ArgumentOutOfRangeException(nameof(options),
-                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
+        ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -86,9 +84,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         where TRequest : Message
         where TReply : Message
     {
-        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
-            throw new ArgumentOutOfRangeException(nameof(options),
-                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
+        ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -175,9 +171,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         where TRequest : Message
         where TReply : Message
     {
-        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
-            throw new ArgumentOutOfRangeException(nameof(options),
-                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
+        ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -334,6 +328,13 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     public bool IsTrackedRequest(string messageId)
     {
         return Guid.TryParse(messageId, out var requestId) && _pendingRequests.ContainsKey(requestId);
+    }
+
+    private static void ValidateOptions(RequestOptions options)
+    {
+        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
+            throw new ArgumentOutOfRangeException(nameof(options),
+                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
     }
 
     private sealed class RequestState(TaskCompletionSource<object> tcs, int expectedCount, Type replyType, Action<object>? onReply = null)
