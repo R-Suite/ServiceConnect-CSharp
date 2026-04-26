@@ -20,7 +20,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private readonly SemaphoreSlim _indexCreationSemaphore = new(1, 1);
     private static readonly HashSet<int> BenignIndexCodes = new() { 85, 86 }; // IndexOptionsConflict, IndexKeySpecsConflict
 
-    // Under WriteConcern.Unacknowledged the driver does not report ModifiedCount/DeletedCount.
+    // Under WriteConcern.Unacknowledged the driver does not report MatchedCount/DeletedCount.
     // Accessing those properties on an unacknowledged result throws NotSupportedException.
     // When guards are disabled we skip the concurrency assertions and log a one-time Warning.
     private readonly bool _concurrencyGuardsEnabled;
@@ -60,7 +60,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
 
         // Detect WriteConcern.Unacknowledged (w:0) at construction time.
-        // Under w:0 the driver does not populate ModifiedCount/DeletedCount and accessing
+        // Under w:0 the driver does not populate MatchedCount/DeletedCount and accessing
         // them throws NotSupportedException. Disable the concurrency assertions and log a
         // one-time Warning so operators are aware the guarantees are relaxed.
         var effectiveWriteConcern = mongoClient.Settings.WriteConcern;
@@ -69,7 +69,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         {
             _logger.LogWarning(
                 "MongoDbProcessManagerFinder: WriteConcern.Unacknowledged (w:0) detected. " +
-                "Optimistic-concurrency guards (ModifiedCount/DeletedCount checks) are DISABLED. " +
+                "Optimistic-concurrency guards (MatchedCount/DeletedCount checks) are DISABLED. " +
                 "Concurrent saga updates will not be detected.");
         }
     }
@@ -240,14 +240,14 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             );
             var result = await collection.ReplaceOneAsync(filter, writeRecord, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            if (_concurrencyGuardsEnabled && result.IsAcknowledged && result.ModifiedCount == 0)
+            if (_concurrencyGuardsEnabled && result.IsAcknowledged && result.MatchedCount == 0)
             {
                 throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {versionData.Data.CorrelationId} and Version {currentVersion} could not be updated.");
             }
 
             // Only reflect the bump on the caller's instance after the write is
-            // acknowledged and actually modified a row.
+            // acknowledged and the filter matched a row.
             versionData.Version = currentVersion + 1;
         }
         catch (ConcurrencyException)
