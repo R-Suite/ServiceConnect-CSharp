@@ -101,12 +101,18 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             var source = (List<Entry>)_provider.Get<string, object>(name);
             var messages = new List<object>(source.Count);
             var ids = new List<Guid>(source.Count);
+            var unresolved = 0;
             foreach (var entry in source)
             {
+                if (entry.Data is null)
+                {
+                    unresolved++;
+                    continue;
+                }
                 messages.Add(DeepClone.Clone(entry.Data));
                 ids.Add(entry.Id);
             }
-            return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, 0));
+            return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, unresolved));
         }
     }
 
