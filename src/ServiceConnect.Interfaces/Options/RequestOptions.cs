@@ -9,7 +9,7 @@ namespace ServiceConnect.Interfaces.Options;
 public readonly record struct RequestOptions
 {
     /// <summary>Default per-call timeout in milliseconds.</summary>
-    public const int DefaultTimeoutMs = 30_000;
+    public const int DefaultTimeoutMs = 10_000;
 
     /// <summary>
     /// Initialises <see cref="Timeout"/> to <see cref="DefaultTimeoutMs"/>.
