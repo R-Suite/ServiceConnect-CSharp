@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Concurrent;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
 using MongoDB.Driver;
 
 namespace ServiceConnect.Persistence.MongoDb;
@@ -12,7 +14,11 @@ public static class MongoClientFactory
     // Cache loaded certificates so repeated Create() calls never duplicate the native handle.
     // The cert's lifetime is then bounded by the process (or explicit ClearCertificateCache()
     // in tests) — aligning with the MongoClient singleton that holds a reference to it.
-    private static readonly ConcurrentDictionary<string, X509Certificate2> _certCache = new();
+    private static readonly ConcurrentDictionary<string, Lazy<X509Certificate2>> _certCache = new();
+
+    // Test seam: lets unit tests substitute a counting wrapper without touching the
+    // real X509 loader. Production code always sees LoadCertificate.
+    internal static Func<string, string?, X509Certificate2> CertLoader { get; set; } = LoadCertificate;
 
     /// <summary>
     /// Creates a <see cref="MongoClient"/> using the configured connection and SSL options.
@@ -79,7 +85,12 @@ public static class MongoClientFactory
         // Key must include passphrase changes so a rotated cert is picked up even when the
         // file path stays the same.
         var cacheKey = path + "\0" + (passphrase ?? string.Empty);
-        return _certCache.GetOrAdd(cacheKey, _ => LoadCertificate(path, passphrase));
+        var lazy = _certCache.GetOrAdd(
+            cacheKey,
+            _ => new Lazy<X509Certificate2>(
+                () => CertLoader(path, passphrase),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
     }
 
     private static X509Certificate2 LoadCertificate(string path, string? passphrase)
@@ -102,9 +113,12 @@ public static class MongoClientFactory
     /// </summary>
     internal static void ClearCertificateCache()
     {
-        foreach (var cert in _certCache.Values)
+        foreach (var lazy in _certCache.Values)
         {
-            cert.Dispose();
+            if (lazy.IsValueCreated)
+            {
+                lazy.Value.Dispose();
+            }
         }
         _certCache.Clear();
     }
