@@ -305,6 +305,26 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Null(activity);
     }
 
+    [Fact]
+    public void Consume_SetsMessagingMessageConversationId_FromCorrelationIdHeader()
+    {
+        var correlationId = Guid.NewGuid().ToString();
+        var args = new ConsumeEventArgs
+        {
+            Headers = new Dictionary<string, object>
+            {
+                [HeaderKeys.CorrelationId] = Encoding.UTF8.GetBytes(correlationId),
+                [HeaderKeys.DestinationAddress] = Encoding.UTF8.GetBytes("queue-a"),
+            },
+            Message = new byte[] { 1, 2, 3 },
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args);
+
+        Assert.NotNull(activity);
+        Assert.Equal(correlationId, activity!.GetTagItem(MessageConversationId));
+    }
+
     // ---------------- Send ----------------
 
     [Fact]

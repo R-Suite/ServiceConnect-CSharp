@@ -110,18 +110,25 @@ public static class ServiceConnectActivitySource
 
         if (activity is null) return null;
 
-        // Targeted header lookups — decode only the two headers actually used here
+        // Targeted header lookups — decode only the headers actually used here
         // rather than allocating a full decode dictionary for all 15-20 headers.
         string? destinationAddress = eventArgs.Headers.TryGetValue(HeaderKeys.DestinationAddress, out var daVal)
             ? HeaderDecoder.Decode(daVal) : null;
         string? messageId = eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out var miVal)
             ? HeaderDecoder.Decode(miVal) : null;
+        string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
+            ? HeaderDecoder.Decode(ciVal) : null;
 
         activity.DisplayName = (string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive";
 
         if (messageId is not null)
         {
             activity.SetTag(MessagingAttributes.MessageId, messageId);
+        }
+
+        if (correlationId is not null)
+        {
+            activity.SetTag(MessagingAttributes.MessageConversationId, correlationId);
         }
 
         if (!string.IsNullOrEmpty(destinationAddress))
