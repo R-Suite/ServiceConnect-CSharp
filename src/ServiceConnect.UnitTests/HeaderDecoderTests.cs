@@ -48,13 +48,61 @@ public class HeaderDecoderTests
     }
 
     [Fact]
-    public void Decode_DictionaryHeader_FallsBackToString_DoesNotThrow()
+    public void Decode_DictionaryHeader_RendersAsJsonShape()
     {
-        IDictionary<string, object> dict = new Dictionary<string, object> { ["k"] = "v" };
-        // ToString() on a dictionary returns its type name; the exact content is
-        // unspecified — the invariant is that it does not throw.
-        var decoded = HeaderDecoder.Decode(dict);
+        var nested = new Dictionary<string, object>
+        {
+            ["a"] = "alpha",
+            ["b"] = 42,
+        };
+
+        var decoded = HeaderDecoder.Decode(nested);
+
         Assert.NotNull(decoded);
+        // Both keys and both values must appear; ordering is not guaranteed.
+        Assert.Contains("a", decoded!);
+        Assert.Contains("alpha", decoded);
+        Assert.Contains("b", decoded);
+        Assert.Contains("42", decoded);
+        Assert.DoesNotContain("System.Collections", decoded);
+    }
+
+    [Fact]
+    public void Decode_ListHeader_RendersAsJsonArrayShape()
+    {
+        var arr = new List<object> { "x", 1, "y" };
+
+        var decoded = HeaderDecoder.Decode(arr);
+
+        Assert.NotNull(decoded);
+        Assert.Contains("x", decoded!);
+        Assert.Contains("1", decoded);
+        Assert.Contains("y", decoded);
+        Assert.DoesNotContain("System.Collections", decoded);
+    }
+
+    [Fact]
+    public void Decode_ByteArrayInsideList_DecodesAsUtf8()
+    {
+        var arr = new List<object> { "xyz"u8.ToArray() };
+        var decoded = HeaderDecoder.Decode(arr);
+        Assert.NotNull(decoded);
+        Assert.Contains("xyz", decoded!);
+    }
+
+    [Fact]
+    public void Decode_RenderingFault_FallsBackToTypeName()
+    {
+        var thrower = new ThrowOnEnumerate();
+        var decoded = HeaderDecoder.Decode(thrower);
+        Assert.NotNull(decoded);
+        Assert.Contains(nameof(ThrowOnEnumerate), decoded!);
+    }
+
+    private sealed class ThrowOnEnumerate : IEnumerable<object>
+    {
+        public IEnumerator<object> GetEnumerator() => throw new InvalidOperationException("boom");
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     [Fact]
