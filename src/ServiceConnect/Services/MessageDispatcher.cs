@@ -107,7 +107,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
                 }
 
                 if (!proc.RunBeforeDeserialization) continue;
-                var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope, cancellationToken);
+                var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope, cancellationToken).ConfigureAwait(false);
                 if (preResult == ProcessResult.Handled)
                     return new ConsumeEventResult { Success = true };
             }
@@ -154,7 +154,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
             // middleware lifetimes are honoured — a cached chain would pin the first instance for
             // the lifetime of the bus.
             var chain = BuildProcessingChain(scope.ServiceProvider);
-            return await chain(messageBytes, type!, message, headers, envelope, cancellationToken);
+            return await chain(messageBytes, type!, message, headers, envelope, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -190,7 +190,7 @@ public sealed class MessageDispatcher : IMessageDispatcher
         foreach (var proc in _processors)
         {
             if (proc.RunBeforeDeserialization) continue;
-            var result = await proc.ProcessAsync(mb, mt, m, h, e, ct);
+            var result = await proc.ProcessAsync(mb, mt, m, h, e, ct).ConfigureAwait(false);
             if (result == ProcessResult.Handled)
                 return new ConsumeEventResult { Success = true };
         }
