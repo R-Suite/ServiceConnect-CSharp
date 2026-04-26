@@ -27,7 +27,7 @@ public interface ISendMessageMiddleware
     /// <param name="endPoint">The destination endpoint, when applicable.</param>
     /// <param name="next">The next delegate in the chain.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    Task Process(Type typeObject, byte[] messageBytes,
+    Task ProcessAsync(Type typeObject, byte[] messageBytes,
         Dictionary<string, string> headers, string? endPoint,
         SendMessageDelegate next,
         CancellationToken cancellationToken);

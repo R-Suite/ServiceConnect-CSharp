@@ -43,7 +43,7 @@ public sealed class MessageDispatcher(
     private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
 
     /// <inheritdoc />
-    public async Task<ConsumeEventResult> Dispatch(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
+    public async Task<ConsumeEventResult> DispatchAsync(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
         using var _ = _scopeAccessor.Push(scope.ServiceProvider);
@@ -219,7 +219,7 @@ public sealed class MessageDispatcher(
         {
             var mw = (IMessageProcessingMiddleware)scopedProvider.GetRequiredService(middlewareTypes[i]);
             var next = chain;
-            chain = (mb, mt, m, h, e, ct) => mw.Process(mb, mt, m, h, e, next, ct);
+            chain = (mb, mt, m, h, e, ct) => mw.ProcessAsync(mb, mt, m, h, e, next, ct);
         }
         return chain;
     }

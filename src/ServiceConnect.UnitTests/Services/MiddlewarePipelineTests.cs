@@ -22,7 +22,7 @@ file class RecordingSendMiddleware(List<string> log) : ISendMessageMiddleware
 {
     private readonly List<string> _log = log;
 
-    public async Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public async Task ProcessAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         _log.Add("before");
         await next(typeObject, messageBytes, headers, endPoint, cancellationToken);
@@ -32,7 +32,7 @@ file class RecordingSendMiddleware(List<string> log) : ISendMessageMiddleware
 
 file class ShortCircuitSendMiddleware : ISendMessageMiddleware
 {
-    public Task Process(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public Task ProcessAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         // Intentionally does NOT call next
         return Task.CompletedTask;
@@ -47,7 +47,7 @@ file class RecordingProcessingMiddleware(List<string> log) : IMessageProcessingM
 {
     private readonly List<string> _log = log;
 
-    public async Task<ConsumeEventResult> Process(ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
+    public async Task<ConsumeEventResult> ProcessAsync(ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {
         _log.Add("before");
@@ -59,7 +59,7 @@ file class RecordingProcessingMiddleware(List<string> log) : IMessageProcessingM
 
 file class ShortCircuitProcessingMiddleware : IMessageProcessingMiddleware
 {
-    public Task<ConsumeEventResult> Process(ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
+    public Task<ConsumeEventResult> ProcessAsync(ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {
         return Task.FromResult(new ConsumeEventResult { Success = true });
@@ -208,7 +208,7 @@ public class ProcessingMiddlewarePipelineTests
         var headers = MakeHeaders(typeof(TestMiddlewareMessage));
 
         // Act
-        var result = await dispatcher.Dispatch(new byte[] { 1 }, nameof(TestMiddlewareMessage), headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1 }, nameof(TestMiddlewareMessage), headers);
 
         // Assert
         Assert.True(result.Success);
@@ -249,7 +249,7 @@ public class ProcessingMiddlewarePipelineTests
         var headers = MakeHeaders(typeof(TestMiddlewareMessage));
 
         // Act
-        var result = await dispatcher.Dispatch(new byte[] { 1 }, nameof(TestMiddlewareMessage), headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1 }, nameof(TestMiddlewareMessage), headers);
 
         // Assert
         Assert.True(result.Success);

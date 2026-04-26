@@ -210,7 +210,7 @@ internal sealed class AggregatorProcessor(
         {
             if (_timers.TryRemove(descriptor.AggregatorName, out var activeTimer))
             {
-                activeTimer.Dispose();
+                await activeTimer.DisposeAsync().ConfigureAwait(false);
             }
 
             if (persistor == null)
@@ -286,7 +286,7 @@ internal sealed class AggregatorProcessor(
         }
 
         // Signal all in-flight flushes to cancel.
-        _disposeCts.Cancel();
+        await _disposeCts.CancelAsync().ConfigureAwait(false);
 
         // Await all tracked pending flushes to complete or cancel.
         var pending = _activeFlushes.Values.ToArray();

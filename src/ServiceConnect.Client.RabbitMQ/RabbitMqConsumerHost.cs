@@ -603,7 +603,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             if (remaining <= TimeSpan.Zero)
             {
                 Volatile.Write(ref _shutdownTimedOut, 1);
-                shutdownPublishCts.Cancel();
+                await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
                 break;
             }
 
@@ -652,10 +652,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
         await CloseChannelAsync(deadline).ConfigureAwait(false);
         await ClosePublishChannelAsync(deadline).ConfigureAwait(false);
-        shutdownPublishCts.Cancel();
+        await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
         shutdownPublishCts.Dispose();
         var deliveryCts = _deliveryCts;
-        try { deliveryCts.Cancel(); } catch (ObjectDisposedException) { }
+        try { await deliveryCts.CancelAsync().ConfigureAwait(false); } catch (ObjectDisposedException) { }
         deliveryCts.Dispose();
     }
 
@@ -664,14 +664,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         var remaining = deadline - _timeProvider.GetUtcNow();
         if (remaining <= TimeSpan.Zero)
         {
-            shutdownPublishCts.Cancel();
+            await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
             return;
         }
 
         try
         {
             await Task.Delay(remaining, _timeProvider, shutdownPublishCts.Token).ConfigureAwait(false);
-            shutdownPublishCts.Cancel();
+            await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (shutdownPublishCts.IsCancellationRequested)
         {
@@ -692,12 +692,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
 
         var timeoutTask = Task.Delay(remaining, _timeProvider);
+#pragma warning disable VSTHRD003 // operation is a Task passed by the caller; this helper bounds its wait against a deadline.
         if (await Task.WhenAny(operation, timeoutTask).ConfigureAwait(false) != operation)
         {
             return false;
         }
 
         await operation.ConfigureAwait(false);
+#pragma warning restore VSTHRD003
         return true;
     }
 

@@ -67,11 +67,13 @@ public sealed class ProcessManagerTimeoutService(
         var cts = Interlocked.Exchange(ref _cts, null);
         if (cts != null)
         {
-            cts.Cancel();
+            await cts.CancelAsync().ConfigureAwait(false);
             if (_pollingTask != null)
             {
-                try { await _pollingTask; }
+#pragma warning disable VSTHRD003 // _pollingTask was started by StartAsync on this instance.
+                try { await _pollingTask.ConfigureAwait(false); }
                 catch (OperationCanceledException) { }
+#pragma warning restore VSTHRD003
             }
 
             cts.Dispose();
@@ -171,11 +173,16 @@ public sealed class ProcessManagerTimeoutService(
         // Mirror StopAsync: Interlocked.Exchange claims exclusive ownership of _cts so a racing
         // StopAsync+DisposeAsync pair can't both call Dispose on the same CTS.
         var cts = Interlocked.Exchange(ref _cts, null);
-        cts?.Cancel();
+        if (cts != null)
+        {
+            await cts.CancelAsync().ConfigureAwait(false);
+        }
         if (_pollingTask != null)
         {
-            try { await _pollingTask; }
+#pragma warning disable VSTHRD003 // _pollingTask was started by StartAsync on this instance.
+            try { await _pollingTask.ConfigureAwait(false); }
             catch (OperationCanceledException) { }
+#pragma warning restore VSTHRD003
         }
         cts?.Dispose();
     }

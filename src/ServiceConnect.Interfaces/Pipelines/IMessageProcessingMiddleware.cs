@@ -31,7 +31,7 @@ public interface IMessageProcessingMiddleware
     /// <param name="next">The next delegate in the chain.</param>
     /// <param name="cancellationToken">A token that cancels processing.</param>
     /// <returns>The consume result.</returns>
-    Task<ConsumeEventResult> Process(
+    Task<ConsumeEventResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope,
         MessageProcessingDelegate next,

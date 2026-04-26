@@ -423,7 +423,7 @@ public static class TestHandlerFixture
 
 file sealed class TestInboundMiddleware : IMessageProcessingMiddleware
 {
-    public Task<ConsumeEventResult> Process(
+    public Task<ConsumeEventResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes,
         Type messageType,
         object message,
@@ -442,7 +442,7 @@ file sealed class TestInboundFilter : IFilter
 
 file sealed class TestSendMiddleware : ISendMessageMiddleware
 {
-    public Task Process(
+    public Task ProcessAsync(
         Type messageType,
         byte[] messageBytes,
         Dictionary<string, string> headers,

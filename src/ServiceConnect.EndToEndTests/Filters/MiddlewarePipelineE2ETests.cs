@@ -9,7 +9,7 @@ namespace ServiceConnect.EndToEndTests;
 
 file sealed class HeaderAddingSendMiddleware : ISendMessageMiddleware
 {
-    public Task Process(Type typeObject, byte[] messageBytes,
+    public Task ProcessAsync(Type typeObject, byte[] messageBytes,
         Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         headers["X-Send-Middleware"] = "applied";
@@ -21,7 +21,7 @@ file sealed class HeaderCapturingMiddleware(TaskCompletionSource<IDictionary<str
 {
     private readonly TaskCompletionSource<IDictionary<string, object>> _tcs = tcs;
 
-    public async Task<ConsumeEventResult> Process(
+    public async Task<ConsumeEventResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope, MessageProcessingDelegate next, CancellationToken cancellationToken)
     {

@@ -83,7 +83,7 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
         {
             var mw = (ISendMessageMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
             var next = chain;
-            chain = (t, b, h, ep, ct) => mw.Process(t, b, h, ep, next, ct);
+            chain = (t, b, h, ep, ct) => mw.ProcessAsync(t, b, h, ep, next, ct);
         }
         return chain;
     }

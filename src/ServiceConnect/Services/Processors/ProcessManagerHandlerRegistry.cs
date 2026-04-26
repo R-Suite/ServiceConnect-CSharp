@@ -142,7 +142,9 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
     }
 
     private static async Task<object?> ToObjectTask<T>(Task<T?> task) where T : class
+#pragma warning disable VSTHRD003 // Task is owned by the caller; this is a generic bridging helper.
         => await task.ConfigureAwait(false);
+#pragma warning restore VSTHRD003
 
     private static Func<object, object> CompileExtractData(Type persistenceInterfaceType)
     {

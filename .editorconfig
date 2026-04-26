@@ -312,3 +312,18 @@ dotnet_naming_rule.private_fields_should_be_underscore_camel.style = underscore_
 dotnet_naming_rule.type_parameters_should_be_begins_with_t.severity = warning
 dotnet_naming_rule.type_parameters_should_be_begins_with_t.symbols = type_parameters
 dotnet_naming_rule.type_parameters_should_be_begins_with_t.style = begins_with_t
+
+# Microsoft.VisualStudio.Threading.Analyzers (VSTHRDxxx) — correctness rules left at defaults.
+# VSTHRD200 (Async-suffix naming) silenced globally: bidirectional firing on internal
+# delegate-typed helpers and xUnit test method names produces too many false positives.
+# Public-API method naming is enforced by code review.
+dotnet_diagnostic.VSTHRD200.severity = silent
+
+# Test projects: silence threading-correctness rules that flag standard test patterns
+# (sync Cancel on local CTS, await of mock-returned Tasks, fire-and-forget setup, etc.).
+# Production code remains under enforcement.
+[**/*Tests/**.cs]
+dotnet_diagnostic.VSTHRD003.severity = silent
+dotnet_diagnostic.VSTHRD103.severity = silent
+dotnet_diagnostic.VSTHRD105.severity = silent
+dotnet_diagnostic.VSTHRD110.severity = silent

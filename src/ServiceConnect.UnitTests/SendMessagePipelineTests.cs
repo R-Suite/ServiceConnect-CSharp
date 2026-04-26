@@ -151,7 +151,7 @@ namespace ServiceConnect.UnitTests
 file sealed class BlockingSendMiddleware : ISendMessageMiddleware
 {
     // Intentionally does NOT call next — short-circuits the pipeline.
-    public Task Process(
+    public Task ProcessAsync(
         Type typeObject, byte[] messageBytes, Dictionary<string, string> headers,
         string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
         => Task.CompletedTask;

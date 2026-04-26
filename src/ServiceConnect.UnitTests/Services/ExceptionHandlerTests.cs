@@ -84,7 +84,7 @@ public class ExceptionHandlerTests
         var headers = MakeHeaders();
 
         // Act
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         // Assert
         Assert.False(result.Success);
@@ -116,7 +116,7 @@ public class ExceptionHandlerTests
         var headers = MakeHeaders();
 
         // Act
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         // Assert — no crash, result indicates failure
         Assert.False(result.Success);
@@ -147,7 +147,7 @@ public class ExceptionHandlerTests
         var headers = MakeHeaders();
 
         // Act — should not throw even though ExceptionHandler throws
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         // Assert — still returns failure without crashing
         Assert.False(result.Success);

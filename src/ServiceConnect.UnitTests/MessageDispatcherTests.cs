@@ -161,7 +161,7 @@ public class MessageDispatcherTests
         var messageBytes = new byte[] { 1, 2, 3 };
 
         // Act
-        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
 
         // Assert
         Assert.True(result.Success);
@@ -197,7 +197,7 @@ public class MessageDispatcherTests
         var messageBytes = new byte[] { 1, 2, 3 };
 
         // Act
-        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
 
         // Assert
         Assert.True(result.Success);
@@ -227,7 +227,7 @@ public class MessageDispatcherTests
         var messageBytes = new byte[] { 1, 2, 3 };
 
         // Act
-        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
 
         // Assert
         Assert.True(result.Success);
@@ -248,7 +248,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(sp);
 
         // Act
-        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
 
         // Assert
         Assert.True(result.Success);
@@ -273,7 +273,7 @@ public class MessageDispatcherTests
 
         var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         Assert.True(result.Success);
         Assert.Equal(0, Assert.IsType<TestDispatcherReplyManager>(_replyManager).CallCount);
@@ -299,7 +299,7 @@ public class MessageDispatcherTests
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(new FakeMessage1(Guid.NewGuid()));
 
-        await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+        await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
         Assert.Equal("before-filter", order[0]);
         Assert.Equal("pre-deser-processor", order[1]);
@@ -318,7 +318,7 @@ public class MessageDispatcherTests
         var preDeser = new OrderRecordingPreDeserProcessor([]);
         var dispatcher = CreateDispatcherWithProcessors([preDeser]);
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
         Assert.True(result.Success);
         Assert.Equal(0, preDeser.CallCount);
@@ -333,7 +333,7 @@ public class MessageDispatcherTests
         var preDeser = new OrderRecordingPreDeserProcessor([]) { ReturnHandled = true };
         var dispatcher = CreateDispatcherWithProcessors([preDeser]);
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
         Assert.True(result.Success);
         _mockFilterPipeline.Verify(
@@ -349,7 +349,7 @@ public class MessageDispatcherTests
         var preDeser = new OrderRecordingPreDeserProcessor([]) { ReturnHandled = true };
         var dispatcher = CreateDispatcherWithProcessors([preDeser]);
 
-        await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+        await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
         _mockSerializer.Verify(
             s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<Type>()),
@@ -371,7 +371,7 @@ public class MessageDispatcherTests
 
         var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         Assert.True(result.Success);
         _mockFilterPipeline.Verify(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -390,7 +390,7 @@ public class MessageDispatcherTests
 
         var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, nameof(UnregisteredReplyMessage), headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, nameof(UnregisteredReplyMessage), headers);
 
         Assert.True(result.Success);
         var replyManager = Assert.IsType<TestDispatcherReplyManager>(_replyManager);
@@ -413,7 +413,7 @@ public class MessageDispatcherTests
 
         var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider(), mockLogger.Object);
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         Assert.True(result.Success);
         Assert.Null(result.Exception);
@@ -439,7 +439,7 @@ public class MessageDispatcherTests
 
         var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "MissingReply", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "MissingReply", headers);
 
         Assert.True(result.Success);
         var replyManager = Assert.IsType<TestDispatcherReplyManager>(_replyManager);
@@ -468,7 +468,7 @@ public class MessageDispatcherTests
         var messageBytes = new byte[] { 1, 2, 3 };
 
         // Act
-        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
 
         // Assert
         Assert.False(result.Success);
@@ -492,7 +492,7 @@ public class MessageDispatcherTests
         var messageBytes = new byte[] { 1, 2, 3 };
 
         // Act
-        var result = await dispatcher.Dispatch(messageBytes, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
 
         // Assert
         Assert.True(result.Success);
@@ -521,7 +521,7 @@ public class MessageDispatcherTests
         var messageBytes = new byte[] { 1, 2, 3 };
 
         // Act
-        var result = await dispatcher.Dispatch(messageBytes, "PolyDerivedMessage", headers);
+        var result = await dispatcher.DispatchAsync(messageBytes, "PolyDerivedMessage", headers);
 
         // Assert
         Assert.True(result.Success);
@@ -541,7 +541,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcherWithProcessors([]);
         var headers = MakeHeaders();
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         Assert.True(result.Success);
         Assert.True(result.NotHandled);
@@ -558,7 +558,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcherWithProcessors([processor]);
         var headers = MakeHeaders();
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         Assert.True(result.Success);
         Assert.False(result.NotHandled);
@@ -593,7 +593,7 @@ public class MessageDispatcherTests
         };
 
         // Act
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         // Assert
         Assert.False(result.Success);
@@ -619,7 +619,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(sp);
         var headers = new Dictionary<string, object>(); // no FullTypeName, no TypeName
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, typeof(FakeMessage1).AssemblyQualifiedName!, headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, typeof(FakeMessage1).AssemblyQualifiedName!, headers);
 
         Assert.True(result.Success);
         Assert.Same(message, receivedMessage);
@@ -646,7 +646,7 @@ public class MessageDispatcherTests
             [HeaderKeys.FullTypeName] = Encoding.UTF8.GetBytes("Bogus.Type.That.Is.Not.Registered")
         };
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, typeof(FakeMessage1).AssemblyQualifiedName!, headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, typeof(FakeMessage1).AssemblyQualifiedName!, headers);
 
         Assert.True(result.Success);
         Assert.True(handlerCalled);
@@ -671,7 +671,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(sp);
         var headers = MakeHeaders(); // has FullTypeName
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "", headers);
 
         Assert.True(result.Success);
         Assert.True(handlerCalled);
@@ -685,7 +685,7 @@ public class MessageDispatcherTests
         var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
         var headers = new Dictionary<string, object>();
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "", headers);
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "", headers);
 
         Assert.False(result.Success);
         Assert.IsType<InvalidOperationException>(result.Exception);
@@ -728,7 +728,7 @@ public class MessageDispatcherTests
             scopeAccessor,
             CreateRegistryWithTypes(typeof(FakeMessage1)));
 
-        var result = await dispatcher.Dispatch(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", MakeHeaders());
 
         Assert.True(result.Success);
         Assert.NotNull(scopedFromProcessor1);
@@ -768,8 +768,8 @@ public class MessageDispatcherTests
             scopeAccessor,
             CreateRegistryWithTypes(typeof(FakeMessage1)));
 
-        await dispatcher.Dispatch(new byte[] { 1 }, "FakeMessage1", MakeHeaders());
-        await dispatcher.Dispatch(new byte[] { 1 }, "FakeMessage1", MakeHeaders());
+        await dispatcher.DispatchAsync(new byte[] { 1 }, "FakeMessage1", MakeHeaders());
+        await dispatcher.DispatchAsync(new byte[] { 1 }, "FakeMessage1", MakeHeaders());
 
         Assert.Equal(2, captured.Count);
         Assert.NotSame(captured[0], captured[1]);
