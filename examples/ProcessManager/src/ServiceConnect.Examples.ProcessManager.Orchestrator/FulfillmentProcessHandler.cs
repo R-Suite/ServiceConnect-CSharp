@@ -7,14 +7,12 @@ namespace ServiceConnect.Examples.ProcessManager.Orchestrator;
 
 public sealed record WorkflowQueues(string WorkflowQueueName, string InventoryQueueName, string PaymentQueueName);
 
-public sealed class FulfillmentProcessHandler :
+public sealed class FulfillmentProcessHandler(WorkflowQueues queues) :
     IProcessHandler<FulfillmentState, OrderSubmitted>,
     IProcessHandler<FulfillmentState, InventoryReserved>,
     IProcessHandler<FulfillmentState, PaymentCaptured>
 {
-    private readonly WorkflowQueues _queues;
-
-    public FulfillmentProcessHandler(WorkflowQueues queues) => _queues = queues;
+    private readonly WorkflowQueues _queues = queues;
 
     public IConsumeContext Context { get; set; } = null!;
 

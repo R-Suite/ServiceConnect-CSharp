@@ -19,7 +19,7 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     CancellationToken.None);
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+services.AddSingleton<IList<HandlerReference>>([]);
 services.AddExampleBus(settings, "aggregator-producer-a");
 
 await using var provider = services.BuildServiceProvider();

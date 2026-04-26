@@ -19,7 +19,7 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     CancellationToken.None);
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+services.AddSingleton<IList<HandlerReference>>([]);
 services.AddExampleBus(settings, requesterQueueName);
 
 await using var provider = services.BuildServiceProvider();
@@ -31,7 +31,7 @@ var replies = await bus.SendRequestMultiAsync<SearchRequest, SearchResponse>(
     new SearchRequest(Guid.NewGuid()) { Query = searchQuery },
     new RequestOptions
     {
-        EndPoints = new List<string> { catalogAQueueName, catalogBQueueName },
+        EndPoints = [catalogAQueueName, catalogBQueueName],
         ExpectedReplyCount = 2,
         Timeout = 30000
     });

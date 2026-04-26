@@ -10,60 +10,59 @@ using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.Filters.MessageDeduplication.Tests
+namespace ServiceConnect.Filters.MessageDeduplication.Tests;
+
+public class OutgoingDeduplicationFilterTests
 {
-    public class OutgoingDeduplicationFilterTests
+    private readonly Mock<IMessageDeduplicationPersistor> _persistor = new();
+    private readonly DeduplicationFilterSettings _settings = new() { MsgExpiryHours = 24 };
+
+    private OutgoingDeduplicationFilter CreateFilter() =>
+        new(_persistor.Object, Options.Create(_settings));
+
+    private static Envelope EnvelopeWithMessageId(Guid id) =>
+        new() { Headers = new Dictionary<string, object> { { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) } } };
+
+    [Fact]
+    public async Task ProcessAsync_HappyPath_CallsInsertAndContinues()
     {
-        private readonly Mock<IMessageDeduplicationPersistor> _persistor = new();
-        private readonly DeduplicationFilterSettings _settings = new() { MsgExpiryHours = 24 };
+        var id = Guid.NewGuid();
+        _persistor.Setup(p => p.InsertAsync(id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
-        private OutgoingDeduplicationFilter CreateFilter() =>
-            new(_persistor.Object, Options.Create(_settings));
+        var filter = CreateFilter();
+        var result = await filter.ProcessAsync(EnvelopeWithMessageId(id));
 
-        private static Envelope EnvelopeWithMessageId(Guid id) =>
-            new() { Headers = new Dictionary<string, object> { { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) } } };
+        Assert.Equal(FilterAction.Continue, result);
+        _persistor.VerifyAll();
+    }
 
-        [Fact]
-        public async Task ProcessAsync_HappyPath_CallsInsertAndContinues()
-        {
-            var id = Guid.NewGuid();
-            _persistor.Setup(p => p.InsertAsync(id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.CompletedTask);
+    [Fact]
+    public async Task ProcessAsync_PersistorThrows_ExceptionPropagates()
+    {
+        var id = Guid.NewGuid();
+        _persistor.Setup(p => p.InsertAsync(id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("boom"));
 
-            var filter = CreateFilter();
-            var result = await filter.ProcessAsync(EnvelopeWithMessageId(id));
+        var filter = CreateFilter();
 
-            Assert.Equal(FilterAction.Continue, result);
-            _persistor.VerifyAll();
-        }
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            filter.ProcessAsync(EnvelopeWithMessageId(id)));
+    }
 
-        [Fact]
-        public async Task ProcessAsync_PersistorThrows_ExceptionPropagates()
-        {
-            var id = Guid.NewGuid();
-            _persistor.Setup(p => p.InsertAsync(id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new InvalidOperationException("boom"));
+    [Fact]
+    public async Task ProcessAsync_PreCancelledToken_ThrowsOCE()
+    {
+        var id = Guid.NewGuid();
+        _persistor.Setup(p => p.InsertAsync(id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
-            var filter = CreateFilter();
+        var filter = CreateFilter();
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                filter.ProcessAsync(EnvelopeWithMessageId(id)));
-        }
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-        [Fact]
-        public async Task ProcessAsync_PreCancelledToken_ThrowsOCE()
-        {
-            var id = Guid.NewGuid();
-            _persistor.Setup(p => p.InsertAsync(id, It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.CompletedTask);
-
-            var filter = CreateFilter();
-
-            using var cts = new CancellationTokenSource();
-            cts.Cancel();
-
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                filter.ProcessAsync(EnvelopeWithMessageId(id), cts.Token));
-        }
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            filter.ProcessAsync(EnvelopeWithMessageId(id), cts.Token));
     }
 }

@@ -18,13 +18,13 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     CancellationToken.None);
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+services.AddSingleton<IList<HandlerReference>>([]);
 services.AddExampleBus(settings, "routing-slip-starter");
 
 await using var provider = services.BuildServiceProvider();
 var bus = provider.GetRequiredService<IBus>();
 await bus.RouteAsync(
     new RoutingSlipOrder(Guid.NewGuid()) { OrderId = orderId, CurrentStep = "InventoryStep" },
-    new List<string> { inventoryQueueName, billingQueueName, shippingQueueName });
+    [inventoryQueueName, billingQueueName, shippingQueueName]);
 ConsoleStatus.Success("routing-slip-starter", $"routed {orderId}");
 await Console.Out.FlushAsync();

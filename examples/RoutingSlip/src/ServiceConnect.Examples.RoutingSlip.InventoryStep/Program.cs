@@ -28,7 +28,7 @@ services.AddTransient<IMessageHandler<RoutingSlipOrder>, RoutingSlipOrderHandler
 services.AddExampleBus(
     settings,
     inventoryQueueName,
-    configureQueues: queues => queues.AddQueueMapping(typeof(RoutingSlipOrder), new List<string> { billingQueueName, shippingQueueName }));
+    configureQueues: queues => queues.AddQueueMapping(typeof(RoutingSlipOrder), [billingQueueName, shippingQueueName]));
 
 await using var provider = services.BuildServiceProvider();
 var bus = provider.GetRequiredService<IBus>();

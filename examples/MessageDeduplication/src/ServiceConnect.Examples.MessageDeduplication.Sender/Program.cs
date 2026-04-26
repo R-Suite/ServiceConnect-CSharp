@@ -24,7 +24,7 @@ await DependencyWaiter.WaitForMongoDbAsync(
     CancellationToken.None);
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+services.AddSingleton<IList<HandlerReference>>([]);
 
 // Register the filter before AddExampleBus so OutgoingDeduplicationFilter
 // is resolvable when the bus pipeline wires it in below.
@@ -45,7 +45,7 @@ services.AddExampleBus(settings, queueName, configureBuilder: builder =>
 await using var provider = services.BuildServiceProvider();
 var bus = provider.GetRequiredService<IBus>();
 
-var orderId = Guid.NewGuid().ToString("N").Substring(0, 8);
+var orderId = Guid.NewGuid().ToString("N")[..8];
 var message = new OrderPlaced(Guid.NewGuid())
 {
     OrderId = orderId,

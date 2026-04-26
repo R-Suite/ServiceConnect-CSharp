@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using ServiceConnect.Examples.Filters.Sender;
 using ServiceConnect.Examples.Filters.Contracts;
+using ServiceConnect.Examples.Filters.Sender;
 using ServiceConnect.Examples.Support.Bootstrap;
 using ServiceConnect.Examples.Support.Configuration;
 using ServiceConnect.Interfaces;
@@ -17,7 +17,7 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     CancellationToken.None);
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+services.AddSingleton<IList<HandlerReference>>([]);
 services.AddSingleton<TraceHeaderFilter>();
 services.AddExampleBus(settings, "filters-sender", configureBuilder: builder =>
 {
