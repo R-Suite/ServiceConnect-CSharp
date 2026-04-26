@@ -87,8 +87,9 @@ public static class Retry
             {
                 return await action().ConfigureAwait(false);
             }
-            catch (OperationCanceledException ex) when (ex.CancellationToken == cancellationToken || cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
+                // OCE is contractually non-retryable regardless of which token cancelled it.
                 throw;
             }
             catch (Exception ex)
