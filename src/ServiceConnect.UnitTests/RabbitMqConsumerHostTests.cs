@@ -1011,10 +1011,10 @@ public class RabbitMqConsumerHostTests
         // Retrieve the private _consumer field via reflection.
         var consumerField = typeof(RabbitMqConsumerHost)
             .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var consumer = consumerField?.GetValue(host) as RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
+        var consumer = consumerField?.GetValue(host) as global::RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
         if (consumer == null) throw new InvalidOperationException("_consumer field not found or host not started.");
 
-        var props = new RabbitMQ.Client.BasicProperties();
+        var props = new global::RabbitMQ.Client.BasicProperties();
         if (headers != null)
             foreach (var kvp in headers)
                 (props.Headers ??= new Dictionary<string, object?>())[kvp.Key] = kvp.Value;
@@ -1421,11 +1421,11 @@ public class RabbitMqConsumerHostTests
         // Retrieve the private _consumer via reflection and fire HandleChannelShutdownAsync.
         var consumerField = typeof(RabbitMqConsumerHost)
             .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var consumer = consumerField?.GetValue(host) as RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
+        var consumer = consumerField?.GetValue(host) as global::RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
         Assert.NotNull(consumer);
 
-        var shutdownArgs = new RabbitMQ.Client.Events.ShutdownEventArgs(
-            RabbitMQ.Client.ShutdownInitiator.Peer, 320, "Queue deleted by broker");
+        var shutdownArgs = new global::RabbitMQ.Client.Events.ShutdownEventArgs(
+            global::RabbitMQ.Client.ShutdownInitiator.Peer, 320, "Queue deleted by broker");
         await consumer.HandleChannelShutdownAsync(consumer, shutdownArgs);
 
         // The handler must have logged a Warning containing "shutdown".
@@ -1463,7 +1463,7 @@ public class RabbitMqConsumerHostTests
 
         var consumerField = typeof(RabbitMqConsumerHost)
             .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var consumer = consumerField?.GetValue(host) as RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
+        var consumer = consumerField?.GetValue(host) as global::RabbitMQ.Client.Events.AsyncEventingBasicConsumer;
         Assert.NotNull(consumer);
 
         // HandleBasicCancelAsync triggers UnregisteredAsync (broker-initiated cancel).
@@ -1503,8 +1503,8 @@ public class RabbitMqConsumerHostTests
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         // Raise the ChannelShutdownAsync event on the consumer channel mock.
-        var shutdownArgs = new RabbitMQ.Client.Events.ShutdownEventArgs(
-            RabbitMQ.Client.ShutdownInitiator.Peer, 320, "Channel closed by broker");
+        var shutdownArgs = new global::RabbitMQ.Client.Events.ShutdownEventArgs(
+            global::RabbitMQ.Client.ShutdownInitiator.Peer, 320, "Channel closed by broker");
         consumerChannel.Raise(c => c.ChannelShutdownAsync += null, consumerChannel.Object, shutdownArgs);
 
         await shutdownObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));

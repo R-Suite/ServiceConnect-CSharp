@@ -133,7 +133,7 @@ public class RabbitMqTopologyProvisionerTests
             "error.queue", true, false, false, args, false, false, It.IsAny<CancellationToken>()),
             Times.Once);
         channel.Verify(c => c.QueueBindAsync(
-            "error.queue", "error.queue", string.Empty, args, false, It.IsAny<CancellationToken>()),
+            "error.queue", "error.queue", string.Empty, null, false, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -188,7 +188,7 @@ public class RabbitMqTopologyProvisionerTests
             "orders" + RabbitMqQueueNaming.RetryDeadLetterExchangeSuffix, ExchangeType.Direct, true, false, null, false, false, It.IsAny<CancellationToken>()),
             Times.Once);
         channel.Verify(c => c.QueueBindAsync(
-            "orders", "orders" + RabbitMqQueueNaming.RetryDeadLetterExchangeSuffix, "orders" + RabbitMqQueueNaming.RetryQueueSuffix, args, false, It.IsAny<CancellationToken>()),
+            "orders", "orders" + RabbitMqQueueNaming.RetryDeadLetterExchangeSuffix, "orders" + RabbitMqQueueNaming.RetryQueueSuffix, null, false, It.IsAny<CancellationToken>()),
             Times.Once);
         channel.Verify(c => c.QueueDeclareAsync(
             "orders" + RabbitMqQueueNaming.RetryQueueSuffix,

@@ -122,7 +122,7 @@ public sealed class RabbitMqTopologyProvisioner
         {
             try
             {
-                await channel.QueueBindAsync(name, name, string.Empty, arguments, cancellationToken: cancellationToken);
+                await channel.QueueBindAsync(name, name, string.Empty, null, cancellationToken: cancellationToken);
             }
             catch (OperationInterruptedException ex)
             {
@@ -161,7 +161,7 @@ public sealed class RabbitMqTopologyProvisioner
 
         try
         {
-            await channel.QueueBindAsync(queueName, retryDeadLetterExchangeName, retryQueueName, retryQueueArguments, cancellationToken: cancellationToken);
+            await channel.QueueBindAsync(queueName, retryDeadLetterExchangeName, retryQueueName, null, cancellationToken: cancellationToken);
         }
         catch (OperationInterruptedException ex)
         {
