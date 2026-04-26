@@ -16,11 +16,12 @@ public class MongoGuidSerializationTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task InsertAndFilterByGuid_UsesStandardBinarySubtype()
     {
-        // Regression guard for MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered /
-        // ModuleInit.Initialize. Under V2 legacy mode the stored Guid uses CSharpLegacy
-        // (subtype 3) while filter literals built via `x => x.Id == theGuid` serialize as
-        // Standard (subtype 4), so the filter silently matches zero documents. After V3
-        // setup, both sides use subtype 4 and the round-trip works.
+        // MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered / ModuleInit.Initialize
+        // must register V3 serializers so stored Guids and filter literals use the same
+        // binary subtype. Under V2 legacy mode the stored Guid uses CSharpLegacy (subtype 3)
+        // while filter literals built via `x => x.Id == theGuid` serialize as Standard
+        // (subtype 4), so the filter silently matches zero documents. With V3 both sides
+        // use subtype 4 and the round-trip works.
 
         var dbName = _fixture.GetUniqueDatabaseName("guidserde");
         var options = new MongoDbPersistenceOptions

@@ -351,10 +351,10 @@ public class StreamProcessorTests
             m => m.FullName == "System.Runtime.CompilerServices.IsExternalInit");
     }
 
-    // After the duplicate-packet idempotent-ack fix, multiple deliveries of the same final
-    // packet all observe IsComplete() == true. The dispatch path must gate on
-    // TryRemove returning true; otherwise every duplicate triggers another handler
-    // invocation. Use a Barrier to converge N threads at the dispatch boundary.
+    // The dispatch path is idempotent-ack: multiple concurrent deliveries of the same final
+    // packet all observe IsComplete() == true, but only the thread whose TryRemove returns
+    // true is allowed to invoke the handler. Use a Barrier to converge N threads at the
+    // dispatch boundary so the race is forced rather than rare.
     [Fact]
     public async Task ProcessAsync_ConcurrentFinalPacketDeliveries_DispatchesHandlerOnce()
     {

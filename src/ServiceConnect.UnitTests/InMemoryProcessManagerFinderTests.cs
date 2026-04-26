@@ -586,8 +586,9 @@ public class InMemoryProcessManagerFinderTests
         Assert.Equal("v2", ((TestData)found.Data).Name);
     }
 
-    // M18: Keys() snapshot + concurrent external IKeyValueStore.Remove(key) between
-    // snapshot and per-key Get(key) returns null, then value.GetType() on null → NRE.
+    // Keys() snapshot + concurrent external IKeyValueStore.Remove(key) between
+    // snapshot and per-key Get(key) can return null; value.GetType() on null would NRE.
+    // The scan path must tolerate the race rather than crash.
     [Fact]
     public async Task FindDataAsync_ConcurrentKeyValueStoreRemoval_DoesNotNre()
     {
@@ -648,9 +649,9 @@ public class InMemoryProcessManagerFinderTests
         Assert.Empty(exceptions);
     }
 
-    // M18 completeness: UpdateDataAsync and DeleteDataAsync have the same Contains→Get
-    // race window. A mock provider whose Contains returns true but Get returns null
-    // deterministically exercises the race without any timing dependency.
+    // UpdateDataAsync and DeleteDataAsync have the same Contains→Get race window. A mock
+    // provider whose Contains returns true but Get returns null deterministically exercises
+    // the race without any timing dependency.
 
     [Fact]
     public async Task UpdateDataAsync_WhenProviderReturnsNullFromGet_ThrowsConcurrencyException()

@@ -359,9 +359,9 @@ public class MessageDispatcherTests
     [Fact]
     public async Task Dispatch_ResponseMessage_WithUnknownReplyId_ReturnsSuccess()
     {
-        // [-] disconfirmed by M5 fix: untracked replies now return Success=true (regression guard).
-        // Old behaviour was Success=false; the fix silently acks stale/duplicate replies to
-        // avoid spurious retry/DLQ churn. After-consuming filters must still run.
+        // Untracked replies return Success=true so the dispatcher silently acks stale or
+        // duplicate replies and avoids spurious retry/DLQ churn. After-consuming filters
+        // must still run on the message.
         var replyId = Guid.NewGuid().ToString();
         var headers = MakeHeaders(responseMessageId: replyId);
         Assert.IsType<TestDispatcherReplyManager>(_replyManager).ShouldHandleReplies = false;
@@ -402,8 +402,8 @@ public class MessageDispatcherTests
     [Fact]
     public async Task Dispatch_UntrackedReply_ReturnsSuccess_NotError()
     {
-        // M5: a reply that arrives after the caller has timed out (or is a duplicate)
-        // should be silently discarded — returning Success=false would drive nack/requeue
+        // A reply that arrives after the caller has timed out (or is a duplicate)
+        // must be silently discarded — returning Success=false would drive nack/requeue
         // and cause spurious retry/DLQ churn. The Debug log must carry the correlation id
         // so operators can diagnose which request timed out.
         var replyId = Guid.NewGuid().ToString();

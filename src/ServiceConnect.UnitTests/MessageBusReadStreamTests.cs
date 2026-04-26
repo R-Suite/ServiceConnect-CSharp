@@ -148,12 +148,10 @@ public class MessageBusReadStreamTests
     [Fact]
     public void IsComplete_ReturnsFalse_WhenPacketSetIsNonContiguous()
     {
-        // Write packets 0, 1, and 999 with LastPacketNumber=2. _receivedCount == 3 and
-        // LastPacketNumber+1 == 3 — the current IsComplete returns true and Read/ReadSequence
-        // silently returns truncated bytes. Fix: Write must reject packetNumber > LastPacketNumber
-        // (when LastPacketNumber is already set) so this state is unreachable.
-        // After the fix, Write(data, 999) throws ArgumentOutOfRangeException, so IsComplete
-        // cannot return true for a non-contiguous set.
+        // Write must reject packetNumber > LastPacketNumber once LastPacketNumber is set,
+        // otherwise a sparse set like {0, 1, 999} with LastPacketNumber=2 would have
+        // _receivedCount == LastPacketNumber+1 and IsComplete would return true while
+        // Read/ReadSequence silently returned truncated bytes.
 
         var stream = new MessageBusReadStream("seq");
         stream.Write([1], 0);

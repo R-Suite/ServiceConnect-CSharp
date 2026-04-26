@@ -133,9 +133,9 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task EnsureIndexes_CancellationTokenCanceled_ThrowsOperationCanceled()
     {
-        // L9: Index creation must observe the CancellationToken so a shutting-down host can
+        // Index creation must observe the CancellationToken so a shutting-down host can
         // interrupt a stalled CreateManyAsync rather than blocking indefinitely. Pre-cancel
-        // the token and assert the first write fails-fast with OperationCanceledException.
+        // the token and assert the first write fails fast with OperationCanceledException.
         var persistor = CreatePersistor();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -152,7 +152,7 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task EnsureIndexes_ConcurrentProcessCreatedSameIndex_DoesNotThrow()
     {
-        // L8: Benign MongoCommandException 85/86 from concurrent index creation must not
+        // Benign MongoCommandException 85/86 from concurrent index creation must not
         // propagate as a persistence failure. Pre-create the compound index with a different
         // Name so the persistor's CreateManyAsync hits Code 85 (IndexOptionsConflict).
         var dbName = _fixture.GetUniqueDatabaseName();
@@ -180,7 +180,7 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
             NullLogger<MongoDbAggregatorPersistor>.Instance, registry);
 
         // First write triggers EnsureIndexesAsync; must NOT throw despite the conflict.
-        var ex = await Record.ExceptionAsync(() => persistor.InsertDataAsync(item, "batch-l8"));
+        var ex = await Record.ExceptionAsync(() => persistor.InsertDataAsync(item, "batch-conflict"));
         Assert.Null(ex);
     }
 
@@ -188,9 +188,10 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task RemoveDataAsync_RowNotFound_ThrowsConcurrencyException()
     {
-        // L10: Silent no-op on a mismatched (name, correlationId) was masking data-integrity
-        // bugs. Mirror the M17 fix on MongoDbProcessManagerFinder and surface ConcurrencyException
-        // so callers can distinguish a concurrent-removal race from a genuine persistence failure.
+        // A delete against a mismatched (name, correlationId) must surface ConcurrencyException
+        // rather than silently no-op'ing. The MongoDb aggregator persistor mirrors the same rule
+        // applied across the other persistors so callers can distinguish a concurrent-removal
+        // race from a genuine persistence failure.
         var persistor = CreatePersistor();
 
         await Assert.ThrowsAsync<ConcurrencyException>(
@@ -203,7 +204,7 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
     {
         // Companion to RowNotFound: the name bucket exists (so EnsureIndexes/collection isn't empty)
         // but no row carries the supplied correlationId. Silent no-op here would mask the same class
-        // of data-integrity bug the RowNotFound test guards against.
+        // of data-integrity error the RowNotFound test guards against.
         var registry = new MessageTypeRegistry();
         var existing = new { CorrelationId = Guid.NewGuid(), Value = "existing" };
         registry.Register(existing.GetType());

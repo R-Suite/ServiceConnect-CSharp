@@ -61,8 +61,7 @@ public class MongoClientFactoryCertCacheTests
             await Task.WhenAll(tasks);
 
             // Assert: Lazy<T>(ExecutionAndPublication) guarantees the loader fires exactly
-            // once even though many threads enter GetOrAdd concurrently. Pre-fix this would
-            // typically be > 1.
+            // once even though many threads enter GetOrAdd concurrently.
             Assert.Equal(1, loadCount);
         }
         finally

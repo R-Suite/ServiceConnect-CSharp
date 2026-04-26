@@ -56,7 +56,9 @@ public class InMemoryProcessManagerFinderCloneCountTests
         Assert.NotNull(found);
         Assert.Equal(targetId, ((CountingProcessManagerData)found!.Data).CorrelationId);
 
-        // Post-fix: DeepClone.Clone runs exactly once on the matched item; Newtonsoft visits the Name getter once during serialization. Pre-fix: ~75-100 (one clone per candidate). The tight bound makes a partial regression visible.
+        // DeepClone.Clone runs exactly once on the matched item; Newtonsoft visits the Name getter
+        // once during serialization. The tight bound (≤ 2) makes a partial regression to
+        // clone-per-candidate visible — that path would push the count into the dozens.
         Assert.True(
             CountingProcessManagerData.GetterCount <= 2,
             $"Expected at most 2 getter reads (clone of matched item only), got {CountingProcessManagerData.GetterCount}");

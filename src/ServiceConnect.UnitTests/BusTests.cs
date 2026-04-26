@@ -873,8 +873,8 @@ public class BusTests
     [Fact]
     public async Task PublishAsync_FilterPath_OutgoingFilterSeesNonEmptyMessageId()
     {
-        // Regression guard for the original bug: outgoing filters must be able to
-        // read envelope.Headers["MessageId"] without a KeyNotFoundException.
+        // Outgoing filters must be able to read envelope.Headers["MessageId"]
+        // without a KeyNotFoundException.
         Envelope? capturedEnvelope = null;
 
         _mockFilterPipeline
@@ -956,12 +956,12 @@ public class BusTests
         Assert.NotEqual(hostile, seenMessageId);
     }
 
-    // --- M1: Reserved header spoof-proofing ---
+    // --- Reserved header spoof-proofing ---
 
     [Fact]
     public async Task SendAsync_CallerCannotOverrideSystemHeaders()
     {
-        // M1: MessageType/CorrelationId in options.Headers must not overwrite the system values
+        // MessageType/CorrelationId in options.Headers must not overwrite the system values
         var spoofedMessageId = Guid.NewGuid().ToString();
         var options = new SendOptions
         {
@@ -993,7 +993,7 @@ public class BusTests
     [Fact]
     public async Task SendAsync_CallerSuppliesReservedHeader_LogsWarningForDroppedKey()
     {
-        // M1 observability: warn operators when a caller-supplied reserved header is dropped.
+        // Observability: warn operators when a caller-supplied reserved header is dropped.
         var options = new SendOptions
         {
             Headers = new Dictionary<string, string>
@@ -1021,15 +1021,14 @@ public class BusTests
             Times.Once);
     }
 
-    // --- M3: Semaphore dispose race ---
+    // --- Semaphore dispose race ---
 
-    // Regression guard for the ThrowIfDisposed()-before-semaphore ordering;
-    // the concurrent variant of this race was audited and disconfirmed.
+    // Pins the ThrowIfDisposed()-before-semaphore ordering on the lifecycle entry points.
     [Fact]
     public async Task StartConsumingAsync_AfterDispose_ThrowsObjectDisposedException()
     {
-        // M3: after DisposeAsync, all lifecycle calls must throw ObjectDisposedException
-        // (not NullReferenceException or succeed silently)
+        // After DisposeAsync, all lifecycle calls must throw ObjectDisposedException
+        // (not NullReferenceException or succeed silently).
         var mockConsumer = new Mock<IConsumer>();
         var bus = CreateBusWithConsumer(mockConsumer.Object);
         await bus.DisposeAsync();
@@ -1038,12 +1037,12 @@ public class BusTests
             () => bus.StartConsumingAsync(CancellationToken.None));
     }
 
-    // --- M4: OperationCanceledException in StopConsumingCoreAsync must still dispose consumer ---
+    // --- OperationCanceledException in StopConsumingCoreAsync must still dispose consumer ---
 
     [Fact]
     public async Task StopConsumingAsync_WhenCancellationRequested_StillDisposesConsumer()
     {
-        // M4: cancellation during StopConsuming must not skip consumer teardown
+        // Cancellation during StopConsuming must not skip consumer teardown.
         var mockConsumer = new Mock<IConsumer>();
         mockConsumer
             .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
@@ -1064,17 +1063,17 @@ public class BusTests
         // Consumer dispose must have been called despite the cancellation
         mockConsumer.Verify(x => x.DisposeAsync(), Times.Once);
 
-        // Explicit dispose to clean up (no consumer left to call DisposeAsync on since
-        // the fix set _consuming=false during the cancelled stop)
+        // Explicit dispose to clean up; the cancelled stop already cleared _consuming
+        // so there is no consumer left to receive a second DisposeAsync.
         await bus.DisposeAsync();
     }
 
-    // --- M2: StopConsuming before start must not poison _stopped ---
+    // --- StopConsuming before start must not poison _stopped ---
 
     [Fact]
     public async Task StopConsumingAsync_BeforeStart_AllowsSubsequentStart()
     {
-        // M2: a defensive stop on an unstarted bus must leave it restartable
+        // A defensive stop on an unstarted bus must leave it restartable.
         var mockConsumer = new Mock<IConsumer>();
         mockConsumer
             .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))

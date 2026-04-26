@@ -44,12 +44,11 @@ public class RequestReplyManagerRegistrationTests
     }
 
     // Case B: user pre-registers ONLY IRequestReplyManager without the secondary interface.
-    // Pre-fix audit claim (confirmed): outgoing requests use the user's impl, but
-    // IReplyStatusRequestReplyManager resolved to the stock RequestReplyManager — split-brain,
-    // replies silently dropped.
-    // Post-fix desired: AddServiceConnect throws InvalidOperationException at configuration
-    // time (not at resolve time) with a clear message directing the user to implement both
-    // interfaces or remove the custom registration.
+    // Without a guard the container would resolve outgoing requests to the user's impl while
+    // IReplyStatusRequestReplyManager fell back to the stock RequestReplyManager — split-brain,
+    // replies silently dropped. AddServiceConnect must throw InvalidOperationException at
+    // configuration time (not at resolve time) with a clear message directing the user to
+    // implement both interfaces or remove the custom registration.
     [Fact]
     public void AddServiceConnect_FailsFast_WhenUserPartiallyReplacesImpl()
     {
@@ -63,11 +62,10 @@ public class RequestReplyManagerRegistrationTests
     }
 
     // Case C (reverse split-brain): user pre-registers ONLY IReplyStatusRequestReplyManager
-    // without also pre-registering IRequestReplyManager.  The stock RequestReplyManager would
+    // without also pre-registering IRequestReplyManager. The stock RequestReplyManager would
     // be used for outgoing requests while the custom impl handles incoming reply correlation —
-    // the two instances are unrelated and replies are silently dropped.
-    // Post-fix desired: AddServiceConnect throws InvalidOperationException at configuration
-    // time with a symmetric diagnostic message.
+    // the two instances are unrelated and replies are silently dropped. AddServiceConnect must
+    // throw InvalidOperationException at configuration time with a symmetric diagnostic message.
     [Fact]
     public void AddServiceConnect_FailsFast_WhenUserRegistersReplyStatusWithoutRequestReplyManager()
     {

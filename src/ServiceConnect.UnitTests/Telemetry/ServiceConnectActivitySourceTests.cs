@@ -82,9 +82,9 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal("OrderPlaced publish", activity!.DisplayName);
         Assert.Equal("OrderPlaced", activity.GetTagItem(MessagingDestination));
         Assert.Equal("high-priority", activity.GetTagItem(MessagingDestinationRoutingKey));
-        // Regression guard: the bug being fixed stamped the routing key onto the destination tag.
-        // Asserting the exchange value above implicitly catches it, but the contrived case where
-        // exchange == routing-key would mask a regression. Make the negative assertion explicit.
+        // Explicit negative assertion: the routing key must not also appear on the
+        // destination-name tag. The exchange assertion above usually catches a regression,
+        // but a contrived case where exchange == routing-key would mask it.
         Assert.NotEqual("high-priority", activity.GetTagItem(MessagingDestination));
     }
 
@@ -399,9 +399,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Send_WithNullMessage_StillInjectsTraceparentHeader()
     {
-        // M19: Send must inject traceparent even when Message is null so that
+        // Send must inject traceparent even when Message is null so that
         // payload-less sends still propagate W3C context across the broker.
-        // The previously-asserted behaviour (no injection on null Message) was the bug.
         var args = new SendEventArgs
         {
             EndPoint = "svc.queue",
@@ -418,8 +417,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Publish_WhenPublishTelemetryDisabled_StillInjectsTraceparentFromAmbient()
     {
-        // M20: An outer (e.g. ASP.NET) ambient activity must propagate across the
-        // broker even when ServiceConnect's own Publish spans are disabled.
+        // An outer (e.g. ASP.NET) ambient activity must propagate across the broker
+        // even when ServiceConnect's own Publish spans are disabled.
         ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
 
         // The existing listener (set up in the constructor) listens to ServiceConnect
@@ -444,7 +443,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Send_WhenSendTelemetryDisabled_StillInjectsTraceparentFromAmbient()
     {
-        // M20 (Send variant): symmetric to the Publish variant above.
+        // Send variant: symmetric to the Publish variant above.
         ServiceConnectActivitySource.Options.EnableSendTelemetry = false;
 
         using var ambientListener = new ActivityListener
@@ -464,13 +463,13 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.True(args.Headers.ContainsKey("traceparent")); // ambient context must be injected
     }
 
-    // ---------------- SetError (M22) ----------------
+    // ---------------- SetError ----------------
 
     [Fact]
     public void SetError_SetsActivityStatusToError_AndRecordsExceptionDetails()
     {
-        // M22: SetError must mark the activity as Error and attach exception metadata
-        // so OTel backends surface it in error-rate dashboards.
+        // SetError must mark the activity as Error and attach exception metadata so
+        // OTel backends surface it in error-rate dashboards.
         // AddException records details as an ActivityEvent named "exception", not as
         // activity-level tags, which is why we inspect Events rather than GetTagItem.
         var args = new PublishEventArgs { Exchange = "orders", Message = new Message(Guid.NewGuid()) };
@@ -547,8 +546,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Send_EndPointsPluralOnly_TagsJoinedDestination()
     {
-        // L14: Multi-destination sends lost their destination in telemetry because only
-        // the singular EndPoint was ever read. Verify EndPoints (plural) surfaces as a
+        // Multi-destination sends must surface every endpoint in telemetry; reading only
+        // the singular EndPoint would lose them. EndPoints (plural) renders as a
         // comma-joined messaging.destination tag and DisplayName.
         var args = new SendEventArgs
         {

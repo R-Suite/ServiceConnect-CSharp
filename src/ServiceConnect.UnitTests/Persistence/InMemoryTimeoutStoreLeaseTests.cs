@@ -11,8 +11,8 @@ public class InMemoryTimeoutStoreLeaseTests
     [Fact]
     public async Task RemoveDispatchedTimeoutAsync_LeaseAware_ThrowsWhenLeaseIsStale()
     {
-        // Mirror of the Mongo regression guard: a caller with a stale lockOwner must see
-        // a ConcurrencyException instead of a silent no-op. Parity across the two stores
+        // Mirror of the Mongo lease test: a caller with a stale lockOwner must see a
+        // ConcurrencyException instead of a silent no-op. Parity across the two stores
         // keeps test doubles against the InMemory implementation honest.
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);

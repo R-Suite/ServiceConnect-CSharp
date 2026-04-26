@@ -251,14 +251,15 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // M10 — byte[] wire encoding from non-.NET producers
+    // --- byte[] wire encoding from non-.NET producers ---
 
     [Fact]
     public async Task HandleFailureAsync_WhenRetryCountHeaderIsByteArray_DecodesAndRetries()
     {
         // Non-.NET producers stamp the RetryCount header as an AMQP string → byte[] on the wire.
-        // raw.ToString() returns "System.Byte[]", int.TryParse fails, candidate=-1 → routes to error.
-        // Fix: HeaderDecoder.Decode(raw) must be used instead.
+        // The handler must run the value through HeaderDecoder.Decode so the byte[] decodes to
+        // its UTF-8 number; relying on raw.ToString() would yield "System.Byte[]", int.TryParse
+        // would fail, and candidate=-1 would route the message to the error exchange.
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -289,7 +290,7 @@ public class MessageRetryHandlerTests
     [Fact]
     public async Task HandleFailureAsync_WhenRetryCountHeaderIsInt_ReturnsInt()
     {
-        // Regression guard: native C# producers stamp int — must still work after the fix.
+        // Native C# producers stamp the RetryCount header as int — must still decode cleanly.
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),

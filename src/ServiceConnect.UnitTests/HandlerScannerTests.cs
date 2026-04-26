@@ -82,8 +82,8 @@ public class HandlerScannerTests
     [Fact]
     public void ScanForHandlers_AssemblyThrowsReflectionTypeLoadException_LogsWarning()
     {
-        // L3: Silent swallow hides broken-assembly scan failures until a message arrives with
-        // no handler. Add an optional logger overload; assert the warning is emitted.
+        // Broken-assembly scan failures must surface as a Warning at scan time. Silently
+        // swallowing them would defer the symptom until a message arrived with no handler.
         var logger = new Mock<ILogger>();
         var loaderException = new TypeLoadException("Could not resolve 'SomeMissingDependency'");
         var fakeAssembly = new Mock<Assembly>();

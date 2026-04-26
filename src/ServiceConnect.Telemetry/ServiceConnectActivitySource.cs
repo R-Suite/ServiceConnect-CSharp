@@ -45,7 +45,7 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
     {
-        // M20: Inject ambient trace context unconditionally so outer (ASP.NET / OTel) spans
+        // Inject ambient trace context unconditionally so outer (ASP.NET / OTel) spans
         // propagate across the broker even when ServiceConnect's own spans are disabled.
         InjectTraceContext(Activity.Current, eventArgs.Headers);
 
@@ -161,7 +161,7 @@ public static class ServiceConnectActivitySource
     /// </summary>
     public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
     {
-        // M19/M20: Inject ambient trace context unconditionally — before any early-return — so
+        // Inject ambient trace context unconditionally — before any early-return — so
         // payload-less sends and disabled-telemetry paths still propagate W3C context across
         // the broker. Downstream inject (below) overwrites with the started activity's span
         // when ServiceConnect's own span is available; otherwise the ambient span propagates.
@@ -185,9 +185,9 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
-        // L14: compute the effective destination from EndPoint (singular) first, then fall back
+        // Compute the effective destination from EndPoint (singular) first, then fall back
         // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
-        // multi-destination fan-outs that previously appeared as anonymous sends in traces.
+        // multi-destination fan-outs that would otherwise appear as anonymous sends in traces.
         // Whitespace entries are filtered before joining so a stray ""/null slot cannot leak into
         // traces as "queue-a,,queue-b"; if filtering empties the list, fall through to anonymous.
         string? destination;
@@ -217,7 +217,7 @@ public static class ServiceConnectActivitySource
             activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
         }
 
-        // M19: Inject the started activity's trace context before the null-message early-return
+        // Inject the started activity's trace context before the null-message early-return
         // so payload-less sends still carry a traceparent header that downstream consumers can link.
         InjectTraceContext(activity, eventArgs.Headers);
 

@@ -18,11 +18,11 @@ public class MongoDbTimeoutStoreTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task RemoveDispatchedTimeoutAsync_LeaseAware_ThrowsWhenLeaseIsStale()
     {
-        // Regression guard: a caller that fell asleep and lost its lease (reaper reassigned
-        // to another worker) must observe the invalidation when it tries to Remove with its
-        // stale sessionId. Without the fix, DeleteOneAsync with a non-matching filter returns
-        // DeletedCount=0 silently and the caller assumes success — leaving a pending timeout
-        // behind that another worker now owns.
+        // A caller that fell asleep and lost its lease (reaper reassigned to another worker)
+        // must observe the invalidation when it tries to Remove with its stale sessionId.
+        // A naive DeleteOneAsync would return DeletedCount=0 silently and the caller would
+        // assume success, leaving a pending timeout behind that another worker now owns —
+        // the lease-aware path raises ConcurrencyException instead.
         var store = BuildStore("leasestale_rm", out var client, out var dbName, out _);
 
         var timeoutId = Guid.NewGuid();
@@ -155,11 +155,10 @@ public class MongoDbTimeoutStoreTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task RemoveDispatchedTimeoutAsync_NullLockOwner_RemovesLeasedRow()
     {
-        // lockOwner == null means unconditional remove. The pre-fix Mongo store filtered
-        // on LockedBy == Guid.Empty, silently no-op'ing on leased rows. The current
-        // contract requires the id-only path to genuinely delete the row even when it
-        // is leased — callers reach for the lockOwner overload only when they want
-        // lease-checked semantics.
+        // lockOwner == null means unconditional remove: the id-only path must genuinely delete
+        // the row even when it is leased. Callers reach for the lockOwner overload only when
+        // they want lease-checked semantics; filtering on LockedBy == Guid.Empty here would
+        // silently no-op on leased rows.
         var store = BuildStore("null_owner_rm", out var client, out var dbName, out _);
 
         var timeoutId = Guid.NewGuid();
@@ -169,8 +168,8 @@ public class MongoDbTimeoutStoreTests(PersistenceFixture fixture)
             Time = new DateTimeOffset(2026, 4, 22, 11, 55, 0, TimeSpan.Zero),
         });
 
-        // Claim the row so it has a non-Empty LockedBy — the pre-fix id-only path
-        // filtered on LockedBy == Guid.Empty and would silently no-op here.
+        // Claim the row so it has a non-Empty LockedBy. A LockedBy == Guid.Empty filter
+        // would silently no-op here; the id-only path must reach this leased row.
         var batch = await store.GetTimeoutsBatchAsync();
         Assert.Single(batch.DueTimeouts);
 

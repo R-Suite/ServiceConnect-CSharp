@@ -17,9 +17,9 @@ public class DeepCloneTests
     [Fact]
     public void Clone_CollectionElementIsSubclass_PreservesSubclassType()
     {
-        // L13: TypeNameHandling.None collapsed List<Animal>'s Dog element to Animal on
-        // deserialize, losing Dog.Breed. Fix switches to TypeNameHandling.Auto so runtime
-        // types inside collections survive the round-trip.
+        // TypeNameHandling.Auto must be used so runtime element types inside collections
+        // survive the round-trip — TypeNameHandling.None would collapse a Dog inside a
+        // List<Animal> to Animal on deserialize and lose Dog.Breed.
         var owner = new Owner
         {
             Id = Guid.NewGuid(),

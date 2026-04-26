@@ -83,7 +83,7 @@ public class MessageAuditPublisherTests
     {
         // AuditRoutingKey is ignored at publish time: the audit direct exchange is bound
         // with an empty routing key, so a non-empty value would cause a silent drop.
-        // The fix forces routingKey="" regardless of the configured value.
+        // The publisher forces routingKey="" regardless of the configured value.
         var channel = new Mock<IChannel>();
         channel.Setup(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),

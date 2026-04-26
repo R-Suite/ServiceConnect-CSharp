@@ -560,10 +560,10 @@ public class ProcessManagerTimeoutServiceTests
     [Fact]
     public async Task StopAsyncAndDisposeAsync_ConcurrentlyRaced_DoesNotDoubleDisposeCts()
     {
-        // L4: Both StopAsync and DisposeAsync take responsibility for _cts.Dispose(). Without
-        // matching Interlocked.Exchange in DisposeAsync, a race can have both call Dispose on the
-        // same CTS, raising ObjectDisposedException.
-        // Note: the race window is narrow; RED phase may not fire on every run of unfixed code.
+        // Both StopAsync and DisposeAsync take responsibility for _cts.Dispose(); both must
+        // claim the CTS via Interlocked.Exchange so that a race between them does not have
+        // both call Dispose on the same instance and raise ObjectDisposedException.
+        // Note: the race window is narrow, so this trial-loop is intentionally aggressive.
         for (var trial = 0; trial < 50; trial++)
         {
             var mockConfig = new Mock<IBusConfiguration>();

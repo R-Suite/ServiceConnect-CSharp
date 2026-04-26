@@ -11,8 +11,8 @@ namespace ServiceConnect.EndToEndTests.Consumers;
 
 /// <summary>
 /// End-to-end guard that a broker-initiated queue deletion (basic.cancel) is observed
-/// and logged by the consumer rather than causing a silent stall.
-/// Corresponds to M13: missing ShutdownAsync / ChannelShutdownAsync subscriptions.
+/// and logged by the consumer rather than causing a silent stall. Without ShutdownAsync /
+/// ChannelShutdownAsync subscriptions the consumer would never learn its queue was gone.
 /// </summary>
 [Collection(nameof(IsolatedCollection))]
 public class BrokerInitiatedCancelTests(MessagingFixture fixture)
@@ -100,10 +100,11 @@ public class BrokerInitiatedCancelTests(MessagingFixture fixture)
         }
         catch (OperationCanceledException)
         {
-            // If we hit this it means the fix is not in place — ShutdownAsync was never subscribed.
+            // Reaching this branch means ShutdownAsync / ChannelShutdownAsync was never subscribed —
+            // the consumer is deaf to broker-initiated cancellation.
             throw new TimeoutException(
                 "Consumer did not log a shutdown warning within 10 s after broker deleted the queue. " +
-                "This confirms M13: ShutdownAsync / ChannelShutdownAsync events are not subscribed.");
+                "ShutdownAsync / ChannelShutdownAsync events are not subscribed.");
         }
 
         Assert.Contains("shutdown", shutdownMessage, StringComparison.OrdinalIgnoreCase);

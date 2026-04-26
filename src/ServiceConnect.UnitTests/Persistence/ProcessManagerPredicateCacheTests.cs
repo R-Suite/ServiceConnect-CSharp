@@ -8,8 +8,8 @@ public class ProcessManagerPredicateCacheTests
     [Fact]
     public void PredicateCacheKey_NullPropertiesHierarchy_ThrowsArgumentNullException()
     {
-        // L12: Null propertiesHierarchy stored as-is silently; Equals/GetHashCode then NRE'd
-        // on the hot path. Guard at construction for a clear signal.
+        // Null propertiesHierarchy must be rejected at construction. Storing null silently
+        // would NRE later on the hot path inside Equals/GetHashCode.
         var ex = Assert.Throws<ArgumentNullException>(() =>
             new ProcessManagerPredicateCache.PredicateCacheKey(typeof(int), null!, typeof(string)));
         Assert.Equal("propertiesHierarchy", ex.ParamName);

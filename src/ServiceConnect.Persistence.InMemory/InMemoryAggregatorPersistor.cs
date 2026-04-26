@@ -152,7 +152,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             }
         }
         // Mirror MongoDbAggregatorPersistor's no-op-delete contract so callers across persistors
-        // can distinguish a concurrent-removal race from a mismatched-key bug. The InMemoryProcessManagerFinder
+        // can distinguish a concurrent-removal race from a mismatched key. InMemoryProcessManagerFinder
         // already raises ConcurrencyException on DeleteDataAsync no-ops; keeping aggregator behaviour
         // aligned prevents a silent divergence between persistor families.
         if (!removed)

@@ -13,10 +13,10 @@ public class MessageTypeRegistryTests
     [Fact]
     public async Task TryResolve_ConcurrentWithRegister_EventuallyResolvesNewlyRegisteredType()
     {
-        // L1: TryResolve + Register race could cache a stale frozen snapshot and permanently
-        // hide the newly-registered type until the next Register invalidates again. Stress
-        // the race across many trials; with the bug present, at least one trial wedges and
-        // times out because the stale cache never gets invalidated.
+        // The TryResolve + Register race must not cache a stale frozen snapshot — doing so
+        // would permanently hide the newly-registered type until the next Register
+        // invalidated the cache again. Stress the race across many trials; if the
+        // version-aware invalidation regresses, at least one trial wedges and times out.
         for (var trial = 0; trial < 50; trial++)
         {
             var registry = new MessageTypeRegistry();
@@ -79,12 +79,12 @@ public class MessageTypeRegistryTests
             }
         };
         // Trigger the snapshot-and-CAS path. _types is null so this will snapshot and CAS.
-        // The hook fires mid-CAS and registers TypeB, advancing _version.
-        // The fix must detect the version advance and invalidate the published snapshot.
+        // The hook fires mid-CAS and registers TypeB, advancing _version. TryResolve must
+        // detect the version advance and invalidate the published snapshot.
         registry.TryResolve("nonexistent", out _);
 
-        // After the race, TypeB must be resolvable. With the bug, the stale snapshot was cached
-        // without TypeB — this next call returns false.
+        // After the race, TypeB must be resolvable. If a stale snapshot were cached without
+        // TypeB the lookup would return false.
         var found = registry.TryResolve(typeof(TypeB).FullName!, out var resolved);
         Assert.True(found, "Stale snapshot was cached — race guard missing.");
         Assert.Equal(typeof(TypeB), resolved);
@@ -132,8 +132,8 @@ public class MessageTypeRegistryTests
     [Fact]
     public void TryResolve_Unknown_SetsOutParameterToNull()
     {
-        // M21: IMessageTypeRegistry.TryResolve should carry [MaybeNullWhen(false)] so that
-        // callers get correct nullable flow analysis when the type is not found.
+        // IMessageTypeRegistry.TryResolve carries [MaybeNullWhen(false)] so callers get
+        // correct nullable flow analysis when the type is not found.
         var registry = new MessageTypeRegistry();
 
         var success = registry.TryResolve("Unknown.TypeName", out Type? resolved);

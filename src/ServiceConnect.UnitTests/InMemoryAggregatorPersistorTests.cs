@@ -183,9 +183,10 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task RemoveData_WhenKeyDoesNotExist_ThrowsConcurrencyException()
     {
-        // Align InMemory with MongoDb (L10) and InMemoryProcessManagerFinder (M17): a no-op delete
-        // on a mismatched key must surface as ConcurrencyException so callers can distinguish a
-        // concurrent-removal race from a structural persistence failure.
+        // Aggregator persistors must agree on the no-op-delete contract: a delete against a
+        // mismatched key surfaces as ConcurrencyException so callers can distinguish a
+        // concurrent-removal race from a structural persistence failure. Mongo and the
+        // InMemoryProcessManagerFinder already follow this rule.
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
 
         await Assert.ThrowsAsync<ConcurrencyException>(

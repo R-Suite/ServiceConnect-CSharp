@@ -146,7 +146,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         var deliveryToken = _deliveryToken;
         _consumer = new AsyncEventingBasicConsumer(_model);
         _consumer.ReceivedAsync += async (sender, args) => await EventAsync(sender, args, deliveryToken).ConfigureAwait(false);
-        // M13: subscribe broker-initiated shutdown events so a queue deletion, channel close,
+        // Subscribe broker-initiated shutdown events so a queue deletion, channel close,
         // or connection-level event is observed and logged rather than silently stalling consumption.
         // ShutdownAsync fires on channel shutdown (both client- and server-initiated).
         // UnregisteredAsync fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
@@ -193,7 +193,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 callbackAdmitted = true;
             }
 
-            // M14: ContainsKey admits a key whose value is null; use TryGetValue+non-null instead.
+            // ContainsKey admits a key whose value is null; use TryGetValue+non-null instead.
             // A null-valued TypeName passes ContainsKey but CopyInboundHeaders skips null values,
             // so the dispatch-site indexer would throw KeyNotFoundException and burn a retry cycle
             // on a guaranteed-fail dispatch. Reject at admission instead.
@@ -442,9 +442,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                     args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
                 // Intentionally swallow: the message is already failed and we cannot retry-publish it.
                 // Acking now (processed = true, returned below) prevents the broker from redelivering it
-                // into the same failed path. Without this, the exception propagates to the outer catch in
-                // EventAsync, sets processed=false, and the finally block nacks with requeue:true →
-                // hot-loop (measured at 73,462 invocations/10s in Phase 0 Task 4).
+                // into the same failed path. Letting the exception propagate would cause the finally block
+                // to nack with requeue:true and hot-loop the broker on a poison message.
             }
         }
         else if (result.NotHandled && _deadLetterUnhandledMessages && !_errorsDisabled)
@@ -516,7 +515,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         return _shutdownPublishCts.Token;
     }
 
-    // M13: broker-initiated shutdown event handlers.
+    // Broker-initiated shutdown event handlers.
 
     private Task OnConsumerShutdownAsync(object? sender, ShutdownEventArgs args)
     {
@@ -635,7 +634,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             }
         }
 
-        // M13: unsubscribe broker-initiated shutdown handlers to prevent leaks on restart.
+        // Unsubscribe broker-initiated shutdown handlers to prevent leaks on restart.
         if (_consumer is not null)
         {
             _consumer.ShutdownAsync -= OnConsumerShutdownAsync;

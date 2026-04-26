@@ -17,20 +17,19 @@ public class PoisonMessageRedeliveryTests(MessagingFixture fixture)
     [Trait("Category", "Docker")]
     public async Task RetryPublishFailure_DoesNotCauseUnboundedRedelivery()
     {
-        // Regression guard for Critical bug — unbounded redelivery when retry/error publish throws.
-        // Passes after the Phase 1 wrapping of HandleFailureAsync/HandleTerminalFailureAsync in
-        // RabbitMqConsumerHost.ProcessMessageAsync (each call site now catches publish exceptions,
-        // logs at Error, and allows the method to return true so EventAsync acks the message).
+        // RabbitMqConsumerHost.ProcessMessageAsync must catch publish exceptions inside both
+        // HandleFailureAsync and HandleTerminalFailureAsync, log at Error, and still return true
+        // so EventAsync acks the message. Letting the exception propagate would set processed=false
+        // and the outer catch would NACK with requeue:true — a hot-loop on a poison message.
         //
         // Setup: a handler that always throws with MaxRetries=0 and an error queue pre-declared with
-        // x-overflow=reject-publish so broker nacks the terminal-failure publish under publisher
-        // confirms. Without the fix the outer catch in EventAsync left processed=false → NACK+requeue
-        // → hot-loop (73,462 invocations/10s measured in Phase 0 Task 4).
+        // x-overflow=reject-publish so the broker nacks the terminal-failure publish under publisher
+        // confirms.
         //
         // NOTE: RabbitMqConsumerHost's _publishChannel is ALWAYS created with publisher confirms
         // enabled (hardcoded in StartConsumingAsync — CreateChannelOptions(publisherConfirmationsEnabled:true)).
         // The reject-publish on the error queue will therefore surface as a thrown exception from
-        // BasicPublishAsync inside MessageRetryHandler.PublishErrorAsync, triggering the redelivery path.
+        // BasicPublishAsync inside MessageRetryHandler.PublishErrorAsync, exercising the redelivery path.
         //
         // We pass matching UtilityQueueArguments to the bus so its QueueDeclareAsync call sees
         // equivalent arguments and doesn't fail with PRECONDITION_FAILED — inequivalent arg.
@@ -122,11 +121,11 @@ public class PoisonMessageRedeliveryTests(MessagingFixture fixture)
             // Observe for 10 seconds. Redelivery loop symptom: attemptCount grows rapidly.
             await Task.Delay(TimeSpan.FromSeconds(10));
 
-            // After the Phase 1 fix, HandleTerminalFailureAsync throws (broker rejects publish),
-            // the inner catch swallows it, ProcessMessageAsync returns true, and EventAsync acks
-            // the message — so the handler is called exactly once and there is no redelivery.
+            // HandleTerminalFailureAsync throws (broker rejects the publish), the inner catch
+            // swallows it, ProcessMessageAsync returns true, and EventAsync acks the message —
+            // so the handler is called exactly once and there is no redelivery.
             Assert.True(attemptCount == 1,
-                $"After the fix, expected the handler to be invoked exactly once (attemptCount == 1). " +
+                $"Expected the handler to be invoked exactly once (attemptCount == 1). " +
                 $"attemptCount={attemptCount}. Unbounded redelivery loop may have regressed, or the message was never delivered.");
         }
         finally

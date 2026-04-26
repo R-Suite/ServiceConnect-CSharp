@@ -10,10 +10,9 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Verifies the post-fix behaviour of <see cref="MessageAuditPublisher"/>:
-/// routing key is always forced to <see cref="string.Empty"/> regardless of the
-/// configured <c>AuditRoutingKey</c>, matching the empty-key binding of the audit
-/// direct exchange.
+/// <see cref="MessageAuditPublisher"/> always forces the publish routing key to
+/// <see cref="string.Empty"/> regardless of the configured <c>AuditRoutingKey</c>,
+/// matching the empty-key binding of the audit direct exchange.
 /// </summary>
 public class MessageAuditPublisherRoutingKeyTests
 {
@@ -52,7 +51,7 @@ public class MessageAuditPublisherRoutingKeyTests
 
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
 
-        // Post-fix: routingKey must be "" regardless of AuditRoutingKey configuration.
+        // routingKey must be "" regardless of AuditRoutingKey configuration.
         channel.Verify(c => c.BasicPublishAsync(
             "audit",
             string.Empty, // forced to empty to match audit exchange binding

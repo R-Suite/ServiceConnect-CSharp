@@ -229,8 +229,8 @@ public class MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
         await Assert.ThrowsAsync<ConcurrencyException>(() => finder.DeleteDataAsync(stub));
     }
 
-    // M15 + M16: concurrent InsertDataAsync callers must not admit duplicate rows, and
-    // concurrent index-creation races (codes 85/86) must not bubble up as errors.
+    // Concurrent InsertDataAsync callers must not admit duplicate rows, and concurrent
+    // index-creation races (codes 85/86) must not bubble up as errors.
     [Fact]
     [Trait("Category", "Docker")]
     public async Task EnsureIndex_ConcurrentCallers_AllSeeIndexBeforeInsertSucceeds()
@@ -265,8 +265,8 @@ public class MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
         Assert.Equal(1, count);
     }
 
-    // M17: Under WriteConcern.Unacknowledged, UpdateDataAsync must not silently swallow
-    // the operation result — concurrency guards should be disabled with a one-time Warning.
+    // Under WriteConcern.Unacknowledged, UpdateDataAsync must not silently swallow
+    // the operation result — concurrency guards are disabled with a one-time Warning.
     [Fact]
     [Trait("Category", "Docker")]
     public async Task UpdateDataAsync_WithW0_DoesNotThrow()
@@ -294,7 +294,7 @@ public class MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
         await finder.UpdateDataAsync(found);
     }
 
-    // M17: Under WriteConcern.Unacknowledged, DeleteDataAsync must not spuriously throw.
+    // Under WriteConcern.Unacknowledged, DeleteDataAsync must not spuriously throw.
     [Fact]
     [Trait("Category", "Docker")]
     public async Task DeleteDataAsync_WithW0_DoesNotSpuriouslyThrow()

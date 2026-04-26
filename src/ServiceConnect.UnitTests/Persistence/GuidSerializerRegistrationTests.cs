@@ -6,20 +6,17 @@ using Xunit;
 namespace ServiceConnect.UnitTests.Persistence;
 
 /// <summary>
-/// Regression guard for <see cref="MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered"/>.
-/// The earlier implementation flipped a once-only guard at the top of the method, so if the
-/// post-toggle verification threw, the flag was already set and the next caller returned
-/// silently — building a <c>MongoClient</c> on broken driver state and reproducing the exact
-/// zero-match Guid filter bug the verification was meant to prevent. The fix defers the flag
-/// flip until after every step (mode toggle, verification, serializer registration) succeeds.
+/// Pins the once-only guard on <see cref="MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered"/>.
+/// The flag must only be set after every step (mode toggle, verification, serializer registration)
+/// has succeeded; flipping it earlier would let a later caller short-circuit on broken driver state
+/// and reproduce a zero-match Guid filter at query time.
 ///
-/// These tests rely on <c>InternalsVisibleTo</c> from the MongoDb persistence project and
-/// use reflection to inspect/reset the module-private <c>_guidSerializerRegistered</c> flag.
-/// They do not attempt to force the verification throw path — once BSON serialization has
-/// started in-process, <c>BsonDefaults.GuidRepresentationMode</c> is frozen and cannot be
-/// toggled back to reproduce the failure case at runtime. Instead, they lock in the
-/// observable invariant: the flag is only set after a successful completion, which implies
-/// the short-circuit cannot hide a previous throw from a later caller.
+/// These tests rely on <c>InternalsVisibleTo</c> from the MongoDb persistence project and use
+/// reflection to inspect/reset the module-private <c>_guidSerializerRegistered</c> flag. They do
+/// not force the verification throw path — once BSON serialization has started in-process,
+/// <c>BsonDefaults.GuidRepresentationMode</c> is frozen and cannot be toggled back at runtime.
+/// Instead, they lock in the observable invariant: the flag is only set after successful completion,
+/// which implies the short-circuit cannot hide a previous throw from a later caller.
 /// </summary>
 public class GuidSerializerRegistrationTests
 {
@@ -55,14 +52,10 @@ public class GuidSerializerRegistrationTests
     [Fact]
     public void EnsureGuidSerializerRegistered_ResetFlag_DoesNotShortCircuit()
     {
-        // This is the core invariant: if the flag is 0 on entry, the method MUST re-run
-        // setup (and, on success, flip the flag back to 1). The old buggy implementation
-        // also re-ran setup in this case — but only because flag-0 means "not attempted."
-        // The regression we guard against is a future edit that moves the flag flip back
-        // to the top of the method, which would still pass this test on the first call
-        // but would also cause a thrown-verification call to short-circuit future callers.
-        // The complementary guard is the inline comment + code review; this test at least
-        // pins down that a flag of 0 always means "setup will run" and never shortcuts.
+        // Core invariant: flag == 0 on entry means setup MUST run (and, on success, flip
+        // the flag to 1). This pins down the contract so that a future edit moving the
+        // flag flip to the top of the method would still pass this case but be caught by
+        // the verification-throw scenarios reasoned about in the class summary.
         MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
         Assert.Equal(1, ReadFlag());
 

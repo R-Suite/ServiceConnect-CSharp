@@ -528,18 +528,16 @@ public class AggregatorProcessorTests
     [Fact]
     public async Task DisposeAsync_WithLateTimerCallback_DoesNotRecreateFlushLock()
     {
-        // L5: A timer callback that fires after DisposeAsync has cleared _flushLocks
-        // would call _flushLocks.GetOrAdd(...) inside FlushAggregatorAsync, re-creating a
+        // OnTimerFired is gated on Volatile.Read(ref _disposed); a callback that fires after
+        // DisposeAsync has cleared _flushLocks must return before touching any state. Without
+        // the gate, FlushAggregatorAsync's _flushLocks.GetOrAdd(...) would re-create a
         // SemaphoreSlim in a dictionary that is never read again — a bounded leak.
-        //
-        // The fix gates OnTimerFired on Volatile.Read(ref _disposed): a late callback
-        // returns before touching any state.
         //
         // White-box approach: manually set _disposed=1 via reflection (WITHOUT calling
         // DisposeAsync so _disposeCts remains live and FlushAggregatorAsync can reach
         // _flushLocks.GetOrAdd), then call OnTimerFired directly and wait briefly for any
-        // spawned background task to complete. Without the fix, _flushLocks.Count becomes 1.
-        // With the fix, the method returns immediately and _flushLocks stays empty.
+        // spawned background task to complete. The expectation is _flushLocks stays empty —
+        // OnTimerFired returns immediately on the disposed guard.
 
         var getSnapshotCalled = new TaskCompletionSource();
         var persistorMock = new Mock<IAggregatorPersistor>();
@@ -603,8 +601,9 @@ public class AggregatorProcessorTests
         onTimerFiredMethod.Invoke(processor, [descriptor]);
 
         // Give the background RunFlushAsync task time to run if the guard is missing.
-        // With the fix: OnTimerFired returns immediately, nothing runs, _flushLocks stays empty.
-        // Without the fix: RunFlushAsync calls FlushAggregatorAsync which calls GetOrAdd.
+        // Expected: OnTimerFired returns immediately on the disposed guard and _flushLocks
+        // stays empty; without the guard, RunFlushAsync would call FlushAggregatorAsync →
+        // GetOrAdd and a stray entry would land in the dictionary.
         await Task.Delay(200);
 
         // Assert: _flushLocks must be empty — the late callback must not have created any entry.
@@ -667,13 +666,13 @@ public class AggregatorProcessorTests
     [Fact]
     public async Task RunFlushAsync_AfterDispose_DoesNotLogSpuriousObjectDisposedException()
     {
-        // Phase 4 Uncertain: OnTimerFired passes the `_disposed` fast-path guard (because
-        // the timer callback was scheduled BEFORE DisposeAsync set the flag), then loses the
-        // race with DisposeAsync to dispose `_disposeCts`. The first act of RunFlushAsync is
+        // Race: OnTimerFired passes the `_disposed` fast-path guard (because the timer callback
+        // was scheduled BEFORE DisposeAsync set the flag), then loses the race with DisposeAsync
+        // to dispose `_disposeCts`. The first act of RunFlushAsync is
         // `FlushAggregatorAsync(descriptor, _disposeCts.Token)` — evaluating the Token on a
-        // disposed CancellationTokenSource throws ObjectDisposedException, which gets caught
-        // by `catch (Exception ex)` in RunFlushAsync and funneled into `logger.LogError(...)`.
-        // Effect: a spurious ERROR log entry during otherwise-clean shutdown.
+        // disposed CancellationTokenSource throws ObjectDisposedException. RunFlushAsync must
+        // recognise this race and stay quiet rather than escalating it through `logger.LogError`,
+        // which would emit a spurious ERROR entry during otherwise-clean shutdown.
         //
         // Deterministic reproduction: fully dispose the processor (so `_disposed=1` AND
         // `_disposeCts` is disposed — exactly the state a losing timer callback sees at the
@@ -721,8 +720,9 @@ public class AggregatorProcessorTests
         var runTask = (Task)runFlushMethod.Invoke(processor, [42, tcs, descriptor])!;
         await runTask;
 
-        // With the fix: RunFlushAsync catches the race quietly, no ERROR logged.
-        // Without the fix: `_disposeCts.Token` throws ODE → catch (Exception) logs ERROR.
+        // RunFlushAsync must catch the race quietly, no ERROR logged. If the ODE from
+        // `_disposeCts.Token` were allowed to fall through into catch (Exception), an
+        // ERROR entry would land here.
         var odeErrors = capturingLogger.Entries
             .Where(e => e.Level == LogLevel.Error && e.Exception is ObjectDisposedException)
             .ToList();

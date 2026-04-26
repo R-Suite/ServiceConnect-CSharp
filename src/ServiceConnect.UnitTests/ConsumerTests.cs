@@ -183,7 +183,7 @@ public class ConsumerTests
     }
 
     // -----------------------------------------------------------------------
-    // M11 — Consumer.DisposeAsync exception resilience
+    // Consumer.DisposeAsync exception resilience
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -226,7 +226,7 @@ public class ConsumerTests
     }
 
     // -----------------------------------------------------------------------
-    // M12 — Consumer.StartConsumingAsync idempotency
+    // Consumer.StartConsumingAsync idempotency
     // -----------------------------------------------------------------------
 
     [Fact]
@@ -260,14 +260,15 @@ public class ConsumerTests
     }
 
     // -----------------------------------------------------------------------
-    // L7 — Accept any IDictionary/IReadOnlyDictionary for queue Arguments
+    // Accept any IDictionary/IReadOnlyDictionary for queue Arguments
     // -----------------------------------------------------------------------
 
     [Fact]
     public void Ctor_ArgumentsAsReadOnlyDictionary_DoesNotThrow()
     {
-        // L7: direct cast of settings[Arguments] to Dictionary<,> broke when callers
-        // passed a ReadOnlyDictionary. Verify the ctor accepts any IDictionary/IReadOnlyDictionary shape.
+        // The ctor must accept any IDictionary/IReadOnlyDictionary shape for
+        // settings[Arguments]; a direct cast to Dictionary<,> would fail on
+        // ReadOnlyDictionary callers.
         var inner = new Dictionary<string, object?> { ["x-message-ttl"] = 60_000 };
         var readOnly = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object?>(inner);
 
@@ -290,8 +291,8 @@ public class ConsumerTests
     [Fact]
     public void Ctor_ArgumentsAsNonDictionaryValue_ThrowsInvalidOperationException()
     {
-        // L7: non-dictionary values must produce a clear InvalidOperationException
-        // rather than an opaque InvalidCastException.
+        // Non-dictionary values must produce a clear InvalidOperationException rather
+        // than an opaque InvalidCastException.
         var cfg = new Mock<ITransportConfiguration>();
         cfg.SetupGet(c => c.MaxRetries).Returns(3);
         cfg.SetupGet(c => c.RetryDelay).Returns(1000);

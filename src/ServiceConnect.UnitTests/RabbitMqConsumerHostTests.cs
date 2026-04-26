@@ -1336,15 +1336,16 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // M14 — null-valued TypeName header survives ContainsKey but crashes dispatch
+    // --- null-valued TypeName header: rejected at admission rather than crashing dispatch ---
 
     [Fact]
     public async Task EventAsync_NullValuedTypeNameHeader_RejectsAtAdmission_WithoutBurningRetryBudget()
     {
-        // Admission check used ContainsKey which admits a key whose value is null.
-        // CopyInboundHeaders skips null values → dispatch-site indexer throws KeyNotFoundException.
-        // The message burns a retry cycle instead of being terminated at admission.
-        // Fix: admission must check TryGetValue+non-null instead of ContainsKey.
+        // Admission must reject a TypeName/FullTypeName key whose value is null using
+        // TryGetValue + non-null rather than ContainsKey. ContainsKey would admit the
+        // message; CopyInboundHeaders then skips the null value and the dispatch-site
+        // indexer throws KeyNotFoundException, burning a retry cycle on what should
+        // have been a terminal admission rejection.
         var (conn, channel, publishChannel) = MockConnection();
         var host = new RabbitMqConsumerHost(
             conn.Object,
@@ -1384,7 +1385,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_NullValuedFullTypeNameHeader_AlsoRejectsAtAdmission()
     {
-        // Same bug applies to FullTypeName key.
+        // FullTypeName follows the same admission rule as TypeName.
         var (conn, channel, publishChannel) = MockConnection();
         var host = new RabbitMqConsumerHost(
             conn.Object,
@@ -1415,14 +1416,14 @@ public class RabbitMqConsumerHostTests
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // M13 — broker-initiated shutdown event subscriptions
+    // --- broker-initiated shutdown event subscriptions ---
 
     [Fact]
     public async Task StartConsumingAsync_ConsumerShutdownAsync_IsSubscribed_AndLogsWarning()
     {
-        // After the fix: ShutdownAsync on the consumer must be subscribed.
-        // Fire the consumer's HandleChannelShutdownAsync (which raises ShutdownAsync)
-        // and assert the host logs a Warning containing "shutdown".
+        // ShutdownAsync on the consumer must be subscribed so a broker-initiated shutdown
+        // is observable. Fire HandleChannelShutdownAsync (which raises ShutdownAsync) and
+        // assert the host logs a Warning containing "shutdown".
         var (conn, _, _) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
@@ -1451,15 +1452,15 @@ public class RabbitMqConsumerHostTests
 
         Assert.False(shutdownLog == default,
             "Expected a Warning-level log mentioning 'shutdown' after consumer ShutdownAsync fired. " +
-            "This confirms M13: ShutdownAsync event is not subscribed.");
+            "Absence of the log indicates ShutdownAsync was never wired up.");
     }
 
     [Fact]
     public async Task StartConsumingAsync_ConsumerUnregisteredAsync_IsSubscribed_AndLogsWarning()
     {
-        // After the fix: UnregisteredAsync on the consumer must be subscribed.
-        // This event fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
-        // Fire it via HandleBasicCancelAsync and verify the Warning is logged.
+        // UnregisteredAsync on the consumer must be subscribed. This event fires on
+        // broker-initiated basic.cancel (e.g. queue deleted while consuming). Fire it via
+        // HandleBasicCancelAsync and verify the Warning is logged.
         var (conn, _, _) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
@@ -1495,7 +1496,7 @@ public class RabbitMqConsumerHostTests
 
         Assert.False(unregisteredLog == default,
             "Expected a Warning-level log mentioning 'shutdown' after consumer UnregisteredAsync fired. " +
-            "This confirms M13: UnregisteredAsync event is not subscribed.");
+            "UnregisteredAsync event is not subscribed.");
     }
 
     [Fact]
@@ -1535,13 +1536,13 @@ public class RabbitMqConsumerHostTests
 
         Assert.False(channelShutdownLog == default,
             "Expected a Warning-level log mentioning 'shutdown' after ChannelShutdownAsync fired. " +
-            "This confirms M13: ChannelShutdownAsync event is not subscribed.");
+            "ChannelShutdownAsync event is not subscribed.");
     }
 
     [Fact]
     public async Task StartConsumingAsync_DisposesPreviouslyAssignedCtsFields()
     {
-        // L6: Field-initialised CTS instances and any CTS from a previous start must be
+        // Field-initialised CTS instances and any CTS from a previous start must be
         // disposed before being replaced in StartConsumingAsync — otherwise restart leaks.
         var (conn, _, _) = MockConnection();
         var tcfg = MakeTransportCfg();
@@ -1585,15 +1586,15 @@ public class RabbitMqConsumerHostTests
     }
 
     // -----------------------------------------------------------------------
-    // L7 — Accept any IDictionary/IReadOnlyDictionary for queue Arguments
+    // Accept any IDictionary/IReadOnlyDictionary for queue Arguments
     // -----------------------------------------------------------------------
 
     [Fact]
     public void Ctor_ArgumentsAsReadOnlyDictionary_DoesNotThrow()
     {
-        // L7: same widening for RabbitMqConsumerHost's Arguments consumption.
-        // Direct cast to IDictionary<,> broke when callers used ReadOnlyDictionary,
-        // which implements IReadOnlyDictionary but not IDictionary.
+        // RabbitMqConsumerHost's Arguments consumption must accept any
+        // IDictionary/IReadOnlyDictionary shape; a direct cast to IDictionary<,> would
+        // fail on ReadOnlyDictionary, which implements IReadOnlyDictionary but not IDictionary.
         var inner = new Dictionary<string, object?> { ["x-max-length"] = 1000 };
         var readOnly = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object?>(inner);
 

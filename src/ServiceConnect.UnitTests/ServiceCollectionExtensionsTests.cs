@@ -316,7 +316,7 @@ public class ServiceCollectionExtensionsTests
     [Fact]
     public void AddServiceConnect_ScansExplicitAssembliesEvenWhenDiscoveryDisabled()
     {
-        // M6: ScanAssemblies(...) must be honoured even when ScanForMessageHandlers=false.
+        // ScanAssemblies(...) must be honoured even when ScanForMessageHandlers=false.
         // The explicit list represents "scan exactly these assemblies"; the global flag
         // must not silently override it.
         var services = new ServiceCollection();
@@ -334,7 +334,7 @@ public class ServiceCollectionExtensionsTests
     [Fact]
     public void AddServiceConnect_DetectsFactoryRegisteredSingletonHandlers()
     {
-        // M7: pre-registering a handler via a factory singleton must prevent the scanner
+        // Pre-registering a handler via a factory singleton must prevent the scanner
         // from adding a second transient descriptor via TryAddEnumerable.
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<TestHandlerFixture.SampleMessage>>(

@@ -528,9 +528,10 @@ public class CacheProviderTests
     [Fact]
     public void KeysOfObject_ReturnsAllKeysIncludingSubtypes()
     {
-        // L11: Keys<TKey>() used exact-type match, so Keys<object>() returned empty because
-        // no key's runtime type is literally System.Object. Expected semantic is
-        // "keys assignable to TKey"; verify via object (covers everything) and IComparable
+        // Keys<TKey>() must return every key whose runtime type is assignable to TKey,
+        // not only keys whose runtime type is exactly TKey. An exact-type match would
+        // make Keys<object>() return empty (no key's runtime type is literally
+        // System.Object). Verified through object (covers everything) and IComparable
         // (Guid/string/int all implement it).
         var provider = new CacheProvider();
         provider.Add<Guid, int>(Guid.NewGuid(), 1);
