@@ -154,16 +154,17 @@ public static class ServiceConnectActivitySource
         // when ServiceConnect's own span is available; otherwise the ambient span propagates.
         InjectTraceContext(Activity.Current, eventArgs.Headers);
 
-        // OTel messaging semconv distinguishes "publish" (pub/sub) from "send"
-        // (point-to-point). This method backs SendAsync, so both the operation
-        // tag and display name carry "send"; backends otherwise mis-aggregate
-        // direct-to-queue traffic with fanout publishes.
+        // SendAsync writes to a specific queue (point-to-point), but in OTel messaging
+        // semantic conventions that is still classified as "publish" — the producer-side
+        // operation name. The point-to-point distinction is preserved by the dedicated
+        // _sendActivitySource and the per-destination DisplayName ("<queue> send"), so
+        // backends that need to disaggregate send from publish can do so by source name.
         Activity? activity = StartActivity(
             _sendActivitySource,
             SendActivitySourceName,
             ActivityKind.Producer,
             Options.EnableSendTelemetry,
-            "send",
+            "publish",
             linkedContext);
 
         if (activity is null) return null;

@@ -319,10 +319,10 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Send(args);
 
         Assert.NotNull(activity);
-        // Send spans use the "send" operation name per OTel messaging semconv,
-        // distinguishing point-to-point traffic from fanout publish spans.
+        // The DisplayName carries "send" for per-destination tracing; the messaging.operation
+        // tag is "publish" per OTel semconv (producer-side regardless of point-to-point vs pub/sub).
         Assert.Equal("svc.queue send", activity!.DisplayName);
-        Assert.Equal("send", activity.GetTagItem(MessagingOperation));
+        Assert.Equal("publish", activity.GetTagItem(MessagingOperation));
         Assert.Equal("svc.queue", activity.GetTagItem(MessagingDestination));
     }
 
@@ -582,6 +582,23 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal("anonymous send", activity!.DisplayName);
         Assert.Null(activity.GetTagItem(MessagingDestination));
         Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+    }
+
+    [Fact]
+    public void Send_SetsMessagingOperation_ToPublish()
+    {
+        var args = new SendEventArgs
+        {
+            EndPoint = "queue-a",
+            Headers = new Dictionary<string, string>(),
+            Message = null,
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args);
+
+        Assert.NotNull(activity);
+        var operation = activity!.GetTagItem(MessagingOperation);
+        Assert.Equal("publish", operation);
     }
 }
 
