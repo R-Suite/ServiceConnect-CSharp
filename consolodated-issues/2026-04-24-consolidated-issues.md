@@ -28,9 +28,11 @@ Within each finding, bracketed tags cite the originating review(s), e.g. `[C#1, 
 |---|---|---|---|---|
 | Critical | 10 | 8 | 8 (C-01, C-02, C-03, C-04, C-05, C-06, C-08, C-09) | 2 (C-07, C-10) |
 | High | 22 | 11 | 12 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12, H-15, H-20, H-21, H-22) | 10 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19) |
-| Medium | 32 | 25 | 0 | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
+| Medium | 32 | 25 | 11 (M-01, M-06, M-11, M-12, M-13, M-16, M-18, M-19, M-20, M-21, M-22) | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
 | Low | 72 | 52 | 1 (L-73) | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
-| **Total** | **136** | **96** | **21** | **42** |
+| **Total** | **136** | **96** | **32** | **42** |
+
+Phase 6a closeout (2026-04-26) also flagged 4 retroactive items as **not a bug at HEAD** because earlier-phase fixes incidentally invalidated the original mechanism: M-02 (after H-02 record-immutable refactor), M-03 (after H-01 duplicate-rollback), M-04 (after `IsOpen` close-guard), M-08 (after CTS-disposed catch). Each carries an inline `**Status**: not a bug at HEAD — ...` line.
 
 Pass-2 also upgraded several earlier partial/equivocal verdicts to CONFIRMED (C-03, C-06, C-09, H-10, H-22, M-04, M-13, M-19, M-32, L-06, L-43) — marked inline.
 
@@ -285,19 +287,23 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 ### M-01 — `MaxActiveStreams` TOCTOU on `Count >= N` then `GetOrAdd`
 - **Location**: `src/ServiceConnect/Services/Processors/StreamProcessor.cs:84-88`
 - **Sources**: [C.Min, N.L3, P.Imp]
+- **Status**: fixed in ffbdbbd6
 
 ### M-02 — `LastSeenUtc` torn read (DateTimeOffset non-atomic, 10 bytes)
 - **Location**: `src/ServiceConnect/Services/Processors/StreamProcessor.cs:101`
 - **Sources**: [P.Imp]
+- **Status**: not a bug at HEAD — `ActiveStreamState` is now a record updated via `with { LastSeenUtc = ... }` after H-02's immutable-record refactor (commit 64217763); writes are atomic CAS-replacements, so the torn-read concern no longer applies.
 
 ### M-03 — `MessageBusReadStream` size-cap transient overshoot on duplicate retry
 - **Location**: `src/ServiceConnect/Services/MessageBusReadStream.cs:79-92`
 - **Sources**: [C.Imp]
+- **Status**: not a bug at HEAD — duplicate-packet path now rolls back the `_totalBytesWritten` reservation before returning (commit 0569dc65 / H-01); the originally-reported drift between in-memory total and the packet dictionary is no longer reachable.
 
 ### M-04 — `Consumer.StartConsumingAsync` finally's `CloseAsync` masks original exception
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/Consumer.cs:145-153`
 - **Pass-2 verdict**: CONFIRMED. The `finally { await channel.CloseAsync(); }` can throw if the channel is already in a faulted state, and in that case the original setup exception is overwritten. Small diagnostic hazard — wrap with try/catch and log.
 - **Sources**: [C.Imp]
+- **Status**: not a bug at HEAD — finally-block now guards close with `if (setupChannel is { IsOpen: true })`, eliminating the common already-closed-channel trigger; remaining close-path failures (network errors mid-close) are theoretical only.
 
 ### M-05 — RabbitMQ `EventAsync` admission-path `HandleTerminalFailureAsync` publishes unprotected
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs:173-259`
@@ -308,6 +314,7 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 ### M-06 — `BasicConsumeAsync` does not pass `cancellationToken`
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs:155`
 - **Sources**: [P.Imp]
+- **Status**: fixed in e97e244a
 
 ### M-07 — `Task.Delay` can receive a negative `TimeSpan` on last loop iteration
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs:554-567`
@@ -318,6 +325,7 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs:534, 613-620`
 - **Pass-2 verdict**: PARTIAL (theoretical). `ObjectDisposedException` is caught; `ArgumentOutOfRangeException` is only reachable if the clock moves backward. Defensive hardening, not a live bug.
 - **Sources**: [C.Imp, P.Imp]
+- **Status**: not a bug at HEAD — `ObjectDisposedException` and shutdown-OCE are caught, and the negative-`TimeSpan` path is gated by `if (remaining <= TimeSpan.Zero) ... return` before `Task.Delay` is invoked; per pass-2 verdict, only theoretical with no live trigger.
 
 ### M-09 — `ProcessMessageAsync` shutdown-OCE rethrow races with `_shutdownTimedOut` flag
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/RabbitMqConsumerHost.cs:256, 270, 391, 429`
@@ -334,17 +342,20 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 ### M-11 — `AggregatorProcessor.FlushAggregatorAsync` "remove-before-execute" drops batch on non-cancellation exception
 - **Location**: `src/ServiceConnect/Services/Processors/AggregatorProcessor.cs:190-198`
 - **Sources**: [N.M9] (overlaps with C.Min 196-198)
+- **Status**: fixed in bfaccb84
 
 ### M-12 — `HandlerProcessor`: first handler exception skips remaining handlers
 - **Location**: `src/ServiceConnect/Services/Processors/HandlerProcessor.cs:70-77`
 - **Bug**: Per-message multi-handler processing short-circuits on the first throw. Downstream handlers for the same message are skipped even though they are independent.
 - **Fix**: Collect exceptions into an `AggregateException` (or decide on a documented short-circuit semantic) rather than leaking the first exception.
 - **Sources**: [N.M8]
+- **Status**: fixed in f43e03f3
 
 ### M-13 — `Bus.DisposeAsync` disposes `_lifecycleSemaphore` while racing `StartConsumingAsync`
 - **Location**: `src/ServiceConnect/Bus.cs:458`
 - **Pass-2 verdict**: CONFIRMED (minor). Race exists; it produces a well-typed `ObjectDisposedException` rather than corruption, which is acceptable but ugly. Cheap to fix by guarding Dispose with an `if (Interlocked.Exchange(ref _disposed, 1) == 0)` gate before touching the semaphore.
 - **Sources**: [P.Imp]
+- **Status**: fixed in 1f04e14c
 
 ### M-14 — `ReapStaleLeasesAsync` has no batch cap
 - **Location**: `src/ServiceConnect.Persistence.MongoDb/MongoDbTimeoutStore.cs:321-343`
@@ -362,6 +373,7 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 - **Bug**: After an admin drops the database, the cached `indexesEnsured` flag prevents re-creation of indexes on next start.
 - **Pass-2 verdict**: PARTIAL. The claim is valid in the DB-drop-without-process-restart scenario only (process restart resets the static flag). That scenario is a legitimate ops/test pattern, so the flag should invalidate on write errors. Kept at Medium.
 - **Sources**: [C.Imp]
+- **Status**: fixed in 8b071649
 
 ### M-17 — Aggregator index-ensure lacks bounded retry
 - **Location**: `src/ServiceConnect.Persistence.MongoDb/MongoDbAggregatorPersistor.cs:230-255`
@@ -372,27 +384,31 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 - **Location**: `src/ServiceConnect.Persistence.InMemory/InMemoryAggregatorPersistor.cs:95-123`
 - **Bug**: Third-party/DTO messages without `: Message` inheritance can't be aggregated on InMemory (Mongo accepts them).
 - **Sources**: [C.Imp]
+- **Status**: fixed in 9a712f35
 
 ### M-19 — `InMemoryTimeoutStore` has no batch-size cap
 - **Location**: `src/ServiceConnect.Persistence.InMemory/InMemoryTimeoutStore.cs:59-110`
 - **Pass-2 verdict**: CONFIRMED — parity divergence. MongoDb persistor applies a caller-provided batch cap; InMemory ignores it. Third-party callers relying on cap-based back-pressure see unbounded returns on InMemory. Contract-parity issue, not a runtime fault.
 - **Sources**: [N.M10]
+- **Status**: fixed in 195fe9bb
 
 ### M-20 — `InMemoryTimeoutStore` shallow header clone for non-`byte[]` values
 - **Location**: `src/ServiceConnect.Persistence.InMemory/InMemoryTimeoutStore.cs:112-134`
 - **Sources**: [N.M11]
+- **Status**: fixed in a830c6d5
 
 ### M-21 — `InMemoryProcessManagerFinder.UpdateDataAsync` doesn't bump caller's `Version`
 - **Location**: `src/ServiceConnect.Persistence.InMemory/InMemoryProcessManagerFinder.cs:243-249`
 - **Bug**: Version numbers the store increments are not reflected back to the caller's object; subsequent updates with the caller's stale Version fail.
 - **Sources**: [P.Imp]
-- **Status**: fixed — `newData.Version` incremented after successful store update; parity matrix updated.
+- **Status**: fixed in 54949ab1
 
 ### M-22 — Persistors bypass `EnsureGuidSerializerRegistered` when ctor'd directly
 - **Location**: `MongoDbAggregatorPersistor.cs:150-153`, `MongoDbProcessManagerFinder.cs:39-66`, `MongoDbTimeoutStore.cs:38-67`
 - **Bug**: `EnsureGuidSerializerRegistered` is called from DI factories only. Direct `new` construction (tests, custom composition) silently leaves Guid serialization on the driver's default (binary, subtype 3) — incompatible with the canonical serializer used elsewhere.
 - **Fix**: Call `EnsureGuidSerializerRegistered` from each class's static ctor.
 - **Sources**: [C#9, N.M12]
+- **Status**: fixed in 2af05de1
 
 ### M-23 — Telemetry Send uses invalid `"send"` for `messaging.operation`
 - **Location**: `src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs:154-164`

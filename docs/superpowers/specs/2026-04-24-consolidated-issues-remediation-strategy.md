@@ -233,7 +233,7 @@ Strictly sequential: Phase 0 → 1 → 2 → 3 → 4 → 5 → 6a → 6b → 7a 
 - Phase 3: complete (4 items, commits c39be6aa f3e78855 8ef58c98 e4aaf12c 5de3bdf6 e4e401ec 5fbd4458 12578252 b581c4b0)
 - Phase 4: complete (4 items + L-73 side-effect, commits ca5213be 7326d9fb c03acc72 a315d2d7 1bff138b d8a707fe)
 - Phase 5: complete (2 items, commits 36b20c27 15b44fe8 23c3d25b 4e0f448f 0e45702d dac580e6 06bf8bd1 73d8fcf1 2b37e279)
-- Phase 6a: not started
+- Phase 6a: complete (11 items, retroactive 4, commits ffbdbbd6 33c157ea e97e244a bfaccb84 f43e03f3 1d428816 1f04e14c f9bed011 8b071649 3858f056 9a712f35 195fe9bb ccd5f56a a830c6d5 d4823c68 54949ab1 1a40bc47 2af05de1 f163fdf4)
 - Phase 6b: not started
 - Phase 7a: not started
 - Phase 7b: not started
