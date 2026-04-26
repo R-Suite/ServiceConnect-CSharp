@@ -18,13 +18,5 @@ public sealed class ConsumeEventArgs
     /// <summary>
     /// Gets the transport headers associated with the consumed message.
     /// </summary>
-    public IDictionary<string, object> Headers
-    {
-        // Lazy getter: backing field is null! when ConsumeEventArgs is constructed without
-        // setting Headers — avoids the wasted allocation from the field initializer.
-        get => _headers ??= new Dictionary<string, object>();
-        init => _headers = value ?? new Dictionary<string, object>();
-    }
-
-    private IDictionary<string, object> _headers = null!;
+    public IDictionary<string, object> Headers { get; init; } = new Dictionary<string, object>();
 }
