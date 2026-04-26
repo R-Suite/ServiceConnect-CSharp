@@ -8,7 +8,7 @@ public interface ICacheProvider
     /// <summary>
     /// Occurs after a cache key is removed.
     /// </summary>
-    event EventHandler KeyRemoved;
+    event EventHandler<KeyRemovedEventArgs> KeyRemoved;
 
     /// <summary>
     /// Add a value to the cache with a relative expiry time, e.g 10 minutes.

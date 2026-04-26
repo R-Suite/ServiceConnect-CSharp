@@ -324,11 +324,41 @@ dotnet_diagnostic.RS0026.severity = silent
 # Public-API method naming is enforced by code review.
 dotnet_diagnostic.VSTHRD200.severity = silent
 
+# Meziantou.Analyzer (MAxxxx) — correctness rules left at defaults; threshold rules tuned.
+# MA0051 (method too long) raised to 200 lines: long methods in Bus.cs, RabbitMqConsumerHost.cs,
+# AggregatorProcessor.cs, StreamProcessor.cs etc. are well-structured state machines whose
+# linear flow is more readable as a single body than fragmented across helper methods. The
+# default 60-line cap would force extractions that hurt readability without surfacing real
+# complexity issues.
+MA0051.maximum_lines_per_method = 200
+MA0051.maximum_statements_per_method = 100
+
 # Test projects: silence threading-correctness rules that flag standard test patterns
 # (sync Cancel on local CTS, await of mock-returned Tasks, fire-and-forget setup, etc.).
-# Production code remains under enforcement.
+# Style/cleanliness rules also relaxed for tests: multiple message/fixture types per file,
+# concrete Dictionary literals in arrange blocks, and string.Contains for assertion text
+# are idiomatic xUnit and noisy when held to library standards. ConfigureAwait is also
+# unnecessary in xUnit (no SyncContext).
 [**/*Tests/**.cs]
 dotnet_diagnostic.VSTHRD003.severity = silent
 dotnet_diagnostic.VSTHRD103.severity = silent
 dotnet_diagnostic.VSTHRD105.severity = silent
 dotnet_diagnostic.VSTHRD110.severity = silent
+dotnet_diagnostic.MA0002.severity = silent
+dotnet_diagnostic.MA0004.severity = silent
+dotnet_diagnostic.MA0006.severity = silent
+dotnet_diagnostic.MA0011.severity = silent
+dotnet_diagnostic.MA0015.severity = silent
+dotnet_diagnostic.MA0016.severity = silent
+dotnet_diagnostic.MA0025.severity = silent
+dotnet_diagnostic.MA0047.severity = silent
+dotnet_diagnostic.MA0048.severity = silent
+dotnet_diagnostic.MA0051.severity = silent
+dotnet_diagnostic.MA0061.severity = silent
+dotnet_diagnostic.MA0069.severity = silent
+dotnet_diagnostic.MA0074.severity = silent
+dotnet_diagnostic.MA0091.severity = silent
+dotnet_diagnostic.MA0099.severity = silent
+dotnet_diagnostic.MA0132.severity = silent
+dotnet_diagnostic.MA0134.severity = silent
+dotnet_diagnostic.MA0158.severity = silent

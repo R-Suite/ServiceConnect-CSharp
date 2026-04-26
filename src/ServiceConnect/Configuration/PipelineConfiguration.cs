@@ -7,31 +7,36 @@ namespace ServiceConnect.Configuration;
 /// </summary>
 public sealed class PipelineConfiguration : IPipelineConfiguration
 {
+    private readonly List<Type> _beforeConsumingFilters = [];
+    private readonly List<Type> _afterConsumingFilters = [];
+    private readonly List<Type> _outgoingFilters = [];
+    private readonly List<Type> _messageProcessingMiddleware = [];
+    private readonly List<Type> _sendMessageMiddleware = [];
+
     /// <summary>
     /// Gets the filters that run before handler invocation.
     /// </summary>
-    public List<Type> BeforeConsumingFilters { get; } = [];
+    public IList<Type> BeforeConsumingFilters => _beforeConsumingFilters;
     /// <summary>
     /// Gets the filters that run after handler invocation.
     /// </summary>
-    public List<Type> AfterConsumingFilters { get; } = [];
+    public IList<Type> AfterConsumingFilters => _afterConsumingFilters;
     /// <summary>
     /// Gets the filters that run for outgoing messages.
     /// </summary>
-    public List<Type> OutgoingFilters { get; } = [];
+    public IList<Type> OutgoingFilters => _outgoingFilters;
     /// <summary>
     /// Gets the middleware types that wrap inbound message processing.
     /// </summary>
-    public List<Type> MessageProcessingMiddleware { get; } = [];
+    public IList<Type> MessageProcessingMiddleware => _messageProcessingMiddleware;
     /// <summary>
     /// Gets the middleware types that wrap outbound send and publish operations.
     /// </summary>
-    public List<Type> SendMessageMiddleware { get; } = [];
+    public IList<Type> SendMessageMiddleware => _sendMessageMiddleware;
 
-    // Explicit interface implementations to satisfy the IReadOnlyList<Type> contract
-    IReadOnlyList<Type> IPipelineConfiguration.BeforeConsumingFilters => BeforeConsumingFilters;
-    IReadOnlyList<Type> IPipelineConfiguration.AfterConsumingFilters => AfterConsumingFilters;
-    IReadOnlyList<Type> IPipelineConfiguration.OutgoingFilters => OutgoingFilters;
-    IReadOnlyList<Type> IPipelineConfiguration.MessageProcessingMiddleware => MessageProcessingMiddleware;
-    IReadOnlyList<Type> IPipelineConfiguration.SendMessageMiddleware => SendMessageMiddleware;
+    IReadOnlyList<Type> IPipelineConfiguration.BeforeConsumingFilters => _beforeConsumingFilters;
+    IReadOnlyList<Type> IPipelineConfiguration.AfterConsumingFilters => _afterConsumingFilters;
+    IReadOnlyList<Type> IPipelineConfiguration.OutgoingFilters => _outgoingFilters;
+    IReadOnlyList<Type> IPipelineConfiguration.MessageProcessingMiddleware => _messageProcessingMiddleware;
+    IReadOnlyList<Type> IPipelineConfiguration.SendMessageMiddleware => _sendMessageMiddleware;
 }

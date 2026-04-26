@@ -95,7 +95,7 @@ public sealed class Consumer : IConsumer
         IChannel? setupChannel = null;
         try
         {
-            setupChannel = await _connection.CreateChannelAsync(cancellationToken);
+            setupChannel = await _connection.CreateChannelAsync(cancellationToken).ConfigureAwait(false);
             _model = setupChannel;
 
             // Mark as initial setup for re-throwing on first topology setup.
@@ -104,7 +104,7 @@ public sealed class Consumer : IConsumer
             // Configure exchanges
             foreach (string messageType in messageTypes)
             {
-                await _topologyProvisioner.ConfigureDeclareExchangeAsync(_model, messageType, ExchangeType.Fanout, isInitialSetup, cancellationToken);
+                await _topologyProvisioner.ConfigureDeclareExchangeAsync(_model, messageType, ExchangeType.Fanout, isInitialSetup, cancellationToken).ConfigureAwait(false);
             }
 
             // Configure queue
@@ -116,13 +116,13 @@ public sealed class Consumer : IConsumer
                 _autoDelete,
                 _queueArguments,
                 isInitialSetup,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             // Purge all messages on queue
             if (_queueConfiguration.PurgeQueueOnStartup)
             {
                 _logger.LogDebug("Purging queue");
-                await _model.QueuePurgeAsync(queueName, cancellationToken);
+                await _model.QueuePurgeAsync(queueName, cancellationToken).ConfigureAwait(false);
             }
 
             // Configure retry queue (but only if retries are expected)
@@ -130,18 +130,18 @@ public sealed class Consumer : IConsumer
             {
                 await _topologyProvisioner.ConfigureRetryTopologyAsync(
                     _model, queueName, _durable, _autoDelete, _retryDelay,
-                    _retryQueueArguments, isInitialSetup, cancellationToken);
+                    _retryQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
             }
 
             // Use the provisioner for utility queue setup.
             string errorExchangeName = _queueConfiguration.ErrorQueueName;
-            await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, errorExchangeName, _utilityQueueArguments, isInitialSetup, cancellationToken);
+            await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, errorExchangeName, _utilityQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
 
             // Configure Audit Queue/Exchange
             if (_queueConfiguration.AuditingEnabled)
             {
                 string auditQueueName = _queueConfiguration.AuditQueueName;
-                await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, auditQueueName, _utilityQueueArguments, isInitialSetup, cancellationToken);
+                await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, auditQueueName, _utilityQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
             }
         }
         finally
@@ -178,10 +178,10 @@ public sealed class Consumer : IConsumer
             // ConsumeMessageTypeAsync on a later iteration does not leak already-started
             // hosts. DisposeAsync iterates _clients and tolerates half-started hosts.
             _clients.Add(client);
-            await client.StartConsumingAsync(eventHandler, queueName, cancellationToken: cancellationToken);
+            await client.StartConsumingAsync(eventHandler, queueName, cancellationToken: cancellationToken).ConfigureAwait(false);
             foreach (string messageType in messageTypes)
             {
-                await client.ConsumeMessageTypeAsync(messageType, cancellationToken);
+                await client.ConsumeMessageTypeAsync(messageType, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -247,8 +247,8 @@ public sealed class Consumer : IConsumer
         return raw switch
         {
             Dictionary<string, object?> d => d,
-            IDictionary<string, object?> id => new Dictionary<string, object?>(id),
-            IReadOnlyDictionary<string, object?> rd => rd.ToDictionary(kv => kv.Key, kv => kv.Value),
+            IDictionary<string, object?> id => new Dictionary<string, object?>(id, StringComparer.Ordinal),
+            IReadOnlyDictionary<string, object?> rd => rd.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal),
             _ => throw new InvalidOperationException(
                 $"Setting '{key}' must be IDictionary<string, object?> or IReadOnlyDictionary<string, object?>; got {raw.GetType().FullName}."),
         };

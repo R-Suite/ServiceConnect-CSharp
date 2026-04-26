@@ -17,7 +17,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     /// <inheritdoc />
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -50,7 +50,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     tcs.TrySetException(new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout)));
                 }
             });
-        });
+        }).ConfigureAwait(false);
 
         try
         {
@@ -86,7 +86,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     /// <inheritdoc />
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -132,7 +132,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     tcs.TrySetResult(null!); // timeout returns what we have
                 }
             });
-        });
+        }).ConfigureAwait(false);
 
         try
         {
@@ -178,7 +178,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     /// <inheritdoc />
     public async Task PublishRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         Action<TReply> onReply,
         CancellationToken cancellationToken = default)
@@ -230,7 +230,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
                 tcs.TrySetResult(null!);
             });
-        });
+        }).ConfigureAwait(false);
 
         try
         {
@@ -359,7 +359,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
     private sealed class RequestState(TaskCompletionSource<object> tcs, int expectedCount, Type replyType, Action<object>? onReply = null)
     {
+#if NET9_0_OR_GREATER
+        private readonly System.Threading.Lock _stateLock = new();
+#else
         private readonly object _stateLock = new();
+#endif
         private bool _closed;
         private bool _hasAcceptedReplies;
         private Action? _pendingCloseAction;

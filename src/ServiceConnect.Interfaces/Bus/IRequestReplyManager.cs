@@ -19,7 +19,7 @@ public interface IRequestReplyManager
     /// <returns>The deserialized reply.</returns>
     Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -37,7 +37,7 @@ public interface IRequestReplyManager
     /// <returns>The replies collected before completion.</returns>
     Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -55,7 +55,7 @@ public interface IRequestReplyManager
     /// <param name="cancellationToken">A token that cancels the request.</param>
     Task PublishRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         Action<TReply> onReply,
         CancellationToken cancellationToken = default)

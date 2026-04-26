@@ -96,12 +96,12 @@ public class CacheProviderTests
     {
         var cache = new CacheProvider();
         cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
-        object? capturedSender = null;
-        cache.KeyRemoved += (sender, _) => capturedSender = sender;
+        object? capturedKey = null;
+        cache.KeyRemoved += (_, args) => capturedKey = args.Key;
 
         cache.Remove("key1");
 
-        Assert.Equal("key1", capturedSender);
+        Assert.Equal("key1", capturedKey);
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class CacheProviderTests
         cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
         cache.Add("key2", "value2", DateTimeOffset.UtcNow.AddMinutes(5));
         var removed = new List<object?>();
-        cache.KeyRemoved += (sender, _) => removed.Add(sender);
+        cache.KeyRemoved += (_, args) => removed.Add(args.Key);
 
         cache.Clear();
 
@@ -146,7 +146,7 @@ public class CacheProviderTests
         cache.Add("normal2", "v2", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.Normal);
         cache.Add("high1", "v3", DateTimeOffset.UtcNow.AddMinutes(5), CacheItemPriority.High);
         var removed = new List<object?>();
-        cache.KeyRemoved += (sender, _) => removed.Add(sender);
+        cache.KeyRemoved += (_, args) => removed.Add(args.Key);
 
         var count = cache.PurgeNormalPriorities();
 

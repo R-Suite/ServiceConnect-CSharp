@@ -27,7 +27,11 @@ public static class MongoDbPersistenceExtensions
     // configuration problem is fixed. The first-time setup is serialised via the lock so
     // concurrent callers don't race on the global BSON mutations.
     private static int _guidSerializerRegistered;
+#if NET9_0_OR_GREATER
+    private static readonly System.Threading.Lock GuidSerializerInitLock = new();
+#else
     private static readonly object GuidSerializerInitLock = new();
+#endif
 
     internal static void EnsureGuidSerializerRegistered()
     {

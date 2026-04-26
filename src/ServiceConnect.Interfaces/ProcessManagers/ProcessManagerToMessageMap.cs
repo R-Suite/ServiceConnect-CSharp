@@ -18,5 +18,5 @@ public sealed class ProcessManagerToMessageMap
     /// <summary>
     /// Gets the process-manager property path represented as a property-name hierarchy.
     /// </summary>
-    public IReadOnlyDictionary<string, Type> PropertiesHierarchy { get; init; } = new Dictionary<string, Type>();
+    public IReadOnlyDictionary<string, Type> PropertiesHierarchy { get; init; } = new Dictionary<string, Type>(StringComparer.Ordinal);
 }

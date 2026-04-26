@@ -18,7 +18,11 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
     // timer replacement are observed together. Without it, a re-Add after the original
     // TryAdd retained the stale value but StartObserving installed a fresh timer —
     // effectively extending the stale value's TTL.
+#if NET9_0_OR_GREATER
+    private readonly System.Threading.Lock _addLock = new();
+#else
     private readonly object _addLock = new();
+#endif
     private int _disposed;
 
     #region Implementation of ICacheProvider
@@ -26,7 +30,7 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
     /// <summary>
     /// Occurs after an entry is removed from the cache.
     /// </summary>
-    public event EventHandler? KeyRemoved;
+    public event EventHandler<KeyRemovedEventArgs>? KeyRemoved;
 
     /// <summary>
     /// Add a value to the cache with a relative expiry time, e.g 10 minutes.
@@ -109,7 +113,7 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
         // never observe removal events for keys that were never in the cache.
         if (removed)
         {
-            KeyRemoved?.Invoke(key, EventArgs.Empty);
+            KeyRemoved?.Invoke(this, new KeyRemovedEventArgs(key!));
         }
     }
 
@@ -140,7 +144,7 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
 
         foreach (var key in removedKeys)
         {
-            KeyRemoved.Invoke(key, EventArgs.Empty);
+            KeyRemoved.Invoke(this, new KeyRemovedEventArgs(key));
         }
     }
 
@@ -199,7 +203,7 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
                 _slidingTime.TryRemove(cacheItem.Key, out _);
                 DisposeTimer(cacheItem.Key);
                 removed++;
-                KeyRemoved?.Invoke(cacheItem.Key, EventArgs.Empty);
+                KeyRemoved?.Invoke(this, new KeyRemovedEventArgs(cacheItem.Key));
             }
         }
         return removed;

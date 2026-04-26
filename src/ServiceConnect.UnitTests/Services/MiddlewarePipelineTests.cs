@@ -22,7 +22,7 @@ file class RecordingSendMiddleware(List<string> log) : ISendMessageMiddleware
 {
     private readonly List<string> _log = log;
 
-    public async Task ProcessAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public async Task ProcessAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         _log.Add("before");
         await next(typeObject, messageBytes, headers, endPoint, cancellationToken);
@@ -32,7 +32,7 @@ file class RecordingSendMiddleware(List<string> log) : ISendMessageMiddleware
 
 file class ShortCircuitSendMiddleware : ISendMessageMiddleware
 {
-    public Task ProcessAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public Task ProcessAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         // Intentionally does NOT call next
         return Task.CompletedTask;
@@ -75,11 +75,11 @@ public class SendMiddlewarePipelineTests
     public SendMiddlewarePipelineTests()
     {
         _mockProducer = new Mock<IProducer>();
-        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
+        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
             .Returns(Task.CompletedTask);
-        _mockProducer.Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
+        _mockProducer.Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
             .Returns(Task.CompletedTask);
-        _mockProducer.Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
+        _mockProducer.Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
             .Returns(Task.CompletedTask);
     }
 
@@ -97,13 +97,13 @@ public class SendMiddlewarePipelineTests
         mockPipelineConfig.Setup(p => p.SendMessageMiddleware)
             .Returns([typeof(RecordingSendMiddleware)]);
 
-        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
+        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
             .Returns(() => { log.Add("producer"); return Task.CompletedTask; });
 
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1], []);
+        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1]);
 
         // Assert
         Assert.Equal(new[] { "before", "producer", "after" }, log);
@@ -120,10 +120,10 @@ public class SendMiddlewarePipelineTests
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1], []);
+        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1]);
 
         // Assert
-        _mockProducer.Verify(p => p.PublishAsync(typeof(string), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
+        _mockProducer.Verify(p => p.PublishAsync(typeof(string), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Once);
     }
 
     [Fact]
@@ -141,10 +141,10 @@ public class SendMiddlewarePipelineTests
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1], []);
+        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1]);
 
         // Assert
-        _mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()), Times.Never);
+        _mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
     }
 }
 

@@ -28,10 +28,10 @@ public sealed class Producer : IProducer
     private static readonly ConcurrentDictionary<Type, (string FullName, string AQN)> _typeNameCache = new();
 
     // Cache the computed exchange name (FullName with dots stripped) per FullName string.
-    private readonly ConcurrentDictionary<string, string> _exchangeNameCache = new();
+    private readonly ConcurrentDictionary<string, string> _exchangeNameCache = new(StringComparer.Ordinal);
     // Track which exchange names have already been declared on the current connection.
     //        Cleared on reconnect because exchange state is per-connection.
-    private readonly ConcurrentDictionary<string, bool> _declaredExchanges = new();
+    private readonly ConcurrentDictionary<string, bool> _declaredExchanges = new(StringComparer.Ordinal);
 
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
@@ -250,7 +250,7 @@ public sealed class Producer : IProducer
     /// <param name="message">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the publish operation.</param>
-    public async Task PublishAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task PublishAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (message.Length > MaximumMessageSize)
@@ -302,7 +302,7 @@ public sealed class Producer : IProducer
     /// <param name="message">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendAsync(Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task SendAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (message.Length > MaximumMessageSize)
@@ -352,12 +352,12 @@ public sealed class Producer : IProducer
     /// <param name="message">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendAsync(string endPoint, Type type, byte[] message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task SendAsync(string endPoint, Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
         {
-            throw new ArgumentException($"Cannot send message of type {type} to empty endpoint");
+            throw new ArgumentException($"Cannot send message of type {type} to empty endpoint", nameof(endPoint));
         }
 
         if (message.Length > MaximumMessageSize)
@@ -397,12 +397,12 @@ public sealed class Producer : IProducer
     /// <param name="packet">The raw payload to send.</param>
     /// <param name="headers">Optional custom headers to include with the packet.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendBytesAsync(string endPoint, Type type, byte[] packet, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task SendBytesAsync(string endPoint, Type type, byte[] packet, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
         {
-            throw new ArgumentException($"Cannot send packet of type {type} to empty endpoint");
+            throw new ArgumentException($"Cannot send packet of type {type} to empty endpoint", nameof(endPoint));
         }
 
         if (packet.Length > MaximumMessageSize)
@@ -531,7 +531,7 @@ public sealed class Producer : IProducer
     private BasicProperties CreateBasicProperties(Dictionary<string, object> messageHeaders)
     {
         // foreach avoids the LINQ Select + enumerator allocation per message.
-        var headersCopy = new Dictionary<string, object?>(messageHeaders.Count);
+        var headersCopy = new Dictionary<string, object?>(messageHeaders.Count, StringComparer.Ordinal);
         foreach (var kvp in messageHeaders)
         {
             headersCopy[kvp.Key] = kvp.Value;
@@ -552,7 +552,7 @@ public sealed class Producer : IProducer
         {
             try
             {
-                basicProperties.Priority = Convert.ToByte(priority);
+                basicProperties.Priority = Convert.ToByte(priority, System.Globalization.CultureInfo.InvariantCulture);
             }
             catch (Exception ex)
             {
@@ -563,13 +563,13 @@ public sealed class Producer : IProducer
         return basicProperties;
     }
 
-    private Dictionary<string, object> GetHeaders(Type type, Dictionary<string, string>? headers, string queueName, string messageType)
+    private Dictionary<string, object> GetHeaders(Type type, IDictionary<string, string>? headers, string queueName, string messageType)
     {
         // Build the final object-valued dictionary directly rather than populating a
         // string-valued copy and then rewriting it. Pre-sized to the maximum
         // number of stamped keys + any caller-provided entries.
         var callerCount = headers?.Count ?? 0;
-        var result = new Dictionary<string, object>(callerCount + StampedHeaderCount);
+        var result = new Dictionary<string, object>(callerCount + StampedHeaderCount, StringComparer.Ordinal);
 
         if (headers is not null)
         {
@@ -668,7 +668,7 @@ public sealed class Producer : IProducer
                 _logger.LogDebug("Disposing Model");
                 if (model.IsOpen)
                 {
-                    await model.CloseAsync();
+                    await model.CloseAsync().ConfigureAwait(false);
                 }
 
                 model.Dispose();
@@ -690,7 +690,7 @@ public sealed class Producer : IProducer
                 _logger.LogDebug("Disposing connection");
                 if (connection.IsOpen)
                 {
-                    await connection.CloseAsync();
+                    await connection.CloseAsync().ConfigureAwait(false);
                 }
 
                 connection.Dispose();

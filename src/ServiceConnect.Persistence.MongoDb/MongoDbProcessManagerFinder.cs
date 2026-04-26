@@ -16,7 +16,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
 {
     private readonly IMongoDatabase _mongoDatabase;
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _indexCreationSemaphore = new(1, 1);
     private static readonly HashSet<int> BenignIndexCodes = [85, 86]; // IndexOptionsConflict, IndexKeySpecsConflict
 
@@ -101,7 +101,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
 
         if (msgPropValue is null)
         {
-            throw new ArgumentException("Message property expression evaluates to null.");
+            throw new ArgumentException("Message property expression evaluates to null.", nameof(message));
         }
 
         try

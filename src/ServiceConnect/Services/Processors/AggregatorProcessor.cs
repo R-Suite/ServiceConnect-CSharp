@@ -13,16 +13,20 @@ internal sealed class AggregatorProcessor(
     ILogger<AggregatorProcessor> logger,
     IAggregatorPersistor? persistor = null) : IMessageProcessor, IAsyncDisposable
 {
-    private readonly ConcurrentDictionary<string, Timer> _timers = new();
+    private readonly ConcurrentDictionary<string, Timer> _timers = new(StringComparer.Ordinal);
     // Single-flight lock for ResetTimer. Concurrent calls for the same aggregator
     // would otherwise rely on ConcurrentDictionary.AddOrUpdate factory semantics,
     // whose factory may re-run under contention — losing-factory Timer instances
     // are then orphaned (already running, never installed, never disposed).
+#if NET9_0_OR_GREATER
+    private readonly System.Threading.Lock _resetTimerLock = new();
+#else
     private readonly object _resetTimerLock = new();
+#endif
     // Per-aggregator flush lock. Holding this across the full flush body prevents
     // the timer-fired path and the batch-size path from double-flushing and
     // racing on Get/Invoke/Remove.
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _flushLocks = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _flushLocks = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _disposeCts = new();
     private readonly ConcurrentDictionary<int, Task> _activeFlushes = new();
     private int _flushId;

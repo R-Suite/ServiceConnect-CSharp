@@ -445,7 +445,7 @@ file sealed class TestSendMiddleware : ISendMessageMiddleware
     public Task ProcessAsync(
         Type messageType,
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         string? endPoint,
         SendMessageDelegate next,
         CancellationToken cancellationToken = default) =>
@@ -456,7 +456,7 @@ file sealed class OverrideRequestReplyManager : IRequestReplyManager
 {
     public Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -465,7 +465,7 @@ file sealed class OverrideRequestReplyManager : IRequestReplyManager
 
     public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -474,7 +474,7 @@ file sealed class OverrideRequestReplyManager : IRequestReplyManager
 
     public Task PublishRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         Action<TReply> onReply,
         CancellationToken cancellationToken = default)
@@ -490,7 +490,7 @@ file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReply
 {
     public Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -499,7 +499,7 @@ file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReply
 
     public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -508,7 +508,7 @@ file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReply
 
     public Task PublishRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         Action<TReply> onReply,
         CancellationToken cancellationToken = default)

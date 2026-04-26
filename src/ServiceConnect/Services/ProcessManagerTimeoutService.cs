@@ -160,8 +160,8 @@ public sealed class ProcessManagerTimeoutService(
         {
             try
             {
-                await timer.WaitForNextTickAsync(cancellationToken);
-                await PollOnceAsync(cancellationToken);
+                await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false);
+                await PollOnceAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { break; }
         }

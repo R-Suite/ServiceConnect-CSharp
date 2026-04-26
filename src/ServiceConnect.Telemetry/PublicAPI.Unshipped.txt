@@ -38,4 +38,4 @@ static ServiceConnect.Telemetry.ServiceConnectActivitySource.Options.get -> Serv
 static ServiceConnect.Telemetry.ServiceConnectActivitySource.Publish(ServiceConnect.Interfaces.PublishEventArgs! eventArgs, System.Diagnostics.ActivityContext linkedContext = default(System.Diagnostics.ActivityContext)) -> System.Diagnostics.Activity?
 static ServiceConnect.Telemetry.ServiceConnectActivitySource.Send(ServiceConnect.Interfaces.SendEventArgs! eventArgs, System.Diagnostics.ActivityContext linkedContext = default(System.Diagnostics.ActivityContext)) -> System.Diagnostics.Activity?
 static ServiceConnect.Telemetry.ServiceConnectActivitySource.SetError(System.Diagnostics.Activity? activity, System.Exception! exception) -> void
-static ServiceConnect.Telemetry.ServiceConnectActivitySource.TryGetExistingContext(System.Collections.Generic.Dictionary<string!, string!>! headers, out System.Diagnostics.ActivityContext context) -> bool
+static ServiceConnect.Telemetry.ServiceConnectActivitySource.TryGetExistingContext(System.Collections.Generic.IDictionary<string!, string!>! headers, out System.Diagnostics.ActivityContext context) -> bool

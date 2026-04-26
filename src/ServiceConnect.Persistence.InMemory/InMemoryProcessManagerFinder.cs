@@ -77,7 +77,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 
         if (msgPropValue is null)
         {
-            throw new ArgumentException("Message property expression evaluates to null");
+            throw new ArgumentException("Message property expression evaluates to null", nameof(message));
         }
 
         var predicate = GetPredicate<T>(mapping.PropertiesHierarchy, msgPropValue.GetType());

@@ -12,12 +12,12 @@ public class RoutingSlipTests
     public async Task RouteAsync_SetsRoutingSlipHeaders()
     {
         string? capturedEndpoint = null;
-        Dictionary<string, string>? capturedHeaders = null;
+        IDictionary<string, string>? capturedHeaders = null;
 
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Type, byte[], Dictionary<string, string>, CancellationToken>((ep, t, b, h, ct) =>
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Type, byte[], IDictionary<string, string>, CancellationToken>((ep, t, b, h, ct) =>
             {
                 capturedEndpoint = ep;
                 capturedHeaders = h;
@@ -50,12 +50,12 @@ public class RoutingSlipTests
     public async Task RouteAsync_SingleDestination_NoRoutingSlipHeader()
     {
         string? capturedEndpoint = null;
-        Dictionary<string, string>? capturedHeaders = null;
+        IDictionary<string, string>? capturedHeaders = null;
 
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Type, byte[], Dictionary<string, string>, CancellationToken>((ep, t, b, h, ct) =>
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Type, byte[], IDictionary<string, string>, CancellationToken>((ep, t, b, h, ct) =>
             {
                 capturedEndpoint = ep;
                 capturedHeaders = h;

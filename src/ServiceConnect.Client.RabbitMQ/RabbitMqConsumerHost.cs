@@ -33,7 +33,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly bool _includeMachineNameInHeaders;
     private readonly bool _deadLetterUnhandledMessages;
     private readonly long _maxInboundMessageSize;
+#if NET9_0_OR_GREATER
+    private readonly System.Threading.Lock _callbackAdmissionGate = new();
+#else
     private readonly object _callbackAdmissionGate = new();
+#endif
 
     private IChannel? _model;
     // RabbitMQ.Client requires per-channel serialization. The consumer channel is used for
@@ -87,7 +91,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _errorsDisabled = queueConfiguration.DisableErrors;
         _autoDelete = settings.TryGetValue(RabbitMQSettingKeys.AutoDelete, out var autoDeleteVal) && (bool)autoDeleteVal;
         _prefetchCount = settings.TryGetValue(RabbitMQSettingKeys.PrefetchCount, out var prefetchVal)
-            ? Convert.ToUInt16(prefetchVal)
+            ? Convert.ToUInt16(prefetchVal, System.Globalization.CultureInfo.InvariantCulture)
             : transportConfiguration.PrefetchCount;
         _disablePrefetch = settings.TryGetValue(RabbitMQSettingKeys.DisablePrefetch, out var disablePrefetchVal) && (bool)disablePrefetchVal;
         _queueArguments = CoerceToQueueArgs(settings, RabbitMQSettingKeys.Arguments);
@@ -95,7 +99,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             ? transportConfiguration.GracefulShutdownTimeoutMilliseconds
             : 5000;
         _maxInboundMessageSize = settings.TryGetValue(RabbitMQSettingKeys.MessageSize, out var maxSizeVal)
-            ? Convert.ToInt64(maxSizeVal)
+            ? Convert.ToInt64(maxSizeVal, System.Globalization.CultureInfo.InvariantCulture)
             : 64 * 1024;
     }
 
@@ -331,7 +335,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private static Dictionary<string, object> CopyInboundHeaders(BasicDeliverEventArgs args)
     {
         var sourceHeaders = args.BasicProperties.Headers;
-        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 0) + 1);
+        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 0) + 1, StringComparer.Ordinal);
         if (sourceHeaders != null)
         {
             foreach (var kvp in sourceHeaders)
@@ -354,7 +358,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // avoid rehashes during the copy on this per-message hot path.
         var sourceHeaders = args.BasicProperties.Headers;
 
-        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3);
+        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3, StringComparer.Ordinal);
         if (sourceHeaders != null)
         {
             foreach (var kvp in sourceHeaders)
@@ -781,8 +785,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         return raw switch
         {
             Dictionary<string, object?> d => d,
-            IDictionary<string, object?> id => new Dictionary<string, object?>(id),
-            IReadOnlyDictionary<string, object?> rd => rd.ToDictionary(kv => kv.Key, kv => kv.Value),
+            IDictionary<string, object?> id => new Dictionary<string, object?>(id, StringComparer.Ordinal),
+            IReadOnlyDictionary<string, object?> rd => rd.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal),
             _ => throw new InvalidOperationException(
                 $"Setting '{key}' must be IDictionary<string, object?> or IReadOnlyDictionary<string, object?>; got {raw.GetType().FullName}."),
         };

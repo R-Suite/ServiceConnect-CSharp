@@ -271,7 +271,7 @@ public static class ServiceConnectActivitySource
     /// <c>true</c> and populates <paramref name="context"/> when the headers contain
     /// a well-formed traceparent; otherwise returns <c>false</c>.
     /// </summary>
-    public static bool TryGetExistingContext(Dictionary<string, string> headers, out ActivityContext context)
+    public static bool TryGetExistingContext(IDictionary<string, string> headers, out ActivityContext context)
     {
         if (headers == null)
         {
@@ -322,7 +322,7 @@ public static class ServiceConnectActivitySource
     /// <see cref="Consume"/>'s extract side; without injection, each consume span becomes a
     /// new trace root and the end-to-end graph cannot be stitched across the broker.
     /// </summary>
-    private static void InjectTraceContext(Activity? activity, Dictionary<string, string> headers)
+    private static void InjectTraceContext(Activity? activity, IDictionary<string, string> headers)
     {
         if (activity is null)
         {
@@ -334,7 +334,7 @@ public static class ServiceConnectActivitySource
 
     private static void InjectHeader(object? carrier, string fieldName, string fieldValue)
     {
-        if (carrier is Dictionary<string, string> headers)
+        if (carrier is IDictionary<string, string> headers)
         {
             headers[fieldName] = fieldValue;
         }

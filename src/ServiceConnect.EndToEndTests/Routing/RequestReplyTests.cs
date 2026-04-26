@@ -15,10 +15,10 @@ public class RequestReplyTests
     {
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
             .Returns(Task.CompletedTask);
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>()))
+            .Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
             .Returns(Task.CompletedTask);
 
         var services = new ServiceCollection();
@@ -49,8 +49,8 @@ public class RequestReplyTests
 
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Type, byte[], Dictionary<string, string>, CancellationToken>((ep, t, b, h, ct) =>
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Type, byte[], IDictionary<string, string>, CancellationToken>((ep, t, b, h, ct) =>
             {
                 if (h.TryGetValue("RequestMessageId", out var messageId) && replyManager != null && serializer != null)
                 {

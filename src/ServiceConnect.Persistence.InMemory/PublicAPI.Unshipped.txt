@@ -12,7 +12,7 @@ ServiceConnect.Persistence.InMemory.CacheProvider.Contains<TKey>(TKey key) -> bo
 ServiceConnect.Persistence.InMemory.CacheProvider.Count() -> int
 ServiceConnect.Persistence.InMemory.CacheProvider.Dispose() -> void
 ServiceConnect.Persistence.InMemory.CacheProvider.Get<TKey, TValue>(TKey key) -> TValue
-ServiceConnect.Persistence.InMemory.CacheProvider.KeyRemoved -> System.EventHandler?
+ServiceConnect.Persistence.InMemory.CacheProvider.KeyRemoved -> System.EventHandler<ServiceConnect.Persistence.InMemory.KeyRemovedEventArgs!>?
 ServiceConnect.Persistence.InMemory.CacheProvider.Keys() -> System.Collections.Generic.IEnumerable<object!>!
 ServiceConnect.Persistence.InMemory.CacheProvider.Keys<TKey>() -> System.Collections.Generic.IEnumerable<TKey>!
 ServiceConnect.Persistence.InMemory.CacheProvider.PurgeNormalPriorities() -> int
@@ -26,7 +26,10 @@ ServiceConnect.Persistence.InMemory.ICacheProvider.Clear() -> void
 ServiceConnect.Persistence.InMemory.ICacheProvider.Contains<TKey>(TKey key) -> bool
 ServiceConnect.Persistence.InMemory.ICacheProvider.Count() -> int
 ServiceConnect.Persistence.InMemory.ICacheProvider.Get<TKey, TValue>(TKey key) -> TValue
-ServiceConnect.Persistence.InMemory.ICacheProvider.KeyRemoved -> System.EventHandler!
+ServiceConnect.Persistence.InMemory.ICacheProvider.KeyRemoved -> System.EventHandler<ServiceConnect.Persistence.InMemory.KeyRemovedEventArgs!>!
+ServiceConnect.Persistence.InMemory.KeyRemovedEventArgs
+ServiceConnect.Persistence.InMemory.KeyRemovedEventArgs.Key.get -> object!
+ServiceConnect.Persistence.InMemory.KeyRemovedEventArgs.KeyRemovedEventArgs(object! key) -> void
 ServiceConnect.Persistence.InMemory.ICacheProvider.Keys() -> System.Collections.Generic.IEnumerable<object!>!
 ServiceConnect.Persistence.InMemory.ICacheProvider.Keys<TKey>() -> System.Collections.Generic.IEnumerable<TKey>!
 ServiceConnect.Persistence.InMemory.ICacheProvider.PurgeNormalPriorities() -> int

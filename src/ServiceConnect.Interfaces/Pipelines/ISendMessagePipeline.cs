@@ -13,7 +13,7 @@ public interface ISendMessagePipeline : IAsyncDisposable
     /// <param name="headers">Optional outgoing headers.</param>
     /// <param name="endPoint">An optional destination endpoint override.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default);
+    Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Executes the send pipeline for an outgoing message.
@@ -23,5 +23,5 @@ public interface ISendMessagePipeline : IAsyncDisposable
     /// <param name="headers">Optional outgoing headers.</param>
     /// <param name="endPoint">An optional destination endpoint override.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default);
+    Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default);
 }

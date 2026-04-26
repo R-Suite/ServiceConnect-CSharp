@@ -28,7 +28,7 @@ public sealed class TimeoutData
     /// <summary>
     /// Store the headers to preserve them across timeouts.
     /// </summary>
-    public IDictionary<string, object> Headers { get; set; } = new Dictionary<string, object>();
+    public IDictionary<string, object> Headers { get; set; } = new Dictionary<string, object>(StringComparer.Ordinal);
 
     /// <summary>
     /// Mark processed timeouts as dispatched to prevent multiple dispatch of the same timeout

@@ -167,6 +167,6 @@ file class MhrFakeConsumeContext : IConsumeContext
     public string? MessageId => null;
     public Guid CorrelationId => Guid.Empty;
     public CancellationToken CancellationToken { get; set; }
-    public Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default) where TReply : Message
+    public Task ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default) where TReply : Message
         => throw new NotImplementedException();
 }

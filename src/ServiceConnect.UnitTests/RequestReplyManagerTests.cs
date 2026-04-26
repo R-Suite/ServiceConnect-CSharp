@@ -76,7 +76,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -145,7 +145,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 "my-queue",
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, endpoint, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, endpoint, _) =>
             {
                 capturedEndpoint = endpoint;
                 capturedMessageId = hdrs!["RequestMessageId"];
@@ -181,7 +181,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
             })
@@ -235,7 +235,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -280,7 +280,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -326,7 +326,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 "single-queue",
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, endpoint, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, endpoint, _) =>
             {
                 capturedEndpoint = endpoint;
                 capturedMessageId = hdrs!["RequestMessageId"];
@@ -377,7 +377,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 "fallback-queue",
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, endpoint, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, endpoint, _) =>
             {
                 capturedEndpoint = endpoint;
                 capturedMessageId = hdrs!["RequestMessageId"];
@@ -415,7 +415,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
             })
@@ -456,7 +456,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -530,7 +530,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() => manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1)));
@@ -589,7 +589,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -659,7 +659,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() => manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1)));
@@ -711,7 +711,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -762,7 +762,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -808,7 +808,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(async () =>
@@ -879,7 +879,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -953,7 +953,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
                 Task.Run(() =>
@@ -994,7 +994,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
             })
@@ -1029,7 +1029,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Returns<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>(async (_, _, _, _, token) =>
+            .Returns<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>(async (_, _, _, _, token) =>
             {
                 observedCancellation.TrySetResult(token);
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
@@ -1040,7 +1040,7 @@ public class RequestReplyManagerTests
 
         var publishTask = manager.PublishRequestAsync<FakeMessage1, FakeMessage1>(
             [1, 2, 3],
-            [],
+            new Dictionary<string, string>(),
             options,
             _ => callbackCount++);
 
@@ -1065,7 +1065,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Returns<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>(async (_, _, _, _, token) =>
+            .Returns<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>(async (_, _, _, _, token) =>
             {
                 observedCancellation.TrySetResult(token);
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
@@ -1076,7 +1076,7 @@ public class RequestReplyManagerTests
 
         var requestTask = manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
             [1, 2, 3],
-            [],
+            new Dictionary<string, string>(),
             options);
 
         var pipelineToken = await observedCancellation.Task;
@@ -1098,7 +1098,7 @@ public class RequestReplyManagerTests
         var options = new RequestOptions { Timeout = 300000 }; // 5 minutes ms
 
         var task = rrm.SendRequestAsync<FakeMessage1, FakeMessage1>(
-            [0], [], options,
+            [0], new Dictionary<string, string>(), options,
             externalCts.Token);
 
         externalCts.CancelAfter(50);
@@ -1113,7 +1113,7 @@ public class RequestReplyManagerTests
         var options = new RequestOptions { Timeout = 50 }; // 50 ms
 
         var task = rrm.SendRequestAsync<FakeMessage1, FakeMessage1>(
-            [0], [], options,
+            [0], new Dictionary<string, string>(), options,
             CancellationToken.None);
 
         await Assert.ThrowsAsync<RequestTimeoutException>(() => task);
@@ -1129,7 +1129,7 @@ public class RequestReplyManagerTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             rrm.SendRequestAsync<FakeMessage1, FakeMessage1>(
-                [0], [],
+                [0], new Dictionary<string, string>(),
                 options, externalCts.Token));
     }
 
@@ -1158,7 +1158,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Returns<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>(
+            .Returns<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>(
                 async (_, _, hdrs, _, _) =>
                 {
                     capturedMessageId = hdrs!["RequestMessageId"];
@@ -1176,7 +1176,7 @@ public class RequestReplyManagerTests
         var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
 
         var requestTask = manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
-            [1, 2, 3], [], options,
+            [1, 2, 3], new Dictionary<string, string>(), options,
             externalCts.Token);
 
         // Wait for the send pipeline to be entered.
@@ -1235,7 +1235,7 @@ public class RequestReplyManagerTests
                 It.IsAny<Dictionary<string, string>>(),
                 null,
                 It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, hdrs, _, _) =>
             {
                 capturedMessageId = hdrs!["RequestMessageId"];
             })

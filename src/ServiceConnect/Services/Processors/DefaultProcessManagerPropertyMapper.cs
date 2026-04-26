@@ -13,7 +13,7 @@ internal sealed class DefaultProcessManagerPropertyMapper : IProcessManagerPrope
         System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
         where TProcessManagerData : IProcessManagerData
     {
-        var propertiesHierarchy = new Dictionary<string, Type>();
+        var propertiesHierarchy = new Dictionary<string, Type>(StringComparer.Ordinal);
 
         var body = processManagerProperty.Body;
         if (body is System.Linq.Expressions.UnaryExpression unary)

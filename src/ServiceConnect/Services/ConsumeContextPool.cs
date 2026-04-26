@@ -10,7 +10,7 @@ internal sealed class ConsumeContextPool
     // Bleed excess contexts to GC rather than growing the pool unboundedly under bursts.
     private const int MaxPoolSize = 512;
 
-    private static readonly Dictionary<string, object> EmptyHeaders = [];
+    private static readonly Dictionary<string, object> EmptyHeaders = new(StringComparer.Ordinal);
     private readonly ConcurrentBag<PooledConsumeContext> _pool = [];
 
     public RentalHandle Rent(
@@ -76,7 +76,7 @@ internal sealed class ConsumeContextPool
             }
         }
 
-        public Task ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+        public Task ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
             where TReply : Message
         {
             _inner.EnsureActive(_token);
@@ -119,7 +119,7 @@ internal sealed class ConsumeContextPool
         CancellationToken IConsumeContext.CancellationToken => throw new NotSupportedException("Use RentalHandle.");
         string? IConsumeContext.MessageId => throw new NotSupportedException("Use RentalHandle.");
         Guid IConsumeContext.CorrelationId => throw new NotSupportedException("Use RentalHandle.");
-        Task IConsumeContext.ReplyAsync<TReply>(TReply message, Dictionary<string, string>? headers, CancellationToken cancellationToken)
+        Task IConsumeContext.ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers, CancellationToken cancellationToken)
             => throw new NotSupportedException("Use RentalHandle.");
 
         internal string? GetOrCacheMessageId()
@@ -155,7 +155,7 @@ internal sealed class ConsumeContextPool
             _busConfig = busConfig;
             _replyStatusRequestReplyManager = replyStatusRequestReplyManager;
             CancellationTokenUnsafe = cancellationToken;
-            _headers = headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers);
+            _headers = headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers, StringComparer.Ordinal);
             _messageId = null;
             _messageIdCached = false;
             _correlationId = null;
@@ -172,7 +172,7 @@ internal sealed class ConsumeContextPool
             }
         }
 
-        internal Task ReplyAsyncCore<TReply>(TReply message, Dictionary<string, string>? headers, CancellationToken cancellationToken)
+        internal Task ReplyAsyncCore<TReply>(TReply message, IDictionary<string, string>? headers, CancellationToken cancellationToken)
             where TReply : Message
         {
             var sourceAddress = ConsumeContext.GetDecodedHeader(_headers, HeaderKeys.SourceAddress);
@@ -196,7 +196,9 @@ internal sealed class ConsumeContextPool
                     "This may indicate a spoofed message. Configure queue mappings or use RequestReplyManager for safe replies.");
             }
 
-            var replyHeaders = headers ?? [];
+            Dictionary<string, string> replyHeaders = headers is null
+                ? new Dictionary<string, string>(StringComparer.Ordinal)
+                : (headers as Dictionary<string, string>) ?? new Dictionary<string, string>(headers, StringComparer.Ordinal);
             if (!string.IsNullOrEmpty(requestMessageId))
             {
                 replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;

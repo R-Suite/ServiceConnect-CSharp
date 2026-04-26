@@ -40,30 +40,30 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     }
 
     /// <inheritdoc />
-    public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
+    public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _publishChain.Value(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
+        return _publishChain.Value(typeObject, messageBytes, headers ?? new Dictionary<string, string>(StringComparer.Ordinal), endPoint, cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, Dictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
+    public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _sendChain.Value(typeObject, messageBytes, headers ?? [], endPoint, cancellationToken);
+        return _sendChain.Value(typeObject, messageBytes, headers ?? new Dictionary<string, string>(StringComparer.Ordinal), endPoint, cancellationToken);
     }
 
     private SendMessageDelegate BuildPublishChain()
     {
         var producer = _producer;
-        Task terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct) => producer.PublishAsync(t, b, h, ct);
+        Task terminal(Type t, byte[] b, IDictionary<string, string> h, string? ep, CancellationToken ct) => producer.PublishAsync(t, b, h, ct);
         return WrapMiddleware(terminal);
     }
 
     private SendMessageDelegate BuildSendChain()
     {
         var producer = _producer;
-        Task terminal(Type t, byte[] b, Dictionary<string, string> h, string? ep, CancellationToken ct) =>
+        Task terminal(Type t, byte[] b, IDictionary<string, string> h, string? ep, CancellationToken ct) =>
             !string.IsNullOrEmpty(ep)
                 ? producer.SendAsync(ep, t, b, h, ct)
                 : producer.SendAsync(t, b, h, ct);

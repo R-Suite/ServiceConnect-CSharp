@@ -10,7 +10,7 @@ namespace ServiceConnect.Services;
 /// </summary>
 public sealed class MessageTypeRegistry : IMessageTypeRegistry
 {
-    private readonly ConcurrentDictionary<string, Type> _registeredTypes = new();
+    private readonly ConcurrentDictionary<string, Type> _registeredTypes = new(StringComparer.Ordinal);
     private FrozenDictionary<string, Type>? _types;
     // Monotonic version bumped on every Register. TryResolve captures the version before
     // snapshotting _registeredTypes; if a concurrent Register advances the version between

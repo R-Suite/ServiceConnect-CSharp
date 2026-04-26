@@ -29,7 +29,11 @@ public sealed class Bus : IBus
     private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly bool _hasOutgoingFilters;
     private readonly TimeSpan _disposeTimeout;
+#if NET9_0_OR_GREATER
+    private readonly System.Threading.Lock _stateLock = new();
+#else
     private readonly object _stateLock = new();
+#endif
     private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private volatile bool _consuming;
     private bool _stopped;
@@ -359,7 +363,7 @@ public sealed class Bus : IBus
                     throw new InvalidOperationException("No consumer registered. Call UseRabbitMQ() or register an IConsumer.");
                 }
 
-                var typeNameSet = new HashSet<string>(_handlerReferences.Count);
+                var typeNameSet = new HashSet<string>(_handlerReferences.Count, StringComparer.Ordinal);
                 foreach (var h in _handlerReferences)
                 {
                     typeNameSet.Add(MessageTypeExchangeName.From(h.MessageType));
@@ -581,7 +585,7 @@ public sealed class Bus : IBus
         var envelope = new Envelope
         {
             Body = body,
-            Headers = new Dictionary<string, object>()
+            Headers = new Dictionary<string, object>(StringComparer.Ordinal)
         };
 
         if (snapshot is not null)
@@ -610,7 +614,7 @@ public sealed class Bus : IBus
     {
         // Pre-size the destination to the known envelope header count so the
         // dictionary is not rehashed as we fill it.
-        var headers = new Dictionary<string, string>(envelope.Headers.Count);
+        var headers = new Dictionary<string, string>(envelope.Headers.Count, StringComparer.Ordinal);
         foreach (var kvp in envelope.Headers)
         {
             headers[kvp.Key] = kvp.Value switch
@@ -661,7 +665,7 @@ public sealed class Bus : IBus
         // copy with a single enumeration.
         var snapshot = additionalHeaders?.ToArray();
         var capacity = ReservedHeaders.Count + (snapshot?.Length ?? 0);
-        var headers = new Dictionary<string, string>(capacity);
+        var headers = new Dictionary<string, string>(capacity, StringComparer.Ordinal);
 
         if (snapshot is not null)
         {

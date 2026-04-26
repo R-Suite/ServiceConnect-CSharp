@@ -9,7 +9,7 @@ namespace ServiceConnect.UnitTests;
 public class MessageBusWriteStreamTests
 {
     private readonly Mock<IProducer> _producer = new();
-    private readonly List<(string Endpoint, Type Type, byte[] Payload, Dictionary<string, string>? Headers)> _sends = [];
+    private readonly List<(string Endpoint, Type Type, byte[] Payload, IDictionary<string, string>? Headers)> _sends = [];
 
     public MessageBusWriteStreamTests()
     {
@@ -18,9 +18,9 @@ public class MessageBusWriteStreamTests
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
                 It.IsAny<byte[]>(),
-                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<IDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, Type, byte[], Dictionary<string, string>?, CancellationToken>((ep, type, bytes, headers, _) =>
+            .Callback<string, Type, byte[], IDictionary<string, string>?, CancellationToken>((ep, type, bytes, headers, _) =>
                 _sends.Add((ep, type, bytes, headers)))
             .Returns(Task.CompletedTask);
     }

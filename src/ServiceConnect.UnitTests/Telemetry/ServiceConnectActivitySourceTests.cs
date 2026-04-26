@@ -554,7 +554,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         {
             EndPoint = "",
             EndPoints = ["queue-a", "queue-b"],
-            Headers = [],
+            Headers = new Dictionary<string, string>(),
         };
 
         using var activity = ServiceConnectActivitySource.Send(args);
@@ -574,7 +574,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         {
             EndPoint = "",
             EndPoints = ["queue-a", "", "   ", "queue-b"],
-            Headers = [],
+            Headers = new Dictionary<string, string>(),
         };
 
         using var activity = ServiceConnectActivitySource.Send(args);
@@ -593,7 +593,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         {
             EndPoint = "",
             EndPoints = ["", "   "],
-            Headers = [],
+            Headers = new Dictionary<string, string>(),
         };
 
         using var activity = ServiceConnectActivitySource.Send(args);
@@ -610,7 +610,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         var args = new SendEventArgs
         {
             EndPoint = "queue-a",
-            Headers = [],
+            Headers = new Dictionary<string, string>(),
             Message = null,
         };
 
@@ -635,7 +635,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         var args = new PublishEventArgs
         {
             Exchange = "ex",
-            Headers = [],
+            Headers = new Dictionary<string, string>(),
             Message = null,
         };
 
@@ -664,7 +664,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         var args = new SendEventArgs
         {
             EndPoint = "queue-a",
-            Headers = [],
+            Headers = new Dictionary<string, string>(),
             Message = null,
         };
 

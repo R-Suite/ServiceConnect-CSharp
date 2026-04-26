@@ -35,7 +35,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
                 durable: true,
                 autoDelete: false,
                 arguments: null,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {
@@ -69,7 +69,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
                 exclusive,
                 autoDelete,
                 arguments,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {
@@ -101,7 +101,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
                 durable: true,
                 autoDelete: false,
                 arguments: null,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {
@@ -114,7 +114,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
 
         try
         {
-            await channel.QueueDeclareAsync(name, durable: true, exclusive: false, autoDelete: false, arguments, cancellationToken: cancellationToken);
+            await channel.QueueDeclareAsync(name, durable: true, exclusive: false, autoDelete: false, arguments, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {
@@ -129,7 +129,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         {
             try
             {
-                await channel.QueueBindAsync(name, name, string.Empty, null, cancellationToken: cancellationToken);
+                await channel.QueueBindAsync(name, name, string.Empty, null, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
             catch (OperationInterruptedException ex)
             {
@@ -161,7 +161,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
 
         try
         {
-            await channel.ExchangeDeclareAsync(retryDeadLetterExchangeName, ExchangeType.Direct, durable, autoDelete, null, cancellationToken: cancellationToken);
+            await channel.ExchangeDeclareAsync(retryDeadLetterExchangeName, ExchangeType.Direct, durable, autoDelete, null, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {
@@ -174,7 +174,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
 
         try
         {
-            await channel.QueueBindAsync(queueName, retryDeadLetterExchangeName, retryQueueName, null, cancellationToken: cancellationToken);
+            await channel.QueueBindAsync(queueName, retryDeadLetterExchangeName, retryQueueName, null, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {
@@ -185,7 +185,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
             }
         }
 
-        Dictionary<string, object?> arguments = new(retryQueueArguments)
+        Dictionary<string, object?> arguments = new(retryQueueArguments, StringComparer.Ordinal)
         {
             {RabbitMqQueueNaming.XDeadLetterExchangeArgument, retryDeadLetterExchangeName},
             {RabbitMqQueueNaming.XMessageTtlArgument, retryDelayMs}
@@ -193,7 +193,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
 
         try
         {
-            await channel.QueueDeclareAsync(retryQueueName, durable, exclusive: false, autoDelete: false, arguments, cancellationToken: cancellationToken);
+            await channel.QueueDeclareAsync(retryQueueName, durable, exclusive: false, autoDelete: false, arguments, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {

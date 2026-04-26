@@ -84,7 +84,7 @@ public class RequestReplyManagerRegistrationTests
     {
         public Task<TReply> SendRequestAsync<TRequest, TReply>(
             byte[] messageBytes,
-            Dictionary<string, string> headers,
+            IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
             where TRequest : Message
@@ -93,7 +93,7 @@ public class RequestReplyManagerRegistrationTests
 
         public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
             byte[] messageBytes,
-            Dictionary<string, string> headers,
+            IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
             where TRequest : Message
@@ -102,7 +102,7 @@ public class RequestReplyManagerRegistrationTests
 
         public Task PublishRequestAsync<TRequest, TReply>(
             byte[] messageBytes,
-            Dictionary<string, string> headers,
+            IDictionary<string, string> headers,
             RequestOptions options,
             Action<TReply> onReply,
             CancellationToken cancellationToken = default)
@@ -124,7 +124,7 @@ public class RequestReplyManagerRegistrationTests
     {
         public Task<TReply> SendRequestAsync<TRequest, TReply>(
             byte[] messageBytes,
-            Dictionary<string, string> headers,
+            IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
             where TRequest : Message
@@ -133,7 +133,7 @@ public class RequestReplyManagerRegistrationTests
 
         public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
             byte[] messageBytes,
-            Dictionary<string, string> headers,
+            IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
             where TRequest : Message
@@ -142,7 +142,7 @@ public class RequestReplyManagerRegistrationTests
 
         public Task PublishRequestAsync<TRequest, TReply>(
             byte[] messageBytes,
-            Dictionary<string, string> headers,
+            IDictionary<string, string> headers,
             RequestOptions options,
             Action<TReply> onReply,
             CancellationToken cancellationToken = default)

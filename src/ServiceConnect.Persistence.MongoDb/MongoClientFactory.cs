@@ -14,7 +14,7 @@ public static class MongoClientFactory
     // Cache loaded certificates so repeated Create() calls never duplicate the native handle.
     // The cert's lifetime is then bounded by the process (or explicit ClearCertificateCache()
     // in tests) — aligning with the MongoClient singleton that holds a reference to it.
-    private static readonly ConcurrentDictionary<string, Lazy<X509Certificate2>> _certCache = new();
+    private static readonly ConcurrentDictionary<string, Lazy<X509Certificate2>> _certCache = new(StringComparer.Ordinal);
 
     // Test seam: lets unit tests substitute a counting wrapper without touching the
     // real X509 loader. Production code always sees LoadCertificate.

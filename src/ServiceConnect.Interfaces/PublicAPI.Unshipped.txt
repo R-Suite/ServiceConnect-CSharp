@@ -220,7 +220,7 @@ ServiceConnect.Interfaces.IConsumeContext.CancellationToken.get -> System.Thread
 ServiceConnect.Interfaces.IConsumeContext.CorrelationId.get -> System.Guid
 ServiceConnect.Interfaces.IConsumeContext.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, object!>!
 ServiceConnect.Interfaces.IConsumeContext.MessageId.get -> string?
-ServiceConnect.Interfaces.IConsumeContext.ReplyAsync<TReply>(TReply! message, System.Collections.Generic.Dictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.IConsumeContext.ReplyAsync<TReply>(TReply! message, System.Collections.Generic.IDictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Interfaces.IConsumer
 ServiceConnect.Interfaces.IConsumer.IsConnected.get -> bool
 ServiceConnect.Interfaces.IConsumer.StartConsumingAsync(string! queueName, System.Collections.Generic.IList<string!>! messageTypes, ServiceConnect.Interfaces.ConsumerEventHandler! eventHandler, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
@@ -288,22 +288,22 @@ ServiceConnect.Interfaces.IProcessManagerPropertyMapper.Mappings.get -> System.C
 ServiceConnect.Interfaces.IProducer
 ServiceConnect.Interfaces.IProducer.DisconnectAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Interfaces.IProducer.MaximumMessageSize.get -> long
-ServiceConnect.Interfaces.IProducer.PublishAsync(System.Type! type, byte[]! message, System.Collections.Generic.Dictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-ServiceConnect.Interfaces.IProducer.SendAsync(string! endPoint, System.Type! type, byte[]! message, System.Collections.Generic.Dictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-ServiceConnect.Interfaces.IProducer.SendAsync(System.Type! type, byte[]! message, System.Collections.Generic.Dictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-ServiceConnect.Interfaces.IProducer.SendBytesAsync(string! endPoint, System.Type! type, byte[]! packet, System.Collections.Generic.Dictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.IProducer.PublishAsync(System.Type! type, byte[]! message, System.Collections.Generic.IDictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.IProducer.SendAsync(string! endPoint, System.Type! type, byte[]! message, System.Collections.Generic.IDictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.IProducer.SendAsync(System.Type! type, byte[]! message, System.Collections.Generic.IDictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.IProducer.SendBytesAsync(string! endPoint, System.Type! type, byte[]! packet, System.Collections.Generic.IDictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Interfaces.IRegistryInitializer
 ServiceConnect.Interfaces.IRegistryInitializer.Initialize() -> void
 ServiceConnect.Interfaces.IRequestReplyManager
 ServiceConnect.Interfaces.IRequestReplyManager.ProcessReply(string! messageId, System.ReadOnlyMemory<byte> messageBytes, System.Type! type) -> void
-ServiceConnect.Interfaces.IRequestReplyManager.PublishRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Action<TReply!>! onReply, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-ServiceConnect.Interfaces.IRequestReplyManager.SendRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TReply!>!
-ServiceConnect.Interfaces.IRequestReplyManager.SendRequestMultiAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IList<TReply!>!>!
+ServiceConnect.Interfaces.IRequestReplyManager.PublishRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Action<TReply!>! onReply, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.IRequestReplyManager.SendRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TReply!>!
+ServiceConnect.Interfaces.IRequestReplyManager.SendRequestMultiAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IList<TReply!>!>!
 ServiceConnect.Interfaces.ISendMessageMiddleware
-ServiceConnect.Interfaces.ISendMessageMiddleware.ProcessAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>! headers, string? endPoint, ServiceConnect.Interfaces.SendMessageDelegate! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.ISendMessageMiddleware.ProcessAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>! headers, string? endPoint, ServiceConnect.Interfaces.SendMessageDelegate! next, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task!
 ServiceConnect.Interfaces.ISendMessagePipeline
-ServiceConnect.Interfaces.ISendMessagePipeline.ExecutePublishMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-ServiceConnect.Interfaces.ISendMessagePipeline.ExecuteSendMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.ISendMessagePipeline.ExecutePublishMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Interfaces.ISendMessagePipeline.ExecuteSendMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Interfaces.IStreamHandler<TMessage>
 ServiceConnect.Interfaces.IStreamHandler<TMessage>.ExecuteAsync(TMessage! stream, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Interfaces.IStreamHandler<TMessage>.Stream.get -> ServiceConnect.Interfaces.IMessageBusReadStream!
@@ -346,7 +346,7 @@ ServiceConnect.Interfaces.Options.SendOptions.Headers.get -> System.Collections.
 ServiceConnect.Interfaces.Options.SendOptions.Headers.init -> void
 ServiceConnect.Interfaces.Options.SendOptions.SendOptions() -> void
 ServiceConnect.Interfaces.OutgoingEventArgs
-ServiceConnect.Interfaces.OutgoingEventArgs.Headers.get -> System.Collections.Generic.Dictionary<string!, string!>!
+ServiceConnect.Interfaces.OutgoingEventArgs.Headers.get -> System.Collections.Generic.IDictionary<string!, string!>!
 ServiceConnect.Interfaces.OutgoingEventArgs.Headers.init -> void
 ServiceConnect.Interfaces.OutgoingEventArgs.Message.get -> ServiceConnect.Interfaces.Message?
 ServiceConnect.Interfaces.OutgoingEventArgs.Message.init -> void

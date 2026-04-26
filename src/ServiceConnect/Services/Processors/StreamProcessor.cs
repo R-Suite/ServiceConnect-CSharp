@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -13,7 +14,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private readonly StreamHandlerRegistry _streamHandlerRegistry;
     private readonly IMessageSerializer _serializer;
     private readonly TimeProvider _timeProvider;
-    private readonly ConcurrentDictionary<string, ActiveStreamState> _activeStreams = new();
+    private readonly ConcurrentDictionary<string, ActiveStreamState> _activeStreams = new(StringComparer.Ordinal);
     // Tracks admitted stream count separately so admission can be gated with Interlocked
     // without relying on ConcurrentDictionary.Count (which is accurate but does not compose
     // atomically with insertion). The counter is incremented inside the GetOrAdd factory
@@ -77,7 +78,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         }
 
         var msgType = HeaderDecoder.Decode(msgTypeRaw);
-        if (msgType != HeaderKeys.ByteStream)
+        if (!string.Equals(msgType, HeaderKeys.ByteStream, StringComparison.Ordinal))
         {
             return NotHandledTask;
         }
@@ -102,7 +103,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         }
 
         var pnString = HeaderDecoder.Decode(pnRaw);
-        if (!long.TryParse(pnString, out var packetNumber))
+        if (!long.TryParse(pnString, NumberStyles.Integer, CultureInfo.InvariantCulture, out var packetNumber))
         {
             _logger.LogWarning("Stream packet has invalid PacketNumber header '{Value}'; discarding", pnString);
             return HandledTask; // Handled to prevent infinite requeue
@@ -172,7 +173,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
             {
                 var lpnString = HeaderDecoder.Decode(lpnRaw);
-                if (!long.TryParse(lpnString, out var lastPacketNumber))
+                if (!long.TryParse(lpnString, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lastPacketNumber))
                 {
                     _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
                     return HandledTask;

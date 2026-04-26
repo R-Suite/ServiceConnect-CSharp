@@ -114,7 +114,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
             Destination = timeoutData.Destination,
             ProcessManagerId = timeoutData.ProcessManagerId,
             Time = timeoutData.Time,
-            Headers = timeoutData.Headers.ToDictionary(static pair => pair.Key, static pair => CloneHeaderValue(pair.Value)),
+            Headers = timeoutData.Headers.ToDictionary(static pair => pair.Key, static pair => CloneHeaderValue(pair.Value), StringComparer.Ordinal),
             Locked = timeoutData.Locked,
             LockedBy = timeoutData.LockedBy,
             LockExpiresAt = timeoutData.LockExpiresAt,

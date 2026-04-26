@@ -18,7 +18,7 @@ public class OutgoingEventArgs
     /// map and strip required MessageType/CorrelationId entries before the
     /// transport send.
     /// </summary>
-    public Dictionary<string, string> Headers
+    public IDictionary<string, string> Headers
     {
         get => _headers;
         init
@@ -28,5 +28,5 @@ public class OutgoingEventArgs
         }
     }
 
-    private readonly Dictionary<string, string> _headers = [];
+    private readonly IDictionary<string, string> _headers = new Dictionary<string, string>(StringComparer.Ordinal);
 }

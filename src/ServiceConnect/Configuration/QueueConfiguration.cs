@@ -28,7 +28,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
     // (same namespace+name in different assemblies) don't collide into one bucket
     // and cross-wire each other's routing. The list preserves registration order
     // for callers while the set gives O(1) duplicate checks.
-    private readonly ConcurrentDictionary<string, QueueMappingEntry> _queueMappings = new();
+    private readonly ConcurrentDictionary<string, QueueMappingEntry> _queueMappings = new(StringComparer.Ordinal);
 
     private static string GetMappingKey(Type messageType) =>
         messageType.AssemblyQualifiedName

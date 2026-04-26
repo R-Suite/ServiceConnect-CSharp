@@ -56,7 +56,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         // Type-reserved headers (FullTypeName / TypeName / MessageType) are stamped by
         // the producer from _messageType — they must not be seeded here, since the
         // producer treats them as server-authoritative and overwrites any caller value.
-        _baseHeaders = new Dictionary<string, string>
+        _baseHeaders = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [HeaderKeys.SequenceId] = _sequenceId
         };
@@ -103,7 +103,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
             // Pre-size the dict to avoid rehash during the copy. A separate dict
             // per packet is required because the producer may mutate / enqueue the
             // dictionary asynchronously, so reuse would race with concurrent writes.
-            var headers = new Dictionary<string, string>(_baseHeaders.Count + 1);
+            var headers = new Dictionary<string, string>(_baseHeaders.Count + 1, StringComparer.Ordinal);
             foreach (var kvp in _baseHeaders)
             {
                 headers[kvp.Key] = kvp.Value;
@@ -182,7 +182,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         // future would break this invariant — see MessageBusReadStream.Read().
         var packetNum = Interlocked.Read(ref _packetNumber);
 
-        var headers = new Dictionary<string, string>(_baseHeaders.Count + 2);
+        var headers = new Dictionary<string, string>(_baseHeaders.Count + 2, StringComparer.Ordinal);
         foreach (var kvp in _baseHeaders)
         {
             headers[kvp.Key] = kvp.Value;

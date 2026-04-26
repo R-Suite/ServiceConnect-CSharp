@@ -51,12 +51,12 @@ ServiceConnect.Configuration.PersistenceConfiguration.DatabaseName.get -> string
 ServiceConnect.Configuration.PersistenceConfiguration.DatabaseName.set -> void
 ServiceConnect.Configuration.PersistenceConfiguration.PersistenceConfiguration() -> void
 ServiceConnect.Configuration.PipelineConfiguration
-ServiceConnect.Configuration.PipelineConfiguration.AfterConsumingFilters.get -> System.Collections.Generic.List<System.Type!>!
-ServiceConnect.Configuration.PipelineConfiguration.BeforeConsumingFilters.get -> System.Collections.Generic.List<System.Type!>!
-ServiceConnect.Configuration.PipelineConfiguration.MessageProcessingMiddleware.get -> System.Collections.Generic.List<System.Type!>!
-ServiceConnect.Configuration.PipelineConfiguration.OutgoingFilters.get -> System.Collections.Generic.List<System.Type!>!
+ServiceConnect.Configuration.PipelineConfiguration.AfterConsumingFilters.get -> System.Collections.Generic.IList<System.Type!>!
+ServiceConnect.Configuration.PipelineConfiguration.BeforeConsumingFilters.get -> System.Collections.Generic.IList<System.Type!>!
+ServiceConnect.Configuration.PipelineConfiguration.MessageProcessingMiddleware.get -> System.Collections.Generic.IList<System.Type!>!
+ServiceConnect.Configuration.PipelineConfiguration.OutgoingFilters.get -> System.Collections.Generic.IList<System.Type!>!
 ServiceConnect.Configuration.PipelineConfiguration.PipelineConfiguration() -> void
-ServiceConnect.Configuration.PipelineConfiguration.SendMessageMiddleware.get -> System.Collections.Generic.List<System.Type!>!
+ServiceConnect.Configuration.PipelineConfiguration.SendMessageMiddleware.get -> System.Collections.Generic.IList<System.Type!>!
 ServiceConnect.Configuration.QueueConfiguration
 ServiceConnect.Configuration.QueueConfiguration.AddQueueMapping(System.Type! messageType, string! queue) -> void
 ServiceConnect.Configuration.QueueConfiguration.AddQueueMapping(System.Type! messageType, System.Collections.Generic.IList<string!>! queues) -> void
@@ -142,7 +142,7 @@ ServiceConnect.Services.ConsumeContext.ConsumeContext(ServiceConnect.Interfaces.
 ServiceConnect.Services.ConsumeContext.CorrelationId.get -> System.Guid
 ServiceConnect.Services.ConsumeContext.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, object!>!
 ServiceConnect.Services.ConsumeContext.MessageId.get -> string?
-ServiceConnect.Services.ConsumeContext.ReplyAsync<TReply>(TReply! message, System.Collections.Generic.Dictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Services.ConsumeContext.ReplyAsync<TReply>(TReply! message, System.Collections.Generic.IDictionary<string!, string!>? headers = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Services.ConsumeScopeAccessor
 ServiceConnect.Services.ConsumeScopeAccessor.ConsumeScopeAccessor() -> void
 ServiceConnect.Services.ConsumeScopeAccessor.Current.get -> System.IServiceProvider!
@@ -194,15 +194,15 @@ ServiceConnect.Services.ProcessManagerTimeoutService.StopAsync(System.Threading.
 ServiceConnect.Services.RequestReplyManager
 ServiceConnect.Services.RequestReplyManager.IsTrackedRequest(string! messageId) -> bool
 ServiceConnect.Services.RequestReplyManager.ProcessReply(string! messageId, System.ReadOnlyMemory<byte> messageBytes, System.Type! type) -> void
-ServiceConnect.Services.RequestReplyManager.PublishRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Action<TReply!>! onReply, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Services.RequestReplyManager.PublishRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Action<TReply!>! onReply, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Services.RequestReplyManager.RequestReplyManager(ServiceConnect.Interfaces.IMessageSerializer! serializer, ServiceConnect.Interfaces.ISendMessagePipeline! sendPipeline) -> void
-ServiceConnect.Services.RequestReplyManager.SendRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TReply!>!
-ServiceConnect.Services.RequestReplyManager.SendRequestMultiAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IList<TReply!>!>!
+ServiceConnect.Services.RequestReplyManager.SendRequestAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TReply!>!
+ServiceConnect.Services.RequestReplyManager.SendRequestMultiAsync<TRequest, TReply>(byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>! headers, ServiceConnect.Interfaces.Options.RequestOptions options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IList<TReply!>!>!
 ServiceConnect.Services.RequestReplyManager.TryProcessReply(string! messageId, System.ReadOnlyMemory<byte> messageBytes, System.Type! type) -> bool
 ServiceConnect.Services.SendMessagePipeline
 ServiceConnect.Services.SendMessagePipeline.DisposeAsync() -> System.Threading.Tasks.ValueTask
-ServiceConnect.Services.SendMessagePipeline.ExecutePublishMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
-ServiceConnect.Services.SendMessagePipeline.ExecuteSendMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.Dictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Services.SendMessagePipeline.ExecutePublishMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+ServiceConnect.Services.SendMessagePipeline.ExecuteSendMessagePipelineAsync(System.Type! typeObject, byte[]! messageBytes, System.Collections.Generic.IDictionary<string!, string!>? headers = null, string? endPoint = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 ServiceConnect.Services.SendMessagePipeline.SendMessagePipeline(ServiceConnect.Interfaces.IProducer! producer, ServiceConnect.Interfaces.Configuration.IPipelineConfiguration! pipelineConfig, System.IServiceProvider! serviceProvider) -> void
 static ServiceConnect.ServiceCollectionExtensions.AddServiceConnect(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<ServiceConnect.ServiceConnectBuilder!>! configure) -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
 static ServiceConnect.Services.HandlerScanner.ScanForHandlers(System.Collections.Generic.IEnumerable<System.Reflection.Assembly!>! assemblies, Microsoft.Extensions.Logging.ILogger? logger = null) -> System.Collections.Generic.IList<ServiceConnect.Interfaces.HandlerReference!>!

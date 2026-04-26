@@ -1,3 +1,4 @@
+using System.Globalization;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces.Configuration;
 
@@ -28,7 +29,7 @@ internal static class ConnectionFactoryBuilder
 
         var explicitPortConfigured = transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal);
         var port = explicitPortConfigured
-            ? Convert.ToInt32(portVal)
+            ? Convert.ToInt32(portVal, CultureInfo.InvariantCulture)
             : AmqpTcpEndpoint.UseDefaultPort;
 
         var factory = new ConnectionFactory
@@ -82,7 +83,7 @@ internal static class ConnectionFactoryBuilder
 
         if (settings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var timeRaw))
         {
-            return TimeSpan.FromSeconds(Convert.ToInt32(timeRaw));
+            return TimeSpan.FromSeconds(Convert.ToInt32(timeRaw, CultureInfo.InvariantCulture));
         }
 
         return DefaultHeartbeat;

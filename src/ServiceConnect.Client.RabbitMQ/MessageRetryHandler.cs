@@ -41,7 +41,7 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
             else
             {
                 var decoded = HeaderDecoder.Decode(raw);
-                candidate = decoded is not null && int.TryParse(decoded, out var parsed) ? parsed : -1;
+                candidate = decoded is not null && int.TryParse(decoded, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : -1;
             }
 
             if (candidate < 0 || candidate > _maxRetries + 1)

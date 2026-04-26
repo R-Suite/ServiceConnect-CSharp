@@ -318,10 +318,10 @@ public class BusTests
         var sharedHeaders = new Dictionary<string, string> { ["caller-header"] = "original" };
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
-        Dictionary<string, string>? captured = null;
+        IDictionary<string, string>? captured = null;
         _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
-            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>?, string?, CancellationToken>((_, _, h, _, _) => captured = h)
+            It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback<Type, byte[], IDictionary<string, string>?, string?, CancellationToken>((_, _, h, _, _) => captured = h)
             .Returns(Task.CompletedTask);
 
         await _bus.PublishAsync(message, new PublishOptions { Headers = sharedHeaders });
@@ -973,12 +973,12 @@ public class BusTests
             }
         };
 
-        Dictionary<string, string>? captured = null;
+        IDictionary<string, string>? captured = null;
         _mockSendPipeline
             .Setup(x => x.ExecuteSendMessagePipelineAsync(
-                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<Dictionary<string, string>>(),
+                It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>(),
                 It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Callback<Type, byte[], Dictionary<string, string>, string?, CancellationToken>((_, _, h, _, _) => captured = h)
+            .Callback<Type, byte[], IDictionary<string, string>, string?, CancellationToken>((_, _, h, _, _) => captured = h)
             .Returns(Task.CompletedTask);
 
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };

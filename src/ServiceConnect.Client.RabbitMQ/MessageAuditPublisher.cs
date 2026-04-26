@@ -56,7 +56,7 @@ internal sealed class MessageAuditPublisher
             messageType = HeaderDecoder.Decode(raw);
         }
 
-        if (messageType == HeaderKeys.ByteStream)
+        if (string.Equals(messageType, HeaderKeys.ByteStream, StringComparison.Ordinal))
         {
             return;
         }
