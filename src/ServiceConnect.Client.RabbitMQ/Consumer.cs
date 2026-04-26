@@ -174,7 +174,7 @@ public sealed class Consumer : IConsumer
             await client.StartConsumingAsync(eventHandler, queueName, cancellationToken: cancellationToken);
             foreach (string messageType in messageTypes)
             {
-                await client.ConsumeMessageTypeAsync(messageType);
+                await client.ConsumeMessageTypeAsync(messageType, cancellationToken);
             }
         }
     }

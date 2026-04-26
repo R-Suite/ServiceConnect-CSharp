@@ -156,9 +156,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
     }
 
-    public async Task ConsumeMessageTypeAsync(string messageTypeName)
+    public async Task ConsumeMessageTypeAsync(string messageTypeName, CancellationToken cancellationToken = default)
     {
-        await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, _queueArguments, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     // Pass cancellationToken as a method parameter instead of storing it.
