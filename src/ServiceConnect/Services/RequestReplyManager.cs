@@ -23,6 +23,10 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         where TRequest : Message
         where TReply : Message
     {
+        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
+            throw new ArgumentOutOfRangeException(nameof(options),
+                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var messageId = Guid.NewGuid();
@@ -82,6 +86,10 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         where TRequest : Message
         where TReply : Message
     {
+        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
+            throw new ArgumentOutOfRangeException(nameof(options),
+                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var messageId = Guid.NewGuid();
@@ -167,6 +175,10 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         where TRequest : Message
         where TReply : Message
     {
+        if (options.Timeout < 0 && options.Timeout != Timeout.Infinite)
+            throw new ArgumentOutOfRangeException(nameof(options),
+                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var messageId = Guid.NewGuid();
