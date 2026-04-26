@@ -281,7 +281,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// Internal document type for aggregator storage (not constrained by IProcessManagerData).
     /// </summary>
     [BsonIgnoreExtraElements]
-    internal class AggregatorDocument
+    internal sealed class AggregatorDocument
     {
         public Guid Id { get; set; }
         public int Version { get; set; }
