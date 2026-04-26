@@ -31,7 +31,7 @@ public sealed class Bus : IBus
     private readonly TimeSpan _disposeTimeout;
     private readonly object _stateLock = new();
     private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
-    private bool _consuming;
+    private volatile bool _consuming;
     private bool _stopped;
     // 0 = alive, 1 = disposed. Accessed via Interlocked/Volatile only — never under _stateLock —
     // so DisposeAsync can publish disposal atomically without ordering it against the lifecycle semaphore.
