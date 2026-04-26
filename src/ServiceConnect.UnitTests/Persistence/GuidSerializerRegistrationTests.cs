@@ -98,6 +98,10 @@ public class GuidSerializerRegistrationTests
         // before any field is touched — i.e., before any instance ctor body runs and
         // before any serialization side-effect can be triggered. That's the contract
         // we need for EnsureGuidSerializerRegistered to fire on direct-new paths.
+        //
+        // We can't assert "the cctor calls EnsureGuidSerializerRegistered" here without
+        // a fresh AppDomain — once any test has touched these types the cctor has
+        // already run and the side effect is invisible. Code review must guard the body.
         Assert.NotNull(persistorType.TypeInitializer);
         Assert.False(
             (persistorType.Attributes & TypeAttributes.BeforeFieldInit) != 0,
