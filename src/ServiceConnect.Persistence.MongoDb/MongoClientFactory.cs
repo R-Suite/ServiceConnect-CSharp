@@ -90,7 +90,20 @@ public static class MongoClientFactory
             _ => new Lazy<X509Certificate2>(
                 () => CertLoader(path, passphrase),
                 LazyThreadSafetyMode.ExecutionAndPublication));
-        return lazy.Value;
+        try
+        {
+            return lazy.Value;
+        }
+        catch
+        {
+            // Lazy<T>(ExecutionAndPublication) memoises the exception; evict the failed entry
+            // so the next caller retries rather than receiving the same cached failure forever.
+            // The KeyValuePair overload ensures we only remove if the value is still the same
+            // Lazy that failed, avoiding a race where another thread has already inserted a
+            // fresh one.
+            _certCache.TryRemove(new KeyValuePair<string, Lazy<X509Certificate2>>(cacheKey, lazy));
+            throw;
+        }
     }
 
     private static X509Certificate2 LoadCertificate(string path, string? passphrase)
