@@ -27,12 +27,14 @@ Within each finding, bracketed tags cite the originating review(s), e.g. `[C#1, 
 | Severity | Raised | Confirmed / partial after pass-2 | Fixed | Rejected / reclassified after pass-2 |
 |---|---|---|---|---|
 | Critical | 10 | 8 | 8 (C-01, C-02, C-03, C-04, C-05, C-06, C-08, C-09) | 2 (C-07, C-10) |
-| High | 22 | 11 | 12 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12, H-15, H-20, H-21, H-22) | 10 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19) |
+| High | 22 | 11 | 14 (H-01, H-02, H-03, H-05, H-06, H-07, H-08, H-10, H-11, H-12, H-15, H-20, H-21, H-22) | 8 (H-04, H-09, H-13, H-14, H-16, H-17, H-18, H-19) |
 | Medium | 32 | 25 | 21 (M-01, M-06, M-11, M-12, M-13, M-16, M-18, M-19, M-20, M-21, M-22, M-23, M-24, M-25, M-26, M-27, M-28, M-29, M-30, M-31, M-32) | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
-| Low | 72 | 52 | 1 (L-73) | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
-| **Total** | **136** | **96** | **42** | **42** |
+| Low | 72 | 52 | 21 (L-01, L-07, L-11, L-12, L-14, L-15, L-18, L-20, L-21, L-22, L-25, L-26, L-28, L-33, L-37, L-39, L-40, L-41, L-42, L-43, L-73) | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
+| **Total** | **136** | **96** | **64** | **40** |
 
 Phase 6a closeout (2026-04-26) also flagged 4 retroactive items as **not a bug at HEAD** because earlier-phase fixes incidentally invalidated the original mechanism: M-02 (after H-02 record-immutable refactor), M-03 (after H-01 duplicate-rollback), M-04 (after `IsOpen` close-guard), M-08 (after CTS-disposed catch). Phase 6b closeout (2026-04-26) added L-58 to the same list — the `RequestOptions.Default` per-access heap allocation was eliminated as a side-effect of the M-30 class → readonly record struct conversion. Each carries an inline `**Status**: not a bug at HEAD — ...` line.
+
+Phase 7a closeout (2026-04-26) remediates 22 confirmed Low/High items across Core, RabbitMQ, InMemory and MongoDb persistors. H-03 and H-08 had been Pass-2 reclassified to Low (cosmetic / latent latency); Phase 7a fixed both as defence-in-depth and graduates them back to the Fixed column.
 
 Pass-2 also upgraded several earlier partial/equivocal verdicts to CONFIRMED (C-03, C-06, C-09, H-10, H-22, M-04, M-13, M-19, M-32, L-06, L-43) — marked inline.
 
@@ -141,6 +143,7 @@ Functional bugs that occur on normal shutdown/restart paths, divergent contracts
 - **Fix**: Separate argument sets per RabbitMQ call.
 - **Pass-2 verdict**: RECLASSIFIED — COSMETIC ONLY. The broker silently ignores binding args on non-`headers` exchanges (direct/topic/fanout), so the queue-declare args passed to `QueueBindAsync` have no runtime effect on any exchange type currently in use. Still a code smell worth fixing, but no observable behaviour change today. Severity reduced to Low hygiene.
 - **Sources**: [C#4]
+- **Status**: fixed in 0f91a503
 
 ### H-04 — Producer NRE loop after reconnect-inside-retry
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/Producer.cs:201-211`
@@ -176,6 +179,7 @@ Functional bugs that occur on normal shutdown/restart paths, divergent contracts
 - **Fix**: Bounded WaitAsync with a dispose timeout; force-close the underlying connection on wait failure.
 - **Pass-2 verdict**: RECLASSIFIED — LATENT LATENCY, not a deadlock. `ConnectAsync`'s `finally` always releases the lock; "unbounded" only matters if an in-flight RabbitMQ network op hangs. Not a shutdown hazard in practice but worth a bounded wait for cooperative shutdown SLAs. Severity reduced to Low hygiene.
 - **Sources**: [N.M2]
+- **Status**: fixed in 7873ab5c
 
 ### H-09 — `Retry.CalculateDelay` throws on negative `baseInterval`
 - **Location**: `src/ServiceConnect.Client.RabbitMQ/Retry.cs:132`
@@ -472,55 +476,55 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 Dead code, minor nullability/comment quirks, hygiene items, and hard-to-trigger edges. Listed compactly.
 
 ### Core / bus / processors
-- **L-01** `AggregatorProcessor` Timer-fired flush can install new `_flushLocks` entry after Clear — `AggregatorProcessor.cs:101-156, 160, 240-243` — [C.Min, P.Min]
+- **L-01** `AggregatorProcessor` Timer-fired flush can install new `_flushLocks` entry after Clear — `AggregatorProcessor.cs:101-156, 160, 240-243` — [C.Min, P.Min] — **Status**: fixed in 9b1f1233 (followup e840a51e)
 - **L-02** `Bus.DisposeAsync` skips `_lifecycleSemaphore.Dispose` if `StopConsumingCoreAsync` throws — `Bus.cs:446-459` — [N.L1] — **Pass-2: CONFIRMED** (latent; StopConsumingCoreAsync unlikely to throw but possible)
 - **L-03** `ConsumeContextPool.Release` doesn't null-out refs — `ConsumeContextPool.cs:202-208` — [N.L2] — **Pass-2: REJECTED** (token-guard architecture makes null-out unnecessary; refs overwritten on next Initialize)
 - **L-04** `ConsumeContextPool` Count-based soft cap race — `ConsumeContextPool.cs:31-38` — [C.Min] — **Pass-2: REJECTED** (race is documented in code as acceptable soft cap)
 - **L-05** `HandlerScanner` only catches `ReflectionTypeLoadException` — `HandlerScanner.cs:33-48` — [N.L5] — **Pass-2: REJECTED** (narrow catch is intentional by design)
 - **L-06** `MessageTypeRegistry.Register` partial-failure leaves orphan AQN mapping — `MessageTypeRegistry.cs:54-72` — [N.L6] — **Pass-2: CONFIRMED** (latent: rare trigger but real orphan)
-- **L-07** `MessageDispatcher` missing `ConfigureAwait(false)` — `MessageDispatcher.cs:110, 157, 193` — [C.Min, N.L7, P.Min]
+- **L-07** `MessageDispatcher` missing `ConfigureAwait(false)` — `MessageDispatcher.cs:110, 157, 193` — [C.Min, N.L7, P.Min] — **Status**: fixed in e53ce3d9
 - **L-08** `ReadOnlyMemoryStream`/`ReadOnlySequenceStream` `Read` skip standard argument validation — [N.L8] — **Pass-2: REJECTED** (internal-only streams; caller guarantees hold)
 - **L-09** `ConsumeContextAccessor.Scope.Dispose` not Interlocked-guarded — `ConsumeContextAccessor.cs:22-31` — [N.L9, P.Min] — **Pass-2: REJECTED** (AsyncLocal write is idempotent)
 - **L-10** `RequestReplyManager` swallows send-time cancellation, resolves via TCS timeout — `RequestReplyManager.cs:56-58, 137-139` — [N.L10] — **Pass-2: REJECTED** (caller's own CT propagates correctly; only internal-timeout path uses TCS)
-- **L-11** `RequestReplyManager.CancelAfter` doesn't validate `options.Timeout` — `RequestReplyManager.cs:35-36, 107-108, 182-183` — [C.Min]
-- **L-12** `MessageBusWriteStream` uses `DateTime.UtcNow` instead of `TimeProvider` — `MessageBusWriteStream.cs:93-99` — [P.Min]
+- **L-11** `RequestReplyManager.CancelAfter` doesn't validate `options.Timeout` — `RequestReplyManager.cs:35-36, 107-108, 182-183` — [C.Min] — **Status**: fixed in f726d3d0 (followup 8ffa3009)
+- **L-12** `MessageBusWriteStream` uses `DateTime.UtcNow` instead of `TimeProvider` — `MessageBusWriteStream.cs:93-99` — [P.Min] — **Status**: fixed in 5ff16433
 - **L-13** `ConsumeContext` lazy `_messageIdCached` pair without memory barrier — `ConsumeContext.cs:71-100` — [P.Min] — **Pass-2: REJECTED** (ConsumeContext is per-invocation, not shared; no memory-barrier concern)
-- **L-14** `Bus.IsConsuming` reads `_consuming` without lock — `Bus.cs:76` — [P.Min]
+- **L-14** `Bus.IsConsuming` reads `_consuming` without lock — `Bus.cs:76` — [P.Min] — **Status**: fixed in dd27061f
 
 ### RabbitMQ transport
-- **L-15** `ConsumeMessageTypeAsync` lacks CancellationToken — `RabbitMqConsumerHost.cs:159-162` — [C.Min]
+- **L-15** `ConsumeMessageTypeAsync` lacks CancellationToken — `RabbitMqConsumerHost.cs:159-162` — [C.Min] — **Status**: fixed in 78ecd853
 - **L-16** On shutdown timeout, delivery left unacked, prefetch slots occupied — `RabbitMqConsumerHost.cs:270-273` — [P.Min] — **Pass-2: REJECTED** (explicitly documented tradeoff with log statement)
 - **L-17** Event handlers subscribed to `UnderlyingConnection` relies on facade-preserves-subs — `RabbitMqConsumerHost.cs:145-153` — [P.Min] — **Pass-2: STALE** (facade code path has been refactored; architectural risk no longer triggered)
-- **L-18** `_connected` not a reliable liveness signal — `Producer.cs:96` — [C.Min]
+- **L-18** `_connected` not a reliable liveness signal — `Producer.cs:96` — [C.Min] — **Status**: fixed in 8d0500d8
 - **L-19** `BasicPublishAsync` timeout masks caller cancellation in reconnect path — `Producer.cs:513-549` — [C.Min] — **Pass-2: REJECTED** (`when` clause excludes caller cancellation; only timeout CTS is remapped)
-- **L-20** Exchange-name cache keyed on `AssemblyQualifiedName` (version-churn dup entries) — `Producer.cs:235` — [P.Min]
-- **L-21** Non-matching `OperationCanceledException` falls into generic retry — `Retry.cs:90` — [P.Min]
-- **L-22** `MessageAuditPublisher` fast-path doesn't check CT — `MessageAuditPublisher.cs:46-54` — [C.Min]
+- **L-20** Exchange-name cache keyed on `AssemblyQualifiedName` (version-churn dup entries) — `Producer.cs:235` — [P.Min] — **Status**: fixed in 6af40895
+- **L-21** Non-matching `OperationCanceledException` falls into generic retry — `Retry.cs:90` — [P.Min] — **Status**: fixed in 522601ea
+- **L-22** `MessageAuditPublisher` fast-path doesn't check CT — `MessageAuditPublisher.cs:46-54` — [C.Min] — **Status**: fixed in a87915ec
 
 ### InMemory persistence
 - **L-23** `CacheProvider` `Keys<>()` lazy-snapshot comment misleading — `CacheProvider.cs:139-146` — [C.Min] — **Pass-2: REJECTED** (doc inaccuracy, not code defect)
 - **L-24** `CacheProvider.Remove` not inside `_addLock` — `CacheProvider.cs:225-260` — [P.Min] — **Pass-2: REJECTED** (design intentionally accepts this race per ConcurrentDictionary semantics)
-- **L-25** `CacheProvider` no disposed-guard on public mutators — `CacheProvider.cs:39-205, 214` — [R.Low]
-- **L-26** `InMemoryProcessManagerFinder.FindMatchingItem` DeepClones every candidate — `InMemoryProcessManagerFinder.cs:90-125` — [P.Min]
+- **L-25** `CacheProvider` no disposed-guard on public mutators — `CacheProvider.cs:39-205, 214` — [R.Low] — **Status**: fixed in 177b70ab
+- **L-26** `InMemoryProcessManagerFinder.FindMatchingItem` DeepClones every candidate — `InMemoryProcessManagerFinder.cs:90-125` — [P.Min] — **Status**: fixed in f07d01f3 (followup 8a03c45a)
 - **L-27** Dead `DefaultNextQueryInterval` field — `InMemoryProcessManagerFinder.cs:34` — [C.Min]
-- **L-28** `GetSnapshotAsync.UnresolvedCount` hardcoded 0 — `InMemoryAggregatorPersistor.cs:88` — [C.Min]
+- **L-28** `GetSnapshotAsync.UnresolvedCount` hardcoded 0 — `InMemoryAggregatorPersistor.cs:88` — [C.Min] — **Status**: fixed in dbf90f27
 - **L-29** `CacheItem.Value` nullability inconsistency — `CacheItem.cs:9, 17` — [C.Min] — **Pass-2: PARTIAL** (nullability inconsistency, not runtime defect — annotation tightening)
 
 ### MongoDb persistence
 - **L-30** `RemoveDataAsync` tie-break semantics differ (Mongo arbitrary vs InMemory oldest) — `MongoDbAggregatorPersistor.cs:150-156` vs `InMemoryAggregatorPersistor.cs:104-112` — [P.Imp] — **Pass-2: REJECTED** (both delete by CorrelationId match; no observable tie-break divergence in the actual code path)
 - **L-31** `_concurrencyGuardsEnabled` evaluated once, never re-checked — `MongoDbProcessManagerFinder.cs:57-65` — [C.Min] — **Pass-2: REJECTED** (WriteConcern is immutable after client creation; re-check pointless)
 - **L-32** `CountAsync` silently truncates at `int.MaxValue` — `MongoDbAggregatorPersistor.cs:217` — [C.Min] — **Pass-2: REJECTED** (explicit clamp to int.MaxValue is documented behaviour, not silent)
-- **L-33** No precondition check `Id != Guid.Empty` on `InsertTimeoutAsync` — `MongoDbTimeoutStore.cs:70-85` — [C.Min]
+- **L-33** No precondition check `Id != Guid.Empty` on `InsertTimeoutAsync` — `MongoDbTimeoutStore.cs:70-85` — [C.Min] — **Status**: fixed in 0ff472cf
 - **L-34** `AggregatorSnapshot.ResolvedIds` typed concrete `List<Guid>` — [C.Min] — **Pass-2: REJECTED** (surface is `IReadOnlyList<Guid>` interface, not `List<Guid>`)
 - **L-35** `MongoClientFactory.ClearCertificateCache` race with concurrent `Create` (test-only) — `MongoClientFactory.cs:103-110` — [C.Min]
 - **L-36** `MongoDbData<T>` relies on Id convention (add `[BsonId]`) — `MongoDbData.cs:16` — [C.Min] — **Pass-2: REJECTED** (driver's `IdMemberConvention` maps `Id` property by convention; attribute is redundant)
-- **L-37** `AggregatorDocument` missing `[BsonIgnoreExtraElements]` — [C.Min]
+- **L-37** `AggregatorDocument` missing `[BsonIgnoreExtraElements]` — [C.Min] — **Status**: fixed in 9466ee43
 - **L-38** `TimeoutData.Time`/`LockExpiresAt` stored as `DateTimeOffset` sub-doc (queries don't index cleanly) — [C.Min]
-- **L-39** `MongoClientFactory` certificate load leaks on `GetOrAdd` factory re-entry — `MongoClientFactory.cs:77-96` — [N.L12]
-- **L-40** `MongoDbAggregatorPersistor.GetSnapshotAsync` `BsonSerializationException` leaks past `MongoException` catch — `MongoDbAggregatorPersistor.cs:104-142` — [N.L13]
-- **L-41** `UpdateDataAsync` checks `ModifiedCount == 0` instead of `MatchedCount == 0` — `MongoDbProcessManagerFinder.cs:232-242` — [N.L14]
-- **L-42** `MongoDbAggregatorPersistor.InsertDataAsync` no null-check on data — `MongoDbAggregatorPersistor.cs:68-88` — [P.Min]
-- **L-43** `MongoDbProcessManagerFinder` `catch(TargetInvocationException)` dead code — `MongoDbProcessManagerFinder.cs:176-179` — [P.Min] — **Pass-2: CONFIRMED** (dead code — CLR doesn't wrap in `TargetInvocationException` for compiled lambda expressions, only for `MethodInfo.Invoke`)
+- **L-39** `MongoClientFactory` certificate load leaks on `GetOrAdd` factory re-entry — `MongoClientFactory.cs:77-96` — [N.L12] — **Status**: fixed in 36fff572 (followup 476ba54f)
+- **L-40** `MongoDbAggregatorPersistor.GetSnapshotAsync` `BsonSerializationException` leaks past `MongoException` catch — `MongoDbAggregatorPersistor.cs:104-142` — [N.L13] — **Status**: fixed in 57d14c3c (followup 2cadae7e)
+- **L-41** `UpdateDataAsync` checks `ModifiedCount == 0` instead of `MatchedCount == 0` — `MongoDbProcessManagerFinder.cs:232-242` — [N.L14] — **Status**: fixed in 2cf92953
+- **L-42** `MongoDbAggregatorPersistor.InsertDataAsync` no null-check on data — `MongoDbAggregatorPersistor.cs:68-88` — [P.Min] — **Status**: fixed in 4a2eb015
+- **L-43** `MongoDbProcessManagerFinder` `catch(TargetInvocationException)` dead code — `MongoDbProcessManagerFinder.cs:176-179` — [P.Min] — **Pass-2: CONFIRMED** (dead code — CLR doesn't wrap in `TargetInvocationException` for compiled lambda expressions, only for `MethodInfo.Invoke`) — **Status**: fixed in 90ec63bb
 
 ### Telemetry
 - **L-44** Consume span never gets `SetError` wired — `ServiceConnectActivitySource.cs:95-140, 224-225` — [C.Min, N.M16]

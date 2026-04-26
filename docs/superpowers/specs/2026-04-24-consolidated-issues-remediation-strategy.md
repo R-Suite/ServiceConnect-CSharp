@@ -235,7 +235,7 @@ Strictly sequential: Phase 0 → 1 → 2 → 3 → 4 → 5 → 6a → 6b → 7a 
 - Phase 5: complete (2 items, commits 36b20c27 15b44fe8 23c3d25b 4e0f448f 0e45702d dac580e6 06bf8bd1 73d8fcf1 2b37e279)
 - Phase 6a: complete (11 items, retroactive 4, commits ffbdbbd6 33c157ea e97e244a bfaccb84 f43e03f3 1d428816 1f04e14c f9bed011 8b071649 3858f056 9a712f35 195fe9bb ccd5f56a a830c6d5 d4823c68 54949ab1 1a40bc47 2af05de1 f163fdf4)
 - Phase 6b: complete (10 items + L-58 side-effect, commits c11aa54e 248e4502 44117b12 cbd970bd 40ccb64b dff4c22e f23fc7bc 0110a272 547335f9 b7f43616 4457d85f 29e92c3a)
-- Phase 7a: not started
+- Phase 7a: complete (22 items: 20 Low + reclassified H-03, H-08; deferred L-02, L-06 latent / L-27 dead-field / L-29 nullability-only / L-35 test-only / L-38 storage-migration). Commits: 9b1f1233 e840a51e e53ce3d9 f726d3d0 8ffa3009 5ff16433 dd27061f 78ecd853 0f91a503 8d0500d8 6af40895 522601ea a87915ec 7873ab5c 177b70ab f07d01f3 8a03c45a dbf90f27 0ff472cf 9466ee43 36fff572 476ba54f 57d14c3c 2cadae7e 2cf92953 4a2eb015 90ec63bb
 - Phase 7b: not started
 
 ## Appendix A — Item-count reconciliation
