@@ -137,8 +137,23 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                     continue;
                 }
 
-                messages.Add(BsonSerializer.Deserialize(doc.DataBson, type));
-                ids.Add(doc.Id);
+                try
+                {
+                    messages.Add(BsonSerializer.Deserialize(doc.DataBson, type));
+                    ids.Add(doc.Id);
+                }
+                catch (Exception ex) when (ex is BsonException or FormatException)
+                {
+                    // Schema drift or corrupt document for this single row — treat as unresolved
+                    // so the snapshot still surfaces the rest of the aggregator's messages.
+                    // BsonException covers structural BSON errors; FormatException is thrown by
+                    // BsonClassMapSerializer when a field's BSON type is incompatible with the CLR
+                    // property type (e.g. BsonArray stored where a string is expected).
+                    _logger.LogWarning(ex,
+                        "Failed to deserialise aggregator document {Id} as '{TypeName}'; counting as unresolved",
+                        doc.Id, doc.DataTypeName);
+                    unresolved++;
+                }
             }
 
             return new AggregatorSnapshot(messages, ids, unresolved);
@@ -266,7 +281,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// Internal document type for aggregator storage (not constrained by IProcessManagerData).
     /// </summary>
     [BsonIgnoreExtraElements]
-    private class AggregatorDocument
+    internal class AggregatorDocument
     {
         public Guid Id { get; set; }
         public int Version { get; set; }

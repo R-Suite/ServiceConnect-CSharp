@@ -12,6 +12,10 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>ServiceConnect.UnitTests</_Parameter1>
         </AssemblyAttribute>
+        <!-- Required for Moq/Castle DynamicProxy to generate proxies for internal types -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="MongoDB.Driver" Version="2.23.1" />
