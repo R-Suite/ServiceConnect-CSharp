@@ -28,11 +28,11 @@ Within each finding, bracketed tags cite the originating review(s), e.g. `[C#1, 
 |---|---|---|---|---|
 | Critical | 10 | 8 | 8 (C-01, C-02, C-03, C-04, C-05, C-06, C-08, C-09) | 2 (C-07, C-10) |
 | High | 22 | 11 | 12 (H-01, H-02, H-05, H-06, H-07, H-10, H-11, H-12, H-15, H-20, H-21, H-22) | 10 (H-03 cosmetic, H-04, H-08 latent, H-09, H-13, H-14, H-16, H-17, H-18, H-19) |
-| Medium | 32 | 25 | 11 (M-01, M-06, M-11, M-12, M-13, M-16, M-18, M-19, M-20, M-21, M-22) | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
+| Medium | 32 | 25 | 21 (M-01, M-06, M-11, M-12, M-13, M-16, M-18, M-19, M-20, M-21, M-22, M-23, M-24, M-25, M-26, M-27, M-28, M-29, M-30, M-31, M-32) | 7 (M-05, M-07, M-09, M-10, M-14, M-15, M-17) |
 | Low | 72 | 52 | 1 (L-73) | 23 (L-03, L-04, L-05, L-08, L-09, L-10, L-13, L-16, L-17 stale, L-19, L-23, L-24, L-30, L-31, L-32, L-34, L-36, L-54, L-60, L-61, L-65, L-66, L-74) |
-| **Total** | **136** | **96** | **32** | **42** |
+| **Total** | **136** | **96** | **42** | **42** |
 
-Phase 6a closeout (2026-04-26) also flagged 4 retroactive items as **not a bug at HEAD** because earlier-phase fixes incidentally invalidated the original mechanism: M-02 (after H-02 record-immutable refactor), M-03 (after H-01 duplicate-rollback), M-04 (after `IsOpen` close-guard), M-08 (after CTS-disposed catch). Each carries an inline `**Status**: not a bug at HEAD — ...` line.
+Phase 6a closeout (2026-04-26) also flagged 4 retroactive items as **not a bug at HEAD** because earlier-phase fixes incidentally invalidated the original mechanism: M-02 (after H-02 record-immutable refactor), M-03 (after H-01 duplicate-rollback), M-04 (after `IsOpen` close-guard), M-08 (after CTS-disposed catch). Phase 6b closeout (2026-04-26) added L-58 to the same list — the `RequestOptions.Default` per-access heap allocation was eliminated as a side-effect of the M-30 class → readonly record struct conversion. Each carries an inline `**Status**: not a bug at HEAD — ...` line.
 
 Pass-2 also upgraded several earlier partial/equivocal verdicts to CONFIRMED (C-03, C-06, C-09, H-10, H-22, M-04, M-13, M-19, M-32, L-06, L-43) — marked inline.
 
@@ -414,46 +414,56 @@ Observable bugs in narrow paths, hygiene issues that mask real bugs, or contract
 - **Location**: `src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs:154-164`
 - **Bug**: OTel semconv defines the values; `"send"` isn't one (it's `publish`).
 - **Sources**: [C#11, P.Imp]
+- **Status**: fixed in c11aa54e
 
 ### M-24 — `TryEnrich` swallows `OperationCanceledException` + writes `ex.Message` (PII leak)
 - **Location**: `src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs:341-363`
 - **Sources**: [C.Imp]
+- **Status**: fixed in 248e4502 (followup 44117b12)
 
 ### M-25 — `MessageConversationId` on publish-side only; missing on consume-side
 - **Location**: `src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs:62, 95-140`
 - **Sources**: [C.Imp]
+- **Status**: fixed in cbd970bd
 
 ### M-26 — `linkedContext` param is actually parent, not OTel link
 - **Location**: `src/ServiceConnect.Telemetry/ServiceConnectActivitySource.cs:46, 146`
 - **Bug**: Naming/semantic mismatch: the "linked" context is wired as parent context, so consume spans show as direct child of producer instead of a linked span.
 - **Sources**: [C#10]
+- **Status**: fixed in 40ccb64b
 
 ### M-27 — `ConsumeEventArgs.Headers` getter mutates `_headers` via `??=` (race)
 - **Location**: `src/ServiceConnect.Interfaces/Events/ConsumeEventArgs.cs:22-29`
 - **Sources**: [C.Imp, N.L21, P.Min]
+- **Status**: fixed in dff4c22e
 
 ### M-28 — `IMessageHandler`/`IProcessHandler.HandleAsync` omit `CancellationToken`
 - **Location**: `src/ServiceConnect.Interfaces/IMessageHandler.cs:20`, `IProcessHandler.cs:26`
 - **Note**: P agent rejected this claiming token is exposed via `IConsumeContext`. That's true for the common case but not a complete substitute — the token signature on the handler is still missing, making external handler implementations awkward.
 - **Sources**: [C.Imp]
+- **Status**: fixed in 4457d85f
 
 ### M-29 — `IMessageBusWriteStream` methods lack `CancellationToken`
 - **Location**: `src/ServiceConnect.Interfaces/IMessageBusWriteStream.cs:14, 19`
 - **Sources**: [C.Imp, P.Min]
+- **Status**: fixed in 29e92c3a
 
 ### M-30 — `RequestOptions` is a mutable sealed class (PublishOptions/SendOptions are records)
 - **Location**: `src/ServiceConnect.Interfaces/Options/RequestOptions.cs`
 - **Sources**: [C.Imp, N.L23]
+- **Status**: fixed in 0110a272 (followup 547335f9)
 
 ### M-31 — `SendOptions.EndPoints` is mutable `IList<>` (vs readonly Headers)
 - **Location**: `src/ServiceConnect.Interfaces/Options/SendOptions.cs:13, 23`
 - **Sources**: [C.Imp, P.Imp]
+- **Status**: fixed in b7f43616
 
 ### M-32 — `HeaderDecoder.Decode` returns type-name string for nested tables/arrays
 - **Location**: `src/ServiceConnect.Interfaces/Headers/HeaderDecoder.cs:22-28`
 - **Note**: A broken test already asserts the current broken behaviour — documented in N.M14.
 - **Pass-2 verdict**: CONFIRMED — harmful fallback. XML doc claims "fallback to object.ToString for non-native types," but for tables/arrays this produces a useless `"System.Collections.Generic.Dictionary..."` string instead of recursively decoding the table/array, silently losing nested header data. Existing test lock-in is part of the bug. Kept at Medium.
 - **Sources**: [N.M14]
+- **Status**: fixed in f23fc7bc
 
 ---
 
@@ -529,7 +539,7 @@ Dead code, minor nullability/comment quirks, hygiene items, and hard-to-trigger 
 - **L-57** `InjectTraceContext` doesn't null-check headers — `ServiceConnectActivitySource.cs:301` — [P.Min]
 
 ### Interfaces
-- **L-58** `RequestOptions.Default` allocates on every access — `RequestOptions.cs:17` — [C.Imp]
+- **L-58** `RequestOptions.Default` allocates on every access — `RequestOptions.cs:17` — [C.Imp] — **Status**: not a bug at HEAD — resolved as a side-effect of M-30 in 0110a272 (the struct conversion eliminates the heap allocation entirely; `Default => new()` returns a value-typed instance)
 - **L-59** `HeaderDecoder.Decode` doesn't trap `ToString` exceptions — `HeaderDecoder.cs:22-28` — [C.Min]
 - **L-60** `HeaderDecoder` UTF-8 decoder not defensively constructed (global `Encoding.UTF8`) — `HeaderDecoder.cs:25` — [N.M15] — **Pass-2: REJECTED** (uses BCL's `Encoding.UTF8` singleton — no construction involved, no defence needed)
 - **L-61** `Message` primary-ctor deserialization ambiguity across JSON libs — `Message.cs:16` — [N.M17] — **Pass-2: REJECTED** (Newtonsoft handles primary ctors via `ConstructorHandling.AllowNonPublicDefaultConstructor`; STJ also supports them)
