@@ -38,6 +38,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Add<TKey, TValue>(TKey key, TValue value, TimeSpan slidingExpiry, CacheItemPriority priority = CacheItemPriority.Normal)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         Add(key, value, slidingExpiry, priority, true);
     }
 
@@ -46,6 +47,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Add<TKey, TValue>(TKey key, TValue value, DateTimeOffset absoluteExpiry, CacheItemPriority priority = CacheItemPriority.Normal)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (absoluteExpiry < _timeProvider.GetUtcNow())
             throw new ArgumentOutOfRangeException(nameof(absoluteExpiry), "Absolute expiry must be in the future.");
 
@@ -62,6 +64,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Add<TKey, TValue>(TKey key, TValue value, CacheItemPriority priority = CacheItemPriority.Normal)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         // Matches the timed Add overloads: a re-Add replaces the value and clears any
         // sliding/timer state a prior timed Add left in place.
         lock (_addLock)
@@ -91,6 +94,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Remove<TKey>(TKey key)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (Equals(key, null)) return;
 
         var removed = _cache.TryRemove(key!, out _);
@@ -110,6 +114,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Clear()
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         // Snapshot keys before clearing so subscribers see a KeyRemoved event for every
         // entry that was present. Concurrent adds/removes across this window are
         // best-effort — consistent with ConcurrentDictionary.Clear's own semantics.
@@ -164,6 +169,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public int PurgeNormalPriorities()
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         int removed = 0;
         foreach (var cacheItem in _cache)
         {
@@ -200,6 +206,7 @@ public sealed class CacheProvider : ICacheProvider, IKeyValueStore, IDisposable
     /// </summary>
     public void Update<TKey, TValue>(TKey key, TValue value)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (key is null) return;
         while (_cache.TryGetValue(key!, out var existing))
         {
