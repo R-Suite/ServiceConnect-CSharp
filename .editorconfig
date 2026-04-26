@@ -313,11 +313,6 @@ dotnet_naming_rule.type_parameters_should_be_begins_with_t.severity = warning
 dotnet_naming_rule.type_parameters_should_be_begins_with_t.symbols = type_parameters
 dotnet_naming_rule.type_parameters_should_be_begins_with_t.style = begins_with_t
 
-# Microsoft.CodeAnalysis.PublicApiAnalyzers (RSxxxx)
-# RS0026 (multiple overloads with optional parameters) silenced: pre-existing design choice
-# in IProducer (SendAsync overloads) is disambiguated by the first parameter type.
-dotnet_diagnostic.RS0026.severity = silent
-
 # Microsoft.VisualStudio.Threading.Analyzers (VSTHRDxxx) — correctness rules left at defaults.
 # VSTHRD200 (Async-suffix naming) silenced globally: bidirectional firing on internal
 # delegate-typed helpers and xUnit test method names produces too many false positives.

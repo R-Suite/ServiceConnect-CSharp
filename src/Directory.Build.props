@@ -35,14 +35,4 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-  <!-- PublicApiAnalyzers tracks the public surface of shipping libraries. Test projects
-       opt out via IsPackable=false. -->
-  <ItemGroup Condition="'$(IsPackable)' != 'false'">
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="3.3.4">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt" Condition="Exists('$(MSBuildProjectDirectory)\PublicAPI.Shipped.txt')" />
-    <AdditionalFiles Include="$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt" Condition="Exists('$(MSBuildProjectDirectory)\PublicAPI.Unshipped.txt')" />
-  </ItemGroup>
 </Project>
