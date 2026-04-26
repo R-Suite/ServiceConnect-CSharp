@@ -141,7 +141,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Publish(args);
 
         Assert.NotNull(activity);
-        Assert.Equal("boom", activity!.GetTagItem("enrichment.exception"));
+        Assert.Equal("System.InvalidOperationException", activity!.GetTagItem("enrichment.exception"));
     }
 
     [Fact]

@@ -346,9 +346,17 @@ public static class ServiceConnectActivitySource
         {
             Options.EnrichWithMessage?.Invoke(activity, message);
         }
+        catch (OperationCanceledException)
+        {
+            // Co-operative cancellation — propagate so callers can distinguish
+            // shutdown from enrichment failure.
+            throw;
+        }
         catch (Exception ex)
         {
-            activity.SetTag("enrichment.exception", ex.Message);
+            // Tag the exception type only. Message strings can contain caller-
+            // controlled payloads or PII; the type name is sufficient diagnostic.
+            activity.SetTag("enrichment.exception", ex.GetType().FullName);
         }
     }
 
@@ -361,9 +369,19 @@ public static class ServiceConnectActivitySource
         {
             Options.EnrichWithMessageBytes?.Invoke(activity, message);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            activity.SetTag("enrichment.exception", ex.Message);
+            activity.SetTag("enrichment.exception", ex.GetType().FullName);
         }
     }
+
+    internal static void InvokeTryEnrichForTest(Activity activity, Message? message) =>
+        TryEnrich(activity, message);
+
+    internal static void InvokeTryEnrichForTest(Activity activity, byte[]? bytes) =>
+        TryEnrich(activity, bytes);
 }
