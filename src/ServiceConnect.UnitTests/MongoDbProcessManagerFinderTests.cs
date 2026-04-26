@@ -12,31 +12,6 @@ namespace ServiceConnect.UnitTests;
 public class MongoDbProcessManagerFinderTests
 {
     [Fact]
-    public async Task InsertDataAsync_UnwrapsTargetInvocationException()
-    {
-        var finder = CreateFinder(out _, out _);
-        var cacheField = typeof(MongoDbProcessManagerFinder)
-            .GetField("InsertDelegateCache", BindingFlags.Static | BindingFlags.NonPublic)!;
-        var cache = (System.Collections.IDictionary)cacheField.GetValue(null)!;
-        var data = new TestProcessManagerData();
-        var inner = new InvalidOperationException("inner");
-
-        cache[data.GetType()] = new Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>(
-            (_, _, _, _) => throw new TargetInvocationException(inner));
-
-        try
-        {
-            var exception = await Record.ExceptionAsync(() => finder.InsertDataAsync(data, CancellationToken.None));
-
-            Assert.Same(inner, exception);
-        }
-        finally
-        {
-            cache.Remove(data.GetType());
-        }
-    }
-
-    [Fact]
     public async Task UpdateDataAsync_RestoresOriginalVersion_WhenReplaceFails()
     {
         var finder = CreateFinder(out var database, out _);

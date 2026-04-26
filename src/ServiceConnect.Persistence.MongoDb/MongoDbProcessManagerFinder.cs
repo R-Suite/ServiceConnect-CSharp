@@ -182,10 +182,6 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         {
             await insertDelegate(this, data, collectionName, cancellationToken).ConfigureAwait(false);
         }
-        catch (TargetInvocationException ex)
-        {
-            throw ex.InnerException ?? ex;
-        }
         catch (MongoException ex)
         {
             throw new PersistenceException(
