@@ -18,7 +18,7 @@ The four send-shaped methods cover distinct routing patterns:
 
 `MaximumMessageSize` lets the pipeline pre-check payload size before attempting a send, avoiding a roundtrip to the broker for a message that will be rejected.
 
-Note the header asymmetry: outgoing headers are `Dictionary<string, string>` (string values only) because transport headers are stringified on the wire. On the receive side, `ConsumerEventHandler` receives `IDictionary<string, object>` because some broker clients restore typed values (integers, timestamps) during deserialisation. See [`IConsumer`](./iconsumer/) for the receiving contract.
+Note the header asymmetry: outgoing headers are `IDictionary<string, string>` (string values only) because transport headers are stringified on the wire. On the receive side, `ConsumerEventHandler` receives `IDictionary<string, object>` because some broker clients restore typed values (integers, timestamps) during deserialisation. See [`IConsumer`](./iconsumer/) for the receiving contract.
 
 See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for how the producer fits into the full message pipeline.
 
@@ -30,7 +30,7 @@ See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for how the p
 Task PublishAsync(
     Type type,
     byte[] message,
-    Dictionary<string, string>? headers = null,
+    IDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
@@ -53,7 +53,7 @@ Publishes `message` to all subscribers registered for `type`. The broker routes 
 Task SendAsync(
     Type type,
     byte[] message,
-    Dictionary<string, string>? headers = null,
+    IDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
@@ -75,7 +75,7 @@ Task SendAsync(
     string endPoint,
     Type type,
     byte[] message,
-    Dictionary<string, string>? headers = null,
+    IDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
@@ -98,7 +98,7 @@ Task SendBytesAsync(
     string endPoint,
     Type type,
     byte[] packet,
-    Dictionary<string, string>? headers = null,
+    IDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
@@ -172,7 +172,7 @@ public sealed class BrokerProducer : IProducer
     public Task PublishAsync(
         Type type,
         byte[] message,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var topic = DeriveTopicFromType(type);
@@ -182,7 +182,7 @@ public sealed class BrokerProducer : IProducer
     public Task SendAsync(
         Type type,
         byte[] message,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         // Resolve the destination queue from IQueueConfiguration.QueueMappings.
@@ -194,7 +194,7 @@ public sealed class BrokerProducer : IProducer
         string endPoint,
         Type type,
         byte[] message,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         return PublishToBrokerAsync(endPoint, message, headers, cancellationToken);
@@ -204,7 +204,7 @@ public sealed class BrokerProducer : IProducer
         string endPoint,
         Type type,
         byte[] packet,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         // Stamp type headers from `type` (server-authoritative) then publish.
@@ -226,7 +226,7 @@ public sealed class BrokerProducer : IProducer
     // Broker-specific helpers — implement using your broker client.
     private string DeriveTopicFromType(Type type) => throw new NotImplementedException();
     private Task PublishToBrokerAsync(string destination, byte[] payload,
-        Dictionary<string, string>? headers, CancellationToken ct) => throw new NotImplementedException();
+        IDictionary<string, string>? headers, CancellationToken ct) => throw new NotImplementedException();
 }
 ```
 
@@ -254,7 +254,7 @@ public sealed class KafkaProducer : IProducer
     public async Task PublishAsync(
         Type type,
         byte[] message,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var topic    = type.FullName!.Replace('.', '-').ToLowerInvariant();
@@ -265,7 +265,7 @@ public sealed class KafkaProducer : IProducer
     public async Task SendAsync(
         Type type,
         byte[] message,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         // Resolve the destination from IQueueConfiguration.QueueMappings, then
@@ -277,7 +277,7 @@ public sealed class KafkaProducer : IProducer
         string endPoint,
         Type type,
         byte[] message,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var kafkaMsg = BuildMessage(type.FullName!, message, headers);
@@ -288,7 +288,7 @@ public sealed class KafkaProducer : IProducer
         string endPoint,
         Type type,
         byte[] packet,
-        Dictionary<string, string>? headers = null,
+        IDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var kafkaMsg = BuildMessage(key: string.Empty, packet, headers);
@@ -315,7 +315,7 @@ public sealed class KafkaProducer : IProducer
     private static Message<string, byte[]> BuildMessage(
         string key,
         byte[] value,
-        Dictionary<string, string>? headers)
+        IDictionary<string, string>? headers)
     {
         var kafkaHeaders = new Headers();
         if (headers is not null)

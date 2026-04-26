@@ -70,7 +70,7 @@ Gets a cancellation token tied to the consumer loop. It fires when consumption i
 ```csharp
 Task ReplyAsync<TReply>(
     TReply message,
-    Dictionary<string, string>? headers = null,
+    IDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default)
     where TReply : Message;
 ```

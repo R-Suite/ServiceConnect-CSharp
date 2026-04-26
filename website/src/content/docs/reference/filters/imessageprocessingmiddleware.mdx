@@ -11,10 +11,10 @@ See [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) for the 
 
 ## Reference
 
-### `Process`
+### `ProcessAsync`
 
 ```csharp
-Task<ConsumeEventResult> Process(
+Task<ConsumeEventResult> ProcessAsync(
     ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
     IDictionary<string, object> headers, Envelope envelope,
     MessageProcessingDelegate next,
@@ -58,7 +58,7 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
 {
     private static readonly ActivitySource Source = new("ServiceConnect.Consume");
 
-    public async Task<ConsumeEventResult> Process(
+    public async Task<ConsumeEventResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object message,
         IDictionary<string, object> headers, Envelope envelope,
         MessageProcessingDelegate next,

@@ -64,7 +64,7 @@ The callback the transport invokes for every delivered message.
 
 - `message` — the raw serialised payload as received from the broker.
 - `type` — the wire type name of the message (for example `"OrderService.Messages.OrderPlaced"`). The pipeline uses this to resolve the CLR type and dispatch to the correct handler.
-- `headers` — a dictionary of transport headers. Values are typed as `object` because some broker clients expose typed header values (integers, timestamps) rather than plain strings. Note the asymmetry with `IProducer`, where outgoing headers are `Dictionary<string, string>` — the transport layer stringifies header values on the wire, but deserialisation restores the broker-native type.
+- `headers` — a dictionary of transport headers. Values are typed as `object` because some broker clients expose typed header values (integers, timestamps) rather than plain strings. Note the asymmetry with `IProducer`, where outgoing headers are `IDictionary<string, string>` — the transport layer stringifies header values on the wire, but deserialisation restores the broker-native type.
 - `cancellationToken` — propagated from the consumer's cancellation token; the handler should respect it for any I/O it performs.
 
 **Returns.** A `ConsumeEventResult` describing whether the message was processed successfully. See [`ConsumeEventResult`](#consumeeventresult) below.

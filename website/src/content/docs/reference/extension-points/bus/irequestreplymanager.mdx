@@ -43,7 +43,7 @@ public interface IRequestReplyManager
     /// </summary>
     Task<TReply> SendRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -54,7 +54,7 @@ public interface IRequestReplyManager
     /// </summary>
     Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
         where TRequest : Message
@@ -65,7 +65,7 @@ public interface IRequestReplyManager
     /// </summary>
     Task PublishRequestAsync<TRequest, TReply>(
         byte[] messageBytes,
-        Dictionary<string, string> headers,
+        IDictionary<string, string> headers,
         RequestOptions options,
         Action<TReply> onReply,
         CancellationToken cancellationToken = default)

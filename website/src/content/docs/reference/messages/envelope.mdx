@@ -47,7 +47,7 @@ Gets the raw message body bytes as delivered by the transport.
 public sealed class AuditLoggingMiddleware(ILogger<AuditLoggingMiddleware> logger)
     : IMessageProcessingMiddleware
 {
-    public Task<ConsumeEventResult> Process(
+    public Task<ConsumeEventResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes,
         Type messageType,
         object message,
