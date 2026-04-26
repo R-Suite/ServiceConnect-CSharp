@@ -142,7 +142,7 @@ public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(WorkSubmitted message)
+    public Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Processed {message.WorkId}");
         return Task.CompletedTask;

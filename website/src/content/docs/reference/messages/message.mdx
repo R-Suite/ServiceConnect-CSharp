@@ -56,7 +56,7 @@ public sealed class PlaceOrderHandler(IBus bus) : IMessageHandler<PlaceOrder>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(PlaceOrder message)
+    public async Task HandleAsync(PlaceOrder message, CancellationToken cancellationToken = default)
     {
         // ... persist the order ...
 

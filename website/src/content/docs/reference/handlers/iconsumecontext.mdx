@@ -97,7 +97,7 @@ public sealed class QuoteShippingHandler : IMessageHandler<QuoteShipping>
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(QuoteShipping message)
+    public async Task HandleAsync(QuoteShipping message, CancellationToken cancellationToken = default)
     {
         var ctx = Context!;
 

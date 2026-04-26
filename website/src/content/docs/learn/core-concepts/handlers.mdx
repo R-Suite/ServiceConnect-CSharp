@@ -13,7 +13,7 @@ Handlers are the simplest unit of work in a ServiceConnect application — and t
 public interface IMessageHandler<in TMessage> where TMessage : Message
 {
     IConsumeContext Context { get; set; }
-    Task HandleAsync(TMessage message);
+    Task HandleAsync(TMessage message, CancellationToken cancellationToken = default);
 }
 ```
 
@@ -26,7 +26,7 @@ public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(WorkSubmitted message)
+    public async Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Processing {message.WorkId}");
         await Task.CompletedTask;
@@ -70,7 +70,7 @@ public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(QuoteRequest message)
+    public async Task HandleAsync(QuoteRequest message, CancellationToken cancellationToken = default)
     {
         var price = Quote(message.ProductCode);
         await Context!.ReplyAsync(new QuoteResponse(message.CorrelationId)
@@ -156,7 +156,7 @@ public sealed class WorkSubmittedHandler(IWorkItemStore store, ILogger<WorkSubmi
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(WorkSubmitted message)
+    public async Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
     {
         log.LogInformation("Received {WorkId}", message.WorkId);
         await store.SaveAsync(message);

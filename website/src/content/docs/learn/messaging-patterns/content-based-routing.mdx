@@ -42,7 +42,7 @@ public sealed class PremiumOrderHandler : IMessageHandler<PremiumOrderPlaced>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(PremiumOrderPlaced message)
+    public Task HandleAsync(PremiumOrderPlaced message, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Priority lane: processing {message.OrderId}");
         return Task.CompletedTask;
@@ -71,7 +71,7 @@ public sealed class OrderRoutingHandler(IWorkQueues queues) : IMessageHandler<Or
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(OrderPlaced message)
+    public async Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
     {
         if (message.TotalValue > 500m)
             await Context!.Bus.SendAsync(
@@ -101,7 +101,7 @@ A pattern to avoid: a handler that subscribes to `OrderPlaced`, checks `TotalVal
 
 ```csharp
 // Bad: a silent no-op for messages the handler doesn't want.
-public Task HandleAsync(OrderPlaced message)
+public Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
 {
     if (message.TotalValue <= 500m) return Task.CompletedTask;
     // …process premium…

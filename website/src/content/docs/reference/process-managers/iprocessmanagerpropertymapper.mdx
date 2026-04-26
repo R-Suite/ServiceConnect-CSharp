@@ -52,7 +52,7 @@ public sealed class ShippingSaga :
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(OrderPlaced message, ShippingSagaData data)
+    public Task HandleAsync(OrderPlaced message, ShippingSagaData data, CancellationToken cancellationToken = default)
     {
         data.OrderId = message.OrderId;
         return Task.CompletedTask;

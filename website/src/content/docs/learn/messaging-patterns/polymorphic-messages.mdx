@@ -67,7 +67,7 @@ public sealed class DomainEventHandler : IMessageHandler<DomainEvent>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(DomainEvent message)
+    public Task HandleAsync(DomainEvent message, CancellationToken cancellationToken = default)
     {
         var concreteTypeName = message.GetType().Name;
         var orderId = message switch
@@ -95,7 +95,7 @@ public sealed class OrderShippedHandler : IMessageHandler<OrderShipped>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(OrderShipped message)
+    public Task HandleAsync(OrderShipped message, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Shipping: {message.OrderId} via {message.Carrier}");
         return Task.CompletedTask;

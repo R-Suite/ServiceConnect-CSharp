@@ -61,7 +61,7 @@ public sealed class FulfillmentProcessHandler :
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data)
+    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, CancellationToken cancellationToken = default)
     {
         if (data.IsSubmitted) return;           // idempotent — saw this already
 
@@ -73,7 +73,7 @@ public sealed class FulfillmentProcessHandler :
             new SendOptions { EndPoint = "inventory-worker" });
     }
 
-    public async Task HandleAsync(InventoryReserved message, FulfillmentState data)
+    public async Task HandleAsync(InventoryReserved message, FulfillmentState data, CancellationToken cancellationToken = default)
     {
         if (data.InventoryReserved) return;
 
@@ -84,7 +84,7 @@ public sealed class FulfillmentProcessHandler :
             new SendOptions { EndPoint = "payment-worker" });
     }
 
-    public Task HandleAsync(PaymentCaptured message, FulfillmentState data)
+    public Task HandleAsync(PaymentCaptured message, FulfillmentState data, CancellationToken cancellationToken = default)
     {
         if (data.PaymentCaptured) return Task.CompletedTask;
 
@@ -164,7 +164,7 @@ The `HandlerReference` list tells the dispatch pipeline which message types rout
 Some workflows need to react to *nothing happening*. "If we haven't received `PaymentCaptured` within 24 hours, cancel the order." The pattern for that is `RequestTimeoutAsync`:
 
 ```csharp
-public async Task HandleAsync(InventoryReserved message, FulfillmentState data)
+public async Task HandleAsync(InventoryReserved message, FulfillmentState data, CancellationToken cancellationToken = default)
 {
     data.InventoryReserved = true;
 
@@ -174,7 +174,7 @@ public async Task HandleAsync(InventoryReserved message, FulfillmentState data)
         Context.CancellationToken);
 }
 
-public Task HandleAsync(TimeoutMessage message, FulfillmentState data)
+public Task HandleAsync(TimeoutMessage message, FulfillmentState data, CancellationToken cancellationToken = default)
 {
     if (data.IsCompleted) return Task.CompletedTask;   // payment already arrived — ignore
 

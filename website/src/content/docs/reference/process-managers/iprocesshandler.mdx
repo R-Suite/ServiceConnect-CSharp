@@ -38,7 +38,7 @@ Gets or sets the per-message consume context (bus handle, correlation id, reply 
 ### `HandleAsync`
 
 ```csharp
-Task HandleAsync(TMessage message, TData data);
+Task HandleAsync(TMessage message, TData data, CancellationToken cancellationToken = default);
 ```
 
 Invoked once the framework has correlated `message` to the `data` record. Mutations to `data` are persisted when the returned task completes successfully; returning a faulted task (or throwing) prevents persistence and propagates to the pipeline's retry and error-handling policy.
@@ -46,6 +46,7 @@ Invoked once the framework has correlated `message` to the `data` record. Mutati
 **Parameters**
 - `message` — the deserialised message; guaranteed non-null when invoked by the dispatcher.
 - `data` — the persisted state record for this correlation id. The first message in a workflow receives a freshly-constructed, default-valued instance; subsequent messages receive the record as last written.
+- `cancellationToken` — sourced from the transport consume context; signals cooperative shutdown. Pass it through to downstream awaits so long-running steps unwind cleanly when the bus stops consuming.
 
 ---
 
@@ -81,7 +82,7 @@ public sealed class ShippingSaga :
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(OrderPlaced message, ShippingSagaData data)
+    public async Task HandleAsync(OrderPlaced message, ShippingSagaData data, CancellationToken cancellationToken = default)
     {
         if (data.Status != OrderStatus.Pending)
         {

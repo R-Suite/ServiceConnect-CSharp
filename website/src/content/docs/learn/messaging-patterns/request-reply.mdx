@@ -92,7 +92,7 @@ public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(QuoteRequest message)
+    public async Task HandleAsync(QuoteRequest message, CancellationToken cancellationToken = default)
     {
         var price = PriceFor(message.ProductCode);
         await Context!.ReplyAsync(new QuoteResponse(message.CorrelationId)

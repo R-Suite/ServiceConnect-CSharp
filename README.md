@@ -51,7 +51,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(OrderPlaced message)
+    public Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Received order {message.OrderId}");
         return Task.CompletedTask;

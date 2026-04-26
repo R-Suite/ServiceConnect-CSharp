@@ -34,13 +34,14 @@ Gets or sets the per-message consume context (bus handle, correlation id, reply 
 ### `HandleAsync`
 
 ```csharp
-Task HandleAsync(TMessage message);
+Task HandleAsync(TMessage message, CancellationToken cancellationToken = default);
 ```
 
 Invoked once per delivered message. Returning a faulted `Task` (or throwing synchronously) signals failure to the pipeline, which applies the configured retry and error-handling policy.
 
 **Parameters**
 - `message` — the deserialised message; guaranteed non-null when `HandleAsync` is invoked by the dispatcher.
+- `cancellationToken` — sourced from the transport consume context; signals cooperative shutdown. Pass it through to downstream awaits so long-running handlers unwind cleanly when the bus stops consuming.
 
 **Remarks.** The generic parameter is constrained to `Message`, matching the constraint on `IBus.PublishAsync` and `IBus.SendAsync`. Keep the handler's work inside the awaited task — the pipeline acknowledges the broker only once this task completes successfully.
 
@@ -57,7 +58,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(OrderPlaced message)
+    public async Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
     {
         // Use the message id as a deduplication key so retries and duplicate
         // deliveries never write the same row twice.
@@ -97,7 +98,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(OrderPlaced message)
+    public async Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
     {
         var authorization = await _payments.AuthorizeAsync(
             message.CustomerId,

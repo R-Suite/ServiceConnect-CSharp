@@ -70,16 +70,16 @@ Gets the single destination endpoint.
 ### `EndPoints`
 
 ```csharp
-public IList<string>? EndPoints { get; init; }
+public IReadOnlyList<string>? EndPoints { get; init; }
 ```
 
 Gets the destination endpoints when sending to multiple queues.
 
-**Remarks.** Default is `null`. Use this when a single logical send should be delivered to several queues in one call.
+**Remarks.** Default is `null`. Use this when a single logical send should be delivered to several queues in one call. Any `IReadOnlyList<string>` implementation — `List<string>`, an immutable list, an array — is assignable at construction time via the object initialiser.
 
 ## `RequestOptions`
 
-Passed to `IBus.SendRequestAsync` and `IBus.SendRequestMultiAsync`. A mutable `sealed class`.
+Passed to `IBus.SendRequestAsync` and `IBus.SendRequestMultiAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. The struct shape matches `PublishOptions` and `SendOptions` so concurrent request callers cannot share a mutable instance and clobber each other's headers, endpoints, or timeout between construction and the async pipeline's read.
 
 ### `DefaultTimeoutMs`
 
@@ -97,64 +97,64 @@ The default request timeout, in milliseconds (10 seconds).
 public static RequestOptions Default => new();
 ```
 
-Gets a fresh `RequestOptions` populated with default values.
+Gets a `RequestOptions` value populated with default values — equivalent to `new RequestOptions()`.
 
-**Returns.** A new `RequestOptions` instance per access, so mutating the returned object does not leak into other callers using the fallback. Handy when you want to pass defaults explicitly rather than `null`.
+**Returns.** A struct value per access. Handy when you want to pass defaults explicitly rather than letting the bus apply its own.
 
 ---
 
 ### `Headers`
 
 ```csharp
-public Dictionary<string, string>? Headers { get; set; }
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
 ```
 
-Gets or sets additional headers to attach to the request message.
+Gets additional headers to attach to the request message.
 
-**Remarks.** Default is `null`.
+**Remarks.** Default is `null`. See the `PublishOptions.Headers` note above for why the read-only interface is used.
 
 ---
 
 ### `EndPoint`
 
 ```csharp
-public string? EndPoint { get; set; }
+public string? EndPoint { get; init; }
 ```
 
-Gets or sets the single destination endpoint for the request.
+Gets the single destination endpoint for the request.
 
-**Remarks.** Default is `null`. Overrides the configured queue mapping for the request message type.
+**Remarks.** Default is `null`. Overrides the configured queue mapping for the request message type. Mutually exclusive with `EndPoints`.
 
 ---
 
 ### `EndPoints`
 
 ```csharp
-public IList<string>? EndPoints { get; set; }
+public IReadOnlyList<string>? EndPoints { get; init; }
 ```
 
-Gets or sets the destination endpoints when broadcasting a multi-request.
+Gets the destination endpoints when broadcasting a multi-request.
 
-**Remarks.** Default is `null`. Used by `SendRequestMultiAsync` to fan out to several respondents.
+**Remarks.** Default is `null`. Used by `SendRequestMultiAsync` to fan out to several respondents. Mutually exclusive with `EndPoint`.
 
 ---
 
 ### `Timeout`
 
 ```csharp
-public int Timeout { get; set; } = DefaultTimeoutMs;
+public int Timeout { get; init; }
 ```
 
-Gets or sets the request timeout, in milliseconds.
+Gets the request timeout, in milliseconds.
 
-**Remarks.** Defaults to `DefaultTimeoutMs` (10,000). For single-reply requests, the call faults if no reply arrives before the deadline. For multi-requests, see `ExpectedReplyCount` for how timeout and count interact.
+**Remarks.** Defaults to `DefaultTimeoutMs` (10,000) — the parameterless constructor seeds the field, so a `new RequestOptions()` value already carries the default. For single-reply requests, the call faults if no reply arrives before the deadline. For multi-requests, see `ExpectedReplyCount` for how timeout and count interact.
 
 ---
 
 ### `ExpectedReplyCount`
 
 ```csharp
-public int? ExpectedReplyCount { get; set; }
+public int? ExpectedReplyCount { get; init; }
 ```
 
 Number of replies the multi-request should wait for before completing. Only consulted by `SendRequestMultiAsync`.

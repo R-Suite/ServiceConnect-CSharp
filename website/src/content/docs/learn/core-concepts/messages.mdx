@@ -102,7 +102,7 @@ public sealed class PlaceOrderHandler(IBus bus) : IMessageHandler<PlaceOrder>
 {
     public IConsumeContext Context { get; set; } = null!;
 
-    public async Task HandleAsync(PlaceOrder message)
+    public async Task HandleAsync(PlaceOrder message, CancellationToken cancellationToken = default)
     {
         // Carry the correlation id forward so downstream logs and
         // process managers can tie every subsequent message back to
