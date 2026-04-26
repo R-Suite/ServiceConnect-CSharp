@@ -66,6 +66,7 @@ public class ProducerPublishTimeoutTests
     private static Mock<IChannel> MakeHangingChannel()
     {
         var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
         channel.Setup(c => c.BasicPublishAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
@@ -146,6 +147,7 @@ public class ProducerPublishTimeoutTests
         // Arrange: short timeout, but the channel acks immediately — no timeout should fire.
         var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
         var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
         var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = true;
 
@@ -169,6 +171,7 @@ public class ProducerPublishTimeoutTests
         // NOT be swallowed and converted to TimeoutException.
         var producer = CreateProducer(publishTimeout: TimeSpan.FromSeconds(30));
         var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
         var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = true;
 

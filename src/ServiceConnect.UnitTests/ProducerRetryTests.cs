@@ -49,7 +49,9 @@ public class ProducerRetryTests
     {
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
+        firstChannel.SetupGet(c => c.IsOpen).Returns(true);
         var secondChannel = new Mock<IChannel>();
+        secondChannel.SetupGet(c => c.IsOpen).Returns(true);
         var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = true;
 
@@ -101,6 +103,7 @@ public class ProducerRetryTests
     {
         var producer = CreateProducer();
         var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
         var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = true;
         using var cancellationSource = new CancellationTokenSource();
@@ -137,6 +140,7 @@ public class ProducerRetryTests
     {
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
+        firstChannel.SetupGet(c => c.IsOpen).Returns(true);
         var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = true;
         using var cancellationSource = new CancellationTokenSource();
@@ -331,7 +335,9 @@ public class ProducerRetryTests
     {
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
+        firstChannel.SetupGet(c => c.IsOpen).Returns(true);
         var secondChannel = new Mock<IChannel>();
+        secondChannel.SetupGet(c => c.IsOpen).Returns(true);
 
         firstChannel.Setup(c => c.ExchangeDeclareAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(),
@@ -376,6 +382,7 @@ public class ProducerRetryTests
     {
         var producer = CreateProducer();
         var channel = new Mock<IChannel>(MockBehavior.Strict);
+        channel.SetupGet(c => c.IsOpen).Returns(true);
         using var cancellationSource = new CancellationTokenSource();
         var cancellationToken = cancellationSource.Token;
         var reconnectCalls = 0;
@@ -457,7 +464,9 @@ public class ProducerRetryTests
     {
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
+        firstChannel.SetupGet(c => c.IsOpen).Returns(true);
         var secondChannel = new Mock<IChannel>();
+        secondChannel.SetupGet(c => c.IsOpen).Returns(true);
 
         firstChannel.Setup(c => c.BasicPublishAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),

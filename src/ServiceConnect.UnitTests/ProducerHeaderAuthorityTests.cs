@@ -55,6 +55,7 @@ public class ProducerHeaderAuthorityTests
     {
         var producer = CreateProducer();
         var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
         IDictionary<string, object?>? captured = null;
 
         channel
@@ -103,6 +104,7 @@ public class ProducerHeaderAuthorityTests
     {
         var producer = CreateProducer();
         var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
         IDictionary<string, object?>? captured = null;
 
         channel

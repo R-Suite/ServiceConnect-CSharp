@@ -85,6 +85,11 @@ public sealed class Producer : IProducer
         return settings.TryGetValue(key, out var value) ? converter(value) : defaultValue;
     }
 
+    // Returns true only when both the connected flag is set AND the underlying channel
+    // is still open. A broker drop closes the channel without clearing _connected, so
+    // checking the flag alone would permanently suppress reconnect attempts.
+    private bool IsHealthy() => _connected && (_model?.IsOpen ?? false);
+
     private Task EnsureConnectedAsync()
     {
         return EnsureConnectedAsync(CancellationToken.None);
@@ -93,12 +98,12 @@ public sealed class Producer : IProducer
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
-        if (_connected) return;
+        if (IsHealthy()) return;
 
         await _connectionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_connected) return;
+            if (IsHealthy()) return;
 
             await Retry.DoAsync(() => CreateConnectionAsync(cancellationToken), async ex =>
             {
