@@ -75,6 +75,8 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// <inheritdoc />
     public async Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(data);
+
         try
         {
             await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
