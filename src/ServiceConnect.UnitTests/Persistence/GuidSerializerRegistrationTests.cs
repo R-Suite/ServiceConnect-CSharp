@@ -87,4 +87,20 @@ public class GuidSerializerRegistrationTests
 
         Assert.Equal(1, ReadFlag());
     }
+
+    [Theory]
+    [InlineData(typeof(MongoDbAggregatorPersistor))]
+    [InlineData(typeof(MongoDbProcessManagerFinder))]
+    [InlineData(typeof(MongoDbTimeoutStore))]
+    public void Persistor_HasExplicitStaticConstructor(Type persistorType)
+    {
+        // An explicit `static T()` clears BeforeFieldInit and ensures the cctor runs
+        // before any field is touched — i.e., before any instance ctor body runs and
+        // before any serialization side-effect can be triggered. That's the contract
+        // we need for EnsureGuidSerializerRegistered to fire on direct-new paths.
+        Assert.NotNull(persistorType.TypeInitializer);
+        Assert.False(
+            (persistorType.Attributes & TypeAttributes.BeforeFieldInit) != 0,
+            $"{persistorType.Name} must declare an explicit `static {persistorType.Name}()` so the Guid serializer registrar fires before any field access on direct-ctor paths.");
+    }
 }

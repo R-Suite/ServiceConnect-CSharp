@@ -23,6 +23,14 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     // so the ensure call has succeeded as far as the caller is concerned.
     private static readonly HashSet<int> BenignIndexCodes = new() { 85, 86 };
 
+    static MongoDbAggregatorPersistor()
+    {
+        // Ensure the canonical Guid serializer is registered before any direct-ctor
+        // path serialises a Guid. DI factories also call this; the static ctor covers
+        // tests and custom compositions that bypass DI.
+        MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
+    }
+
     /// <summary>
     /// Creates a persistor that stores aggregator data in the default <c>Aggregator</c> collection.
     /// </summary>

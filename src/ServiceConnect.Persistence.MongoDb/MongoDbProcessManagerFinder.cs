@@ -29,6 +29,15 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     // Avoid MakeGenericMethod + MethodInfo.Invoke on every insert call.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>>
         InsertDelegateCache = new();
+
+    static MongoDbProcessManagerFinder()
+    {
+        // Ensure the canonical Guid serializer is registered before any direct-ctor
+        // path serialises a Guid. DI factories also call this; the static ctor covers
+        // tests and custom compositions that bypass DI.
+        MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
+    }
+
     /// <summary>
     /// Creates a process-manager finder backed by MongoDB.
     /// </summary>

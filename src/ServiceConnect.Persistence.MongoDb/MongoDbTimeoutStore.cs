@@ -19,6 +19,14 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
     private const string TimeoutsCollectionName = "Timeouts";
 
+    static MongoDbTimeoutStore()
+    {
+        // Ensure the canonical Guid serializer is registered before any direct-ctor
+        // path serialises a Guid. DI factories also call this; the static ctor covers
+        // tests and custom compositions that bypass DI.
+        MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
+    }
+
     /// <summary>
     /// Creates a timeout store backed by MongoDB.
     /// </summary>
