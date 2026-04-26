@@ -10,6 +10,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     private readonly IProducer _producer;
     private readonly string _endpoint;
     private readonly Type _messageType;
+    private readonly TimeProvider _timeProvider;
     private readonly string _sequenceId;
     private readonly Dictionary<string, string> _baseHeaders;
     private long _packetNumber;
@@ -27,15 +28,30 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 
     /// <summary>
     /// Creates a write stream that targets a single endpoint and message type.
+    /// Uses <see cref="TimeProvider.System"/> for the close-drain deadline.
     /// </summary>
     /// <param name="producer">The producer used to send stream packets.</param>
     /// <param name="endpoint">The destination endpoint for the stream.</param>
     /// <param name="messageType">The logical message type represented by the stream.</param>
     public MessageBusWriteStream(IProducer producer, string endpoint, Type messageType)
+        : this(producer, endpoint, messageType, TimeProvider.System) { }
+
+    /// <summary>
+    /// Creates a write stream that targets a single endpoint and message type.
+    /// </summary>
+    /// <param name="producer">The producer used to send stream packets.</param>
+    /// <param name="endpoint">The destination endpoint for the stream.</param>
+    /// <param name="messageType">The logical message type represented by the stream.</param>
+    /// <param name="timeProvider">
+    /// The time provider used to compute the close-drain deadline. Inject a fake
+    /// provider in tests to control the timeout without relying on wall-clock time.
+    /// </param>
+    public MessageBusWriteStream(IProducer producer, string endpoint, Type messageType, TimeProvider timeProvider)
     {
-        _producer = producer;
-        _endpoint = endpoint;
-        _messageType = messageType;
+        _producer = producer ?? throw new ArgumentNullException(nameof(producer));
+        _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
+        _messageType = messageType ?? throw new ArgumentNullException(nameof(messageType));
+        _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         _sequenceId = FormatGuid(Guid.NewGuid());
         // Type-reserved headers (FullTypeName / TypeName / MessageType) are stamped by
         // the producer from _messageType — they must not be seeded here, since the
@@ -116,13 +132,13 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         // its closed-flag check must complete (either successfully or with an exception)
         // before we assign the close packet number — otherwise its packet would ship with
         // a number beyond LastPacketNumber and the reader would silently drop it.
-        var deadline = DateTime.UtcNow + CloseDrainTimeout;
+        var deadline = _timeProvider.GetUtcNow().UtcDateTime + CloseDrainTimeout;
         var spin = new SpinWait();
         while (Volatile.Read(ref _inFlightWrites) > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (spin.NextSpinWillYield && DateTime.UtcNow >= deadline)
+            if (spin.NextSpinWillYield && _timeProvider.GetUtcNow().UtcDateTime >= deadline)
                 throw new TimeoutException(
                     $"Timed out waiting for {Volatile.Read(ref _inFlightWrites)} in-flight write(s) to drain before closing stream {_sequenceId}.");
 
