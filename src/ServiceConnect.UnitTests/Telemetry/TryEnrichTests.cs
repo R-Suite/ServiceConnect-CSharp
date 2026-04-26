@@ -5,6 +5,7 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests.Telemetry;
 
+[Collection("ActivityListener")]
 public class TryEnrichTests : IDisposable
 {
     private readonly Action<Activity, Message>? _originalMessageEnricher;

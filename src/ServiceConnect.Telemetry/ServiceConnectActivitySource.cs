@@ -371,10 +371,12 @@ public static class ServiceConnectActivitySource
         }
         catch (OperationCanceledException)
         {
+            // See Message overload for rationale on OCE rethrow.
             throw;
         }
         catch (Exception ex)
         {
+            // See Message overload for rationale on tagging the type only.
             activity.SetTag("enrichment.exception", ex.GetType().FullName);
         }
     }
