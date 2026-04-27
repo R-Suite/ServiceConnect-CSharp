@@ -113,9 +113,25 @@ Runnable console apps live in [`examples/`](examples), one per pattern:
 
 Each example ships with a `run.sh` and a `docker-compose.yml` at `examples/docker-compose.yml` for a local RabbitMQ broker.
 
-## Requirements
+## Supported runtimes
 
-- .NET 8 or .NET 10 (core packages multi-target; `ServiceConnect.Filters.MessageDeduplication` requires .NET 10)
+ServiceConnect targets modern .NET only — by design.
+
+- **`net8.0`** — current LTS. The minimum.
+- **`net10.0`** — current STS. Used to opt into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; net8.0 paths take guarded fallbacks.
+
+The library packages (`ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.*`, `ServiceConnect.Telemetry`) multi-target both. `ServiceConnect.Filters.MessageDeduplication` is currently `net10.0`-only.
+
+We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
+
+- The hot paths use BCL features that are awkward to polyfill cleanly.
+- The remaining LTS/STS surface (.NET 8 + .NET 10) covers every supported Microsoft runtime with active patch coverage at time of writing.
+- Consumers on .NET Framework or out-of-support .NET Core SKUs can pin earlier ServiceConnect releases that targeted those runtimes; we are not adding support back to the current line.
+
+If your scenario needs `netstandard2.1` (or you'd like to upstream the work), please open an issue.
+
+## Other requirements
+
 - RabbitMQ 3.7+
 
 ## License

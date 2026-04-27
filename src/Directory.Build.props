@@ -1,5 +1,16 @@
 <Project>
   <PropertyGroup>
+    <!-- Default target frameworks for every project under src/. The library packages
+         multi-target the current LTS (net8.0) and the latest STS (net10.0); test
+         projects, the example filter, and anything else with framework-specific
+         requirements override this in their own .csproj.
+
+         Why these two and nothing older: net8.0 is the broadest LTS currently in
+         support, and net10.0 unlocks System.Threading.Lock, the field keyword,
+         and other recent BCL niceties used in the hot paths. We deliberately do
+         NOT target netstandard2.x or net6.0/net7.0 — see the README's "Supported
+         runtimes" section for the rationale and consumer guidance. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- Run IDE/style analyzers (IDE0xxx) during compile so .editorconfig violations
          become warnings, which TreatWarningsAsErrors promotes to build errors. -->
