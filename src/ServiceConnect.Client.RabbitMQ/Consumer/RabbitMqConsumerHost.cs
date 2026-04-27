@@ -45,6 +45,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // so helper publishes cannot interleave with the consumer's ack/nack stream.
     private IChannel? _publishChannel;
     private ConsumerEventHandler? _consumerEventHandler;
+    // Per-delivery dispatcher (handler invocation + retry/terminal/audit routing) — built
+    // in StartConsumingAsync once the queue / retry-queue names are known. The host owns
+    // admission, ack/nack, and lifecycle; the processor is the pure "given a delivery,
+    // process and route it" operation.
+    private InboundMessageProcessor? _messageProcessor;
     private AsyncEventingBasicConsumer? _consumer;
     private string? _consumerTag;
     private bool _autoDelete;
@@ -140,6 +145,19 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _deliveryCts.Dispose();
         _deliveryCts = new CancellationTokenSource();
         _deliveryToken = _deliveryCts.Token;
+        _messageProcessor = new InboundMessageProcessor(
+            _consumerEventHandler,
+            _retryHandler,
+            _auditPublisher,
+            _queueConfiguration,
+            _timeProvider,
+            _logger,
+            _retryQueueName,
+            _errorsDisabled,
+            _deadLetterUnhandledMessages,
+            _includeMachineNameInHeaders,
+            shutdownTimedOut: () => Volatile.Read(ref _shutdownTimedOut) != 0,
+            shutdownPublishToken: () => _shutdownPublishCts.Token);
         // The lambda captures the delivery *token* (not _deliveryCts.Token accessor) so a
         // late delivery fired after DisposeAsync disposed the CTS can still run without
         // throwing ObjectDisposedException from the Token property.
@@ -263,7 +281,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 }
             }
 
-            processed = await ProcessMessageAsync(publishChannel!, args, cancellationToken).ConfigureAwait(false);
+            processed = await _messageProcessor!.ProcessAsync(publishChannel!, args, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -348,166 +366,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
 
         return headers;
-    }
-
-    private async Task<bool> ProcessMessageAsync(IChannel publishChannel, BasicDeliverEventArgs args, CancellationToken cancellationToken)
-    {
-        ConsumeEventResult result;
-        // Pre-size the dict to the incoming header count plus 3 consumer-added
-        // headers (TimeReceived, DestinationMachine, DestinationAddress) so we
-        // avoid rehashes during the copy on this per-message hot path.
-        var sourceHeaders = args.BasicProperties.Headers;
-
-        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3, StringComparer.Ordinal);
-        if (sourceHeaders != null)
-        {
-            foreach (var kvp in sourceHeaders)
-            {
-                if (kvp.Value is not null)
-                {
-                    headers[kvp.Key] = kvp.Value;
-                }
-            }
-        }
-
-        if (args.Redelivered)
-        {
-            HeaderHelpers.SetHeader(headers, HeaderKeys.Redelivered, true);
-        }
-
-        try
-        {
-            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeReceived, FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime));
-            if (_includeMachineNameInHeaders)
-            {
-                HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationMachine, Environment.MachineName);
-            }
-
-            HeaderHelpers.SetHeader(headers, HeaderKeys.DestinationAddress, _queueConfiguration.QueueName);
-
-            // Prefer FullTypeName; fall back to TypeName. Use TryGetValue to avoid KeyNotFoundException.
-            // Admission already guarantees at least one is present with a non-null value, but
-            // FullTypeName could be null-valued while TypeName is valid — check the value.
-            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw) || typeNameRaw is null)
-            {
-                headers.TryGetValue(HeaderKeys.TypeName, out typeNameRaw);
-            }
-
-            string typeName = HeaderDecoder.Decode(typeNameRaw) ?? "";
-
-            if (_consumerEventHandler == null)
-            {
-                _logger.LogError("Consumer event handler not set — message will be nacked for redelivery. Queue: {Queue}", _queueConfiguration.QueueName);
-                result = new ConsumeEventResult { Success = false };
-            }
-            else
-            {
-                result = await _consumerEventHandler(args.Body, typeName, headers, cancellationToken).ConfigureAwait(false);
-            }
-
-            HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime));
-        }
-        catch (Exception ex)
-        {
-            result = new ConsumeEventResult { Exception = ex, Success = false };
-        }
-
-        if (!result.Success)
-        {
-            if (Volatile.Read(ref _shutdownTimedOut) != 0)
-            {
-                return false;
-            }
-
-            try
-            {
-                await _retryHandler.HandleFailureAsync(
-                    publishChannel,
-                    _retryQueueName,
-                    args,
-                    headers,
-                    result.Exception,
-                    GetShutdownPublishToken()).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (_shutdownPublishCts.IsCancellationRequested)
-            {
-                // Shutdown grace window expired mid-publish — propagate so the outer finally
-                // leaves the message unacked for broker redelivery after reconnection.
-                throw;
-            }
-            catch (Exception retryEx)
-            {
-                _logger.LogError(retryEx,
-                    "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
-                    args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
-                // Intentionally swallow: the message is already failed and we cannot retry-publish it.
-                // Acking now (processed = true, returned below) prevents the broker from redelivering it
-                // into the same failed path. Letting the exception propagate would cause the finally block
-                // to nack with requeue:true and hot-loop the broker on a poison message.
-            }
-        }
-        else if (result.NotHandled && _deadLetterUnhandledMessages && !_errorsDisabled)
-        {
-            if (Volatile.Read(ref _shutdownTimedOut) != 0)
-            {
-                return false;
-            }
-
-            // Route via the terminal-failure path (error exchange) — a message with no
-            // handler is not a retryable condition, so bypass the retry queue.
-            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw))
-            {
-                headers.TryGetValue(HeaderKeys.TypeName, out typeNameRaw);
-            }
-
-            var typeName = HeaderDecoder.Decode(typeNameRaw) ?? "<unknown>";
-
-            try
-            {
-                await _retryHandler.HandleTerminalFailureAsync(
-                    publishChannel,
-                    args,
-                    headers,
-                    new InvalidOperationException($"No processor handled message of type '{typeName}'."),
-                    GetShutdownPublishToken()).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (_shutdownPublishCts.IsCancellationRequested)
-            {
-                // Shutdown grace window expired mid-publish — propagate so the outer finally
-                // leaves the message unacked for broker redelivery after reconnection.
-                throw;
-            }
-            catch (Exception terminalEx)
-            {
-                _logger.LogError(terminalEx,
-                    "Terminal-failure publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
-                    args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
-                // Intentionally swallow — same rationale as the HandleFailureAsync catch above.
-            }
-        }
-        else if (!_errorsDisabled)
-        {
-            if (Volatile.Read(ref _shutdownTimedOut) != 0)
-            {
-                return false;
-            }
-
-            // Audit publish failures must not fail message delivery — audit is an
-            // observability side-effect, not part of the business transaction. A
-            // throw here would bubble out of ProcessMessageAsync, leave `processed`
-            // false in the caller (EventAsync), and the already-handled message would
-            // be nacked with requeue:true → duplicate handler invocation.
-            try
-            {
-                await _auditPublisher.PublishAuditIfEnabledAsync(publishChannel, args, headers, GetShutdownPublishToken()).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to publish audit message for delivery {DeliveryTag}; continuing to ack the original message", args.DeliveryTag);
-            }
-        }
-
-        return Volatile.Read(ref _shutdownTimedOut) == 0;
     }
 
     private CancellationToken GetShutdownPublishToken()
@@ -704,14 +562,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         await operation.ConfigureAwait(false);
 #pragma warning restore VSTHRD003
         return true;
-    }
-
-    // Avoid StringBuilder allocation inside DateTime.ToString("O").
-    private static string FormatTimestamp(DateTime dt)
-    {
-        Span<char> buffer = stackalloc char[33]; // "O" format max length
-        dt.TryFormat(buffer, out int charsWritten, "O");
-        return new string(buffer[..charsWritten]);
     }
 
     private async Task CloseChannelAsync(DateTimeOffset deadline)
