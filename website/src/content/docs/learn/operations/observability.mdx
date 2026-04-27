@@ -79,9 +79,18 @@ The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbin
 dotnet add package ServiceConnect.Telemetry
 ```
 
+### Wiring
+
+Call `builder.AddTelemetry()` inside `AddServiceConnect`, then register the three activity sources with your OTel tracing builder:
+
 ```csharp
-using OpenTelemetry.Trace;
 using ServiceConnect.Telemetry;
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(/* ... */);
+    builder.AddTelemetry(opts => { /* optional enrichment */ });
+});
 
 services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
@@ -91,17 +100,36 @@ services.AddOpenTelemetry()
         .AddOtlpExporter());
 ```
 
-End-to-end correlation across the broker is automatic: `ServiceConnectActivitySource.Publish` and `Send` inject the W3C `traceparent`/`tracestate` onto the outgoing headers, and `Consume` extracts them on the way in. A consume span on the far side of the broker is a direct child of the publish span, not a new root.
+### Enrichment
 
-Wire the package into your bus by calling the `Publish`, `Send`, and `Consume` helpers from a filter or custom outgoing hook and passing the event-args exposed by the pipeline — see [`event-args`](/ServiceConnect-CSharp/reference/handlers/event-args/) for the DTO shapes. To enrich spans with decoded-message data or toggle a source, configure the static `ServiceConnectActivitySource.Options`:
+Use `opts.EnrichWithMessage` to attach application-specific tags to a span from the decoded message:
 
 ```csharp
-ServiceConnectActivitySource.Options.EnableSendTelemetry = true;
-ServiceConnectActivitySource.Options.EnrichWithMessage = (activity, message) =>
-    activity.SetTag("app.correlation_id", message.CorrelationId);
+builder.AddTelemetry(opts =>
+{
+    opts.EnrichWithMessage = (activity, message) =>
+        activity.SetTag("app.correlation_id", message.CorrelationId);
+});
 ```
 
 > **Security note.** Do not attach raw payload fields (or raw bytes) as span tags without review — messages may contain PII or regulated data that would then flow to every observability backend.
+
+### Disabling specific sources
+
+All three sources are enabled by default. Disable any you don't need to keep sampling noise down:
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    opts.EnablePublishTelemetry = false;
+    opts.EnableSendTelemetry = false;
+    opts.EnableConsumeTelemetry = true;
+});
+```
+
+### Propagation
+
+The framework injects W3C `traceparent`/`tracestate` headers onto every outgoing publish and send, and extracts them on the consume side. A span recorded by a subscriber is a direct child of the publisher's span — a single `TraceId` threads the full journey across the broker, even across independent processes. See the [`examples/Telemetry`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Telemetry) sample for a three-process demonstration.
 
 For bespoke headers that aren't tracing — redaction, a tenant stamp — the [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) API remains the right hook. Filters and telemetry compose; they don't compete.
 
