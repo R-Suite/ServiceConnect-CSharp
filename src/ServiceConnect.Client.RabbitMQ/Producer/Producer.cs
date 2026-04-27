@@ -14,7 +14,6 @@ public sealed class Producer : IProducer
 {
     /// <summary>Default maximum message body size, in bytes (64 KiB).</summary>
     private const long DefaultMaxMessageSize = 64 * 1024;
-    private const int StampedHeaderCount = 11;
     /// <summary>Default publish-retry attempt count.</summary>
     private const ushort DefaultRetryCount = 60;
     /// <summary>Default delay between publish retries, in seconds.</summary>
@@ -24,9 +23,6 @@ public sealed class Producer : IProducer
     private static readonly string ProducerName = Assembly.GetEntryAssembly()?.GetName().Name
         ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
-    // Cache (FullName, AssemblyQualifiedName) per Type — these are constant for a given Type.
-    private static readonly ConcurrentDictionary<Type, (string FullName, string AQN)> _typeNameCache = new();
-
     // Cache the computed exchange name (FullName with dots stripped) per FullName string.
     private readonly ConcurrentDictionary<string, string> _exchangeNameCache = new(StringComparer.Ordinal);
     // Track which exchange names have already been declared on the current connection.
@@ -35,9 +31,8 @@ public sealed class Producer : IProducer
 
     private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
-    private readonly IBusConfiguration _busConfiguration;
+    private readonly OutboundHeaderBuilder _headerBuilder;
     private readonly ILogger<Producer> _logger;
-    private readonly TimeProvider _timeProvider;
     private volatile IChannel? _model;
     private IConnection? _connection;
     private readonly SemaphoreSlim _publishLock = new(1, 1);
@@ -67,9 +62,9 @@ public sealed class Producer : IProducer
     {
         _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
-        _busConfiguration = busConfiguration ?? throw new ArgumentNullException(nameof(busConfiguration));
+        ArgumentNullException.ThrowIfNull(busConfiguration);
         _logger = logger;
-        _timeProvider = timeProvider ?? TimeProvider.System;
+        _headerBuilder = new OutboundHeaderBuilder(busConfiguration, queueConfiguration, timeProvider ?? TimeProvider.System, logger);
 
         var settings = transportConfiguration.ClientSettings;
         MaximumMessageSize = GetSetting(settings, RabbitMQSettingKeys.MessageSize, DefaultMaxMessageSize, Convert.ToInt64);
@@ -268,8 +263,8 @@ public sealed class Producer : IProducer
             // would NRE on null _model.
             ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
-            var messageHeaders = GetHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
-            var basicProperties = CreateBasicProperties(messageHeaders);
+            var messageHeaders = _headerBuilder.BuildHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
+            var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
 
             // Compute the exchange name once per type and cache it.
             // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
@@ -324,11 +319,11 @@ public sealed class Producer : IProducer
             }
 
             // Build base headers once outside the loop; only DestinationAddress varies per endpoint.
-            var baseHeaders = GetHeaders(type, headers, string.Empty, "Send");
+            var baseHeaders = _headerBuilder.BuildHeaders(type, headers, string.Empty, "Send");
             foreach (string endPoint in endPoints)
             {
                 baseHeaders[HeaderKeys.DestinationAddress] = endPoint;
-                var basicProperties = CreateBasicProperties(baseHeaders);
+                var basicProperties = _headerBuilder.BuildBasicProperties(baseHeaders);
                 await ExecuteWithConnectionRetryAsync(
                     () => PublishWithTimeoutAsync(
                         _model!,
@@ -373,8 +368,8 @@ public sealed class Producer : IProducer
             // Re-check disposed flag after winning the lock; see PublishAsync.
             ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
-            var messageHeaders = GetHeaders(type, headers, endPoint, "Send");
-            var basicProperties = CreateBasicProperties(messageHeaders);
+            var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send");
+            var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
                 () => PublishWithTimeoutAsync(
                     _model!,
@@ -418,8 +413,8 @@ public sealed class Producer : IProducer
             // Re-check disposed flag after winning the lock; see PublishAsync.
             ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
-            var messageHeaders = GetHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
-            var basicProperties = CreateBasicProperties(messageHeaders);
+            var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
+            var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
                 () => PublishWithTimeoutAsync(
                     _model!,
@@ -519,92 +514,6 @@ public sealed class Producer : IProducer
     /// Gets the maximum allowed outbound message size, in bytes.
     /// </summary>
     public long MaximumMessageSize { get; }
-
-    // Avoid StringBuilder allocation inside DateTime.ToString("O").
-    private static string FormatTimestamp(DateTime dt)
-    {
-        Span<char> buffer = stackalloc char[33]; // "O" format max length
-        dt.TryFormat(buffer, out int charsWritten, "O");
-        return new string(buffer[..charsWritten]);
-    }
-
-    private BasicProperties CreateBasicProperties(Dictionary<string, object> messageHeaders)
-    {
-        // foreach avoids the LINQ Select + enumerator allocation per message.
-        var headersCopy = new Dictionary<string, object?>(messageHeaders.Count, StringComparer.Ordinal);
-        foreach (var kvp in messageHeaders)
-        {
-            headersCopy[kvp.Key] = kvp.Value;
-        }
-
-        var basicProperties = new BasicProperties
-        {
-            Headers = headersCopy,
-            Persistent = true
-        };
-
-        if (messageHeaders.TryGetValue(HeaderKeys.MessageId, out var messageId))
-        {
-            basicProperties.MessageId = messageId?.ToString();
-        }
-
-        if (messageHeaders.TryGetValue(HeaderKeys.Priority, out var priority))
-        {
-            try
-            {
-                basicProperties.Priority = Convert.ToByte(priority, System.Globalization.CultureInfo.InvariantCulture);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error setting message priority");
-            }
-        }
-
-        return basicProperties;
-    }
-
-    private Dictionary<string, object> GetHeaders(Type type, IDictionary<string, string>? headers, string queueName, string messageType)
-    {
-        // Build the final object-valued dictionary directly rather than populating a
-        // string-valued copy and then rewriting it. Pre-sized to the maximum
-        // number of stamped keys + any caller-provided entries.
-        var callerCount = headers?.Count ?? 0;
-        var result = new Dictionary<string, object>(callerCount + StampedHeaderCount, StringComparer.Ordinal);
-
-        if (headers is not null)
-        {
-            foreach (var kvp in headers)
-            {
-                result[kvp.Key] = kvp.Value;
-            }
-        }
-
-        result[HeaderKeys.DestinationAddress] = queueName;
-        // MessageId is now Bus-authoritative; preserve the Bus-minted value.
-        // Only mint one here for callers that invoke the Producer directly (bypassing Bus).
-        if (!result.ContainsKey(HeaderKeys.MessageId))
-        {
-            result[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
-        }
-
-        result[HeaderKeys.MessageType] = messageType;
-
-        result[HeaderKeys.SourceAddress] = _queueConfiguration.QueueName;
-        result[HeaderKeys.TimeSent] = FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
-        if (_busConfiguration.IncludeMachineNameInHeaders)
-        {
-            result[HeaderKeys.SourceMachine] = Environment.MachineName;
-        }
-
-        var (fullName, aqn) = _typeNameCache.GetOrAdd(type, static t => (t.FullName!, t.AssemblyQualifiedName!));
-        result[HeaderKeys.TypeName] = fullName;
-        result[HeaderKeys.FullTypeName] = aqn;
-
-        result[HeaderKeys.ConsumerType] = "RabbitMQ";
-        result[HeaderKeys.Language] = "C#";
-
-        return result;
-    }
 
     /// <summary>
     /// Wraps <c>IChannel.BasicPublishAsync</c> with a configurable timeout.
