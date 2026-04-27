@@ -14,33 +14,35 @@ See [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) for the 
 ### `ProcessAsync`
 
 ```csharp
-Task ProcessAsync(Type typeObject, byte[] messageBytes,
-    IDictionary<string, string> headers, string? endPoint,
-    SendMessageDelegate next,
-    CancellationToken cancellationToken);
+Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken);
 ```
 
 Processes an outgoing message and optionally hands off to the next middleware by awaiting `next`.
 
 **Parameters**
-- `typeObject` — the CLR type of the outgoing message, resolved before the call.
-- `messageBytes` — the already-serialized payload that will be written to the transport.
-- `headers` — the mutable string-valued header dictionary for the outgoing envelope.
-- `endPoint` — the explicit destination endpoint for a point-to-point send, or `null` for a broadcast publish.
+- `context` — a `SendContext` value that bundles all data for the outgoing message (see properties below).
 - `next` — the delegate that invokes the remaining middleware and, eventually, the transport. Not calling it short-circuits the send.
 - `cancellationToken` — cancels the operation before the transport acknowledges.
 
-**Remarks.** Middleware runs in registration order on the way out and unwinds in reverse. Because `headers` is passed through the chain, middleware composes cleanly — each stage can stamp its own metadata before delegating.
+**`SendContext` properties**
+- `Message` — the strongly-typed outgoing `Message` instance, when available.
+- `MessageType` — the CLR `Type` of the outgoing message, resolved before the call.
+- `MessageBytes` — the already-serialized payload that will be written to the transport.
+- `Headers` — the mutable string-valued header dictionary for the outgoing envelope.
+- `EndPoint` — the explicit destination endpoint for a point-to-point send, or `null` for a broadcast publish.
+- `RoutingKey` — the routing key used when publishing, or `null` for a direct send.
+- `Operation` — a `SendOperation` discriminator (`Publish` or `Send`) so middleware can branch by operation type without inspecting other fields.
+
+**Remarks.** Middleware runs in registration order on the way out and unwinds in reverse. Because `context.Headers` is passed through the chain, middleware composes cleanly — each stage can stamp its own metadata before delegating.
+
+**Why `SendContext`?** Bundling the outgoing data into a single parameter object lets observability middleware see the strongly-typed `Message` alongside `RoutingKey`, `EndPoint`, and `Operation` for every outgoing event — all the context a tracing or auditing hook needs without separate parameters. It also means future additions to the outgoing contract are non-breaking: new fields appear on `SendContext` and existing middleware continues to compile unchanged.
 
 ---
 
 ### `SendMessageDelegate`
 
 ```csharp
-public delegate Task SendMessageDelegate(
-    Type typeObject, byte[] messageBytes,
-    IDictionary<string, string> headers, string? endPoint,
-    CancellationToken cancellationToken);
+public delegate Task SendMessageDelegate(SendContext context, CancellationToken cancellationToken);
 ```
 
 The continuation passed to each middleware as `next`. Invoking it advances the send pipeline one step toward the transport.
@@ -113,24 +115,23 @@ Disposes the pipeline and any middleware scopes it owns. Inherited from `IAsyncD
 public sealed class CorrelationStampingMiddleware : ISendMessageMiddleware
 {
     public Task ProcessAsync(
-        Type typeObject, byte[] messageBytes,
-        IDictionary<string, string> headers, string? endPoint,
+        SendContext context,
         SendMessageDelegate next,
         CancellationToken cancellationToken)
     {
         // Only stamp if the caller has not already supplied a correlation id.
-        if (!headers.ContainsKey("CorrelationHeader"))
+        if (!context.Headers.ContainsKey("CorrelationHeader"))
         {
             var activityId = Activity.Current?.Id;
             if (!string.IsNullOrEmpty(activityId))
             {
-                headers["CorrelationHeader"] = activityId;
+                context.Headers["CorrelationHeader"] = activityId;
             }
         }
 
-        headers["SentAt"] = DateTimeOffset.UtcNow.ToString("O");
+        context.Headers["SentAt"] = DateTimeOffset.UtcNow.ToString("O");
 
-        return next(typeObject, messageBytes, headers, endPoint, cancellationToken);
+        return next(context, cancellationToken);
     }
 }
 
