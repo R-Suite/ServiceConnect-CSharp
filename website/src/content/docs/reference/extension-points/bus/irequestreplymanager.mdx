@@ -11,7 +11,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 1. Generates a fresh correlation `Guid` and stamps it onto the outgoing headers as `RequestMessageId`.
 2. Records a `TaskCompletionSource` (or callback) keyed by that id in its pending-request table.
-3. Dispatches the serialized message bytes through the send pipeline.
+3. Dispatches the typed message through the outgoing pipeline; the pipeline serializes it and writes to the transport.
 4. Awaits the `TaskCompletionSource` until the matching reply arrives or the timeout fires.
 
 When a reply message arrives, the reply consumer calls `ProcessReply`, which looks up the correlation id in the pending table, deserializes the payload using the reply type recorded at request time (not the wire-reported type), and resolves the `TaskCompletionSource`.
@@ -42,7 +42,7 @@ public interface IRequestReplyManager
     /// Sends a request and waits for a single reply.
     /// </summary>
     Task<TReply> SendRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -53,7 +53,7 @@ public interface IRequestReplyManager
     /// Sends a request and collects multiple replies.
     /// </summary>
     Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -64,7 +64,7 @@ public interface IRequestReplyManager
     /// Publishes a request and invokes a callback for each reply that arrives.
     /// </summary>
     Task PublishRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         Action<TReply> onReply,
@@ -81,10 +81,10 @@ public interface IRequestReplyManager
 
 ### `SendRequestAsync<TRequest, TReply>`
 
-Sends a serialized request and waits for exactly one reply. The method generates a correlation id, stamps `RequestMessageId` onto `headers`, sends the bytes through the pipeline, then blocks until `ProcessReply` resolves the `TaskCompletionSource`. If the reply does not arrive within `RequestOptions.Timeout`, a `RequestTimeoutException` is thrown.
+Sends a typed request and waits for exactly one reply. The method generates a correlation id, stamps `RequestMessageId` onto `headers`, hands the message to the outgoing pipeline (which serializes and writes to the transport), then blocks until `ProcessReply` resolves the `TaskCompletionSource`. If the reply does not arrive within `RequestOptions.Timeout`, a `RequestTimeoutException` is thrown.
 
 **Parameters**
-- `messageBytes` — the pre-serialized request payload.
+- `message` — the typed request message. The pipeline serializes it and middleware sees the strongly-typed instance via `SendContext.Message`.
 - `headers` — outgoing headers; `RequestMessageId` is written into this dictionary by the implementation.
 - `options` — routing and timeout options. Set `EndPoint` to target a specific queue, or leave blank to use the type-mapped default.
 - `cancellationToken` — cancels both the send and the wait; throws `OperationCanceledException`.
@@ -101,11 +101,12 @@ Sends a serialized request and collects multiple replies. Works identically to `
 
 ### `PublishRequestAsync<TRequest, TReply>`
 
-Publishes a request to all subscribers and invokes `onReply` for each reply that arrives. Unlike the `SendRequest` variants, this uses the publish pipeline rather than the send pipeline, and the caller supplies a callback rather than awaiting a return value. The method returns when the reply count is satisfied, or after the timeout. If `options.ExpectedReplyCount` is positive and fewer replies arrive before the timeout, a `RequestTimeoutException` is thrown.
+Publishes a typed request to all subscribers and invokes `onReply` for each reply that arrives. Unlike the `SendRequest` variants, this uses the publish pipeline rather than the send pipeline, and the caller supplies a callback rather than awaiting a return value. The method returns when the reply count is satisfied, or after the timeout. If `options.ExpectedReplyCount` is positive and fewer replies arrive before the timeout, a `RequestTimeoutException` is thrown.
 
 **Parameters**
+- `message` — the typed request message; same shape as `SendRequestAsync`.
 - `onReply` — invoked on the reply-processing thread for each matching reply. The callback must not block; long-running work should be dispatched to a background thread.
-- All other parameters match `SendRequestAsync`.
+- `headers`, `options`, `cancellationToken` — match `SendRequestAsync`.
 
 ### `ProcessReply`
 

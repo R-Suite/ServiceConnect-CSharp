@@ -55,20 +55,14 @@ The continuation passed to each middleware as `next`. Invoking it advances the s
 
 ```csharp
 Task ExecutePublishMessagePipelineAsync(
-    Type typeObject,
-    byte[] messageBytes,
-    IDictionary<string, string>? headers = null,
-    string? endPoint = null,
+    SendContext context,
     CancellationToken cancellationToken = default);
 ```
 
 Runs the configured outbound middleware chain for a publish and hands off to the transport.
 
 **Parameters**
-- `typeObject` — the CLR type of the message being published.
-- `messageBytes` — the serialized payload.
-- `headers` — optional outgoing headers. The pipeline allocates an empty dictionary when `null` is passed.
-- `endPoint` — an optional destination override; usually `null` for a publish.
+- `context` — the `SendContext` describing the outgoing publish (see [`SendContext` properties](#isendmessagemiddleware) above). The bus populates `Operation = SendOperation.Publish` before invoking the pipeline.
 - `cancellationToken` — cancels the pipeline before the broker acknowledges.
 
 **Remarks.** Called by the bus inside `PublishAsync`. Middleware sees every published message before the transport does.
@@ -79,23 +73,17 @@ Runs the configured outbound middleware chain for a publish and hands off to the
 
 ```csharp
 Task ExecuteSendMessagePipelineAsync(
-    Type typeObject,
-    byte[] messageBytes,
-    IDictionary<string, string>? headers = null,
-    string? endPoint = null,
+    SendContext context,
     CancellationToken cancellationToken = default);
 ```
 
 Runs the configured outbound middleware chain for a point-to-point send.
 
 **Parameters**
-- `typeObject` — the CLR type of the message being sent.
-- `messageBytes` — the serialized payload.
-- `headers` — optional outgoing headers. The pipeline allocates an empty dictionary when `null` is passed.
-- `endPoint` — the destination endpoint; required for point-to-point addressing.
+- `context` — the `SendContext` describing the outgoing send. The bus populates `Operation = SendOperation.Send` (or `SendOperation.Request` for request/reply call sites) and an explicit `EndPoint` before invoking the pipeline.
 - `cancellationToken` — cancels the pipeline before the broker acknowledges.
 
-**Remarks.** Called by the bus inside `SendAsync` and `SendRequestAsync`. Shares its middleware chain with `ExecutePublishMessagePipelineAsync` — a single middleware sees every outbound message regardless of shape.
+**Remarks.** Called by the bus inside `SendAsync` and the request/reply send paths. Shares its middleware chain with `ExecutePublishMessagePipelineAsync` — a single middleware sees every outbound message regardless of shape.
 
 ---
 

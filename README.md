@@ -25,7 +25,7 @@ dotnet add package ServiceConnect.Persistence.MongoDb
 # Distributed tracing (W3C traceparent injection, OTel messaging semconv)
 dotnet add package ServiceConnect.Telemetry
 
-# Built-in filters
+# Built-in filter
 dotnet add package ServiceConnect.Filters.MessageDeduplication
 ```
 
@@ -95,6 +95,7 @@ await bus.PublishAsync(new OrderPlaced(Guid.NewGuid()) { OrderId = "ORD-001" });
 - **Request/Reply** — single-reply and multi-reply RPC
 - **Competing Consumers** — scale out handlers across processes
 - **Content-Based Routing** — dispatch by message type or content
+- **Polymorphic Messages** — subscribe by base type and receive every derived message
 - **Routing Slip** — sequential pipeline of endpoints
 - **Scatter-Gather** — multicast with reply aggregation
 - **Process Manager** — long-running, stateful workflows (sagas)
@@ -108,7 +109,7 @@ Each pattern has a conceptual guide and worked example in [the docs](https://r-s
 
 Runnable console apps live in [`examples/`](examples), one per pattern:
 
-[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [PolymorphicMessages](examples/PolymorphicMessages) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [MessageDeduplication](examples/MessageDeduplication) · [Streaming](examples/Streaming)
+[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [PolymorphicMessages](examples/PolymorphicMessages) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [MessageDeduplication](examples/MessageDeduplication) · [Streaming](examples/Streaming) · [Telemetry](examples/Telemetry)
 
 Each example ships with a `run.sh` and a `docker-compose.yml` at `examples/docker-compose.yml` for a local RabbitMQ broker.
 

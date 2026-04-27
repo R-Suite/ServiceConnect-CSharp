@@ -11,13 +11,16 @@ export default defineConfig({
       title: 'ServiceConnect',
       description:
         'Asynchronous messaging for .NET. Distributed systems, done cleanly.',
+      favicon: '/favicon.png',
       logo: {
-        src: './src/assets/logo-icon.svg',
-        replacesTitle: false,
+        light: './src/assets/logo-light.png',
+        dark: './src/assets/logo-dark.png',
+        replacesTitle: true,
       },
       customCss: ['./src/styles/brand.css'],
       components: {
         Footer: './src/overrides/Footer.astro',
+        ThemeProvider: './src/overrides/ThemeProvider.astro',
       },
       social: [
         {
@@ -71,6 +74,7 @@ export default defineConfig({
         },
         {
           label: 'API Reference',
+          collapsed: true,
           items: [
             { label: 'Overview', link: '/reference/' },
             {
@@ -125,10 +129,17 @@ export default defineConfig({
                 { label: 'ISendMessageMiddleware', link: '/reference/filters/isendmessagemiddleware/' },
               ],
             },
+            {
+              label: 'Telemetry',
+              items: [
+                { label: 'ServiceConnect.Telemetry', link: '/reference/telemetry/' },
+              ],
+            },
           ],
         },
         {
           label: 'Extension Points',
+          collapsed: true,
           items: [
             { label: 'Overview', link: '/reference/extension-points/' },
             {

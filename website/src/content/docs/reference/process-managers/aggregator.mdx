@@ -61,6 +61,19 @@ Processes a completed batch. The framework calls this on a background flush afte
 
 **Remarks.** `ExecuteAsync` is async-first — it runs on a background flush timer and returns a batch outcome, not a handler result. The `CancellationToken` flows through so long-running I/O can be cancelled cleanly; await async work directly rather than reaching for sync-over-async bridges.
 
+## IAggregatorSnapshot
+
+```csharp
+public interface IAggregatorSnapshot
+{
+    IReadOnlyList<object> ResolvedMessages { get; }
+    IReadOnlyList<Guid> ResolvedIds { get; }
+    int UnresolvedCount { get; }
+}
+```
+
+The contract returned by `IAggregatorPersistor.GetSnapshotAsync` — implement it on your own snapshot type if a custom persistor needs to surface fields the built-in record does not carry (for example, a per-record timestamp). Most persistors return the framework-supplied `AggregatorSnapshot` record below.
+
 ## AggregatorSnapshot
 
 ```csharp
@@ -70,7 +83,7 @@ public sealed record AggregatorSnapshot(
     int UnresolvedCount) : IAggregatorSnapshot
 ```
 
-A point-in-time capture of aggregator messages returned by the configured `IAggregatorPersistor`. Carries the deserialised messages, the ids of the underlying storage records, and the count of records that could not be resolved — typically because the CLR type the record was serialised against has been renamed or removed.
+The default `IAggregatorSnapshot` implementation. A point-in-time capture of aggregator messages returned by the configured `IAggregatorPersistor`. Carries the deserialised messages, the ids of the underlying storage records, and the count of records that could not be resolved — typically because the CLR type the record was serialised against has been renamed or removed.
 
 ### `ResolvedMessages`
 

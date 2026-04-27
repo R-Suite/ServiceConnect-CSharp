@@ -243,7 +243,7 @@ public sealed class OrderService
         // … persist the order, charge the card, etc. …
 
         await _bus.PublishAsync(
-            new OrderPlaced
+            new OrderPlaced(command.CorrelationId)
             {
                 OrderId = command.OrderId,
                 CustomerId = command.CustomerId,
@@ -259,24 +259,29 @@ public sealed class OrderService
 ### Request/reply with a single respondent
 
 ```csharp
-public sealed class ShippingSaga : IProcessManager<ShippingState>
+public sealed class ShippingSaga : IProcessHandler<ShippingState, OrderPlaced>
 {
     private readonly IBus _bus;
 
     public ShippingSaga(IBus bus) => _bus = bus;
 
-    public async Task HandleAsync(OrderPlaced @event, CancellationToken cancellationToken)
+    public IConsumeContext Context { get; set; } = null!;
+
+    public async Task HandleAsync(
+        OrderPlaced @event,
+        ShippingState data,
+        CancellationToken cancellationToken = default)
     {
         var quote = await _bus.SendRequestAsync<QuoteShipping, ShippingQuote>(
-            new QuoteShipping
+            new QuoteShipping(@event.CorrelationId)
             {
                 OrderId = @event.OrderId,
                 Destination = @event.ShippingAddress
             },
             cancellationToken: cancellationToken);
 
-        Data.QuotedCost = quote.Cost;
-        Data.CarrierCode = quote.CarrierCode;
+        data.QuotedCost = quote.Cost;
+        data.CarrierCode = quote.CarrierCode;
     }
 }
 ```

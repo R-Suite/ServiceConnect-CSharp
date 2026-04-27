@@ -31,6 +31,18 @@ Registers the core ServiceConnect services, handler discovery, message processor
 
 **Remarks.** Transport selection is not baked in; pick a transport via extension methods on `ServiceConnectBuilder` (`UseRabbitMQ`, etc.). Handler types are discovered from `builder.ScanAssemblies(...)` when `IBusConfiguration.ScanForMessageHandlers` is true. Call `AddServiceConnect` exactly once per service collection.
 
+### Builder methods
+
+The `ServiceConnectBuilder` passed to `configure` exposes the following helpers in addition to the transport and persistence extensions registered by satellite packages:
+
+| Method | Purpose |
+| ------ | ------- |
+| `ScanAssemblies(params Assembly[])` | Restrict handler discovery to a fixed list of assemblies instead of every loaded assembly. Preferred for deterministic startup and tests. |
+| `AddRegistration(Action<IServiceCollection>)` | Run an arbitrary registration callback after the core ServiceConnect services have been registered. Use this to swap framework defaults (e.g. a custom `IRequestReplyManager`) or to register your own services that depend on ServiceConnect types. |
+| `ConfigureTransport`, `ConfigureQueues`, `ConfigurePersistence`, `ConfigurePipeline`, `ConfigureBus` | Mutate the matching configuration interfaces. Validation runs eagerly inside `ConfigureTransport` (host, retry, shutdown timeouts). |
+| `AddOutgoingFilter<T>`, `AddBeforeConsumingFilter<T>`, `AddAfterConsumingFilter<T>` | Register an `IFilter` at the corresponding pipeline stage. Filters short-circuit by returning `FilterAction.Discard`. |
+| `AddSendMessageMiddleware<T>`, `AddMessageProcessingMiddleware<T>` | Register middleware around outgoing sends/publishes and incoming consume respectively. Middleware composes via `await next()` and unwinds in reverse registration order. |
+
 <Aside type="caution" title="Handlers must not be singletons">
   If a handler type is pre-registered as a singleton in `services` before `AddServiceConnect` runs, the call throws `InvalidOperationException`. Handlers hold per-message `IConsumeContext` state and must be transient or scoped.
 </Aside>

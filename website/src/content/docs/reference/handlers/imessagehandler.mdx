@@ -104,7 +104,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
             message.CustomerId,
             message.Total);
 
-        await _bus.PublishAsync(new OrderConfirmed
+        await _bus.PublishAsync(new OrderConfirmed(message.CorrelationId)
         {
             OrderId = message.OrderId,
             AuthorizationCode = authorization.Code,
