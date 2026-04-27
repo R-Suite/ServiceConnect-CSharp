@@ -2,6 +2,12 @@
 
   <PropertyGroup>
     <TargetFrameworks>net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Public API of this filter is not yet doc-commented; opt out so the
+         solution-wide GenerateDocumentationFile=true does not raise CS1591
+         on every public symbol. Add doc comments and drop this override. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <AssemblyName>ServiceConnect.Filters.MessageDeduplication</AssemblyName>
     <PackageId>ServiceConnect.Filters.MessageDeduplication</PackageId>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
@@ -10,14 +16,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Common.Logging" Version="3.4.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.0" />
     <PackageReference Include="MongoDB.Driver" Version="2.23.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <ProjectReference Include="../../../src/ServiceConnect.Interfaces/ServiceConnect.Interfaces.csproj" />
+    <ProjectReference Include="../ServiceConnect.Interfaces/ServiceConnect.Interfaces.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ServiceConnect.Filters.MessageDeduplication.Tests</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>

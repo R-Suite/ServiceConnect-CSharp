@@ -36,8 +36,8 @@ public static class AddMessageDeduplicationFilterExtensions
             {
                 PersistorType.InMemory => new MessageDeduplicationPersistorInMemory(),
                 PersistorType.MongoDb => new MessageDeduplicationPersistorMongoDb(settings),
-                _ => throw new ArgumentOutOfRangeException(
-                    nameof(settings.PersistorType), settings.PersistorType, "Unsupported persistor type.")
+                _ => throw new InvalidOperationException(
+                    $"Unsupported {nameof(DeduplicationFilterSettings.PersistorType)} value: {settings.PersistorType}.")
             };
         });
 

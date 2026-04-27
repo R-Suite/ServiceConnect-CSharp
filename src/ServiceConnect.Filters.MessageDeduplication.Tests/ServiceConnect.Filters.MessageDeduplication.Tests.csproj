@@ -2,8 +2,15 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Test projects don't ship API docs. Override the solution-wide
+         GenerateDocumentationFile=true so CS1591 (missing XML comment)
+         stops being raised on test classes/methods. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <AssemblyName>ServiceConnect.Filters.MessageDeduplication.Tests</AssemblyName>
     <PackageId>ServiceConnect.Filters.MessageDeduplication.Tests</PackageId>
+    <IsPackable>false</IsPackable>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>

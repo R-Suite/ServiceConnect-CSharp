@@ -40,9 +40,9 @@ public class MessageDeduplicationPersistorInMemory : IMessageDeduplicationPersis
         }
         return Task.CompletedTask;
     }
-}
 
-internal sealed class CacheItem
-{
-    public DateTime MessageExpiry { get; set; }
+    private sealed class CacheItem
+    {
+        public DateTime MessageExpiry { get; set; }
+    }
 }
