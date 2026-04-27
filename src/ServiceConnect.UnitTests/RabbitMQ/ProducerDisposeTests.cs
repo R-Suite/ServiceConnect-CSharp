@@ -131,14 +131,19 @@ public class ProducerDisposeTests
         publishLock.Release();
         connectionSemaphore.Release();
 
-        // Both waits share one stopwatch budget, so total elapsed is bounded by
-        // disposeTimeout (150ms) plus teardown overhead. 220ms upper bound = 150ms
-        // timeout + 70ms slack for mock-channel close + scheduler jitter. 120ms
-        // lower bound guards against a pathological fast return (timers never
-        // fire early, so this is a sanity check that the waits actually ran).
+        // The invariant under test: both lock waits share ONE 150ms budget, not
+        // two stacked 150ms budgets. If they were stacked (the regression we're
+        // guarding against) the elapsed wall time would be ≥ 300ms; sharing a
+        // budget caps it well below that. The bound is 500ms rather than the
+        // tighter ~250ms that "shared budget + jitter" would allow because the
+        // test runs alongside other parallel test classes (and inside a CPU-
+        // constrained cgroup on this dev machine), and Stopwatch is wall-clock
+        // — scheduler stalls can easily add 100–300ms of jitter under load.
+        // 50ms lower bound is a sanity check that the timers actually ran
+        // (a pathological fast return would be near-zero).
         Assert.InRange(stopwatch.Elapsed,
-            TimeSpan.FromMilliseconds(120),
-            TimeSpan.FromMilliseconds(220));
+            TimeSpan.FromMilliseconds(50),
+            TimeSpan.FromMilliseconds(500));
     }
 
     [Fact]

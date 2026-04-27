@@ -18,6 +18,19 @@ namespace ServiceConnect.UnitTests;
 
 public class MongoDbTimeoutStoreTests
 {
+    static MongoDbTimeoutStoreTests()
+    {
+        // Several tests in this class call BsonSerializer.LookupSerializer<TimeoutData>()
+        // and render filters that contain Guid fields BEFORE constructing a
+        // MongoDbTimeoutStore (which would otherwise trigger registration via its
+        // static cctor). When the test class runs in isolation the serializer is
+        // not yet registered and Guid filter rendering fails. xUnit class-level
+        // ordering is non-deterministic, so the failures showed up as "passes when
+        // run alone, fails when run alongside others". Force registration here so
+        // every test in this class sees a consistent BSON state.
+        MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
+    }
+
     [Fact]
     public void BuildDueTimeoutFilter_IncludesExpiredLeasesForRecovery()
     {

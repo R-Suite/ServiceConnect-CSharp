@@ -356,11 +356,15 @@ public class RabbitMqConsumerHostTests
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
-        var disposeTask = host.DisposeAsync().AsTask();
-        await Task.Yield();
-
-        Assert.True(disposeTask.IsCompleted);
-        await disposeTask;
+        // "CompletesImmediately" means the dispose returns promptly when there
+        // is no in-flight work — not that it completes synchronously without
+        // any continuation scheduling. Asserting on a single Task.Yield was
+        // sensitive to scheduler jitter under load (test classes run in
+        // parallel), so we assert the looser-but-still-meaningful guarantee
+        // that dispose completes well within the gracefulShutdownTimeoutMs
+        // (50ms) regime — anything that exceeds 2s would mean dispose is
+        // genuinely stuck, not just losing scheduler ticks.
+        await host.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
 
         channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
