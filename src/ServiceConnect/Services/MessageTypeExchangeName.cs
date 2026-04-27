@@ -6,11 +6,28 @@ namespace ServiceConnect.Services;
 
 /// <summary>
 /// Derives transport-safe exchange and binding names from message-type metadata.
-/// Producers and consumers must agree on this mapping so binding names match
-/// declared exchanges — sharing the helper keeps them in lock-step.
+/// Producers and consumers must agree on this mapping so binding names match declared
+/// exchanges — sharing the helper keeps them in lock-step.
 /// </summary>
-internal static class MessageTypeExchangeName
+/// <remarks>
+/// This is part of the public API surface because adapter packages (e.g.
+/// <c>ServiceConnect.Client.RabbitMQ</c>) need to derive the same name as the core bus.
+/// The output format is wire-compatibility-stable: changing how the name is computed
+/// would silently re-route messages across deployed services that pinned different
+/// versions of the core and adapter packages, so the algorithm is fixed.
+/// </remarks>
+public static class MessageTypeExchangeName
 {
+    /// <summary>
+    /// Computes the deterministic exchange / binding name for the given message type.
+    /// </summary>
+    /// <param name="type">The CLR type whose name is being mapped. Must have a non-null <see cref="Type.FullName"/>.</param>
+    /// <returns>
+    /// The flattened type name (dots stripped) suffixed with an underscore and an
+    /// eight-hex-character SHA-256 prefix derived from the assembly-qualified name.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="type"/> has no <see cref="Type.FullName"/>.</exception>
     // FullName.Replace(".", "") alone is not injective — "A.BC" and "AB.C" both
     // flatten to "ABC" and would share an exchange, cross-wiring routing. The
     // eight-char hash suffix, drawn from the assembly-qualified name, keeps the
