@@ -9,7 +9,7 @@ When you finish, you will have a working message flow you can extend, and enough
 
 ## Prerequisites
 
-- **.NET SDK 10.0** or later. Check with `dotnet --version`.
+- **.NET SDK 8.0 or 10.0**. The library packages multi-target `net8.0` (current LTS) and `net10.0` (current STS); use whichever SDK matches your application's target. Older runtimes (`netstandard2.x`, `net6.0`, `net7.0`) are not supported — see [Supported runtimes](/ServiceConnect-CSharp/releases/#supported-runtimes) on the Releases page if you need the rationale or migration guidance.
 - **Docker** (or a local RabbitMQ 3.7+ install). Docker is easier — the command below starts a throwaway broker in 5 seconds.
 
 ## Start RabbitMQ

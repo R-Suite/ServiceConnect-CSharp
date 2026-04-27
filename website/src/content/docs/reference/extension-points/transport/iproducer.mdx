@@ -160,6 +160,8 @@ The three point-to-point overloads have different responsibilities:
 
 `PublishAsync(Type, ...)` is distinct from all three: it is a pub/sub fan-out. Derive the exchange name, topic, or routing key from the type and publish to every subscriber — no queue mapping is involved.
 
+If your adapter needs to interoperate with the bundled RabbitMQ transport on the same broker (publishers using one adapter, subscribers using the other), call `ServiceConnect.Services.MessageTypeExchangeName.From(type)` to compute the exchange name. The helper is the single source of truth used by the bundled RabbitMQ producer for publish and by the core bus for binding — its output format is fixed for wire compatibility. Adapters that are self-contained (their own publishers and consumers, no cross-adapter interop) are free to use any naming scheme.
+
 ### Skeletal producer
 
 ```csharp

@@ -26,9 +26,22 @@ For new applications, take the latest stable of each package. For existing appli
 
 Version 7 is a reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. If you are upgrading from v6, read the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
 
-### .NET 10 target
+### Supported runtimes
 
-Libraries now multi-target `net8.0` and `net10.0`. You can continue to host on .NET 8 LTS, or pick up .NET 10 features (and its runtime improvements) without waiting for a further major. The two target frameworks are kept API-compatible.
+ServiceConnect targets modern .NET only — by design.
+
+- **`net8.0`** — current LTS. The minimum supported runtime.
+- **`net10.0`** — current STS. The library opts into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; `net8.0` paths take guarded fallbacks.
+
+The library packages (`ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.*`, `ServiceConnect.Telemetry`) multi-target both. `ServiceConnect.Filters.MessageDeduplication` is currently `net10.0`-only; multi-target alignment with the rest is tracked as future work.
+
+We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
+
+- The hot paths use BCL features that are awkward to polyfill cleanly.
+- The remaining LTS/STS surface (.NET 8 + .NET 10) covers every supported Microsoft runtime with active patch coverage at the time of writing.
+- Consumers on .NET Framework or out-of-support .NET Core SKUs can pin earlier ServiceConnect releases that targeted those runtimes; we are not adding support back to the current line.
+
+If your scenario needs `netstandard2.1` (or you'd like to upstream the work), please open an issue.
 
 ### Repository consolidation: 17 projects down to 8
 
