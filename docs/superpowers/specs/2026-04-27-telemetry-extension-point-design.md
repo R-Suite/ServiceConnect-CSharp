@@ -64,7 +64,7 @@ Two repository-level changes plus website updates.
 
 **Framework**
 
-- New `SendContext` record. `ISendMessageMiddleware.ProcessAsync` takes `(SendContext, SendMessageDelegate, CancellationToken)`. `Bus.PublishAsync<T>`/`SendAsync<T>`/`SendRequestAsync<T,…>`/`SendRequestMultiAsync<T,…>`/`PublishRequestAsync<T,…>` build a `SendContext` once after serialization and thread it through `_sendPipeline.ExecutePublish/SendMessagePipelineAsync`.
+- New `SendContext` record. `ISendMessageMiddleware.ProcessAsync` takes `(SendContext, SendMessageDelegate, CancellationToken)`. `Bus.PublishAsync<T>` and `Bus.SendAsync<T>` build a `SendContext` once after serialization and thread it through `_sendPipeline.ExecutePublish/SendMessagePipelineAsync`. The request/reply call sites (`SendRequestAsync`/`SendRequestMultiAsync`/`PublishRequestAsync`) bypass the send pipeline today — they go straight to `_requestReplyManager` — so this work does not touch them. `SendOperation.Request` is reserved for a future enhancement that routes them through the pipeline.
 - `ServiceConnect.Telemetry` gains a `TelemetryBuilderExtensions.AddTelemetry(this ServiceConnectBuilder, Action<ServiceConnectInstrumentationOptions>?)` extension that registers a built-in `TelemetrySendMiddleware` and `TelemetryProcessingMiddleware` as singletons and inserts them at position 0 of both pipelines.
 - `ServiceConnectActivitySource.Options` and `ServiceConnectActivitySource.MessagingSystemAttributes` setters are already `internal`; this work introduces `AddTelemetry()` as the supported configuration path that populates them.
 
@@ -104,7 +104,7 @@ Notes:
 - `Message` is non-nullable. Every existing send-pipeline call site has a real `Message` in hand at the point of construction. If a future raw-bytes producer API is added, it will not flow through this pipeline.
 - `Headers` stays `IDictionary<string, string>` and mutable; trace-context injection happens inside the telemetry middleware on the way down, so the producer sees the `traceparent` header.
 - `RoutingKey` is populated for `Operation.Publish` when `PublishOptions.RoutingKey` was set; null otherwise. `EndPoint` is populated for `Operation.Send`/`Request`; null for `Publish`. Multi-endpoint sends are still expanded by `Bus.SendAsync` ([Bus.cs:155-160](src/ServiceConnect/Bus.cs#L155-L160)) into N sequential pipeline calls, each with one `EndPoint`.
-- `Operation` is a tri-state, not an `IsPublish` bool, because `Bus.SendRequestAsync`/`SendRequestMultiAsync` are a third call site that the telemetry middleware will eventually want to distinguish (a future request/reply `ActivitySource` becomes possible without breaking the contract again).
+- `Operation` is a tri-state, not an `IsPublish` bool, so the contract is forward-compatible with a future request/reply call site that does flow through the send pipeline. **Today, only `Publish` and `Send` are produced.** A telemetry middleware that handles `Request` defensively will not encounter that case until a follow-up routes request/reply through the pipeline.
 
 ### `ISendMessageMiddleware` (new contract)
 
@@ -153,7 +153,7 @@ public async Task PublishAsync<T>(T message, PublishOptions? options = null, Can
 }
 ```
 
-`SendAsync` builds with `Operation = Send` and `EndPoint = options?.EndPoint`. `SendRequestAsync`/`SendRequestMultiAsync`/`PublishRequestAsync` build with `Operation = Request`. Multi-endpoint expansion in `SendAsync` continues to issue N pipeline calls; each gets its own `SendContext` with a single `EndPoint`.
+`SendAsync` builds with `Operation = Send` and `EndPoint = options?.EndPoint`. Multi-endpoint expansion in `SendAsync` continues to issue N pipeline calls; each gets its own `SendContext` with a single `EndPoint`. Request/reply call sites are unchanged — they do not flow through the send pipeline today, and routing them through it is an explicit non-goal of this spec.
 
 ### `builder.AddTelemetry()` API
 
@@ -169,9 +169,12 @@ public static class TelemetryBuilderExtensions
         var options = new ServiceConnectInstrumentationOptions();
         configure?.Invoke(options);
 
-        builder.Services.AddSingleton(options);
-        builder.Services.AddSingleton<TelemetrySendMiddleware>();
-        builder.Services.AddSingleton<TelemetryProcessingMiddleware>();
+        builder.AddRegistration(services =>
+        {
+            services.AddSingleton(options);
+            services.AddSingleton<TelemetrySendMiddleware>();
+            services.AddSingleton<TelemetryProcessingMiddleware>();
+        });
 
         builder.ConfigurePipeline(p =>
         {
