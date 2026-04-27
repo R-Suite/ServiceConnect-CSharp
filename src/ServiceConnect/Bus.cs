@@ -196,8 +196,8 @@ public sealed class Bus : IBus
     }
 
     /// <inheritdoc />
-    public async Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-        where T : Message where TReply : Message
+    public async Task<TReply> SendRequestAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+        where TRequest : Message where TReply : Message
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -210,7 +210,7 @@ public sealed class Bus : IBus
             // RequestReplyManager will serialize again on its own path; the cost is one extra
             // serialize per filter-enabled request, kept localized to this branch.
             var messageBytes = _serializer.Serialize(message);
-            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
@@ -220,10 +220,10 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, requestOptions.Headers);
+            headers = BuildHeadersDirect(typeof(TRequest), message.CorrelationId, requestOptions.Headers);
         }
 
-        return await _requestReplyManager.SendRequestAsync<T, TReply>(
+        return await _requestReplyManager.SendRequestAsync<TRequest, TReply>(
             message,
             headers,
             requestOptions,
@@ -231,8 +231,8 @@ public sealed class Bus : IBus
     }
 
     /// <inheritdoc />
-    public async Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-        where T : Message where TReply : Message
+    public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+        where TRequest : Message where TReply : Message
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -243,7 +243,7 @@ public sealed class Bus : IBus
         {
             // See SendRequestAsync for why we serialize locally only on the filter branch.
             var messageBytes = _serializer.Serialize(message);
-            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
@@ -253,10 +253,10 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, requestOptions.Headers);
+            headers = BuildHeadersDirect(typeof(TRequest), message.CorrelationId, requestOptions.Headers);
         }
 
-        return await _requestReplyManager.SendRequestMultiAsync<T, TReply>(
+        return await _requestReplyManager.SendRequestMultiAsync<TRequest, TReply>(
             message,
             headers,
             requestOptions,

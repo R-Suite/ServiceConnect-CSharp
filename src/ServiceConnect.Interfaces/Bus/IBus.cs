@@ -20,14 +20,14 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Sends a request and waits for a single reply.
     /// </summary>
-    Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-        where T : Message where TReply : Message;
+    Task<TReply> SendRequestAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+        where TRequest : Message where TReply : Message;
 
     /// <summary>
     /// Sends a request and waits for multiple replies from all respondents.
     /// </summary>
-    Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-        where T : Message where TReply : Message;
+    Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+        where TRequest : Message where TReply : Message;
 
     /// <summary>
     /// Publishes a request and invokes a callback for each reply received.
