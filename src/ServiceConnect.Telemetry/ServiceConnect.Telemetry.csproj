@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
+    <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
   </ItemGroup>
 
   <ItemGroup>
