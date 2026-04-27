@@ -12,9 +12,9 @@ public enum SendOperation
     Send,
 
     /// <summary>
-    /// Reserved for a future enhancement that routes <c>SendRequestAsync</c>,
-    /// <c>SendRequestMultiAsync</c>, and <c>PublishRequestAsync</c> through the
-    /// send pipeline. Not produced today.
+    /// Originated from <see cref="IBus.SendRequestAsync{TRequest, TReply}"/>,
+    /// <see cref="IBus.SendRequestMultiAsync{TRequest, TReply}"/>, or
+    /// <see cref="IBus.PublishRequestAsync{TRequest, TReply}"/>.
     /// </summary>
     Request,
 }
