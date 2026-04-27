@@ -6,8 +6,6 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <!-- Emit XML documentation files so DocFX can build the API reference. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- Suppress CS1591 (missing XML comment for publicly visible type or member). -->
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <!-- Pin language version per target framework. net8.0 stays on C# 12 so multi-targeting
        projects do not gain C# 13+ features (Lock object lock semantics, field keyword) under
