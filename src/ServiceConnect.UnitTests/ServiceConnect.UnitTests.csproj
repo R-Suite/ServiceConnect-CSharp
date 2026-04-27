@@ -4,6 +4,11 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <!-- Test projects don't ship API docs. Override the solution-wide
+             GenerateDocumentationFile=true so CS1591 (missing XML comment)
+             stops being raised on test classes/methods (where names are docs
+             enough). Without this, every test build needs -p:NoWarn=CS1591. -->
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
