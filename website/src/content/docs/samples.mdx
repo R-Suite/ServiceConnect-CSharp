@@ -111,6 +111,15 @@ Chunk a payload too large for one message, reassembled on the receiver, one hand
 - Pattern: [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/)
 - Source: [`examples/Streaming`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Streaming)
 
+### Telemetry
+
+End-to-end OpenTelemetry tracing across publish → consume, demonstrating
+W3C trace-context propagation through the broker. Three processes share
+one TraceId; each subscriber's span is a direct child of the publisher's.
+
+- Tracing reference: [Observability — Tracing](/ServiceConnect-CSharp/learn/operations/observability/#tracing-opentelemetry)
+- Source: [`examples/Telemetry`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Telemetry)
+
 ## Reading the output
 
 Each sample's processes print status lines in a uniform shape:
