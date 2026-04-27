@@ -136,6 +136,83 @@ namespace ServiceConnect.UnitTests
             _mockProducer.Verify(p => p.DisposeAsync(), Times.Never);
         }
 
+        [Fact]
+        public async Task ExecutePublishMessagePipelineAsync_ThreadsSendContextWithPublishMetadata()
+        {
+            SendContext? captured = null;
+            var middleware = new CapturingSendMiddleware(ctx => captured = ctx);
+
+            var services = new ServiceCollection();
+            services.AddSingleton(middleware);
+            var sp = services.BuildServiceProvider();
+
+            var mockConfig = new Mock<IPipelineConfiguration>();
+            mockConfig.Setup(c => c.SendMessageMiddleware).Returns([typeof(CapturingSendMiddleware)]);
+
+            var pipeline = new SendMessagePipeline(_mockProducer.Object, mockConfig.Object, sp);
+
+            var msg = new TestSendPipelineMessage();
+            var headers = new Dictionary<string, string>(StringComparer.Ordinal) { ["k"] = "v" };
+            var context = new SendContext
+            {
+                Message = msg,
+                MessageType = typeof(TestSendPipelineMessage),
+                MessageBytes = [1, 2, 3],
+                Headers = headers,
+                RoutingKey = "rk",
+                Operation = SendOperation.Publish,
+            };
+
+            await pipeline.ExecutePublishMessagePipelineAsync(context);
+
+            Assert.NotNull(captured);
+            Assert.Same(msg, captured.Message);
+            Assert.Equal(typeof(TestSendPipelineMessage), captured.MessageType);
+            Assert.Same(headers, captured.Headers);
+            Assert.Equal("rk", captured.RoutingKey);
+            Assert.Equal(SendOperation.Publish, captured.Operation);
+            Assert.Null(captured.EndPoint);
+        }
+
+        [Fact]
+        public async Task ExecuteSendMessagePipelineAsync_ThreadsSendContextWithSendMetadata()
+        {
+            SendContext? captured = null;
+            var middleware = new CapturingSendMiddleware(ctx => captured = ctx);
+
+            var services = new ServiceCollection();
+            services.AddSingleton(middleware);
+            var sp = services.BuildServiceProvider();
+
+            var mockConfig = new Mock<IPipelineConfiguration>();
+            mockConfig.Setup(c => c.SendMessageMiddleware).Returns([typeof(CapturingSendMiddleware)]);
+
+            var pipeline = new SendMessagePipeline(_mockProducer.Object, mockConfig.Object, sp);
+
+            var msg = new TestSendPipelineMessage();
+            var headers = new Dictionary<string, string>(StringComparer.Ordinal) { ["k"] = "v" };
+            var context = new SendContext
+            {
+                Message = msg,
+                MessageType = typeof(TestSendPipelineMessage),
+                MessageBytes = [1, 2, 3],
+                Headers = headers,
+                EndPoint = "my-queue",
+                RoutingKey = null,
+                Operation = SendOperation.Send,
+            };
+
+            await pipeline.ExecuteSendMessagePipelineAsync(context);
+
+            Assert.NotNull(captured);
+            Assert.Same(msg, captured.Message);
+            Assert.Equal(typeof(TestSendPipelineMessage), captured.MessageType);
+            Assert.Same(headers, captured.Headers);
+            Assert.Equal("my-queue", captured.EndPoint);
+            Assert.Null(captured.RoutingKey);
+            Assert.Equal(SendOperation.Send, captured.Operation);
+        }
+
         // Outgoing-filter short-circuit via ISendMessageMiddleware
         [Fact]
         public async Task ExecuteSendMessagePipelineAsync_WhenMiddlewareShortCircuits_ProducerSendIsNeverCalled()
@@ -177,4 +254,13 @@ file sealed class BlockingSendMiddleware : ISendMessageMiddleware
     // Intentionally does NOT call next — short-circuits the pipeline.
     public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
         => Task.CompletedTask;
+}
+
+file sealed class CapturingSendMiddleware(Action<SendContext> capture) : ISendMessageMiddleware
+{
+    public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
+    {
+        capture(context);
+        return next(context, cancellationToken);
+    }
 }
