@@ -7,7 +7,6 @@
   </Folder>
   <Folder Name="/Filters/">
     <Project Path="ServiceConnect.Filters.MessageDeduplication/ServiceConnect.Filters.MessageDeduplication.csproj" />
-    <Project Path="ServiceConnect.Filters.MessageDeduplication.Tests/ServiceConnect.Filters.MessageDeduplication.Tests.csproj" />
   </Folder>
   <Folder Name="/Persistence/">
     <Project Path="ServiceConnect.Persistence.InMemory/ServiceConnect.Persistence.InMemory.csproj" />

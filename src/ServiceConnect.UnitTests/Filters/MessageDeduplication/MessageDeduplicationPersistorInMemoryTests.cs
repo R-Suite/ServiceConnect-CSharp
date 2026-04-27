@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using Xunit;
 
-namespace ServiceConnect.Filters.MessageDeduplication.Tests;
+namespace ServiceConnect.UnitTests.Filters.MessageDeduplication;
 
 public class MessageDeduplicationPersistorInMemoryTests
 {

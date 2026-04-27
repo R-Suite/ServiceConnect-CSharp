@@ -9,7 +9,7 @@ using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.Filters.MessageDeduplication.Tests;
+namespace ServiceConnect.UnitTests.Filters.MessageDeduplication;
 
 public class IncomingDeduplicationFilterTests
 {

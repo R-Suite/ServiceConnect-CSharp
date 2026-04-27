@@ -5,12 +5,13 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
 using Moq;
+using ServiceConnect.Filters.MessageDeduplication;
 using ServiceConnect.Filters.MessageDeduplication.Filters;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.Filters.MessageDeduplication.Tests;
+namespace ServiceConnect.UnitTests.Filters.MessageDeduplication;
 
 public class OutgoingDeduplicationFilterTests
 {
@@ -18,7 +19,7 @@ public class OutgoingDeduplicationFilterTests
     private readonly DeduplicationFilterSettings _settings = new() { MsgExpiryHours = 24 };
 
     private OutgoingDeduplicationFilter CreateFilter() =>
-        new(_persistor.Object, Options.Create(_settings));
+        new(_persistor.Object, Microsoft.Extensions.Options.Options.Create(_settings));
 
     private static Envelope EnvelopeWithMessageId(Guid id) =>
         new() { Headers = new Dictionary<string, object> { { "MessageId", Encoding.ASCII.GetBytes(id.ToString()) } } };

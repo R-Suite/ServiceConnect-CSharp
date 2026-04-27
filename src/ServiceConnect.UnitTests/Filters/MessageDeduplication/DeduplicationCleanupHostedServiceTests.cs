@@ -8,7 +8,7 @@ using ServiceConnect.Filters.MessageDeduplication;
 using ServiceConnect.Filters.MessageDeduplication.Persistors;
 using Xunit;
 
-namespace ServiceConnect.Filters.MessageDeduplication.Tests;
+namespace ServiceConnect.UnitTests.Filters.MessageDeduplication;
 
 public class DeduplicationCleanupHostedServiceTests
 {
@@ -19,7 +19,7 @@ public class DeduplicationCleanupHostedServiceTests
     {
         var svc = new DeduplicationCleanupHostedService(
             _persistor.Object,
-            Options.Create(new DeduplicationFilterSettings
+            Microsoft.Extensions.Options.Options.Create(new DeduplicationFilterSettings
             {
                 DisableMsgExpiry = true,
                 MsgCleanupIntervalMinutes = 1
