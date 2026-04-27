@@ -145,7 +145,25 @@ Gets the complete set of destination endpoints when a send targets multiple queu
 
 ## Usage
 
-### Recording a telemetry span per consumed message
+### Recommended: use the `ServiceConnect.Telemetry` package
+
+For most applications, `builder.AddTelemetry()` is the right choice. It wires the built-in publish, send, and consume middleware and handles W3C `traceparent`/`tracestate` propagation automatically:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(/* ... */);
+    builder.AddTelemetry(opts => { /* optional enrichment */ });
+});
+```
+
+See [Observability — Tracing](/ServiceConnect-CSharp/learn/operations/observability/#tracing-opentelemetry) for full wiring details, enrichment options, and how to register the activity sources with your OTel pipeline.
+
+### If you need a custom middleware
+
+When the built-in telemetry isn't enough — for example, to route spans to a non-OTel sink or apply bespoke sampling logic — implement `IMessageProcessingMiddleware` (consume side) or `ISendMessageMiddleware` (send side) directly.
+
+#### Consume side
 
 ```csharp
 public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddleware
@@ -209,7 +227,49 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
 }
 ```
 
-A custom `IMessageProcessingMiddleware` is the natural host for observing the consume-side transition. The `ConsumeEventArgs` shape mirrors the data available to telemetry exporters, and `ConsumeEventResult` captures the success/failure fork so the span status records the real outcome. The outgoing side (`PublishEventArgs`, `SendEventArgs`) is observed analogously by implementing `ISendMessageMiddleware`.
+A custom `IMessageProcessingMiddleware` is the natural host for observing the consume-side transition. The `ConsumeEventArgs` shape mirrors the data available to telemetry exporters, and `ConsumeEventResult` captures the success/failure fork so the span status records the real outcome.
+
+#### Send side
+
+The outgoing counterpart uses `ISendMessageMiddleware` with the `SendContext` parameter object, which carries the strongly-typed `Message`, `MessageType`, serialized `MessageBytes`, `Headers`, `EndPoint`, `RoutingKey`, and `Operation`:
+
+```csharp
+public sealed class OpenTelemetrySendMiddleware : ISendMessageMiddleware
+{
+    private static readonly ActivitySource Source = new("ServiceConnect");
+
+    public async Task ProcessAsync(
+        SendContext context,
+        SendMessageDelegate next,
+        CancellationToken cancellationToken)
+    {
+        using var activity = Source.StartActivity(
+            $"publish {context.MessageType.Name}",
+            ActivityKind.Producer);
+
+        activity?.SetTag("servicebus.message.type", context.MessageType.FullName);
+        activity?.SetTag("servicebus.message.size", context.MessageBytes.Length);
+        if (context.RoutingKey is not null)
+        {
+            activity?.SetTag("servicebus.routing_key", context.RoutingKey);
+        }
+        if (context.EndPoint is not null)
+        {
+            activity?.SetTag("servicebus.endpoint", context.EndPoint);
+        }
+
+        try
+        {
+            await next(context, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            throw;
+        }
+    }
+}
+```
 
 ## See also
 
