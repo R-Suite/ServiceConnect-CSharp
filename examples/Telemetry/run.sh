@@ -23,10 +23,17 @@ wait_for_ready() {
 wait_for_success() {
   local timeout=30
 
+  # Wait for the handlers to print AND for the consume Activity to be Stop()'d
+  # (which happens AFTER the handler returns, so it's strictly later than the
+  # BILLING:/ANALYTICS:received: lines). Without this, the assertion block can
+  # race the consume-side TRACE: lines and kill the subscribers before they
+  # flush, leaving them missing from the log.
   for i in $(seq 1 $((timeout * 2))); do
     if grep -q "SUCCESS:telemetry-publisher:published order" "$OUTPUT_LOG" &&
       grep -q "BILLING:received:" "$OUTPUT_LOG" &&
-      grep -q "ANALYTICS:received:" "$OUTPUT_LOG"; then
+      grep -q "ANALYTICS:received:" "$OUTPUT_LOG" &&
+      grep -qE '^TRACE:billing-subscriber:[A-Za-z.]+:' "$OUTPUT_LOG" &&
+      grep -qE '^TRACE:analytics-subscriber:[A-Za-z.]+:' "$OUTPUT_LOG"; then
       return 0
     fi
     sleep 0.5

@@ -39,11 +39,17 @@ function Wait-ForSubscriberSuccess {
     $timeout = 30
     $elapsed = 0
 
+    # Wait for the handlers to print AND for the consume Activity to be Stop()'d
+    # (which happens AFTER the handler returns). Without that the assertion
+    # block can race the consume-side TRACE: lines and kill the subscribers
+    # before they flush, leaving them missing from the log.
     while ($elapsed -lt $timeout) {
         if ((Test-Path $OUTPUT_LOG) -and
             (Select-String -Path $OUTPUT_LOG -Pattern 'SUCCESS:telemetry-publisher:published order' -Quiet) -and
             (Select-String -Path $OUTPUT_LOG -Pattern 'BILLING:received:' -Quiet) -and
-            (Select-String -Path $OUTPUT_LOG -Pattern 'ANALYTICS:received:' -Quiet)) {
+            (Select-String -Path $OUTPUT_LOG -Pattern 'ANALYTICS:received:' -Quiet) -and
+            (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:billing-subscriber:[A-Za-z.]+:' -Quiet) -and
+            (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:analytics-subscriber:[A-Za-z.]+:' -Quiet)) {
             return $true
         }
 

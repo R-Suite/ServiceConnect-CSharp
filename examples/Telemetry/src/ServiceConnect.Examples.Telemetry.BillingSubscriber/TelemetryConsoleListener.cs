@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ServiceConnect.Telemetry;
 
 namespace ServiceConnect.Examples.Telemetry.BillingSubscriber;
 
@@ -8,7 +9,10 @@ internal static class TelemetryConsoleListener
     {
         ActivitySource.AddActivityListener(new ActivityListener
         {
-            ShouldListenTo = src => src.Name.StartsWith("ServiceConnect.Bus.", StringComparison.Ordinal),
+            ShouldListenTo = src =>
+                src.Name == ServiceConnectActivitySource.PublishActivitySourceName ||
+                src.Name == ServiceConnectActivitySource.SendActivitySourceName ||
+                src.Name == ServiceConnectActivitySource.ConsumeActivitySourceName,
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = a => Console.WriteLine(
                 $"TRACE:{endpoint}:{a.OperationName}:{a.TraceId}:{a.SpanId}:{a.ParentSpanId}"),
