@@ -77,9 +77,9 @@ try {
     }
 
     # Trace-correlation assertions ----------------------------------------
-    $pubLine = (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:telemetry-publisher:[a-z.]+:').Line | Select-Object -First 1
-    $billLine = (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:billing-subscriber:[a-z.]+:').Line | Select-Object -First 1
-    $analyticsLine = (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:analytics-subscriber:[a-z.]+:').Line | Select-Object -First 1
+    $pubLine = (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:telemetry-publisher:[A-Za-z.]+:').Line | Select-Object -First 1
+    $billLine = (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:billing-subscriber:[A-Za-z.]+:').Line | Select-Object -First 1
+    $analyticsLine = (Select-String -Path $OUTPUT_LOG -Pattern '^TRACE:analytics-subscriber:[A-Za-z.]+:').Line | Select-Object -First 1
 
     if (-not $pubLine -or -not $billLine -or -not $analyticsLine) {
         throw "FAIL: missing TRACE: line for one or more processes"

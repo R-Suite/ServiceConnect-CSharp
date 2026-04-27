@@ -31,7 +31,7 @@ Processes an outgoing message and optionally hands off to the next middleware by
 - `Headers` — the mutable string-valued header dictionary for the outgoing envelope.
 - `EndPoint` — the explicit destination endpoint for a point-to-point send, or `null` for a broadcast publish.
 - `RoutingKey` — the routing key used when publishing, or `null` for a direct send.
-- `Operation` — a `SendOperation` discriminator (`Publish` or `Send`) so middleware can branch by operation type without inspecting other fields.
+- `Operation` — a `SendOperation` discriminator (`Publish`, `Send`, or `Request`) so middleware can branch by operation type without inspecting other fields. `Request` covers the three request/reply call sites — `SendRequestAsync`, `SendRequestMultiAsync`, and `PublishRequestAsync` — which thread their typed message through the same outgoing pipeline.
 
 **Remarks.** Middleware runs in registration order on the way out and unwinds in reverse. Because `context.Headers` is passed through the chain, middleware composes cleanly — each stage can stamp its own metadata before delegating.
 

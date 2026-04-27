@@ -67,9 +67,9 @@ if ! wait_for_success; then
 fi
 
 # Trace-correlation assertions ----------------------------------------
-PUB_LINE=$(grep -E '^TRACE:telemetry-publisher:[a-z.]+:' "$OUTPUT_LOG" | head -n1)
-BILL_LINE=$(grep -E '^TRACE:billing-subscriber:[a-z.]+:' "$OUTPUT_LOG" | head -n1)
-ANALYTICS_LINE=$(grep -E '^TRACE:analytics-subscriber:[a-z.]+:' "$OUTPUT_LOG" | head -n1)
+PUB_LINE=$(grep -E '^TRACE:telemetry-publisher:[A-Za-z.]+:' "$OUTPUT_LOG" | head -n1)
+BILL_LINE=$(grep -E '^TRACE:billing-subscriber:[A-Za-z.]+:' "$OUTPUT_LOG" | head -n1)
+ANALYTICS_LINE=$(grep -E '^TRACE:analytics-subscriber:[A-Za-z.]+:' "$OUTPUT_LOG" | head -n1)
 
 if [ -z "$PUB_LINE" ] || [ -z "$BILL_LINE" ] || [ -z "$ANALYTICS_LINE" ]; then
   echo "FAIL: missing TRACE: line for one or more processes" >&2
