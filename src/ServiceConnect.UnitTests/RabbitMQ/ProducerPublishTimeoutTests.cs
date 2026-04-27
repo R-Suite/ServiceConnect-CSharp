@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using RabbitMQ.Client;
@@ -47,19 +46,11 @@ public class ProducerPublishTimeoutTests
         return new Producer(transport.Object, queue.Object, bus.Object, NullLogger<Producer>.Instance);
     }
 
-    private static void SetField<T>(Producer producer, string fieldName, T value)
-    {
-        typeof(Producer)
-            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(producer, value);
-    }
+    private static void SetField<T>(Producer producer, string fieldName, T value) =>
+        ProducerInternals.SetField(producer, fieldName, value);
 
-    private static T GetField<T>(Producer producer, string fieldName)
-    {
-        return (T)typeof(Producer)
-            .GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(producer)!;
-    }
+    private static T GetField<T>(Producer producer, string fieldName) =>
+        ProducerInternals.GetField<T>(producer, fieldName);
 
     /// <summary>
     /// Helper: set up a channel whose BasicPublishAsync hangs until its CancellationToken fires.

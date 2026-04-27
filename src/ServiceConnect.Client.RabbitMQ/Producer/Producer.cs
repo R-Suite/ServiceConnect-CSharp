@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces;
@@ -14,41 +13,40 @@ public sealed class Producer : IProducer
 {
     /// <summary>Default maximum message body size, in bytes (64 KiB).</summary>
     private const long DefaultMaxMessageSize = 64 * 1024;
-    /// <summary>Default publish-retry attempt count.</summary>
-    private const ushort DefaultRetryCount = 60;
-    /// <summary>Default delay between publish retries, in seconds.</summary>
-    private const ushort DefaultRetryTimeInSeconds = 10;
-
-    // Cache process/assembly name — computed once at startup, reused on every reconnect.
-    private static readonly string ProducerName = Assembly.GetEntryAssembly()?.GetName().Name
-        ?? System.Diagnostics.Process.GetCurrentProcess().ProcessName;
 
     // Cache the computed exchange name (FullName with dots stripped) per FullName string.
     private readonly ConcurrentDictionary<string, string> _exchangeNameCache = new(StringComparer.Ordinal);
-    // Track which exchange names have already been declared on the current connection.
-    //        Cleared on reconnect because exchange state is per-connection.
-    private readonly ConcurrentDictionary<string, bool> _declaredExchanges = new(StringComparer.Ordinal);
 
-    private readonly ITransportConfiguration _transportConfiguration;
     private readonly IQueueConfiguration _queueConfiguration;
     private readonly OutboundHeaderBuilder _headerBuilder;
+    private readonly ProducerConnection _producerConnection;
     private readonly ILogger<Producer> _logger;
-    private volatile IChannel? _model;
-    private IConnection? _connection;
     private readonly SemaphoreSlim _publishLock = new(1, 1);
-    private ConnectionFactory? _connectionFactory;
-    private readonly string[] _hosts;
+    private readonly TimeSpan _publishTimeout;
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
-    private readonly bool _publisherAcks;
-    private readonly TimeSpan _publishTimeout;
-    private readonly SemaphoreSlim _connectionSemaphore = new(1, 1);
-    private volatile bool _connected;
     private int _disposedInt;
-    internal Func<CancellationToken, Task>? ReconnectForTests;
-    internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests;
+
     /// <summary>Overrides the dispose lock-wait timeout for unit tests.</summary>
     internal TimeSpan? DisposeTimeoutForTests;
+
+    /// <summary>
+    /// Test seam: routed through to <see cref="ProducerConnection.ReconnectForTests"/>.
+    /// </summary>
+    internal Func<CancellationToken, Task>? ReconnectForTests
+    {
+        get => _producerConnection.ReconnectForTests;
+        set => _producerConnection.ReconnectForTests = value;
+    }
+
+    /// <summary>
+    /// Test seam: routed through to <see cref="ProducerConnection.CreateConnectionForTests"/>.
+    /// </summary>
+    internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests
+    {
+        get => _producerConnection.CreateConnectionForTests;
+        set => _producerConnection.CreateConnectionForTests = value;
+    }
 
     /// <summary>
     /// Initializes a new producer instance using the supplied ServiceConnect configuration.
@@ -60,30 +58,23 @@ public sealed class Producer : IProducer
     /// <param name="timeProvider">An optional time provider used when stamping outbound message headers.</param>
     public Producer(ITransportConfiguration transportConfiguration, IQueueConfiguration queueConfiguration, IBusConfiguration busConfiguration, ILogger<Producer> logger, TimeProvider? timeProvider = null)
     {
-        _transportConfiguration = transportConfiguration;
         _queueConfiguration = queueConfiguration;
         ArgumentNullException.ThrowIfNull(busConfiguration);
         _logger = logger;
         _headerBuilder = new OutboundHeaderBuilder(busConfiguration, queueConfiguration, timeProvider ?? TimeProvider.System, logger);
+        _producerConnection = new ProducerConnection(transportConfiguration, logger);
 
         var settings = transportConfiguration.ClientSettings;
         MaximumMessageSize = GetSetting(settings, RabbitMQSettingKeys.MessageSize, DefaultMaxMessageSize, Convert.ToInt64);
-        _publisherAcks = GetSetting(settings, RabbitMQSettingKeys.PublisherAcknowledgements, false, Convert.ToBoolean);
         _publishTimeout = GetSetting(settings, RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromSeconds(30), v => (TimeSpan)v);
-        _hosts = transportConfiguration.Host.Split(',');
-        _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, DefaultRetryCount, Convert.ToUInt16);
-        _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, DefaultRetryTimeInSeconds, Convert.ToUInt16);
+        _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, (ushort)60, Convert.ToUInt16);
+        _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, (ushort)10, Convert.ToUInt16);
     }
 
     private static T GetSetting<T>(IReadOnlyDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)
     {
         return settings.TryGetValue(key, out var value) ? converter(value) : defaultValue;
     }
-
-    // Returns true only when both the connected flag is set AND the underlying channel
-    // is still open. A broker drop closes the channel without clearing _connected, so
-    // checking the flag alone would permanently suppress reconnect attempts.
-    private bool IsHealthy() => _connected && (_model?.IsOpen ?? false);
 
     // Return the cached exchange name for a type, keying on FullName so that
     // assembly version churn or type forwarding (which changes AQN but not
@@ -95,83 +86,10 @@ public sealed class Producer : IProducer
             _ => ServiceConnect.Services.MessageTypeExchangeName.From(type));
     }
 
-    private Task EnsureConnectedAsync()
-    {
-        return EnsureConnectedAsync(CancellationToken.None);
-    }
-
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
-        if (IsHealthy())
-        {
-            return;
-        }
-
-        await _connectionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (IsHealthy())
-            {
-                return;
-            }
-
-            await Retry.DoAsync(() => CreateConnectionAsync(cancellationToken), async ex =>
-            {
-                _logger.LogError(ex, "Error creating connection");
-                await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
-            }, TimeSpan.FromSeconds(_retryTimeInSeconds), _retryCount, cancellationToken).ConfigureAwait(false);
-
-            _connected = true;
-        }
-        finally
-        {
-            _connectionSemaphore.Release();
-        }
-    }
-
-    private async Task CreateConnectionAsync(CancellationToken cancellationToken)
-    {
-        _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration);
-
-        // Exchange declarations are per-connection — reset the cache on every (re)connect.
-        _declaredExchanges.Clear();
-
-        IConnection? connection = null;
-        IChannel? model = null;
-
-        try
-        {
-            if (CreateConnectionForTests != null)
-            {
-                connection = await CreateConnectionForTests(_connectionFactory, _hosts, ProducerName, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                connection = await _connectionFactory.CreateConnectionAsync(_hosts, ProducerName, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (_publisherAcks)
-            {
-                var channelOptions = new CreateChannelOptions(
-                    publisherConfirmationsEnabled: true,
-                    publisherConfirmationTrackingEnabled: true);
-                model = await connection.CreateChannelAsync(channelOptions, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                model = await connection.CreateChannelAsync(null, cancellationToken).ConfigureAwait(false);
-            }
-
-            _connection = connection;
-            _model = model;
-        }
-        catch
-        {
-            await DisposeModelAsync(model).ConfigureAwait(false);
-            await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
-            throw;
-        }
+        await _producerConnection.EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ExecuteWithConnectionRetryAsync(Func<Task> action, CancellationToken cancellationToken)
@@ -180,7 +98,7 @@ public sealed class Producer : IProducer
         {
             await Retry.DoAsync(
                 action,
-                ex => ReconnectAfterPublishFailureAsync(ex, cancellationToken),
+                ex => _producerConnection.ReconnectAsync(ex, cancellationToken),
                 TimeSpan.FromSeconds(_retryTimeInSeconds),
                 _retryCount,
                 IsRetriablePublishException,
@@ -222,22 +140,6 @@ public sealed class Producer : IProducer
         return true;
     }
 
-    private async Task ReconnectAfterPublishFailureAsync(Exception ex, CancellationToken cancellationToken)
-    {
-        _logger.LogError(ex, "Error publishing message");
-
-        await DisposeConnectionAsync().ConfigureAwait(false);
-        _declaredExchanges.Clear();
-
-        if (ReconnectForTests != null)
-        {
-            await ReconnectForTests(cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-    }
-
     /// <summary>
     /// Publishes a message to the exchange derived from the specified message type.
     /// </summary>
@@ -259,8 +161,8 @@ public sealed class Producer : IProducer
         try
         {
             // Re-check after acquiring the lock — DisposeAsync may have set _disposedInt
-            // and torn down _model while we were waiting. Without this check the publish
-            // would NRE on null _model.
+            // and torn down the channel while we were waiting. Without this check the publish
+            // would NRE on the missing channel.
             ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
             var messageHeaders = _headerBuilder.BuildHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
@@ -272,13 +174,10 @@ public sealed class Producer : IProducer
 
             await ExecuteWithConnectionRetryAsync(async () =>
             {
-                if (!_declaredExchanges.ContainsKey(exchangeName))
-                {
-                    await ConfigureExchangeAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
-                }
+                await _producerConnection.EnsureExchangeDeclaredAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
 
                 await PublishWithTimeoutAsync(
-                    _model!,
+                    _producerConnection.Channel,
                     exchangeName,
                     string.Empty,
                     false,
@@ -326,7 +225,7 @@ public sealed class Producer : IProducer
                 var basicProperties = _headerBuilder.BuildBasicProperties(baseHeaders);
                 await ExecuteWithConnectionRetryAsync(
                     () => PublishWithTimeoutAsync(
-                        _model!,
+                        _producerConnection.Channel,
                         string.Empty,
                         endPoint,
                         false,
@@ -372,7 +271,7 @@ public sealed class Producer : IProducer
             var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
                 () => PublishWithTimeoutAsync(
-                    _model!,
+                    _producerConnection.Channel,
                     string.Empty,
                     endPoint,
                     false,
@@ -417,7 +316,7 @@ public sealed class Producer : IProducer
             var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
             await ExecuteWithConnectionRetryAsync(
                 () => PublishWithTimeoutAsync(
-                    _model!,
+                    _producerConnection.Channel,
                     string.Empty,
                     endPoint,
                     false,
@@ -458,23 +357,13 @@ public sealed class Producer : IProducer
         var disposeTimeout = DisposeTimeoutForTests ?? TimeSpan.FromSeconds(30);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var publishLockAcquired = false;
-        var connectionLockAcquired = false;
         try
         {
             publishLockAcquired = await _publishLock.WaitAsync(disposeTimeout).ConfigureAwait(false);
-
-            var remaining = disposeTimeout - stopwatch.Elapsed;
-            if (remaining < TimeSpan.Zero)
-            {
-                remaining = TimeSpan.Zero;
-            }
-
-            connectionLockAcquired = await _connectionSemaphore.WaitAsync(remaining).ConfigureAwait(false);
-
-            if (!publishLockAcquired || !connectionLockAcquired)
+            if (!publishLockAcquired)
             {
                 _logger.LogWarning(
-                    "Producer dispose could not acquire locks within {Timeout}; forcing teardown",
+                    "Producer dispose could not acquire publish lock within {Timeout}; forcing teardown",
                     disposeTimeout);
             }
         }
@@ -484,29 +373,30 @@ public sealed class Producer : IProducer
         }
         finally
         {
-            // Best-effort teardown ALWAYS runs, whether or not we held the locks.
+            // Best-effort teardown ALWAYS runs, whether or not we held the lock.
             // A stuck BasicPublishAsync will observe the channel closing and throw —
             // that is the correct shutdown signal for an in-flight publisher.
-            try { await TearDownChannelAndConnectionAsync().ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Producer channel/connection close failed during dispose"); }
+            var remaining = disposeTimeout - stopwatch.Elapsed;
+            if (remaining < TimeSpan.Zero)
+            {
+                remaining = TimeSpan.Zero;
+            }
+
+            try { await _producerConnection.CloseAsync(remaining).ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Producer connection close failed during dispose"); }
 
             if (publishLockAcquired)
             {
                 _publishLock.Release();
             }
 
-            if (connectionLockAcquired)
-            {
-                _connectionSemaphore.Release();
-            }
-
-            // _publishLock and _connectionSemaphore are intentionally NOT Disposed:
+            // _publishLock is intentionally NOT Disposed:
             // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and
             // we never call AvailableWaitHandle, so disposal is a functional no-op. An
             // in-flight publisher's `finally { _publishLock.Release(); }` running on a
             // disposed semaphore throws ObjectDisposedException out of the unwind path,
             // which we cannot prevent without holding GC references to every caller.
-            // The fields are GC'd with the Producer instance.
+            // The field is GC'd with the Producer instance.
         }
     }
 
@@ -551,7 +441,7 @@ public sealed class Producer : IProducer
             // Reset the channel: the broker may eventually ack this timed-out publish, which
             // would contaminate the confirm slot of a later in-flight publish. A fresh
             // connection + channel clears the confirm-tracker's state.
-            try { await ReconnectAfterPublishFailureAsync(oce, cancellationToken).ConfigureAwait(false); }
+            try { await _producerConnection.ReconnectAsync(oce, cancellationToken).ConfigureAwait(false); }
             catch (Exception resetEx) { _logger.LogError(resetEx, "Failed to reset connection after publish timeout; channel state may be indeterminate."); }
 
             throw new TimeoutException(
@@ -559,79 +449,5 @@ public sealed class Producer : IProducer
                 $"(exchange='{exchange}', routingKey='{routingKey}', messageId='{basicProperties.MessageId ?? "<none>"}'). " +
                 "The broker may be stalled or the connection may be half-open.");
         }
-    }
-
-    private async Task ConfigureExchangeAsync(string exchangeName, string type, CancellationToken cancellationToken)
-    {
-        await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null, false, false, cancellationToken).ConfigureAwait(false);
-        // Mark as declared so subsequent publishes skip the round-trip.
-        _declaredExchanges[exchangeName] = true;
-    }
-
-    private async Task DisposeModelAsync(IChannel? model)
-    {
-        if (model != null)
-        {
-            try
-            {
-                _logger.LogDebug("Disposing Model");
-                if (model.IsOpen)
-                {
-                    await model.CloseAsync().ConfigureAwait(false);
-                }
-
-                model.Dispose();
-            }
-            catch (ObjectDisposedException) { }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error disposing model");
-            }
-        }
-    }
-
-    private async Task DisposeConnectionInstanceAsync(IConnection? connection)
-    {
-        if (connection != null)
-        {
-            try
-            {
-                _logger.LogDebug("Disposing connection");
-                if (connection.IsOpen)
-                {
-                    await connection.CloseAsync().ConfigureAwait(false);
-                }
-
-                connection.Dispose();
-            }
-            catch (ObjectDisposedException) { }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error disposing connection");
-            }
-        }
-    }
-
-    private async Task DisposeConnectionAsync()
-    {
-        await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
-        }
-        finally
-        {
-            _connectionSemaphore.Release();
-        }
-    }
-
-    private async Task TearDownChannelAndConnectionAsync()
-    {
-        var model = Interlocked.Exchange(ref _model, null);
-        var connection = Interlocked.Exchange(ref _connection, null);
-
-        await DisposeModelAsync(model).ConfigureAwait(false);
-        await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
-        _connected = false;
     }
 }
