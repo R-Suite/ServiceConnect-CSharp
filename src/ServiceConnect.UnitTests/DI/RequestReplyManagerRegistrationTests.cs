@@ -81,7 +81,7 @@ public class RequestReplyManagerRegistrationTests
     private sealed class CustomManager : IRequestReplyManager, IReplyStatusRequestReplyManager
     {
         public Task<TReply> SendRequestAsync<TRequest, TReply>(
-            byte[] messageBytes,
+            TRequest message,
             IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
@@ -90,7 +90,7 @@ public class RequestReplyManagerRegistrationTests
             throw new NotImplementedException();
 
         public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
-            byte[] messageBytes,
+            TRequest message,
             IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
@@ -99,7 +99,7 @@ public class RequestReplyManagerRegistrationTests
             throw new NotImplementedException();
 
         public Task PublishRequestAsync<TRequest, TReply>(
-            byte[] messageBytes,
+            TRequest message,
             IDictionary<string, string> headers,
             RequestOptions options,
             Action<TReply> onReply,
@@ -121,7 +121,7 @@ public class RequestReplyManagerRegistrationTests
     private sealed class PartialManager : IRequestReplyManager
     {
         public Task<TReply> SendRequestAsync<TRequest, TReply>(
-            byte[] messageBytes,
+            TRequest message,
             IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
@@ -130,7 +130,7 @@ public class RequestReplyManagerRegistrationTests
             throw new NotImplementedException();
 
         public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
-            byte[] messageBytes,
+            TRequest message,
             IDictionary<string, string> headers,
             RequestOptions options,
             CancellationToken cancellationToken = default)
@@ -139,7 +139,7 @@ public class RequestReplyManagerRegistrationTests
             throw new NotImplementedException();
 
         public Task PublishRequestAsync<TRequest, TReply>(
-            byte[] messageBytes,
+            TRequest message,
             IDictionary<string, string> headers,
             RequestOptions options,
             Action<TReply> onReply,

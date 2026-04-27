@@ -40,33 +40,36 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     }
 
     /// <inheritdoc />
-    public Task ExecutePublishMessagePipelineAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
+    public Task ExecutePublishMessagePipelineAsync(SendContext context, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _publishChain.Value(typeObject, messageBytes, headers ?? new Dictionary<string, string>(StringComparer.Ordinal), endPoint, cancellationToken);
+        ArgumentNullException.ThrowIfNull(context);
+        return _publishChain.Value(context, cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task ExecuteSendMessagePipelineAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string>? headers = null, string? endPoint = null, CancellationToken cancellationToken = default)
+    public Task ExecuteSendMessagePipelineAsync(SendContext context, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _sendChain.Value(typeObject, messageBytes, headers ?? new Dictionary<string, string>(StringComparer.Ordinal), endPoint, cancellationToken);
+        ArgumentNullException.ThrowIfNull(context);
+        return _sendChain.Value(context, cancellationToken);
     }
 
     private SendMessageDelegate BuildPublishChain()
     {
         var producer = _producer;
-        Task terminal(Type t, byte[] b, IDictionary<string, string> h, string? ep, CancellationToken ct) => producer.PublishAsync(t, b, h, ct);
+        Task terminal(SendContext ctx, CancellationToken ct) =>
+            producer.PublishAsync(ctx.MessageType, ctx.MessageBytes, ctx.Headers, ct);
         return WrapMiddleware(terminal);
     }
 
     private SendMessageDelegate BuildSendChain()
     {
         var producer = _producer;
-        Task terminal(Type t, byte[] b, IDictionary<string, string> h, string? ep, CancellationToken ct) =>
-            !string.IsNullOrEmpty(ep)
-                ? producer.SendAsync(ep, t, b, h, ct)
-                : producer.SendAsync(t, b, h, ct);
+        Task terminal(SendContext ctx, CancellationToken ct) =>
+            !string.IsNullOrEmpty(ctx.EndPoint)
+                ? producer.SendAsync(ctx.EndPoint, ctx.MessageType, ctx.MessageBytes, ctx.Headers, ct)
+                : producer.SendAsync(ctx.MessageType, ctx.MessageBytes, ctx.Headers, ct);
         return WrapMiddleware(terminal);
     }
 
@@ -83,7 +86,7 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
         {
             var mw = (ISendMessageMiddleware)_serviceProvider.GetRequiredService(middlewareTypes[i]);
             var next = chain;
-            chain = (t, b, h, ep, ct) => mw.ProcessAsync(t, b, h, ep, next, ct);
+            chain = (ctx, ct) => mw.ProcessAsync(ctx, next, ct);
         }
         return chain;
     }

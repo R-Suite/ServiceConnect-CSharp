@@ -9,11 +9,10 @@ namespace ServiceConnect.EndToEndTests;
 
 file sealed class HeaderAddingSendMiddleware : ISendMessageMiddleware
 {
-    public Task ProcessAsync(Type typeObject, byte[] messageBytes,
-        IDictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
     {
-        headers["X-Send-Middleware"] = "applied";
-        return next(typeObject, messageBytes, headers, endPoint, cancellationToken);
+        context.Headers["X-Send-Middleware"] = "applied";
+        return next(context, cancellationToken);
     }
 }
 

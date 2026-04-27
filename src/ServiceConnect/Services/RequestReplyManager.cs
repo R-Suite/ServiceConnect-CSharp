@@ -16,7 +16,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
     /// <inheritdoc />
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -26,6 +26,8 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        var messageBytes = _serializer.Serialize(message);
 
         var messageId = Guid.NewGuid();
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -54,14 +56,18 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         try
         {
-            if (!string.IsNullOrEmpty(options.EndPoint))
+            var endPoint = string.IsNullOrEmpty(options.EndPoint) ? null : options.EndPoint;
+            var context = new SendContext
             {
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, options.EndPoint, linkedCts.Token).ConfigureAwait(false);
-            }
-            else
-            {
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, null, linkedCts.Token).ConfigureAwait(false);
-            }
+                Message = message,
+                MessageType = typeof(TRequest),
+                MessageBytes = messageBytes,
+                Headers = headers,
+                EndPoint = endPoint,
+                RoutingKey = null,
+                Operation = SendOperation.Request,
+            };
+            await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && linkedCts.IsCancellationRequested)
         {
@@ -85,7 +91,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
     /// <inheritdoc />
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -95,6 +101,8 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        var messageBytes = _serializer.Serialize(message);
 
         var messageId = Guid.NewGuid();
         int? configuredEndPointCount = options.EndPoints is { Count: > 0 } ? options.EndPoints.Count : null;
@@ -140,16 +148,33 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             {
                 foreach (string endPoint in options.EndPoints)
                 {
-                    await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, endPoint, linkedCts.Token).ConfigureAwait(false);
+                    var context = new SendContext
+                    {
+                        Message = message,
+                        MessageType = typeof(TRequest),
+                        MessageBytes = messageBytes,
+                        Headers = headers,
+                        EndPoint = endPoint,
+                        RoutingKey = null,
+                        Operation = SendOperation.Request,
+                    };
+                    await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
                 }
-            }
-            else if (!string.IsNullOrEmpty(options.EndPoint))
-            {
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, options.EndPoint, linkedCts.Token).ConfigureAwait(false);
             }
             else
             {
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(TRequest), messageBytes, headers, null, linkedCts.Token).ConfigureAwait(false);
+                var endPoint = string.IsNullOrEmpty(options.EndPoint) ? null : options.EndPoint;
+                var context = new SendContext
+                {
+                    Message = message,
+                    MessageType = typeof(TRequest),
+                    MessageBytes = messageBytes,
+                    Headers = headers,
+                    EndPoint = endPoint,
+                    RoutingKey = null,
+                    Operation = SendOperation.Request,
+                };
+                await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && linkedCts.IsCancellationRequested)
@@ -177,7 +202,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
     /// <inheritdoc />
     public async Task PublishRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         Action<TReply> onReply,
@@ -188,6 +213,8 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        var messageBytes = _serializer.Serialize(message);
 
         var messageId = Guid.NewGuid();
         var expectedCount = options.ExpectedReplyCount ?? -1;
@@ -234,7 +261,17 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         try
         {
-            await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(TRequest), messageBytes, headers, null, linkedCts.Token).ConfigureAwait(false);
+            var context = new SendContext
+            {
+                Message = message,
+                MessageType = typeof(TRequest),
+                MessageBytes = messageBytes,
+                Headers = headers,
+                EndPoint = null,
+                RoutingKey = null,
+                Operation = SendOperation.Request,
+            };
+            await _sendPipeline.ExecutePublishMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
             Interlocked.Exchange(ref publishCompletedSuccessfully, 1);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && linkedCts.IsCancellationRequested)

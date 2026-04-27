@@ -36,6 +36,25 @@ namespace ServiceConnect.UnitTests
             return new SendMessagePipeline(_mockProducer.Object, _mockPipelineConfig.Object, _serviceProvider);
         }
 
+        private static SendContext MakePublishContext(Type type, byte[] bytes, IDictionary<string, string>? headers = null) => new()
+        {
+            Message = new TestSendPipelineMessage(),
+            MessageType = type,
+            MessageBytes = bytes,
+            Headers = headers ?? new Dictionary<string, string>(StringComparer.Ordinal),
+            Operation = SendOperation.Publish,
+        };
+
+        private static SendContext MakeSendContext(Type type, byte[] bytes, IDictionary<string, string>? headers = null, string? endPoint = null) => new()
+        {
+            Message = new TestSendPipelineMessage(),
+            MessageType = type,
+            MessageBytes = bytes,
+            Headers = headers ?? new Dictionary<string, string>(StringComparer.Ordinal),
+            EndPoint = endPoint,
+            Operation = SendOperation.Send,
+        };
+
         [Fact]
         public void Constructor_ThrowsWhenProducerIsNull()
         {
@@ -50,7 +69,7 @@ namespace ServiceConnect.UnitTests
             var bytes = new byte[] { 1, 2, 3 };
             var headers = new Dictionary<string, string> { ["key"] = "value" };
 
-            await pipeline.ExecutePublishMessagePipelineAsync(type, bytes, headers);
+            await pipeline.ExecutePublishMessagePipelineAsync(MakePublishContext(type, bytes, headers));
 
             _mockProducer.Verify(p => p.PublishAsync(type, bytes, headers), Times.Once);
         }
@@ -64,7 +83,7 @@ namespace ServiceConnect.UnitTests
             var headers = new Dictionary<string, string>();
             const string endPoint = "my-queue";
 
-            await pipeline.ExecuteSendMessagePipelineAsync(type, bytes, headers, endPoint);
+            await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(type, bytes, headers, endPoint));
 
             _mockProducer.Verify(p => p.SendAsync(endPoint, type, bytes, headers), Times.Once);
             _mockProducer.Verify(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
@@ -77,7 +96,7 @@ namespace ServiceConnect.UnitTests
             var type = typeof(string);
             var bytes = new byte[] { 1, 2, 3 };
 
-            await pipeline.ExecuteSendMessagePipelineAsync(type, bytes);
+            await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(type, bytes));
 
             _mockProducer.Verify(p => p.SendAsync(type, bytes, It.IsAny<IDictionary<string, string>>()), Times.Once);
             _mockProducer.Verify(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
@@ -90,7 +109,7 @@ namespace ServiceConnect.UnitTests
             var type = typeof(string);
             var bytes = new byte[] { 1, 2, 3 };
 
-            await pipeline.ExecuteSendMessagePipelineAsync(type, bytes, endPoint: string.Empty);
+            await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(type, bytes, endPoint: string.Empty));
 
             _mockProducer.Verify(p => p.SendAsync(type, bytes, It.IsAny<IDictionary<string, string>>()), Times.Once);
             _mockProducer.Verify(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
@@ -117,7 +136,7 @@ namespace ServiceConnect.UnitTests
             _mockProducer.Verify(p => p.DisposeAsync(), Times.Never);
         }
 
-        // Gap 5: outgoing-filter short-circuit via ISendMessageMiddleware
+        // Outgoing-filter short-circuit via ISendMessageMiddleware
         [Fact]
         public async Task ExecuteSendMessagePipelineAsync_WhenMiddlewareShortCircuits_ProducerSendIsNeverCalled()
         {
@@ -133,7 +152,7 @@ namespace ServiceConnect.UnitTests
 
             var pipeline = new SendMessagePipeline(_mockProducer.Object, mockConfig.Object, sp);
 
-            await pipeline.ExecuteSendMessagePipelineAsync(typeof(string), [1, 2, 3]);
+            await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(typeof(string), [1, 2, 3]));
 
             _mockProducer.Verify(
                 p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()),
@@ -148,11 +167,14 @@ namespace ServiceConnect.UnitTests
     }
 }
 
+file sealed class TestSendPipelineMessage : Message
+{
+    public TestSendPipelineMessage() : base(Guid.NewGuid()) { }
+}
+
 file sealed class BlockingSendMiddleware : ISendMessageMiddleware
 {
     // Intentionally does NOT call next — short-circuits the pipeline.
-    public Task ProcessAsync(
-        Type typeObject, byte[] messageBytes, IDictionary<string, string> headers,
-        string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
         => Task.CompletedTask;
 }

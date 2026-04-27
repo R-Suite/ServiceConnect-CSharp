@@ -443,19 +443,16 @@ file sealed class TestInboundFilter : IFilter
 file sealed class TestSendMiddleware : ISendMessageMiddleware
 {
     public Task ProcessAsync(
-        Type messageType,
-        byte[] messageBytes,
-        IDictionary<string, string> headers,
-        string? endPoint,
+        SendContext context,
         SendMessageDelegate next,
-        CancellationToken cancellationToken = default) =>
-        next(messageType, messageBytes, headers, endPoint, cancellationToken);
+        CancellationToken cancellationToken) =>
+        next(context, cancellationToken);
 }
 
 file sealed class OverrideRequestReplyManager : IRequestReplyManager
 {
     public Task<TReply> SendRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -464,7 +461,7 @@ file sealed class OverrideRequestReplyManager : IRequestReplyManager
         throw new NotSupportedException();
 
     public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -473,7 +470,7 @@ file sealed class OverrideRequestReplyManager : IRequestReplyManager
         throw new NotSupportedException();
 
     public Task PublishRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         Action<TReply> onReply,
@@ -489,7 +486,7 @@ file sealed class OverrideRequestReplyManager : IRequestReplyManager
 file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReplyStatusRequestReplyManager
 {
     public Task<TReply> SendRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -498,7 +495,7 @@ file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReply
         throw new NotSupportedException();
 
     public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -507,7 +504,7 @@ file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReply
         throw new NotSupportedException();
 
     public Task PublishRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         ServiceConnect.Interfaces.Options.RequestOptions options,
         Action<TReply> onReply,

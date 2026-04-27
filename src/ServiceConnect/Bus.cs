@@ -113,7 +113,17 @@ public sealed class Bus : IBus
             headers[HeaderKeys.RoutingKey] = routingKey;
         }
 
-        await _sendPipeline.ExecutePublishMessagePipelineAsync(typeof(T), messageBytes, headers, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var context = new SendContext
+        {
+            Message = message,
+            MessageType = typeof(T),
+            MessageBytes = messageBytes,
+            Headers = headers,
+            EndPoint = null,
+            RoutingKey = options?.RoutingKey,
+            Operation = SendOperation.Publish,
+        };
+        await _sendPipeline.ExecutePublishMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -156,12 +166,32 @@ public sealed class Bus : IBus
         {
             foreach (var endpoint in endpoints)
             {
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, endpoint, cancellationToken).ConfigureAwait(false);
+                var context = new SendContext
+                {
+                    Message = message,
+                    MessageType = typeof(T),
+                    MessageBytes = messageBytes,
+                    Headers = headers,
+                    EndPoint = endpoint,
+                    RoutingKey = null,
+                    Operation = SendOperation.Send,
+                };
+                await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
             }
         }
         else
         {
-            await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, options?.EndPoint, cancellationToken).ConfigureAwait(false);
+            var context = new SendContext
+            {
+                Message = message,
+                MessageType = typeof(T),
+                MessageBytes = messageBytes,
+                Headers = headers,
+                EndPoint = options?.EndPoint,
+                RoutingKey = null,
+                Operation = SendOperation.Send,
+            };
+            await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -172,11 +202,14 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
-        var messageBytes = _serializer.Serialize(message);
         Dictionary<string, string> headers;
 
         if (_hasOutgoingFilters)
         {
+            // Serialize once here so outgoing filters can inspect the wire body via the envelope.
+            // RequestReplyManager will serialize again on its own path; the cost is one extra
+            // serialize per filter-enabled request, kept localized to this branch.
+            var messageBytes = _serializer.Serialize(message);
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
@@ -191,7 +224,7 @@ public sealed class Bus : IBus
         }
 
         return await _requestReplyManager.SendRequestAsync<T, TReply>(
-            messageBytes,
+            message,
             headers,
             requestOptions,
             cancellationToken).ConfigureAwait(false);
@@ -204,11 +237,12 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
-        var messageBytes = _serializer.Serialize(message);
         Dictionary<string, string> headers;
 
         if (_hasOutgoingFilters)
         {
+            // See SendRequestAsync for why we serialize locally only on the filter branch.
+            var messageBytes = _serializer.Serialize(message);
             var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
@@ -223,7 +257,7 @@ public sealed class Bus : IBus
         }
 
         return await _requestReplyManager.SendRequestMultiAsync<T, TReply>(
-            messageBytes,
+            message,
             headers,
             requestOptions,
             cancellationToken).ConfigureAwait(false);
@@ -242,11 +276,12 @@ public sealed class Bus : IBus
             throw new ArgumentException("PublishRequestAsync does not support EndPoint or EndPoints. Use SendRequestAsync or SendRequestMultiAsync instead.", nameof(options));
         }
 
-        var messageBytes = _serializer.Serialize(message);
         Dictionary<string, string> headers;
 
         if (_hasOutgoingFilters)
         {
+            // See SendRequestAsync for why we serialize locally only on the filter branch.
+            var messageBytes = _serializer.Serialize(message);
             var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
@@ -261,7 +296,7 @@ public sealed class Bus : IBus
         }
 
         await _requestReplyManager.PublishRequestAsync<TRequest, TReply>(
-            messageBytes,
+            message,
             headers,
             requestOptions,
             onReply,
@@ -302,7 +337,17 @@ public sealed class Bus : IBus
             headers[HeaderKeys.RoutingSlip] = BuildRoutingSlip(destinations);
         }
 
-        await _sendPipeline.ExecuteSendMessagePipelineAsync(typeof(T), messageBytes, headers, firstDestination, cancellationToken).ConfigureAwait(false);
+        var context = new SendContext
+        {
+            Message = message,
+            MessageType = typeof(T),
+            MessageBytes = messageBytes,
+            Headers = headers,
+            EndPoint = firstDestination,
+            RoutingKey = null,
+            Operation = SendOperation.Send,
+        };
+        await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

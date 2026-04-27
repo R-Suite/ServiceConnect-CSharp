@@ -12,13 +12,13 @@ public interface IRequestReplyManager
     /// </summary>
     /// <typeparam name="TRequest">The request message type.</typeparam>
     /// <typeparam name="TReply">The expected reply type.</typeparam>
-    /// <param name="messageBytes">The serialized request payload.</param>
+    /// <param name="message">The request message.</param>
     /// <param name="headers">The outgoing headers to send with the request.</param>
     /// <param name="options">Request routing and timeout options.</param>
     /// <param name="cancellationToken">A token that cancels the request.</param>
     /// <returns>The deserialized reply.</returns>
     Task<TReply> SendRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -30,13 +30,13 @@ public interface IRequestReplyManager
     /// </summary>
     /// <typeparam name="TRequest">The request message type.</typeparam>
     /// <typeparam name="TReply">The expected reply type.</typeparam>
-    /// <param name="messageBytes">The serialized request payload.</param>
+    /// <param name="message">The request message.</param>
     /// <param name="headers">The outgoing headers to send with the request.</param>
     /// <param name="options">Request routing and timeout options.</param>
     /// <param name="cancellationToken">A token that cancels the request.</param>
     /// <returns>The replies collected before completion.</returns>
     Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         CancellationToken cancellationToken = default)
@@ -48,13 +48,13 @@ public interface IRequestReplyManager
     /// </summary>
     /// <typeparam name="TRequest">The request message type.</typeparam>
     /// <typeparam name="TReply">The expected reply type.</typeparam>
-    /// <param name="messageBytes">The serialized request payload.</param>
+    /// <param name="message">The request message.</param>
     /// <param name="headers">The outgoing headers to send with the request.</param>
     /// <param name="options">Request routing and timeout options.</param>
     /// <param name="onReply">The callback to invoke for each reply.</param>
     /// <param name="cancellationToken">A token that cancels the request.</param>
     Task PublishRequestAsync<TRequest, TReply>(
-        byte[] messageBytes,
+        TRequest message,
         IDictionary<string, string> headers,
         RequestOptions options,
         Action<TReply> onReply,

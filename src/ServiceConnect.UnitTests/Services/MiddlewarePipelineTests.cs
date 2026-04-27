@@ -22,17 +22,17 @@ file class RecordingSendMiddleware(List<string> log) : ISendMessageMiddleware
 {
     private readonly List<string> _log = log;
 
-    public async Task ProcessAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public async Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         _log.Add("before");
-        await next(typeObject, messageBytes, headers, endPoint, cancellationToken);
+        await next(context, cancellationToken);
         _log.Add("after");
     }
 }
 
 file class ShortCircuitSendMiddleware : ISendMessageMiddleware
 {
-    public Task ProcessAsync(Type typeObject, byte[] messageBytes, IDictionary<string, string> headers, string? endPoint, SendMessageDelegate next, CancellationToken cancellationToken)
+    public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         // Intentionally does NOT call next
         return Task.CompletedTask;
@@ -103,7 +103,7 @@ public class SendMiddlewarePipelineTests
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1]);
+        await pipeline.ExecutePublishMessagePipelineAsync(MakePublishContext());
 
         // Assert
         Assert.Equal(new[] { "before", "producer", "after" }, log);
@@ -120,7 +120,7 @@ public class SendMiddlewarePipelineTests
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1]);
+        await pipeline.ExecutePublishMessagePipelineAsync(MakePublishContext());
 
         // Assert
         _mockProducer.Verify(p => p.PublishAsync(typeof(string), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Once);
@@ -141,11 +141,20 @@ public class SendMiddlewarePipelineTests
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
 
         // Act
-        await pipeline.ExecutePublishMessagePipelineAsync(typeof(string), [1]);
+        await pipeline.ExecutePublishMessagePipelineAsync(MakePublishContext());
 
         // Assert
         _mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
     }
+
+    private static SendContext MakePublishContext() => new()
+    {
+        Message = new TestMiddlewareMessage(),
+        MessageType = typeof(string),
+        MessageBytes = [1],
+        Headers = new Dictionary<string, string>(StringComparer.Ordinal),
+        Operation = SendOperation.Publish,
+    };
 }
 
 public class ProcessingMiddlewarePipelineTests
