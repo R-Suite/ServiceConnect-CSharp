@@ -1,4 +1,4 @@
-# Health Checks Packages, Producer-Connection Surface, and Website Updates
+# Health Checks Package, IProducer Surface, and Website Updates
 
 Date: 2026-04-28
 Branch context: `v7-clean-architecture`
@@ -7,9 +7,9 @@ Branch context: `v7-clean-architecture`
 
 Three coordinated changes:
 
-1. **Framework** — promote `ProducerConnection.IsHealthy()` from `internal` to a public method on a new public interface `IProducerConnection` in `ServiceConnect.Client.RabbitMQ`. Mirrors the existing public surface of `IServiceConnectConnection.IsConnected()` on the consumer side.
-2. **New packages** — add `ServiceConnect.HealthChecks` (transport-agnostic, surfaces bus consumption state) and `ServiceConnect.HealthChecks.RabbitMQ` (surfaces broker connection state for consumer and/or producer). Each package exposes idiomatic extension methods on `IHealthChecksBuilder`.
-3. **Website** — replace the "## No health checks" section of [observability.mdx](website/src/content/docs/learn/operations/observability.mdx) with a "## Health checks" section that documents installation, wiring, and steady-state semantics. Add a short pointer paragraph from `hosting.mdx`.
+1. **Framework** — add `bool IsHealthy { get; }` to `ServiceConnect.Interfaces.IProducer`, mirroring the existing `IConsumer.IsConnected` property. The RabbitMQ `Producer` implementation delegates to its private `ProducerConnection.IsHealthy()`. No new interface; one extra member on an existing transport-agnostic interface.
+2. **New package** — add `ServiceConnect.HealthChecks` with three opt-in `IHealthChecksBuilder` extension methods (`AddServiceConnectBus`, `AddServiceConnectConsumer`, `AddServiceConnectProducer`) and three matching `IHealthCheck` classes. The package depends only on `ServiceConnect.Interfaces` and `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions`. It contains no transport-specific code.
+3. **Website** — replace the "## No health checks" section of [observability.mdx](website/src/content/docs/learn/operations/observability.mdx) with a "## Health checks" section that documents installation, the three opt-in calls, the matching K8s liveness/readiness story, and the steady-state semantics. Add a short pointer paragraph from `hosting.mdx`.
 
 ## Motivation
 
@@ -18,9 +18,9 @@ The current docs steer users to roll their own:
 > ServiceConnect does not ship an `IHealthCheck` implementation. […] If you need more than that, wrap `IBus.IsConsuming` in a custom `IHealthCheck` pointed at the container's bus.
 > — [observability.mdx:138-140](website/src/content/docs/learn/operations/observability.mdx#L138-L140)
 
-Two things have changed since that paragraph was written. First, the components every meaningful check would need are now in place and stable: [`IBus.IsConsuming`](src/ServiceConnect.Interfaces/Bus/IBus.cs#L79), [`IServiceConnectConnection.IsConnected()`](src/ServiceConnect.Client.RabbitMQ/Connection/IServiceConnectConnection.cs#L30), and [`ProducerConnection.IsHealthy()`](src/ServiceConnect.Client.RabbitMQ/Producer/ProducerConnection.cs#L78). Second, the precedent for shipping optional add-on packages alongside the bus is now established by `ServiceConnect.Telemetry`. There is no remaining reason to make every adopter re-implement the same two or three checks.
+Two things have changed since that paragraph was written. First, the components every meaningful check would need are now stable and *transport-agnostic*: [`IBus.IsConsuming`](src/ServiceConnect.Interfaces/Bus/IBus.cs#L79) reports bus state, [`IConsumer.IsConnected`](src/ServiceConnect.Interfaces/Bus/IConsumer.cs) reports consumer-side connection state, and the symmetrical reading on the producer side already exists internally as [`ProducerConnection.IsHealthy()`](src/ServiceConnect.Client.RabbitMQ/Producer/ProducerConnection.cs#L78) — it just needs one extra method on `IProducer` to surface it. Second, the precedent for shipping optional add-on packages alongside the bus is now established by `ServiceConnect.Telemetry`. There is no remaining reason to make every adopter re-implement the same two or three checks.
 
-The user-facing goal is a two-line wire-up alongside their existing `AddServiceConnect` call:
+The user-facing goal is opt-in wiring matched to the host's actual workload:
 
 ```csharp
 services.AddServiceConnect(builder =>
@@ -29,85 +29,81 @@ services.AddServiceConnect(builder =>
 });
 
 services.AddHealthChecks()
-    .AddServiceConnect(tags: new[] { "live" })
-    .AddServiceConnectRabbitMQ(tags: new[] { "ready" });
+    .AddServiceConnectBus(tags: new[] { "live" })
+    .AddServiceConnectConsumer(tags: new[] { "ready" })   // omit on publish-only hosts
+    .AddServiceConnectProducer(tags: new[] { "ready" });  // omit on consume-only hosts
 ```
-
-…with the `AddServiceConnectRabbitMQ()` call adapting automatically to whether the host is configured for consume, publish, or both.
 
 ## Goals
 
-- Three checks ship: bus liveness, RabbitMQ consumer-connection readiness, RabbitMQ producer-connection readiness.
-- Idiomatic registration: extension methods on `IHealthChecksBuilder`, matching the shape of `AddNpgSql`, `AddRedis`, etc.
-- The RabbitMQ extension method registers 0, 1, or 2 checks based on which connection components are in DI, so a publish-only or consume-only host gets the right thing automatically.
-- All checks are O(1), allocation-light, and side-effect-free — they inspect last-known in-process state. No I/O, no AMQP round-trips.
-- Transport-agnostic check (bus liveness) lives in a transport-agnostic package (`ServiceConnect.HealthChecks`); transport-specific checks live in the RabbitMQ-specific package (`ServiceConnect.HealthChecks.RabbitMQ`). The transport seam is preserved.
-- `ProducerConnection.IsHealthy()` becomes part of a stable, public, minimal interface (`IProducerConnection`) without exposing other internals.
-- Documentation in `observability.mdx` is rewritten to match shipped reality, with installation, wiring, semantics, and the publish-only/consume-only behaviour explained.
+- Three opt-in `IHealthCheck` classes ship in one package, each registered through its own `IHealthChecksBuilder` extension method. The user picks the calls that match their topology.
+- The package is transport-agnostic: it depends only on `ServiceConnect.Interfaces`, not on `ServiceConnect.Client.RabbitMQ`. A future `Kafka` transport that implements the same interfaces gets the same checks for free.
+- All checks are O(1), allocation-light, and side-effect-free — they inspect last-known in-process state through public interface members. No I/O, no AMQP round-trips, no broker channels opened per probe.
+- `IProducer` gains exactly one member (`bool IsHealthy { get; }`) — the smallest change needed to mirror `IConsumer.IsConnected`.
+- Documentation in `observability.mdx` is rewritten to match shipped reality: installation, the three opt-in calls, K8s wiring, the publish-only / consume-only / both topologies, and the "before first publish" semantic for the producer check.
 
 ## Non-goals
 
-- Active broker probing (no AMQP heartbeat injection, no synthetic publish, no test-channel open per probe). The shipped checks reflect last-known connection state from the RabbitMQ client's own event stream. Active probing is what we do not want, and we explicitly justify it (see *Steady-state semantics*).
-- A second transport. The repo is RabbitMQ-only today; the package layout is forward-compatible with a future transport (e.g. `ServiceConnect.HealthChecks.Kafka`) but no second-transport package is in scope.
-- Distinguishing "bus has not started yet" from "bus has been terminally stopped" inside the liveness check. `IBus` does not expose this distinction, and the right tool for the startup window is K8s `initialDelaySeconds` or ASP.NET endpoint ordering, not a bus-level state machine. (Discussed and ruled out.)
-- An `examples/HealthChecks` example project. The wiring snippet in `observability.mdx` is enough; we can add a sample later if uptake suggests it is needed.
-- README changes. The website is the canonical learn-path docs; rebalancing the README around health checks is out of scope.
-- Changes to any other public interface in `ServiceConnect.Client.RabbitMQ` beyond the `IProducerConnection` promotion described above. In particular, `IServiceConnectConnection` is unchanged.
-- A `Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheckPublisher` integration (the polling-with-callback pattern). Not needed for the minimum useful surface; users who want it can wire it up via the standard `IHealthChecksBuilder.AddCheck` registrations our packages produce.
+- Active broker probing (no AMQP heartbeat injection, no synthetic publish, no test-channel open per probe). The shipped checks reflect last-known connection state from the transport client's own event stream.
+- A second transport. The repo is RabbitMQ-only today; the package layout is forward-compatible (any transport whose `IConsumer`/`IProducer` implementations honour `IsConnected`/`IsHealthy` correctly works with these checks).
+- A `ServiceConnect.HealthChecks.RabbitMQ` second package. Considered and rejected: there is no transport-specific code in the checks themselves, so a second package would be empty packaging, not a real seam.
+- DI introspection at registration time ("only register the producer check if a producer is in DI"). Considered and rejected: `UseRabbitMQ` always registers both `IProducer` and `IConsumer` regardless of whether the host actually publishes or consumes, so DI presence is not a useful signal. Explicit per-method opt-in puts the decision where it belongs — with the user, who knows their topology.
+- Distinguishing "bus has not started yet" from "bus has been terminally stopped" inside the liveness check. `IBus` does not expose this distinction, and the right tool for the startup window is K8s `initialDelaySeconds` or ASP.NET endpoint ordering, not a bus-level state machine.
+- A new public interface in `ServiceConnect.Client.RabbitMQ` (e.g. `IProducerConnection`). The right surface promotion is on `IProducer` itself, in `ServiceConnect.Interfaces`. The connection-layer types stay `internal`.
+- An `examples/HealthChecks` example project. The wiring snippet in `observability.mdx` is enough.
+- README changes. The website is the canonical learn-path docs.
+- A `Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheckPublisher` integration. Users who want one wire it up against the standard `IHealthChecksBuilder` registrations our methods produce.
 
 ## Design
 
 ### Project layout
 
-Two new projects under `src/`:
+One new project under `src/`:
 
 ```
 src/ServiceConnect.HealthChecks/
     BusConsumingHealthCheck.cs
+    ConsumerConnectionHealthCheck.cs
+    ProducerConnectionHealthCheck.cs
     HealthChecksBuilderExtensions.cs
     ServiceConnect.HealthChecks.csproj
     ServiceConnect.HealthChecks.nuspec
-
-src/ServiceConnect.HealthChecks.RabbitMQ/
-    RabbitMqConsumerConnectionHealthCheck.cs
-    RabbitMqProducerConnectionHealthCheck.cs
-    HealthChecksBuilderExtensions.cs
-    ServiceConnect.HealthChecks.RabbitMQ.csproj
-    ServiceConnect.HealthChecks.RabbitMQ.nuspec
 ```
 
-Both projects are added to `src/ServiceConnect.slnx`. Both inherit TFMs from `Directory.Build.props` (no per-project TFM overrides), per the centralisation in commit `9b13f3ab`.
+Added to `src/ServiceConnect.slnx`. Inherits TFMs from `Directory.Build.props` (no per-project TFM overrides), per the centralisation in commit `9b13f3ab`.
 
 ### Dependencies
 
 **`ServiceConnect.HealthChecks.csproj`**:
 
-- `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions` — the *abstractions* package, not the full `Microsoft.Extensions.Diagnostics.HealthChecks`. The abstractions package contains `IHealthCheck`, `HealthCheckResult`, `HealthStatus`, `HealthCheckRegistration`, and the `IHealthChecksBuilder` interface — everything our extensions and check classes need to compile and run. The full package adds `IHealthCheckPublisher`, the hosted-service publisher implementation, and `services.AddHealthChecks()` itself; consuming applications already pull that in (it is a transitive of the `Microsoft.AspNetCore.Diagnostics.HealthChecks` integration they use to expose the `/health` endpoint). Depending on abstractions only keeps our packaging lean and avoids duplicating publisher/registration plumbing into the dependency closure.
-- `ProjectReference` to `ServiceConnect.Interfaces`. **Not** to `ServiceConnect`. The check only needs `IBus`.
+- `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions` — the *abstractions* package only. Contains `IHealthCheck`, `HealthCheckResult`, `HealthStatus`, `HealthCheckRegistration`, and `IHealthChecksBuilder` — everything the extensions and check classes need to compile and run. The full `Microsoft.Extensions.Diagnostics.HealthChecks` package adds publisher/registration plumbing that consuming applications already pull in via `Microsoft.AspNetCore.Diagnostics.HealthChecks`.
+- `ProjectReference` to `ServiceConnect.Interfaces`. **Not** to `ServiceConnect`, **not** to `ServiceConnect.Client.RabbitMQ`. The checks resolve `IBus`, `IConsumer`, `IProducer` — all of which live in `Interfaces`.
 
-**`ServiceConnect.HealthChecks.RabbitMQ.csproj`**:
+### Surface change in `ServiceConnect.Interfaces`
 
-- `ProjectReference` to `ServiceConnect.HealthChecks` (transitively brings in the abstractions package and the `Interfaces` reference).
-- `ProjectReference` to `ServiceConnect.Client.RabbitMQ` (the RabbitMQ-specific connection types).
-
-### Surface change in `ServiceConnect.Client.RabbitMQ`
-
-Promote `ProducerConnection.IsHealthy()` to public surface:
+Add one property to `IProducer` (in [src/ServiceConnect.Interfaces/Bus/IProducer.cs](src/ServiceConnect.Interfaces/Bus/IProducer.cs)):
 
 ```csharp
-namespace ServiceConnect.Client.RabbitMQ;
-
-public interface IProducerConnection
-{
-    bool IsHealthy();
-}
+/// <summary>
+/// Gets whether the producer is currently connected and ready to publish or send.
+/// </summary>
+/// <remarks>
+/// Returns <see langword="false"/> before the first publish/send call (the producer
+/// connects lazily) and after a connection drop until the next reconnect. Mirrors
+/// <see cref="IConsumer.IsConnected"/>.
+/// </remarks>
+bool IsHealthy { get; }
 ```
 
-`ProducerConnection` (which already exists and is what is registered in DI today) implements `IProducerConnection`. The DI registration changes from `AddSingleton<ProducerConnection>` to `AddSingleton<IProducerConnection, ProducerConnection>`, plus — if any internal consumer of the concrete type still needs it directly — a `services.AddSingleton(sp => (ProducerConnection)sp.GetRequiredService<IProducerConnection>())` shim. The implementation work will check whether any internal call site requires the concrete type and either keep that shim or change the call site to depend on the interface; either is acceptable.
+Implementation in [src/ServiceConnect.Client.RabbitMQ/Producer/Producer.cs](src/ServiceConnect.Client.RabbitMQ/Producer/Producer.cs):
 
-The interface is deliberately minimal (one method). It is *not* a publish-side counterpart to `IServiceConnectConnection` — it is just the slice of `ProducerConnection` that has to be visible from outside the assembly to support a health check. Anything else stays internal.
+```csharp
+public bool IsHealthy => _producerConnection.IsHealthy();
+```
 
-This is the same shape of small public-surface promotion done for `MessageTypeExchangeName` in commit `5f87d039`.
+`ProducerConnection.IsHealthy()` itself stays `internal`. The connection-layer types are not promoted; only the `IProducer` surface gains a member.
+
+This is a smaller change than the original spec proposed (which invented an `IProducerConnection` in the RabbitMQ assembly). It puts the readable surface where it belongs: alongside `IConsumer.IsConnected`, in the same transport-agnostic interfaces project, with symmetrical naming.
 
 ### Public API of `ServiceConnect.HealthChecks`
 
@@ -122,82 +118,68 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
         CancellationToken cancellationToken = default);
 }
 
+public sealed class ConsumerConnectionHealthCheck : IHealthCheck
+{
+    public ConsumerConnectionHealthCheck(IConsumer consumer);
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class ProducerConnectionHealthCheck : IHealthCheck
+{
+    public ProducerConnectionHealthCheck(IProducer producer);
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+
 public static class HealthChecksBuilderExtensions
 {
-    public static IHealthChecksBuilder AddServiceConnect(
+    public static IHealthChecksBuilder AddServiceConnectBus(
         this IHealthChecksBuilder builder,
         string name = "serviceconnect-bus",
         HealthStatus failureStatus = HealthStatus.Unhealthy,
         IEnumerable<string>? tags = null,
         TimeSpan? timeout = null);
-}
-```
 
-`AddServiceConnect` registers a single `HealthCheckRegistration` whose factory resolves `BusConsumingHealthCheck` from the `IServiceProvider` (which in turn resolves `IBus`). Tags, failure status, and timeout flow through to the registration verbatim. The implementation lives in a few dozen lines.
-
-### Public API of `ServiceConnect.HealthChecks.RabbitMQ`
-
-```csharp
-namespace ServiceConnect.HealthChecks.RabbitMQ;
-
-public sealed class RabbitMqConsumerConnectionHealthCheck : IHealthCheck
-{
-    public RabbitMqConsumerConnectionHealthCheck(IServiceConnectConnection connection);
-    public Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context,
-        CancellationToken cancellationToken = default);
-}
-
-public sealed class RabbitMqProducerConnectionHealthCheck : IHealthCheck
-{
-    public RabbitMqProducerConnectionHealthCheck(IProducerConnection connection);
-    public Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context,
-        CancellationToken cancellationToken = default);
-}
-
-public static class HealthChecksBuilderExtensions
-{
-    public static IHealthChecksBuilder AddServiceConnectRabbitMQ(
+    public static IHealthChecksBuilder AddServiceConnectConsumer(
         this IHealthChecksBuilder builder,
-        string consumerName = "serviceconnect-rabbitmq-consumer",
-        string producerName = "serviceconnect-rabbitmq-producer",
+        string name = "serviceconnect-consumer",
+        HealthStatus failureStatus = HealthStatus.Unhealthy,
+        IEnumerable<string>? tags = null,
+        TimeSpan? timeout = null);
+
+    public static IHealthChecksBuilder AddServiceConnectProducer(
+        this IHealthChecksBuilder builder,
+        string name = "serviceconnect-producer",
         HealthStatus failureStatus = HealthStatus.Unhealthy,
         IEnumerable<string>? tags = null,
         TimeSpan? timeout = null);
 }
 ```
 
-`AddServiceConnectRabbitMQ` uses DI introspection to decide what to register:
-
-1. Read `builder.Services` (the underlying `IServiceCollection`).
-2. If a registration for `IServiceConnectConnection` exists, register `RabbitMqConsumerConnectionHealthCheck` under `consumerName`.
-3. If a registration for `IProducerConnection` exists, register `RabbitMqProducerConnectionHealthCheck` under `producerName`.
-4. If neither registration exists, the call is a silent no-op. We do not throw (which would penalise composition order — `AddHealthChecks` before `UseRabbitMQ`) and we do not log (no `ILogger` is available at `IHealthChecksBuilder` extension time without building a temporary `IServiceProvider`, which is an unwarranted side-effect for a registration call). The diagnostic signal is the empty `/health/ready` endpoint at runtime, which is the same signal every other ecosystem health-checks library exposes for the same misconfiguration. The docs name this case explicitly so the on-call engineer knows what to look for.
-
-The introspection is a `services.Any(d => d.ServiceType == typeof(...))` check at registration time. It is not a runtime introspection — by the time `AddServiceConnectRabbitMQ` is called, `services.AddServiceConnect(...).UseRabbitMQ(...)` has already produced its `ServiceDescriptor` entries.
-
-Tags, failure status, and timeout are applied to *every* check the call registers. Per-check tags are intentionally not supported — the K8s probe model treats consumer and producer readiness as a single "ready to do RabbitMQ work" concern and tagging them identically is the right default. A user who needs different tags per check can call `AddCheck<T>` directly with the public health-check classes (which is the standard escape hatch).
+Each method registers exactly one `HealthCheckRegistration`. Tags, failure status, name, and timeout flow through verbatim. No DI introspection. The user calls only the methods that match what their host actually does.
 
 ### Steady-state semantics
 
 | Check | Healthy when | Unhealthy when | Description string |
 |---|---|---|---|
 | `BusConsumingHealthCheck` | `IBus.IsConsuming == true` | `IBus.IsConsuming == false` | `"Bus is consuming."` / `"Bus is not consuming."` |
-| `RabbitMqConsumerConnectionHealthCheck` | `IServiceConnectConnection.IsConnected() == true` | `IServiceConnectConnection.IsConnected() == false` | `"RabbitMQ consumer connection is open."` / `"RabbitMQ consumer connection is closed."` |
-| `RabbitMqProducerConnectionHealthCheck` | `IProducerConnection.IsHealthy() == true` | `IProducerConnection.IsHealthy() == false` | `"RabbitMQ producer connection is open."` / `"RabbitMQ producer connection is closed."` |
+| `ConsumerConnectionHealthCheck` | `IConsumer.IsConnected == true` | `IConsumer.IsConnected == false` | `"Consumer connection is open."` / `"Consumer connection is closed."` |
+| `ProducerConnectionHealthCheck` | `IProducer.IsHealthy == true` | `IProducer.IsHealthy == false` | `"Producer connection is open."` / `"Producer connection is closed."` |
 
-All three checks are synchronous in body and return `Task.FromResult<HealthCheckResult>` — there is no `async`/`await`, no I/O, no allocations beyond the `HealthCheckResult` struct construction. `cancellationToken` is honoured trivially (an inspection that takes no time cannot meaningfully cancel mid-flight) but it is accepted on the signature for `IHealthCheck` conformance.
+All three checks are synchronous in body and return `Task.FromResult<HealthCheckResult>` — no `async`/`await`, no I/O, no allocations beyond the `HealthCheckResult` struct construction. `cancellationToken` is honoured trivially (an inspection that takes no time cannot meaningfully cancel mid-flight) but is accepted on the signature for `IHealthCheck` conformance.
 
-Why no active probing: `AspNetCore.HealthChecks.RabbitMQ`'s common pattern is to open a channel per probe, which competes with real traffic and amplifies failure modes (a probe interval of 5s × N replicas ≈ steady channel churn against the broker). The RabbitMQ client we use already maintains an event-driven view of the connection state — `IsOpen` and the equivalent flags reflect the most recent shutdown / blocked / unblocked event. Surfacing that view is honest, costs nothing, and is what production-quality clients have done for years (the official RabbitMQ .NET examples use the same model).
+**Two timing footnotes worth documenting** so on-call engineers do not chase ghosts:
 
-A consequence to call out: a Healthy result means *the last known state of the connection was open*. If the connection has just dropped and the client has not yet processed the shutdown event, there is a small (millisecond-scale) window during which a probe can still report Healthy. This window is dwarfed by the K8s probe interval and — more importantly — is the same window that any in-process check has, regardless of implementation. We document this in `observability.mdx`.
+1. **Producer "before first publish"**: the RabbitMQ `Producer` connects lazily — the first call to `PublishAsync`/`SendAsync` triggers `EnsureConnectedAsync`. Until that first call, `IsHealthy` is `false` and the producer check reports Unhealthy. For hosts that publish anything at startup (most do — request/reply, heartbeats, subscribe-confirm) this resolves within milliseconds. For hosts that publish only in response to inbound messages, the producer check is Unhealthy until the first outbound message. This is intentional: a producer that has never connected is genuinely not ready, and pretending otherwise hides a real failure mode (broker unreachable from startup).
+2. **Last-known state, not active probe**: a Healthy result means *the last shutdown event observed by the transport client had not yet fired*. If a connection has just dropped and the client has not yet processed the shutdown event, there is a small (millisecond-scale) window during which a probe can still report Healthy. This window is dwarfed by the K8s probe interval and is the same window any in-process check has, regardless of implementation. The alternative — opening a probe channel per call — costs a per-replica-per-interval channel against the broker, which is not worth the marginal freshness.
 
 ### Wiring example (for the docs)
 
 ```csharp
 using ServiceConnect.HealthChecks;
-using ServiceConnect.HealthChecks.RabbitMQ;
 
 services.AddServiceConnect(builder =>
 {
@@ -205,15 +187,16 @@ services.AddServiceConnect(builder =>
 });
 
 services.AddHealthChecks()
-    .AddServiceConnect(tags: new[] { "live" })
-    .AddServiceConnectRabbitMQ(tags: new[] { "ready" });
+    .AddServiceConnectBus(tags: new[] { "live" })
+    .AddServiceConnectConsumer(tags: new[] { "ready" })
+    .AddServiceConnectProducer(tags: new[] { "ready" });
 
 // In Program.cs / Startup.cs:
 app.MapHealthChecks("/health/live",  new HealthCheckOptions { Predicate = c => c.Tags.Contains("live") });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 ```
 
-A publish-only host (no `AddConsumer<T>` registrations, so no `IServiceConnectConnection` in DI) gets the producer check on `/health/ready` and nothing else under that tag. A consume-only host (no producer wiring) gets the consumer check on `/health/ready` and nothing else under that tag. A host with neither produces a perpetually-empty `/health/ready` — that is the visible signal that the user called `AddServiceConnectRabbitMQ` before `UseRabbitMQ`, or that the RabbitMQ transport is not wired at all.
+For a publish-only host, drop the `AddServiceConnectConsumer` line. For a consume-only host, drop `AddServiceConnectProducer`. The bus liveness check is always meaningful as long as the bus is in the host (it reports `false` until the bus has started consuming, which `BusHostedService.StartAsync` blocks on at host startup).
 
 ## Testing
 
@@ -223,36 +206,34 @@ A publish-only host (no `AddConsumer<T>` registrations, so no `IServiceConnectCo
   - Returns Healthy when `IBus.IsConsuming == true`.
   - Returns Unhealthy when `IBus.IsConsuming == false`.
   - Honours caller-supplied `failureStatus` (`Degraded` flows through to the result, not `Unhealthy`).
-  - `Description` contains the expected text. Assertion is on a substring, not the whole string, so cosmetic copy edits do not break tests.
-- `RabbitMqConsumerConnectionHealthCheckTests.cs` — mirror of the above against `IServiceConnectConnection`.
-- `RabbitMqProducerConnectionHealthCheckTests.cs` — mirror of the above against `IProducerConnection`.
-- `HealthChecksBuilderExtensionsTests.cs` (core)
-  - `AddServiceConnect` registers a single `HealthCheckRegistration` with the configured name, tags, timeout, and `failureStatus`.
+  - `Description` contains the expected text. Assertion on a substring, not the whole string.
+- `ConsumerConnectionHealthCheckTests.cs` — mirror of the above against `IConsumer.IsConnected`.
+- `ProducerConnectionHealthCheckTests.cs` — mirror of the above against `IProducer.IsHealthy`.
+- `HealthChecksBuilderExtensionsTests.cs`
+  - `AddServiceConnectBus` registers a `HealthCheckRegistration` with the configured name, tags, timeout, and `failureStatus`.
   - Default name is `"serviceconnect-bus"`.
-- `RabbitMqHealthChecksBuilderExtensionsTests.cs`
-  - Both checks registered when `IServiceConnectConnection` and `IProducerConnection` are in DI.
-  - Only the consumer check registered when only `IServiceConnectConnection` is in DI.
-  - Only the producer check registered when only `IProducerConnection` is in DI.
-  - No checks registered when neither is in DI (silent no-op).
-  - Custom `consumerName` / `producerName` propagate through to the registrations.
+  - `AddServiceConnectConsumer` — same shape, default name `"serviceconnect-consumer"`.
+  - `AddServiceConnectProducer` — same shape, default name `"serviceconnect-producer"`.
+  - Custom names propagate through.
+  - `failureStatus = Degraded` makes the registration's `FailureStatus` return Degraded.
 
-### Integration test (`src/ServiceConnect.EndToEndTests/HealthChecks/`)
+### Integration test (`src/ServiceConnect.EndToEndTests/HealthChecks/HealthCheckEndToEndTests.cs`)
 
-One file: `HealthCheckEndToEndTests.cs`. One test method that exercises wiring against the existing Testcontainers RabbitMQ:
+One test method that exercises wiring against the existing Testcontainers RabbitMQ:
 
-1. Build a host with `services.AddServiceConnect(...).UseRabbitMQ(...)` plus `services.AddHealthChecks().AddServiceConnect().AddServiceConnectRabbitMQ()`.
-2. Start the host. Assert all three checks report Healthy via `HealthCheckService.CheckHealthAsync`.
+1. Build a host with `services.AddServiceConnect(...).UseRabbitMQ(...)` plus all three `AddServiceConnect…` calls.
+2. Trigger a publish at startup (so the producer connects). Assert all three checks report Healthy via `HealthCheckService.CheckHealthAsync`.
 3. Drop the broker connection (using whichever helper the existing E2E suite already uses to simulate broker outages — the implementation step locates this).
-4. Assert the two RabbitMQ checks flip to Unhealthy. The bus-consuming check stays Healthy: the bus is still notionally consuming and the RabbitMQ client is reconnecting under it. This is the *intended* shape — liveness ("the host is alive and trying") and readiness ("the broker is reachable right now") are different signals.
-5. Bring the connection back. Assert all three return to Healthy.
+4. Assert the consumer and producer checks flip to Unhealthy. The bus-consuming check stays Healthy: the bus is still notionally consuming, the transport client is reconnecting under it. This is the *intended* shape — liveness ("the host is alive and trying") and readiness ("the broker is reachable right now") are different signals.
+5. Bring the connection back. Trigger another publish (so the producer reconnects, since reconnection is also lazy on the first publish-after-drop). Assert all three return to Healthy.
 
-The test asserts steady states only — never transitions. We do not control the order in which the RabbitMQ client surfaces shutdown / reconnect events to the consumer vs producer connections, and asserting transition order would be flaky.
+The test asserts steady states only — never transitions. We do not control the order in which the transport client surfaces shutdown / reconnect events to the consumer vs producer connections.
 
-No additional E2E tests for publish-only or consume-only topologies. The `RabbitMqHealthChecksBuilderExtensionsTests` unit suite covers the registration-time decision tree, and adding broker-bound E2E variants of the same logic is duplication.
+No additional E2E tests for publish-only or consume-only topologies. The unit tests cover each `IHealthCheck`'s observation of its own interface independently, and adding broker-bound E2E variants is duplication.
 
 ### Existing tests
 
-`BusHostedServiceTests` and `BusLifecycleTests` already cover the bus-state surface that the liveness check observes. No additions there.
+`BusHostedServiceTests` and `BusLifecycleTests` already cover the bus-state surface that the liveness check observes. No additions there. `IConsumer.IsConnected` is tested in the consumer suite. The new `IProducer.IsHealthy` member needs at least one unit test in the producer suite confirming it delegates to `_producerConnection.IsHealthy()` (the spec's surface promotion is small enough that the dedicated unit test in `ProducerConnectionHealthCheckTests` arguably covers it via the mock, but a one-line `Producer`-side test that the property delegates is cheap insurance and matches the existing test style).
 
 ## Documentation
 
@@ -264,17 +245,17 @@ No additional E2E tests for publish-only or consume-only topologies. The `Rabbit
 
 The replacement section is structured as:
 
-1. **One-paragraph framing.** Three checks ship: bus liveness, RabbitMQ consumer-connection readiness, RabbitMQ producer-connection readiness. The first ships in `ServiceConnect.HealthChecks`; the latter two ship in `ServiceConnect.HealthChecks.RabbitMQ`.
+1. **One-paragraph framing.** Three opt-in `IHealthCheck` classes ship in `ServiceConnect.HealthChecks`. They observe `IBus`, `IConsumer`, `IProducer` — all transport-agnostic.
 2. **Install:**
    ```bash
    dotnet add package ServiceConnect.HealthChecks
-   dotnet add package ServiceConnect.HealthChecks.RabbitMQ
    ```
 3. **Wiring:** the snippet from *Wiring example* above, including `MapHealthChecks` predicates.
 4. **Per-check semantics table** mirroring the *Steady-state semantics* table above.
-5. **Publish-only / consume-only paragraph:** which checks are registered in which topology, and that an empty `/health/ready` endpoint means `AddServiceConnectRabbitMQ` was called before `UseRabbitMQ` (or there is no RabbitMQ wiring at all).
-6. **Steady-state caveat:** "Healthy means *the last known state of the connection was open*. We surface in-memory state from the RabbitMQ client's event stream rather than opening a probe channel per call. The cost of the alternative — channel churn against the broker on every probe interval — is not worth the marginal freshness."
-7. **Cross-link** to `Configuration` and `Hosting`, matching the page's existing "What comes next" discipline.
+5. **Topology paragraph:** "Pick the calls that match what your host does. A consume-only host omits `AddServiceConnectProducer`. A publish-only host omits `AddServiceConnectConsumer`. Hosts that do both call all three."
+6. **Producer-before-first-publish caveat:** quoted from *Steady-state semantics* footnote 1.
+7. **Steady-state caveat:** quoted from *Steady-state semantics* footnote 2.
+8. **Cross-link** to `Configuration` and `Hosting`, matching the page's existing "What comes next" discipline.
 
 ### Add pointer in `hosting.mdx`
 
@@ -282,23 +263,25 @@ One short paragraph (one or two sentences) under the most natural anchor in [hos
 
 ### No `examples/HealthChecks` project
 
-Out of scope. The wiring snippet in `observability.mdx` is sufficient.
+Out of scope.
 
 ## Implementation order
 
-1. Promote `ProducerConnection.IsHealthy()` to `IProducerConnection.IsHealthy()` in `ServiceConnect.Client.RabbitMQ`. Update DI registration. Confirm internal callers either move to the interface or are unaffected.
-2. Add `ServiceConnect.HealthChecks` project: csproj, nuspec, `BusConsumingHealthCheck`, `HealthChecksBuilderExtensions.AddServiceConnect`. Add to `slnx`.
-3. Add `ServiceConnect.HealthChecks.RabbitMQ` project: csproj, nuspec, two checks, `HealthChecksBuilderExtensions.AddServiceConnectRabbitMQ` with DI introspection. Add to `slnx`.
-4. Unit tests in `ServiceConnect.UnitTests/HealthChecks/` for all three checks and both extension methods.
-5. Integration test in `ServiceConnect.EndToEndTests/HealthChecks/HealthCheckEndToEndTests.cs`.
-6. Rewrite the observability doc section. Add the `hosting.mdx` pointer.
-7. Verify packaging: `dotnet pack` produces both `.nupkg`s with the expected dependency closure (abstractions only on the core package, RabbitMQ client on the transport package).
+1. **`IProducer.IsHealthy` promotion.** Add the property to the interface; implement on `Producer` as a delegating computed property; one-line unit test on `Producer` confirming delegation. Independently committable and revertable.
+2. **`ServiceConnect.HealthChecks` project skeleton.** csproj, nuspec, add to `slnx`. Empty implementation files, no checks yet — confirms the build, packaging, and slnx wiring are correct in isolation.
+3. **`BusConsumingHealthCheck` + `AddServiceConnectBus`** + unit tests for both.
+4. **`ConsumerConnectionHealthCheck` + `AddServiceConnectConsumer`** + unit tests for both.
+5. **`ProducerConnectionHealthCheck` + `AddServiceConnectProducer`** + unit tests for both.
+6. **`HealthChecksBuilderExtensionsTests` registration tests** — name, tags, timeout, failureStatus propagation across all three methods.
+7. **Integration test** at `ServiceConnect.EndToEndTests/HealthChecks/HealthCheckEndToEndTests.cs`.
+8. **Rewrite the observability doc section.** Add the `hosting.mdx` pointer.
+9. **Verify packaging:** `dotnet pack` produces `ServiceConnect.HealthChecks.nupkg` with the abstractions package as its only NuGet dependency and `ServiceConnect.Interfaces` as a project reference (which becomes the right NuGet dependency at pack time).
 
-Each step is independently revertable. Step 1 is a small `internal → public` promotion that can ship on its own; steps 2–7 build on it.
+Each step is independently committable and revertable. Step 1 is a small interface promotion that ships on its own; steps 2–9 build on it.
 
 ## Risks and open questions
 
-- **DI introspection robustness.** The `AddServiceConnectRabbitMQ` shape relies on `IServiceCollection.Any(d => d.ServiceType == typeof(...))` reflecting the registrations made by `UseRabbitMQ`. If a future refactor replaces named-singleton registration with keyed services or a different binding style, the introspection has to track. This is a maintenance contract worth a one-line note in the RabbitMQ extensions class.
-- **`IProducerConnection` interface naming.** The name is generic enough that a future second transport could collide on it. The interface lives in the `ServiceConnect.Client.RabbitMQ` namespace, so technically there is no clash, but if a future `Kafka` transport invents its own `IProducerConnection` we will have an unfortunate symmetry. Acceptable for now — the namespace differentiates — but worth flagging.
-- **Health check timeout default.** We pass `timeout: null` through to `HealthCheckRegistration`, which means "no timeout". Since our checks are O(1) state inspections, no timeout is fine — but a hostile DI registration could substitute a slow `IBus` mock that hangs `IsConsuming`. We accept this; it is the user's problem.
-- **Behaviour when `BusHostedService.StartAsync` has not yet completed.** In the `AutoStartConsuming = true` path, `IsConsuming` is `false` until `StartAsync` finishes. ASP.NET does not begin serving requests (and therefore does not poll `MapHealthChecks` endpoints) until startup completes, so under the standard wiring this window is invisible to probes. If a user takes an unusual setup — e.g. polling `HealthCheckService` from a different host — they will see the transient `false`. This is documented in the steady-state caveat paragraph.
+- **`IProducer.IsHealthy` semantics before first publish.** Documented above and in the docs section. The trade-off is between hiding a real "broker unreachable from startup" failure mode (which we reject) and reporting Unhealthy for hosts that don't publish at startup. K8s `initialDelaySeconds` typically masks the brief window for hosts that *do* publish at startup; hosts that genuinely publish only on inbound traffic should not register the producer check on a `ready` tag.
+- **Health check timeout default.** We pass `timeout: null` through to `HealthCheckRegistration`, which means "no timeout". Since our checks are O(1) state inspections, no timeout is fine — but a hostile DI registration could substitute a slow `IBus`/`IConsumer`/`IProducer` mock that hangs the property getter. We accept this; it is the user's problem.
+- **Behaviour when `BusHostedService.StartAsync` has not yet completed.** In the `AutoStartConsuming = true` path, `IsConsuming` is `false` until `StartAsync` finishes. ASP.NET does not begin serving requests until startup completes, so under the standard wiring this window is invisible to probes. Documented in the steady-state caveat paragraph.
+- **`IConsumer.IsConnected` already exists; we do not add a redundant member.** The spec relies on this being the canonical surface for consumer connection state. If a future refactor moves connection state off `IConsumer`, the consumer check has to track. The check class is one method long, so this is a small maintenance contract.
