@@ -51,4 +51,16 @@ public class BusConsumingHealthCheckTests
 
         Assert.Equal(HealthStatus.Degraded, result.Status);
     }
+
+    [Fact]
+    public async Task CheckHealthAsync_BusIsNotConsuming_NoRegistration_DefaultsToUnhealthy()
+    {
+        _bus.SetupGet(b => b.IsConsuming).Returns(false);
+
+        // HealthCheckContext with null Registration — exercises the
+        // `context.Registration?.FailureStatus ?? HealthStatus.Unhealthy` fallback path.
+        var result = await CreateSut().CheckHealthAsync(new HealthCheckContext());
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+    }
 }
