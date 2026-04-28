@@ -16,6 +16,7 @@
     <Project Path="ServiceConnect.EndToEndTests/ServiceConnect.EndToEndTests.csproj" />
     <Project Path="ServiceConnect.UnitTests/ServiceConnect.UnitTests.csproj" />
   </Folder>
+  <Project Path="ServiceConnect.HealthChecks/ServiceConnect.HealthChecks.csproj" />
   <Project Path="ServiceConnect.Interfaces/ServiceConnect.Interfaces.csproj" />
   <Project Path="ServiceConnect.Telemetry/ServiceConnect.Telemetry.csproj" />
   <Project Path="ServiceConnect/ServiceConnect.csproj" />

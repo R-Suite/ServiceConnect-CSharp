@@ -20,6 +20,7 @@
         <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
         <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
         <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj" />
+        <ProjectReference Include="..\ServiceConnect.HealthChecks\ServiceConnect.HealthChecks.csproj" />
         <ProjectReference Include="..\ServiceConnect.Persistence.InMemory\ServiceConnect.Persistence.InMemory.csproj" />
         <ProjectReference Include="..\ServiceConnect.Persistence.MongoDb\ServiceConnect.Persistence.MongoDb.csproj" />
         <ProjectReference Include="..\ServiceConnect.Telemetry\ServiceConnect.Telemetry.csproj" />
