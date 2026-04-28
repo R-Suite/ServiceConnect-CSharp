@@ -51,4 +51,29 @@ public static class HealthChecksBuilderExtensions
             tags,
             timeout));
     }
+
+    /// <summary>
+    /// Registers a health check that reports Healthy when the producer connection
+    /// is open (<see cref="ServiceConnect.Interfaces.IProducer.IsHealthy"/>).
+    /// </summary>
+    /// <remarks>
+    /// The producer connects lazily on the first publish/send call. Hosts that
+    /// do not publish at startup should not register this check on a readiness
+    /// tag — it would report Unhealthy until the first outbound message.
+    /// </remarks>
+    public static IHealthChecksBuilder AddServiceConnectProducer(
+        this IHealthChecksBuilder builder,
+        string name = "serviceconnect-producer",
+        HealthStatus failureStatus = HealthStatus.Unhealthy,
+        IEnumerable<string>? tags = null,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.Add(new HealthCheckRegistration(
+            name,
+            sp => ActivatorUtilities.CreateInstance<ProducerConnectionHealthCheck>(sp),
+            failureStatus,
+            tags,
+            timeout));
+    }
 }
