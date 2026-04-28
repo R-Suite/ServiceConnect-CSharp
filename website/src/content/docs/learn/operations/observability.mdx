@@ -133,11 +133,55 @@ The framework injects W3C `traceparent`/`tracestate` headers onto every outgoing
 
 For bespoke headers that aren't tracing — redaction, a tenant stamp — the [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) API remains the right hook. Filters and telemetry compose; they don't compete.
 
-## No health checks
+## Health checks
 
-ServiceConnect does not ship an `IHealthCheck` implementation. For a consumer, the useful liveness signal is "the bus is consuming, and the broker connection is open" — which the existence of the `BusHostedService` and the absence of startup exceptions ought to tell you. For a readiness signal, the one worth adding is "I can reach RabbitMQ" — a standard RabbitMQ health check from your usual library is enough.
+`ServiceConnect.HealthChecks` ships three opt-in `IHealthCheck` classes for `Microsoft.Extensions.Diagnostics.HealthChecks`:
 
-If you need more than that, wrap `IBus.IsConsuming` in a custom `IHealthCheck` pointed at the container's bus.
+| Check | Default name | Observes |
+|---|---|---|
+| `BusConsumingHealthCheck` | `serviceconnect-bus` | `IBus.IsConsuming` |
+| `ConsumerConnectionHealthCheck` | `serviceconnect-consumer` | `IConsumer.IsConnected` |
+| `ProducerConnectionHealthCheck` | `serviceconnect-producer` | `IProducer.IsHealthy` |
+
+The package is transport-agnostic — it depends only on `ServiceConnect.Interfaces`. All three checks are O(1) state inspections; they do not open broker channels or perform AMQP round-trips per probe.
+
+```bash
+dotnet add package ServiceConnect.HealthChecks
+```
+
+### Wiring
+
+Pick the calls that match what your host actually does. A consume-only host omits `AddServiceConnectProducer`; a publish-only host omits `AddServiceConnectConsumer`; hosts that do both call all three.
+
+```csharp
+using ServiceConnect.HealthChecks;
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(opts => opts.Host = "rabbit");
+});
+
+services.AddHealthChecks()
+    .AddServiceConnectBus(tags: ["live"])
+    .AddServiceConnectConsumer(tags: ["ready"])
+    .AddServiceConnectProducer(tags: ["ready"]);
+
+app.MapHealthChecks("/health/live",  new HealthCheckOptions { Predicate = c => c.Tags.Contains("live") });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
+```
+
+### Steady-state semantics
+
+Each check inspects the *last known* state from the transport client's event stream. There is no active probing — that would compete with real traffic and amplify failure modes (a probe interval of 5 seconds × N replicas would mean steady channel churn against the broker for what is, in practice, a one-bit signal).
+
+Two timing footnotes worth knowing:
+
+- **The producer connects lazily.** `IProducer.IsHealthy` is `false` before the host has published or sent its first message. For hosts that publish anything at startup (request/reply, heartbeats, subscribe-confirm), this resolves within milliseconds; for hosts that publish only in response to inbound traffic, the producer check is Unhealthy until the first outbound message. If your host falls in the second category, **do not put the producer check on the `ready` tag** — it would block readiness until the first inbound message arrives. Use `AddServiceConnectConsumer` only for that topology.
+- **The window between connection drop and event observation.** When the broker connection drops, there is a small (millisecond-scale) gap before the client raises its shutdown event and `IsConnected` / `IsHealthy` flip to `false`. A probe firing inside that gap can still see Healthy. This is shorter than any K8s probe interval and is the same gap any in-process check has, regardless of implementation.
+
+### Custom checks
+
+If you need anything more than the shipped three checks — a custom predicate over multiple bus state pieces, a different failure-status mapping, integration with a non-`Microsoft.Extensions.Diagnostics.HealthChecks` framework — implement `IHealthCheck` directly against `IBus`, `IConsumer`, or `IProducer`. The shipped check classes are sealed; their source is short enough to copy as a starting point.
 
 ## Putting it together
 

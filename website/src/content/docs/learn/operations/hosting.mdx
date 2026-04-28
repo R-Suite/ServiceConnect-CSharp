@@ -107,6 +107,10 @@ If you want graceful degradation ("log, keep the HTTP server up, retry in the ba
 
 A handler that crosses the deadline is abandoned — its message was not acked, so the broker will redeliver it on the next start. That is the right trade-off: cutting the wait is always safe because the messaging infrastructure will replay the work; cutting it is *not* safe if your handler has non-idempotent side effects. See [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for the idempotency argument.
 
+## Health checks
+
+The `ServiceConnect.HealthChecks` package ships `IHealthCheck` classes for bus, consumer, and producer state, registered through `IHealthChecksBuilder` extensions on `services.AddHealthChecks()`. See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/#health-checks) for the wiring details.
+
 ## What comes next
 
 - [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — the full set of knobs this page references.
