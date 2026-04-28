@@ -85,6 +85,7 @@ public class HealthCheckEndToEndTests(MessagingFixture fixture)
         finally
         {
             await bus.StopConsumingAsync();
+            await bus.DisposeAsync();
             if (provider is IAsyncDisposable asyncProvider)
             {
                 await asyncProvider.DisposeAsync();
