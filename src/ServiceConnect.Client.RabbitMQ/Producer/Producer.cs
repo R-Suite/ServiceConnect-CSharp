@@ -405,6 +405,9 @@ public sealed class Producer : IProducer
     /// </summary>
     public long MaximumMessageSize { get; }
 
+    /// <inheritdoc />
+    public bool IsHealthy => _producerConnection.IsHealthy();
+
     /// <summary>
     /// Wraps <c>IChannel.BasicPublishAsync</c> with a configurable timeout.
     /// If the broker ack does not arrive within <see cref="_publishTimeout"/>, the waiting task

@@ -33,6 +33,16 @@ public interface IProducer : IAsyncDisposable
     long MaximumMessageSize { get; }
 
     /// <summary>
+    /// Gets whether the producer is currently connected and ready to publish or send.
+    /// </summary>
+    /// <remarks>
+    /// Returns <see langword="false"/> before the first publish/send call (the producer
+    /// connects lazily) and after a connection drop until the next reconnect. Mirrors
+    /// <see cref="IConsumer.IsConnected"/>.
+    /// </remarks>
+    bool IsHealthy { get; }
+
+    /// <summary>
     /// Disconnects the producer from the broker.
     /// </summary>
     Task DisconnectAsync(CancellationToken cancellationToken = default);
