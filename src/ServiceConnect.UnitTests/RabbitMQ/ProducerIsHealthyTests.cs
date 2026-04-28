@@ -1,9 +1,9 @@
-using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.UnitTests;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.RabbitMQ;
@@ -35,20 +35,6 @@ public class ProducerIsHealthyTests
         return new Producer(transport.Object, queue.Object, bus.Object, NullLogger<Producer>.Instance);
     }
 
-    private static object GetProducerConnection(Producer producer)
-    {
-        var field = typeof(Producer).GetField("_producerConnection",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        return field.GetValue(producer)!;
-    }
-
-    private static void SetField<T>(object target, string fieldName, T value)
-    {
-        var field = target.GetType().GetField(fieldName,
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
-        field.SetValue(target, value);
-    }
-
     [Fact]
     public void IsHealthy_FreshProducer_ReturnsFalse()
     {
@@ -60,13 +46,11 @@ public class ProducerIsHealthyTests
     public void IsHealthy_ConnectedAndChannelOpen_ReturnsTrue()
     {
         var producer = CreateProducer();
-        var connection = GetProducerConnection(producer);
-
         var openChannel = new Mock<IChannel>();
         openChannel.SetupGet(c => c.IsOpen).Returns(true);
 
-        SetField(connection, "_connected", true);
-        SetField(connection, "_model", openChannel.Object);
+        ProducerInternals.SetField(producer, "_connected", true);
+        ProducerInternals.SetField(producer, "_model", openChannel.Object);
 
         Assert.True(producer.IsHealthy);
     }
@@ -75,13 +59,11 @@ public class ProducerIsHealthyTests
     public void IsHealthy_ConnectedButChannelClosed_ReturnsFalse()
     {
         var producer = CreateProducer();
-        var connection = GetProducerConnection(producer);
-
         var closedChannel = new Mock<IChannel>();
         closedChannel.SetupGet(c => c.IsOpen).Returns(false);
 
-        SetField(connection, "_connected", true);
-        SetField(connection, "_model", closedChannel.Object);
+        ProducerInternals.SetField(producer, "_connected", true);
+        ProducerInternals.SetField(producer, "_model", closedChannel.Object);
 
         Assert.False(producer.IsHealthy);
     }
