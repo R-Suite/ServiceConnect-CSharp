@@ -15,6 +15,7 @@ ServiceConnect is versioned per-package. Each package ships independently on NuG
   - [`ServiceConnect.Persistence.MongoDb`](https://www.nuget.org/packages/ServiceConnect.Persistence.MongoDb) — MongoDB persistence for process managers and aggregators.
   - [`ServiceConnect.Persistence.InMemory`](https://www.nuget.org/packages/ServiceConnect.Persistence.InMemory) — in-process persistence for tests and samples.
   - [`ServiceConnect.Telemetry`](https://www.nuget.org/packages/ServiceConnect.Telemetry) — OpenTelemetry instrumentation hooks.
+  - [`ServiceConnect.HealthChecks`](https://www.nuget.org/packages/ServiceConnect.HealthChecks) — `IHealthCheck` integrations for `Microsoft.Extensions.Diagnostics.HealthChecks`.
 
 ## Picking a version
 
@@ -33,7 +34,7 @@ ServiceConnect targets modern .NET only — by design.
 - **`net8.0`** — previous LTS. End of Microsoft support: **November 10, 2026**.
 - **`net10.0`** — current LTS. End of Microsoft support: November 14, 2028. The library opts into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; `net8.0` paths take guarded fallbacks.
 
-All published packages multi-target both: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, and `ServiceConnect.Filters.MessageDeduplication`.
+All published packages multi-target both: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, `ServiceConnect.HealthChecks`, and `ServiceConnect.Filters.MessageDeduplication`.
 
 We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
 
@@ -62,6 +63,10 @@ Caller-supplied headers can no longer override the framework's reserved keys. `D
 ### End-to-end distributed tracing
 
 `ServiceConnect.Telemetry` now injects the W3C `traceparent`/`tracestate` onto outgoing messages (it already extracted on consume). Spans are tagged with the correct OTel messaging semconv — `publish` for pub/sub and `send` for point-to-point — so dashboards aggregate each traffic shape separately. Trace-context extraction now iterates via the dictionary interface, so header bags wrapped as `ReadOnlyDictionary` no longer silently lose the trace context. See [Observability](/ServiceConnect-CSharp/learn/operations/observability/).
+
+### Health checks
+
+`ServiceConnect.HealthChecks` is a new optional package that ships three opt-in `IHealthCheck` classes for `Microsoft.Extensions.Diagnostics.HealthChecks`: `BusConsumingHealthCheck` (observes `IBus.IsConsuming`), `ConsumerConnectionHealthCheck` (observes `IConsumer.IsConnected`), and `ProducerConnectionHealthCheck` (observes `IProducer.IsHealthy` — a new property promoted to the `IProducer` interface in this release, mirroring the existing `IConsumer.IsConnected`). The package is transport-agnostic and registered through standard `IHealthChecksBuilder` extension methods. See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/#health-checks) for wiring and the [`ServiceConnect.HealthChecks` reference](/ServiceConnect-CSharp/reference/healthchecks/) for the full API surface.
 
 ### Correlation ID reliably on the wire
 

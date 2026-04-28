@@ -1,0 +1,165 @@
+---
+title: ServiceConnect.HealthChecks
+description: Three opt-in IHealthCheck classes for Microsoft.Extensions.Diagnostics.HealthChecks — bus liveness, consumer connection, producer connection. Transport-agnostic.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`ServiceConnect.HealthChecks` is the optional package that ships health-check classes for `Microsoft.Extensions.Diagnostics.HealthChecks`. It contains three sealed `IHealthCheck` implementations and three matching extension methods on `IHealthChecksBuilder`. The package is transport-agnostic — it depends only on `ServiceConnect.Interfaces`. A future transport that implements `IBus`, `IConsumer`, and `IProducer` works with these checks unchanged.
+
+Each check is O(1), allocation-light, and side-effect-free: it inspects last-known in-process state through a public interface property (`IBus.IsConsuming`, `IConsumer.IsConnected`, `IProducer.IsHealthy`). No broker channels are opened per probe, no AMQP round-trips are issued.
+
+See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/) for the conceptual walk-through, K8s liveness/readiness wiring, and the producer-lazy-connect caveat.
+
+## Installation
+
+```bash
+dotnet add package ServiceConnect.HealthChecks
+```
+
+Then call any combination of `AddServiceConnectBus`, `AddServiceConnectConsumer`, and `AddServiceConnectProducer` on `services.AddHealthChecks()` — pick the methods that match what your host actually does.
+
+## HealthChecksBuilderExtensions
+
+Static class containing the three registration extension methods. Each registers exactly one `HealthCheckRegistration`; tags, failure status, name, and timeout flow through verbatim.
+
+### `AddServiceConnectBus`
+
+```csharp
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name = "serviceconnect-bus",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+```
+
+Registers `BusConsumingHealthCheck`. The factory uses `ActivatorUtilities.CreateInstance<BusConsumingHealthCheck>` so `IBus` is resolved from the DI container at probe time.
+
+**Parameters**
+- `builder` — the `IHealthChecksBuilder` returned by `services.AddHealthChecks()`.
+- `name` — registration name. Defaults to `"serviceconnect-bus"`.
+- `failureStatus` — status to return when the bus is not consuming. Defaults to `Unhealthy`.
+- `tags` — tags attached to the registration (use these with `MapHealthChecks` predicates to split liveness/readiness endpoints).
+- `timeout` — per-check timeout. Defaults to none — the check is O(1) and does not need one.
+
+### `AddServiceConnectConsumer`
+
+```csharp
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name = "serviceconnect-consumer",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+```
+
+Registers `ConsumerConnectionHealthCheck`. Same factory pattern as `AddServiceConnectBus`. The default name is `"serviceconnect-consumer"`. Skip this on publish-only hosts.
+
+### `AddServiceConnectProducer`
+
+```csharp
+public static IHealthChecksBuilder AddServiceConnectProducer(
+    this IHealthChecksBuilder builder,
+    string name = "serviceconnect-producer",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+```
+
+Registers `ProducerConnectionHealthCheck`. The default name is `"serviceconnect-producer"`. Skip this on consume-only hosts.
+
+<Aside type="caution" title="Producer connects lazily">
+  `IProducer.IsHealthy` is `false` until the host has published or sent its first message — the producer's broker connection is established on demand, not at startup. Hosts that publish only in response to inbound traffic should not register this check on a `ready` tag, because readiness would block until the first inbound message arrives. For that topology, use `AddServiceConnectConsumer` only.
+</Aside>
+
+## Health-check classes
+
+Each class is `public sealed`, takes its observed interface via constructor with `ArgumentNullException.ThrowIfNull`, and returns `Task.FromResult<HealthCheckResult>` from a synchronous method body.
+
+### `BusConsumingHealthCheck`
+
+```csharp
+public sealed class BusConsumingHealthCheck : IHealthCheck
+{
+    public BusConsumingHealthCheck(IBus bus);
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+```
+
+Returns `HealthCheckResult.Healthy("Bus is consuming.")` when `IBus.IsConsuming` is `true`, otherwise `new HealthCheckResult(failureStatus, "Bus is not consuming.")` where `failureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy`.
+
+`IsConsuming` flips to `true` after `IBus.StartConsumingAsync` succeeds and back to `false` after `StopConsumingAsync` (which is terminal — the bus cannot be restarted). For the standard `BusHostedService` wiring, `StartConsumingAsync` is awaited during host startup, so the check returns `Healthy` for the lifetime of a normally-running host.
+
+### `ConsumerConnectionHealthCheck`
+
+```csharp
+public sealed class ConsumerConnectionHealthCheck : IHealthCheck
+{
+    public ConsumerConnectionHealthCheck(IConsumer consumer);
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+```
+
+Returns `HealthCheckResult.Healthy("Consumer connection is open.")` when `IConsumer.IsConnected` is `true`, otherwise `new HealthCheckResult(failureStatus, "Consumer connection is closed.")`.
+
+`IConsumer.IsConnected` reflects the transport client's last-known view of the broker connection. When the broker drops, the client raises a shutdown event and the property flips to `false`; on reconnect, it flips back. There is a millisecond-scale gap between the underlying connection drop and the event being observed — a probe inside that window can still see `Healthy`. This is the same gap any in-process check has, regardless of implementation.
+
+### `ProducerConnectionHealthCheck`
+
+```csharp
+public sealed class ProducerConnectionHealthCheck : IHealthCheck
+{
+    public ProducerConnectionHealthCheck(IProducer producer);
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+```
+
+Returns `HealthCheckResult.Healthy("Producer connection is open.")` when `IProducer.IsHealthy` is `true`, otherwise `new HealthCheckResult(failureStatus, "Producer connection is closed.")`.
+
+`IProducer.IsHealthy` is `false` before the first publish/send (the producer connects lazily) and after a connection drop until the next reconnect. See the caveat under `AddServiceConnectProducer` above.
+
+## Usage
+
+### Registration
+
+```csharp
+using ServiceConnect.HealthChecks;
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(opts => opts.Host = "rabbit");
+});
+
+services.AddHealthChecks()
+    .AddServiceConnectBus(tags: ["live"])
+    .AddServiceConnectConsumer(tags: ["ready"])
+    .AddServiceConnectProducer(tags: ["ready"]);
+
+app.MapHealthChecks("/health/live",  new HealthCheckOptions { Predicate = c => c.Tags.Contains("live") });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
+```
+
+### Topology choices
+
+- **Consume-only** — drop `AddServiceConnectProducer`.
+- **Publish-only** — drop both `AddServiceConnectConsumer` and `AddServiceConnectBus` (a host that never starts consuming would report `IsConsuming` permanently `false`).
+- **Both** — call all three.
+
+### Custom checks
+
+The shipped check classes are `sealed`. If you need a different shape — a custom predicate over multiple bus state pieces, a different failure-status mapping, integration with a non-`Microsoft.Extensions.Diagnostics.HealthChecks` framework — implement `IHealthCheck` directly against `IBus`, `IConsumer`, or `IProducer`. The shipped classes are short enough to copy as a starting point.
+
+## See also
+
+- [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/#health-checks) — concept and wiring walk-through
+- [Hosting](/ServiceConnect-CSharp/learn/operations/hosting/) — how the bus interacts with the .NET hosted-service lifecycle
+- [`AddServiceConnect`](../bus/add-serviceconnect/) — registration entry point
