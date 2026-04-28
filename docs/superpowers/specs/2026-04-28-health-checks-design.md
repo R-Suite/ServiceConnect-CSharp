@@ -76,7 +76,7 @@ Added to `src/ServiceConnect.slnx`. Inherits TFMs from `Directory.Build.props` (
 
 **`ServiceConnect.HealthChecks.csproj`**:
 
-- `Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions` — the *abstractions* package only. Contains `IHealthCheck`, `HealthCheckResult`, `HealthStatus`, `HealthCheckRegistration`, and `IHealthChecksBuilder` — everything the extensions and check classes need to compile and run. The full `Microsoft.Extensions.Diagnostics.HealthChecks` package adds publisher/registration plumbing that consuming applications already pull in via `Microsoft.AspNetCore.Diagnostics.HealthChecks`.
+- `Microsoft.Extensions.Diagnostics.HealthChecks` — the full package, version 9.0.0. Contains `IHealthCheck`, `HealthCheckResult`, `HealthStatus`, `HealthCheckRegistration` (from the abstractions, transitively), `IHealthChecksBuilder`, and `ActivatorUtilities` (from `Microsoft.Extensions.DependencyInjection`, transitively) — everything the extensions and check classes need to compile and run. We considered the abstractions-only package; it does not contain `IHealthChecksBuilder`, so it cannot host extension methods on that type.
 - `ProjectReference` to `ServiceConnect.Interfaces`. **Not** to `ServiceConnect`, **not** to `ServiceConnect.Client.RabbitMQ`. The checks resolve `IBus`, `IConsumer`, `IProducer` — all of which live in `Interfaces`.
 
 ### Surface change in `ServiceConnect.Interfaces`
@@ -196,7 +196,7 @@ app.MapHealthChecks("/health/live",  new HealthCheckOptions { Predicate = c => c
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 ```
 
-For a publish-only host, drop the `AddServiceConnectConsumer` line. For a consume-only host, drop `AddServiceConnectProducer`. The bus liveness check is always meaningful as long as the bus is in the host (it reports `false` until the bus has started consuming, which `BusHostedService.StartAsync` blocks on at host startup).
+For a publish-only host, drop both the `AddServiceConnectConsumer` and `AddServiceConnectBus` lines (a host that never starts consuming would report `IsConsuming` permanently `false`). For a consume-only host, drop `AddServiceConnectProducer`. Hosts that do both call all three.
 
 ## Testing
 
@@ -219,15 +219,14 @@ For a publish-only host, drop the `AddServiceConnectConsumer` line. For a consum
 
 ### Integration test (`src/ServiceConnect.EndToEndTests/HealthChecks/HealthCheckEndToEndTests.cs`)
 
-One test method that exercises wiring against the existing Testcontainers RabbitMQ:
+One file: `HealthCheckEndToEndTests.cs`. One test method that exercises wiring against the existing Testcontainers RabbitMQ:
 
-1. Build a host with `services.AddServiceConnect(...).UseRabbitMQ(...)` plus all three `AddServiceConnect…` calls.
-2. Trigger a publish at startup (so the producer connects). Assert all three checks report Healthy via `HealthCheckService.CheckHealthAsync`.
-3. Drop the broker connection (using whichever helper the existing E2E suite already uses to simulate broker outages — the implementation step locates this).
-4. Assert the consumer and producer checks flip to Unhealthy. The bus-consuming check stays Healthy: the bus is still notionally consuming, the transport client is reconnecting under it. This is the *intended* shape — liveness ("the host is alive and trying") and readiness ("the broker is reachable right now") are different signals.
-5. Bring the connection back. Trigger another publish (so the producer reconnects, since reconnection is also lazy on the first publish-after-drop). Assert all three return to Healthy.
+1. Build a host with `services.AddServiceConnect(...).UseRabbitMQ(...)` plus `services.AddHealthChecks().AddServiceConnectBus().AddServiceConnectConsumer().AddServiceConnectProducer()`.
+2. Start the host (so `IsConsuming` becomes true and the consumer connection opens).
+3. Publish at least one message via `IBus.PublishAsync(...)` so the producer's lazy connect runs and `IProducer.IsHealthy` becomes true.
+4. Resolve `HealthCheckService` from the service provider and assert all three checks report Healthy via `HealthCheckService.CheckHealthAsync`. Confirm the report has exactly three entries with the default names (`serviceconnect-bus`, `serviceconnect-consumer`, `serviceconnect-producer`), each Healthy.
 
-The test asserts steady states only — never transitions. We do not control the order in which the transport client surfaces shutdown / reconnect events to the consumer vs producer connections.
+**Scope reduction (recorded after implementation):** The original draft of this spec also called for the test to drop the broker connection mid-test and assert the consumer/producer checks flip to Unhealthy while the bus-consuming check stays Healthy. The existing E2E suite has no broker-drop helper, and building one is its own piece of work, so the shipped E2E test is positive-path only. The negative path is fully covered by the unit tests in Tasks 3–5 against mocked `IBus`/`IConsumer`/`IProducer`. The drop/reconnect transition assertion remains a useful future addition once a broker-drop helper exists; until then this gap is acknowledged.
 
 No additional E2E tests for publish-only or consume-only topologies. The unit tests cover each `IHealthCheck`'s observation of its own interface independently, and adding broker-bound E2E variants is duplication.
 
@@ -275,7 +274,7 @@ Out of scope.
 6. **`HealthChecksBuilderExtensionsTests` registration tests** — name, tags, timeout, failureStatus propagation across all three methods.
 7. **Integration test** at `ServiceConnect.EndToEndTests/HealthChecks/HealthCheckEndToEndTests.cs`.
 8. **Rewrite the observability doc section.** Add the `hosting.mdx` pointer.
-9. **Verify packaging:** `dotnet pack` produces `ServiceConnect.HealthChecks.nupkg` with the abstractions package as its only NuGet dependency and `ServiceConnect.Interfaces` as a project reference (which becomes the right NuGet dependency at pack time).
+9. **Verify packaging:** `dotnet pack` produces `ServiceConnect.HealthChecks.nupkg` with `Microsoft.Extensions.Diagnostics.HealthChecks` 9.0.0 as its only direct NuGet dependency and `ServiceConnect.Interfaces` as a project reference (which becomes the right NuGet dependency at pack time).
 
 Each step is independently committable and revertable. Step 1 is a small interface promotion that ships on its own; steps 2–9 build on it.
 
