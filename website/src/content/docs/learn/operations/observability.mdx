@@ -151,7 +151,7 @@ dotnet add package ServiceConnect.HealthChecks
 
 ### Wiring
 
-Pick the calls that match what your host actually does. A consume-only host omits `AddServiceConnectProducer`; a publish-only host omits `AddServiceConnectConsumer`; hosts that do both call all three.
+Pick the calls that match what your host actually does. A consume-only host omits `AddServiceConnectProducer`; a publish-only host omits both `AddServiceConnectConsumer` and `AddServiceConnectBus` (a host that never starts consuming would report `IsConsuming` permanently `false`); hosts that do both call all three.
 
 ```csharp
 using ServiceConnect.HealthChecks;
