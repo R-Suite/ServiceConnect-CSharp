@@ -24,19 +24,34 @@ public class MessageDeduplicationPersistorMongoDb : IMessageDeduplicationPersist
         if (!string.IsNullOrEmpty(settings.MongoDbCertPath) ||
             !string.IsNullOrEmpty(settings.MongoDbCertBase64))
         {
+            // X509CertificateLoader is the .NET 9+ recommended path; the X509Certificate2
+            // constructor overloads it replaces are still available on net8.0 and produce
+            // an equivalent certificate object.
             X509Certificate2 cert;
             if (!string.IsNullOrEmpty(settings.MongoDbCertPath))
             {
+#if NET9_0_OR_GREATER
                 cert = string.IsNullOrEmpty(settings.MongoDbCertPassphrase)
                     ? X509CertificateLoader.LoadCertificateFromFile(settings.MongoDbCertPath)
                     : X509CertificateLoader.LoadPkcs12FromFile(settings.MongoDbCertPath, settings.MongoDbCertPassphrase);
+#else
+                cert = string.IsNullOrEmpty(settings.MongoDbCertPassphrase)
+                    ? new X509Certificate2(settings.MongoDbCertPath)
+                    : new X509Certificate2(settings.MongoDbCertPath, settings.MongoDbCertPassphrase);
+#endif
             }
             else
             {
                 var certBytes = Convert.FromBase64String(settings.MongoDbCertBase64!);
+#if NET9_0_OR_GREATER
                 cert = string.IsNullOrEmpty(settings.MongoDbCertPassphrase)
                     ? X509CertificateLoader.LoadCertificate(certBytes)
                     : X509CertificateLoader.LoadPkcs12(certBytes, settings.MongoDbCertPassphrase);
+#else
+                cert = string.IsNullOrEmpty(settings.MongoDbCertPassphrase)
+                    ? new X509Certificate2(certBytes)
+                    : new X509Certificate2(certBytes, settings.MongoDbCertPassphrase);
+#endif
             }
 
             clientSettings.UseTls = true;

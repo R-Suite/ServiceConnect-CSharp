@@ -117,18 +117,22 @@ Each example ships with a `run.sh` and a `docker-compose.yml` at `examples/docke
 
 ServiceConnect targets modern .NET only — by design.
 
-- **`net8.0`** — current LTS. The minimum.
-- **`net10.0`** — current STS. Used to opt into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; net8.0 paths take guarded fallbacks.
+- **`net8.0`** — previous LTS. End of Microsoft support: **November 10, 2026**.
+- **`net10.0`** — current LTS. End of Microsoft support: November 14, 2028. Used to opt into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; `net8.0` paths take guarded fallbacks.
 
-The library packages (`ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.*`, `ServiceConnect.Telemetry`) multi-target both. `ServiceConnect.Filters.MessageDeduplication` is currently `net10.0`-only.
+All published packages — `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.*`, `ServiceConnect.Telemetry`, and `ServiceConnect.Filters.MessageDeduplication` — multi-target both.
 
 We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
 
 - The hot paths use BCL features that are awkward to polyfill cleanly.
-- The remaining LTS/STS surface (.NET 8 + .NET 10) covers every supported Microsoft runtime with active patch coverage at time of writing.
+- The remaining LTS surface (.NET 8 + .NET 10) covers every Microsoft runtime with active patch coverage at the time of writing.
 - Consumers on .NET Framework or out-of-support .NET Core SKUs can pin earlier ServiceConnect releases that targeted those runtimes; we are not adding support back to the current line.
 
 If your scenario needs `netstandard2.1` (or you'd like to upstream the work), please open an issue.
+
+### When `net8.0` will be dropped
+
+.NET 8 reaches end of Microsoft support on **November 10, 2026**. ServiceConnect will drop the `net8.0` target framework in the first major version released after that date — current consumers on .NET 8 should plan their migration to .NET 10 LTS during the second half of 2026 or pin to a pre-drop ServiceConnect major.
 
 ## Other requirements
 

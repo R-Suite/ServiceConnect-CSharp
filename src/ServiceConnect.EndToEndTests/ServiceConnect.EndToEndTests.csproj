@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <!-- Keep this E2E project on net10.0 only. Multi-targeting would require
+             rewriting several Moq Setup expression-trees that omit the optional
+             CancellationToken (CS0854 under C# 12). The libraries under test are
+             multi-targeted to net8.0;net10.0, so the runtime behaviour on the
+             older TFM is exercised by consumers — duplicating that exercise in
+             the E2E suite isn't worth the maintenance tax. -->
         <TargetFrameworks>net10.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>

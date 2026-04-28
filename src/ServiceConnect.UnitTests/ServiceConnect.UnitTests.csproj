@@ -1,5 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <!-- Tests stay net10.0-only. Multi-targeting requires editing every Moq Setup
+             expression that omits the optional CancellationToken (CS0854 is enforced
+             under C# 12; relaxed under C# 14) — ~50 sites across this suite alone, with
+             ongoing maintenance overhead and no real correctness gain. The libraries
+             under test are multi-targeted to net8.0;net10.0, so consumer scenarios
+             exercise the older TFM at runtime. -->
         <TargetFrameworks>net10.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
