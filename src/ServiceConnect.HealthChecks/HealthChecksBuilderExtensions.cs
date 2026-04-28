@@ -31,4 +31,24 @@ public static class HealthChecksBuilderExtensions
             tags,
             timeout));
     }
+
+    /// <summary>
+    /// Registers a health check that reports Healthy when the consumer connection
+    /// is open (<see cref="ServiceConnect.Interfaces.IConsumer.IsConnected"/>).
+    /// </summary>
+    public static IHealthChecksBuilder AddServiceConnectConsumer(
+        this IHealthChecksBuilder builder,
+        string name = "serviceconnect-consumer",
+        HealthStatus failureStatus = HealthStatus.Unhealthy,
+        IEnumerable<string>? tags = null,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.Add(new HealthCheckRegistration(
+            name,
+            sp => ActivatorUtilities.CreateInstance<ConsumerConnectionHealthCheck>(sp),
+            failureStatus,
+            tags,
+            timeout));
+    }
 }
