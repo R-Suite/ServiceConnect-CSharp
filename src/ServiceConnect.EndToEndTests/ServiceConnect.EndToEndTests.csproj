@@ -20,6 +20,7 @@
         <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\ServiceConnect.HealthChecks\ServiceConnect.HealthChecks.csproj" />
         <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
         <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
         <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj" />
