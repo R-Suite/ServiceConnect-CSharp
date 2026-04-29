@@ -260,6 +260,10 @@ public class MessageDispatcherTests
         _mockFilterPipeline.Verify(
             f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
             Times.Never);
+        // Existing finally-block behaviour unchanged: AfterConsumingFilters still runs.
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
