@@ -232,6 +232,27 @@ public class MessageBusWriteStreamTests
     }
 
     [Fact]
+    public async Task WriteAsync_HeaderAllocationOrSendThrow_SetsFaultedFlag()
+    {
+        var producer = new Mock<IProducer>();
+        var sendException = new InvalidOperationException("simulated post-increment throw");
+        producer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(),
+                It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(sendException);
+
+        var stream = new MessageBusWriteStream(producer.Object, "queue", typeof(string));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            stream.WriteAsync([1, 2, 3], 0, 3, CancellationToken.None));
+
+        var secondAttempt = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            stream.WriteAsync([4, 5, 6], 0, 3, CancellationToken.None));
+        Assert.Contains("faulted", secondAttempt.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task CloseAsync_TokenCancelledDuringClosePacketSend_PropagatesOce()
     {
         // The close-packet send blocks until the token is cancelled. If CloseAsync does NOT

@@ -100,19 +100,19 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 
             var packetNum = Interlocked.Increment(ref _packetNumber) - 1;
 
-            // Pre-size the dict to avoid rehash during the copy. A separate dict
-            // per packet is required because the producer may mutate / enqueue the
-            // dictionary asynchronously, so reuse would race with concurrent writes.
-            var headers = new Dictionary<string, string>(_baseHeaders.Count + 1, StringComparer.Ordinal);
-            foreach (var kvp in _baseHeaders)
-            {
-                headers[kvp.Key] = kvp.Value;
-            }
-
-            headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
-
             try
             {
+                // Pre-size the dict to avoid rehash during the copy. A separate dict
+                // per packet is required because the producer may mutate / enqueue the
+                // dictionary asynchronously, so reuse would race with concurrent writes.
+                var headers = new Dictionary<string, string>(_baseHeaders.Count + 1, StringComparer.Ordinal);
+                foreach (var kvp in _baseHeaders)
+                {
+                    headers[kvp.Key] = kvp.Value;
+                }
+
+                headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
+
                 await _producer.SendBytesAsync(_endpoint, _messageType, packet, headers, cancellationToken).ConfigureAwait(false);
             }
             catch
@@ -120,6 +120,8 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
                 // The reserved packet number is now stranded — there is no safe way for the
                 // caller to retry without producing a permanent gap, so refuse all further
                 // writes. The exception still propagates so the caller learns the send failed.
+                // See learn/operations/cancellation: any throw between Increment and SendBytesAsync,
+                // including OOM during dict alloc, must trigger the fault flag.
                 Volatile.Write(ref _faulted, 1);
                 throw;
             }
