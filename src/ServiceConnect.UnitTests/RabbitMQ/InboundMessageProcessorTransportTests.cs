@@ -207,4 +207,21 @@ public sealed class InboundMessageProcessorTransportTests
         var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None);
         Assert.True(processed);
     }
+
+    [Fact]
+    public async Task ProcessAsync_TerminalFailurePublishThrowsBrokerUnreachable_RethrowsForBrokerRedelivery()
+    {
+        var channelMock = new Mock<IChannel>();
+        var loggerMock = new Mock<ILogger>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+
+        var transportException = new BrokerUnreachableException(new Exception("inner"));
+
+        var processor = MakeTerminalPublishProcessor(channelMock, transportException, loggerMock);
+
+        var thrown = await Assert.ThrowsAsync<BrokerUnreachableException>(() =>
+            processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None));
+
+        Assert.Same(transportException, thrown);
+    }
 }
