@@ -21,6 +21,22 @@ internal sealed class OutboundHeaderBuilder(
 {
     private const int StampedHeaderCount = 11;
 
+    // Producer-stamped keys: callers cannot override these (the framework owns them).
+    // MessageId is deliberately NOT in this set — caller-supplied MessageId (e.g. Bus's
+    // authoritative stamp) is preserved by the !ContainsKey check in BuildHeaders below.
+    private static readonly HashSet<string> OverwrittenHeaderKeys = new(StringComparer.Ordinal)
+    {
+        HeaderKeys.DestinationAddress,
+        HeaderKeys.MessageType,
+        HeaderKeys.SourceAddress,
+        HeaderKeys.TimeSent,
+        HeaderKeys.SourceMachine,
+        HeaderKeys.TypeName,
+        HeaderKeys.FullTypeName,
+        HeaderKeys.ConsumerType,
+        HeaderKeys.Language,
+    };
+
     // Cache (FullName, AssemblyQualifiedName) per Type — these are constant for a given Type.
     // Static so a process running multiple Producer instances pays the reflection cost once.
     private static readonly ConcurrentDictionary<Type, (string FullName, string AQN)> TypeNameCache = new();
@@ -42,6 +58,13 @@ internal sealed class OutboundHeaderBuilder(
         {
             foreach (var kvp in headers)
             {
+                if (OverwrittenHeaderKeys.Contains(kvp.Key))
+                {
+                    _logger.LogWarning(
+                        "Caller-supplied reserved header '{Key}' will be overwritten by the framework",
+                        kvp.Key);
+                    continue;
+                }
                 result[kvp.Key] = kvp.Value;
             }
         }
