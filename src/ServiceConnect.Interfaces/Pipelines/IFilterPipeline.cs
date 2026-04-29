@@ -22,4 +22,14 @@ public interface IFilterPipeline
     /// filter blocked the message; otherwise <see cref="FilterAction.Continue"/>.
     /// </summary>
     Task<FilterAction> ExecuteAfterConsumingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes all on-consumed-successfully filters. Returns
+    /// <see cref="FilterAction.Stop"/> if any filter halted the pipeline;
+    /// otherwise <see cref="FilterAction.Continue"/>. The dispatcher invokes this
+    /// stage only after a successful handler — failures and unhandled messages
+    /// skip it. <see cref="FilterAction.Stop"/> halts further on-success filters
+    /// but does not flip the dispatch result to failure.
+    /// </summary>
+    Task<FilterAction> ExecuteOnConsumedSuccessfullyFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default);
 }

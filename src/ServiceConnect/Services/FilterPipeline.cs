@@ -29,6 +29,12 @@ public sealed class FilterPipeline(IPipelineConfiguration config, ConsumeScopeAc
         return ExecuteFiltersAsync(config.AfterConsumingFilters, envelope, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task<FilterAction> ExecuteOnConsumedSuccessfullyFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    {
+        return ExecuteFiltersAsync(config.OnConsumedSuccessfullyFilters, envelope, cancellationToken);
+    }
+
     private async Task<FilterAction> ExecuteFiltersAsync(IReadOnlyList<Type> filterTypes, Envelope envelope, CancellationToken cancellationToken)
     {
         if (filterTypes == null || filterTypes.Count == 0)

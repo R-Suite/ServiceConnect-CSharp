@@ -235,4 +235,50 @@ public class FilterPipelineTests
 
         mockFilter.Verify(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    [Fact]
+    public async Task ExecuteOnConsumedSuccessfullyFiltersAsync_WithNoFilters_ReturnsContinue()
+    {
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope);
+        Assert.Equal(FilterAction.Continue, result);
+    }
+
+    [Fact]
+    public async Task ExecuteOnConsumedSuccessfullyFiltersAsync_WhenFilterContinues_PipelineContinues()
+    {
+        var mockFilter = new Mock<FakeFilter1>();
+        mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Continue);
+
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(mockFilter.Object);
+
+        _config.OnConsumedSuccessfullyFilters.Add(typeof(FakeFilter1));
+
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope);
+
+        Assert.Equal(FilterAction.Continue, result);
+    }
+
+    [Fact]
+    public async Task ExecuteOnConsumedSuccessfullyFiltersAsync_WhenFilterStops_PipelineStops()
+    {
+        var mockFilter = new Mock<FakeFilter1>();
+        mockFilter.Setup(f => f.ProcessAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
+
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(FakeFilter1)))
+            .Returns(mockFilter.Object);
+
+        _config.OnConsumedSuccessfullyFilters.Add(typeof(FakeFilter1));
+
+        var envelope = new Envelope();
+        var result = await _pipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope);
+
+        Assert.Equal(FilterAction.Stop, result);
+    }
 }
