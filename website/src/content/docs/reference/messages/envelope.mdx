@@ -25,6 +25,10 @@ Gets the headers accumulated by the pipeline.
 
 **Remarks.** Header values are untyped because transports such as RabbitMQ expose bytes, strings, and numeric values through a single `object`-typed channel. Code that reads a header should defensively cast or decode.
 
+<Aside type="note" title="Reading type information from headers">
+  `MessageType` carries the **operation name** — `"Publish"`, `"Send"`, or `"ByteStream"` — not the CLR type. For type information use `TypeName` (the type's `FullName`, e.g. `"OrderService.Messages.OrderPlaced"`) or `FullTypeName` (its `AssemblyQualifiedName`). Both are stamped server-authoritatively on outbound and cannot be overridden by caller-supplied headers.
+</Aside>
+
 ---
 
 ### `Body`
@@ -61,9 +65,9 @@ public sealed class AuditLoggingMiddleware(ILogger<AuditLoggingMiddleware> logge
             envelope.Headers.Count,
             envelope.Body.Length);
 
-        if (envelope.Headers.TryGetValue("MessageType", out var headerType))
+        if (envelope.Headers.TryGetValue("TypeName", out var headerType))
         {
-            logger.LogDebug("MessageType header: {MessageType}", headerType);
+            logger.LogDebug("TypeName header: {TypeName}", headerType);
         }
 
         return next(messageBytes, messageType, message, headers, envelope, cancellationToken);

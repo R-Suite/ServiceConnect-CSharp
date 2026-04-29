@@ -12,6 +12,26 @@ When `HandleAsync` throws, the consumer inspects a `RetryCount` header on the de
 - If `RetryCount < MaxRetries`, the message is republished to a dedicated **retry queue** (`<queueName>.Retries`) with `RetryCount` incremented. That queue has a per-message TTL of `RetryDelay` milliseconds — when the TTL fires, RabbitMQ dead-letters the message back into the main queue, where the consumer picks it up again.
 - If `RetryCount >= MaxRetries`, the message is published to the **error queue** (`ErrorQueueName`, default `"errors"`) with an `Exception` header stamped on. It is not redelivered automatically.
 
+### Retry topology invariant: the DLX outlives the consumer
+
+The retry dead-letter exchange is always declared with `autoDelete: false`, even when the main consumer queue is auto-deleted. This guarantees that messages dwelling in the retry queue have somewhere to land when their TTL expires — without this invariant, retried messages would be silently dropped after a consumer disconnects.
+
+### Customising the retry queue: framework-wins on two keys
+
+The retry queue itself can be tuned via `RabbitMQSettingKeys.RetryQueueArguments` — for example, capping retry depth with `x-max-length` or switching to `x-queue-mode: lazy` for memory-bound brokers:
+
+```csharp
+transport.SetClientSetting(
+    RabbitMQSettingKeys.RetryQueueArguments,
+    new Dictionary<string, object>
+    {
+        ["x-max-length"]  = 10_000,
+        ["x-queue-mode"]  = "lazy",
+    });
+```
+
+ServiceConnect manages two retry-queue AMQP arguments authoritatively: `x-dead-letter-exchange` and `x-message-ttl`. If the supplied dictionary includes either key, the caller-supplied value is overridden with the framework value at provisioning time and a Debug log records the override. Other `x-*` arguments flow through unchanged.
+
 `MaxRetries` and `RetryDelay` live on the transport configuration:
 
 ```csharp

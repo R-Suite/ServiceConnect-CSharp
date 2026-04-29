@@ -53,6 +53,10 @@ Sends a message to a specific endpoint or to the queue resolved from the configu
 
 **Remarks.** If no destination is supplied via `options` and no queue mapping is registered for the message type, the call throws.
 
+<Aside type="note" title="Multi-endpoint Send">
+  When `Send` resolves to multiple endpoints — either via [`SendOptions.EndPoints`](../../messages/options/#endpoints) or because [`AddQueueMapping`](../../configuration/iqueueconfiguration/#addqueuemapping) registered several queues for the message type — each delivery is an independent on-wire message with a distinct `MessageId` and `TimeSent`. Use `CorrelationId` to correlate deliveries that originated from the same logical bus operation; it remains constant across the fan-out.
+</Aside>
+
 ---
 
 ### `SendRequestAsync<T, TReply>`

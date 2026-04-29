@@ -116,6 +116,28 @@ The in-memory process-manager and aggregator stores previously set an absolute 2
 
 Inbound middleware and filters are now resolved per-message from a scoped `IServiceProvider` rather than pinning a transient or scoped instance for the bus lifetime. Startup validation mirrors this on the inbound side — lifetime misconfigurations fail fast instead of manifesting as stale dependencies at runtime.
 
+### RabbitMQ producer and topology hardening
+
+A pass over the RabbitMQ producer's outbound path and the retry-queue declaration. None of these are wire-breaking; they fix observable behaviour, improve diagnostics, or remove surprises latent in earlier point releases.
+
+**Per-delivery `MessageId` for multi-endpoint Send.** Every endpoint resolved by `AddQueueMapping` (or supplied through `SendOptions.EndPoints`) now receives a delivery with a distinct `MessageId` and `TimeSent`. Correlate cross-endpoint deliveries via `CorrelationId`, which remains constant across the fan-out.
+
+**Retry DLX always durable.** The retry dead-letter exchange is now always declared with `autoDelete: false`, regardless of the consumer queue's auto-delete setting. Without this invariant, messages dwelling in the retry queue would be silently dropped after the consumer disconnected. Pre-existing topologies are unaffected on next provisioning.
+
+**Caller-supplied retry args overridden with framework values.** `x-dead-letter-exchange` and `x-message-ttl` in `RabbitMQSettingKeys.RetryQueueArguments` are now overridden silently with framework values at retry-queue provisioning time. A Debug log records each override. Pre-fix, supplying either key threw `ArgumentException` from the AMQP arg merge.
+
+**Publish timeout no longer holds the publish lock during reconnect.** A timed-out publish now marks the connection for reset; the next publish drives the actual reconnect off-lock. Concurrent publishers are no longer blocked behind the worst-case retry budget (~10 minutes by default).
+
+**Producer entry-point null guards.** `Producer.PublishAsync` / `SendAsync` / `SendBytesAsync` now throw `ArgumentNullException` with a useful `ParamName` for null `type` / `message` / `packet` arguments, instead of `NullReferenceException` from later array access.
+
+**Priority-conversion error context.** When a `Priority` header value is non-convertible, the log now includes the offending value and its runtime type instead of a generic "Error setting message priority". The publish continues without priority (advisory semantics preserved).
+
+**Reserved header overwrite warning.** `OutboundHeaderBuilder` now logs a Warning when a caller supplies a reserved header (`DestinationAddress`, `MessageType`, `SourceAddress`, `TimeSent`, `SourceMachine`, `TypeName`, `FullTypeName`, `ConsumerType`, `Language`) — same behaviour as the Bus's reserved-header check, just at a different layer. `MessageId` is preserved for callers that pre-stamp it (e.g. the Bus's authoritative stamp).
+
+**Connection-factory setting errors include key context.** Setting-conversion failures (`Port`, `HeartbeatTime`) now throw `InvalidOperationException` with the setting key, value, and runtime type instead of the raw `FormatException` / `InvalidCastException` / `OverflowException`. The original exception is preserved as `InnerException`.
+
+**`MessageType` header semantics formalised.** The `MessageType` header is the **operation flag** — `"Publish"`, `"Send"`, or `"ByteStream"` — not a CLR type name. **No observable wire change**: the on-wire value has always been one of those three strings. For type information, read `TypeName` (the type's `FullName`) or `FullTypeName` (its `AssemblyQualifiedName`). Downstream auditors that read `MessageType` expecting a type FullName based on out-of-date documentation should switch to `FullTypeName`. Caller-supplied `MessageType` in `IBus.Publish`/`Send` `options.Headers` now flows through to the producer instead of being silently dropped (the producer continues to overwrite it before the wire) — no code-level breakage; existing callers see no change.
+
 ### API-shape changes
 
 - **`PublishOptions`** is now a `readonly record struct` matching `SendOptions`. Concurrent `PublishAsync` callers can no longer mutate a shared instance between construction and the async read.
