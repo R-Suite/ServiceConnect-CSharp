@@ -1,76 +1,120 @@
 ---
 title: Idempotency
-description: Why duplicates happen in ServiceConnect, how to design handlers that tolerate them, and when to add infrastructure-level deduplication.
+description: Why duplicates happen in ServiceConnect, how to design handlers that tolerate them, and when to add a filter-based deduplication backstop.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-ServiceConnect delivers messages at least once. Most of the time you receive
-a message exactly once, but occasionally you will see the same message twice
-— the broker redelivers when a consumer NACKs or disconnects before
-acknowledging. If the handler's side effects are not idempotent, the second
-delivery corrupts state.
+ServiceConnect delivers messages **at least once**. Most of the time you receive
+a message exactly once, but occasionally you will see the same message twice:
+the broker redelivers when a consumer NACKs or disconnects before acknowledging.
+If your handler's side effects are not idempotent, the second delivery corrupts
+state.
 
-There are two places to defend against this, and they are not exclusive.
+There are two places to defend against this, and they are not mutually
+exclusive.
 
 ## Handler-side idempotency (preferred)
 
 Design the handler so that processing the same message twice produces the same
 end state as processing it once. This is the most reliable defence because it
 survives every kind of duplicate — broker redelivery, publisher retries, manual
-requeues.
+requeues — and requires no external infrastructure.
 
 Common patterns:
 
 - **Natural keys and upserts.** `INSERT ... ON CONFLICT DO NOTHING` against a
   table with a unique index on the message's business id. The second delivery
   does nothing.
-- **Domain-specific dedup tables.** Record the `MessageId` in the same
-  transaction as the side effect, keyed and indexed. Before doing work, check
-  the table.
-- **Outbox / inbox pattern.** The handler writes the processed-id alongside
-  the outgoing events in a single transaction. Subsequent deliveries find the
-  inbox row and skip.
+- **Check-then-act in the same transaction.** Write the `MessageId` alongside
+  the side effect in a single database transaction. Before doing work, check
+  whether the id is already present.
+- **Outbox / inbox pattern.** The handler writes the processed id alongside any
+  outgoing events in one transaction. Subsequent deliveries find the inbox row
+  and skip.
 
-The common thread: the dedup check lives inside the same consistency boundary
-as the side effect.
+The common thread: the dedup check lives inside the **same consistency boundary**
+as the side effect — no window between the check and the write.
 
-## Infrastructure-level deduplication
+## Filter-based deduplication (for non-idempotent side effects)
 
-When the side effect lives outside your consistency boundary (calling a
-third-party API, sending an email, charging a card), you cannot always make
-the handler idempotent. For these cases ServiceConnect provides the
-`ServiceConnect.Filters.MessageDeduplication` filter package.
+When the side effect is outside your consistency boundary — calling a
+third-party API, sending an email, taking a payment — you cannot always make
+the handler idempotent. For these cases, build a pair of per-consumer filters
+that wrap the pipeline:
 
-The filter records outgoing `MessageId`s in a shared persistor (MongoDB is the
-cross-process option) and blocks incoming messages whose `Redelivered` header
-is `true` and whose `MessageId` is already recorded. The handler never sees
-the redelivery.
+1. **Before-consuming filter** — checks whether the incoming `MessageId` is
+   already in the dedup store. If it is, return `FilterAction.Stop` to
+   short-circuit the pipeline without redelivering.
+2. **OnConsumedSuccessfully filter** — records the `MessageId` in the dedup
+   store only *after* the handler completes successfully.
 
-See the [filter reference](/ServiceConnect-CSharp/reference/filters/messagededuplication/) for
-configuration, persistor selection, and wiring, and the runnable
-[sample](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/MessageDeduplication)
-for an end-to-end demonstration.
+The `OnConsumedSuccessfully` stage is specifically designed for this use case:
+it fires only when the handler returned without throwing and the message was
+not unhandled, so a handler crash will not cause a key to be recorded
+prematurely — the broker will redeliver, and the before-filter will not find
+the id.
+
+```csharp
+// Register both ends of the pair
+services.AddSingleton<IDeduplicationStore, MyDeduplicationStore>();
+services.AddSingleton<DeduplicationCheckFilter>();
+services.AddSingleton<DeduplicationRecordFilter>();
+
+services.AddServiceConnect(builder =>
+{
+    // ...
+    builder.AddBeforeConsumingFilter<DeduplicationCheckFilter>();
+    builder.AddOnConsumedSuccessfullyFilter<DeduplicationRecordFilter>();
+});
+```
+
+A worked implementation is in the
+[`CustomFilterAndMiddleware` sample](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CustomFilterAndMiddleware).
+See the [`IFilter` reference](/ServiceConnect-CSharp/reference/filters/ifilter/)
+for the filter interface and all registration methods.
+
+<Aside type="caution">
+  **TOCTOU under contention.** A read-then-write dedup pattern is racy when two
+  deliveries race each other (rare, but possible with competing consumers at
+  high throughput). Production persistors should use atomic insert primitives —
+  a unique index plus duplicate-key detection — so only one writer wins without
+  silent data loss.
+</Aside>
+
+<Aside type="caution">
+  **Per-process vs. cross-process store.** An in-process dictionary deduplicates
+  only within a single replica. If you run multiple instances of the same
+  consumer, each replica has its own dictionary and a redelivered message may
+  land on a different replica than the one that first processed it. Use a shared
+  external store (MongoDB, Redis, or any database) when you run more than one
+  consumer replica.
+</Aside>
 
 <Aside type="note">
-  The filter only blocks *broker redeliveries*. It does not protect against a
-  misbehaving publisher that sends two messages with different `MessageId`s
-  for the same logical event — for that, use handler-side idempotency or
-  enforce dedup at the publisher.
+  **Broker redelivery vs. duplicate publish.** These are different problems.
+  Broker redelivery preserves the original `MessageId` — the broker resends the
+  same envelope. That is the canonical use case for this filter pair. Duplicate
+  publish from application code typically generates two messages with *different*
+  `MessageId`s for the same logical event; the filter pair will not stop those
+  because it never sees the same id twice. Prevent duplicate publishes at the
+  source.
 </Aside>
 
 ## Combining the two
 
-In practice, production services use both. Handler-side idempotency is
-correctness; infrastructure dedup is a performance optimisation (skip the
-work entirely) and a backstop for the cases where the handler's own check
-is expensive.
+In practice, production services use both defences. Handler-side idempotency is
+the correctness guarantee. The filter pair is a performance optimisation (skip
+the work entirely) and a backstop for the cases where handler-side idempotency
+is impractical.
 
 Rough rule:
 
-- Small, idempotent handlers → handler-side only.
-- Expensive or externally-visible side effects with cheap `MessageId` lookup
-  → both.
-- Purely external side effects with no natural idempotency key (e.g. sending
-  an SMS) → infrastructure filter is your only option short of redesigning
-  the downstream API.
+- **Small, idempotent handlers** — handler-side only. No extra infrastructure.
+- **Expensive or externally-visible side effects with a natural upsert key** —
+  both. The filter stops duplicates cheaply; the handler's own check handles any
+  that slip through.
+- **Purely external side effects with no natural idempotency key** (e.g. sending
+  an SMS) — filter pair is your primary option short of redesigning the
+  downstream API. Consider whether the external API offers an idempotency key
+  header you can derive from the `MessageId`.
