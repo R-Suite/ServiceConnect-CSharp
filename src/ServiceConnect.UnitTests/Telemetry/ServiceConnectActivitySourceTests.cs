@@ -14,15 +14,14 @@ public class ActivityListenerCollection { }
 public sealed class ServiceConnectActivitySourceTests : IDisposable
 {
     private readonly ActivityListener _listener;
+    private readonly ServiceConnectInstrumentationOptions _options = new();
+    private readonly IMessagingSystemAttributes _attrs = new RabbitMqMessagingSystemAttributes();
 
     public ServiceConnectActivitySourceTests()
     {
         _listener = new ActivityListener
         {
-            ShouldListenTo = src =>
-                src.Name == ServiceConnectActivitySource.PublishActivitySourceName
-                || src.Name == ServiceConnectActivitySource.ConsumeActivitySourceName
-                || src.Name == ServiceConnectActivitySource.SendActivitySourceName,
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
             Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             SampleUsingParentId = (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllData
         };
@@ -32,11 +31,11 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     public void Dispose()
     {
         // Reset user-configurable enrichers in case a test set them.
-        ServiceConnectActivitySource.Options.EnrichWithMessage = null;
-        ServiceConnectActivitySource.Options.EnrichWithMessageBytes = null;
-        ServiceConnectActivitySource.Options.EnablePublishTelemetry = true;
-        ServiceConnectActivitySource.Options.EnableConsumeTelemetry = true;
-        ServiceConnectActivitySource.Options.EnableSendTelemetry = true;
+        _options.EnrichWithMessage = null;
+        _options.EnrichWithMessageBytes = null;
+        _options.EnablePublishTelemetry = true;
+        _options.EnableConsumeTelemetry = true;
+        _options.EnableSendTelemetry = true;
         _listener.Dispose();
     }
 
@@ -52,7 +51,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Headers = { ["MessageId"] = "msg-1" }
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("orders publish", activity!.DisplayName);
@@ -76,7 +75,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Headers = { ["MessageId"] = "msg-1" }
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("OrderPlaced publish", activity!.DisplayName);
@@ -100,7 +99,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid()),
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("OrderPlaced publish", activity!.DisplayName);
@@ -118,7 +117,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("anonymous publish", activity!.DisplayName);
@@ -129,8 +128,10 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Publish_EnricherThrows_RecordsEnrichmentException()
     {
-        ServiceConnectActivitySource.Options.EnrichWithMessage =
-            (_, _) => throw new InvalidOperationException("boom");
+        var options = new ServiceConnectInstrumentationOptions
+        {
+            EnrichWithMessage = (_, _) => throw new InvalidOperationException("boom")
+        };
 
         var args = new PublishEventArgs
         {
@@ -138,7 +139,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("System.InvalidOperationException", activity!.GetTagItem("enrichment.exception"));
@@ -147,7 +148,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Publish_WhenTelemetryDisabled_ReturnsNull()
     {
-        ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
+        var options = new ServiceConnectInstrumentationOptions { EnablePublishTelemetry = false };
 
         var args = new PublishEventArgs
         {
@@ -155,7 +156,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, options, _attrs);
 
         Assert.Null(activity);
     }
@@ -169,7 +170,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.True(args.Headers.TryGetValue("traceparent", out var traceparent));
@@ -185,7 +186,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Publish_WhenTelemetryDisabled_AndNoAmbientActivity_DoesNotTouchHeaders()
     {
-        ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
+        var options = new ServiceConnectInstrumentationOptions { EnablePublishTelemetry = false };
 
         var args = new PublishEventArgs
         {
@@ -193,7 +194,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, options, _attrs);
 
         Assert.Null(activity);
         Assert.False(args.Headers.ContainsKey("traceparent"));
@@ -214,7 +215,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             }
         };
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("svc.inbox receive", activity!.DisplayName);
@@ -234,7 +235,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Headers = new Dictionary<string, object>()
         };
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("anonymous receive", activity!.DisplayName);
@@ -257,7 +258,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             }
         };
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal(traceId, activity!.TraceId.ToString());
@@ -283,7 +284,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Headers = new System.Collections.ObjectModel.ReadOnlyDictionary<string, object>(inner),
         };
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal(traceId, activity!.TraceId.ToString());
@@ -293,14 +294,14 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Consume_WhenTelemetryDisabled_ReturnsNull()
     {
-        ServiceConnectActivitySource.Options.EnableConsumeTelemetry = false;
+        var options = new ServiceConnectInstrumentationOptions { EnableConsumeTelemetry = false };
 
         var args = new ConsumeEventArgs
         {
             Headers = new Dictionary<string, object>()
         };
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, options, _attrs);
 
         Assert.Null(activity);
     }
@@ -319,7 +320,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = [1, 2, 3],
         };
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal(correlationId, activity!.GetTagItem(MessageConversationId));
@@ -336,7 +337,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
         // The DisplayName carries "send" for per-destination tracing; the messaging.operation
@@ -355,7 +356,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("anonymous send", activity!.DisplayName);
@@ -365,7 +366,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     [Fact]
     public void Send_WhenTelemetryDisabled_ReturnsNull()
     {
-        ServiceConnectActivitySource.Options.EnableSendTelemetry = false;
+        var options = new ServiceConnectInstrumentationOptions { EnableSendTelemetry = false };
 
         var args = new SendEventArgs
         {
@@ -373,7 +374,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, options, _attrs);
 
         Assert.Null(activity);
     }
@@ -387,7 +388,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.True(args.Headers.TryGetValue("traceparent", out var traceparent));
@@ -407,7 +408,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = null
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         // With an active listener the call starts an activity, making
         // Activity.Current non-null, so traceparent must be present.
@@ -419,7 +420,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     {
         // An outer (e.g. ASP.NET) ambient activity must propagate across the broker
         // even when ServiceConnect's own Publish spans are disabled.
-        ServiceConnectActivitySource.Options.EnablePublishTelemetry = false;
+        var options = new ServiceConnectInstrumentationOptions { EnablePublishTelemetry = false };
 
         // The existing listener (set up in the constructor) listens to ServiceConnect
         // sources; we need a separate listener for the ambient "ambient" source.
@@ -434,7 +435,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.NotNull(outerActivity); // Sanity: outer activity must be non-null to make Activity.Current non-null.
 
         var args = new PublishEventArgs { Exchange = "orders" };
-        using var scActivity = ServiceConnectActivitySource.Publish(args);
+        using var scActivity = ServiceConnectActivitySource.Publish(args, options, _attrs);
 
         Assert.Null(scActivity); // SC telemetry disabled → no SC span
         Assert.True(args.Headers.ContainsKey("traceparent")); // ambient context must be injected
@@ -444,7 +445,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     public void Send_WhenSendTelemetryDisabled_StillInjectsTraceparentFromAmbient()
     {
         // Send variant: symmetric to the Publish variant above.
-        ServiceConnectActivitySource.Options.EnableSendTelemetry = false;
+        var options = new ServiceConnectInstrumentationOptions { EnableSendTelemetry = false };
 
         using var ambientListener = new ActivityListener
         {
@@ -457,7 +458,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.NotNull(outerActivity);
 
         var args = new SendEventArgs { EndPoint = "svc.queue" };
-        using var scActivity = ServiceConnectActivitySource.Send(args);
+        using var scActivity = ServiceConnectActivitySource.Send(args, options, _attrs);
 
         Assert.Null(scActivity); // SC telemetry disabled → no SC span
         Assert.True(args.Headers.ContainsKey("traceparent")); // ambient context must be injected
@@ -473,11 +474,11 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         // AddException records details as an ActivityEvent named "exception", not as
         // activity-level tags, which is why we inspect Events rather than GetTagItem.
         var args = new PublishEventArgs { Exchange = "orders", Message = new Message(Guid.NewGuid()) };
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
         Assert.NotNull(activity);
 
         var ex = new InvalidOperationException("publish failed");
-        ServiceConnectActivitySource.SetError(activity, ex);
+        ServiceConnectActivitySource.SetError(activity, ex, _options);
 
         Assert.Equal(ActivityStatusCode.Error, activity!.Status);
         // SetStatus(Error, message) populates StatusDescription with the exception message.
@@ -500,7 +501,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     {
         // SetError must not throw when called with a null activity (e.g. telemetry disabled).
         var ex = new InvalidOperationException("oops");
-        var exception = Record.Exception(() => ServiceConnectActivitySource.SetError(null, ex));
+        var exception = Record.Exception(() => ServiceConnectActivitySource.SetError(null, ex, _options));
         Assert.Null(exception);
     }
 
@@ -556,7 +557,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Headers = new Dictionary<string, string>(),
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("queue-a,queue-b send", activity!.DisplayName);
@@ -576,7 +577,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Headers = new Dictionary<string, string>(),
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("queue-a,queue-b send", activity!.DisplayName);
@@ -595,7 +596,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Headers = new Dictionary<string, string>(),
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
         Assert.Equal("anonymous send", activity!.DisplayName);
@@ -613,7 +614,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = null,
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
         var operation = activity!.GetTagItem(MessagingOperation);
@@ -638,7 +639,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = null,
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args, linked);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs, linked);
 
         Assert.NotNull(activity);
         // Producer span inherits ambient trace, NOT the linked trace.
@@ -667,7 +668,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = null,
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args, linked);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs, linked);
 
         Assert.NotNull(activity);
         Assert.Equal(ambientTraceId, activity!.TraceId);
@@ -695,7 +696,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             Message = [1],
         };
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
         // Consume IS a child of the producer — same trace.
@@ -708,6 +709,9 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 [Collection("ActivityListener")]
 public sealed class ServiceConnectActivitySource_NoListenerTests
 {
+    private readonly ServiceConnectInstrumentationOptions _options = new();
+    private readonly IMessagingSystemAttributes _attrs = new RabbitMqMessagingSystemAttributes();
+
     [Fact]
     public void Publish_ReturnsNull_WhenNoListeners()
     {
@@ -717,7 +721,7 @@ public sealed class ServiceConnectActivitySource_NoListenerTests
             Message = new Message(Guid.NewGuid())
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
 
         Assert.Null(activity);
     }
@@ -727,7 +731,7 @@ public sealed class ServiceConnectActivitySource_NoListenerTests
     {
         var args = new ConsumeEventArgs();
 
-        using var activity = ServiceConnectActivitySource.Consume(args);
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.Null(activity);
     }
@@ -737,7 +741,7 @@ public sealed class ServiceConnectActivitySource_NoListenerTests
     {
         var args = new SendEventArgs { EndPoint = "ep" };
 
-        using var activity = ServiceConnectActivitySource.Send(args);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.Null(activity);
     }

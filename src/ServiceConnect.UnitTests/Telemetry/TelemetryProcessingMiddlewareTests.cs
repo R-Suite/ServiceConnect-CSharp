@@ -10,12 +10,14 @@ public sealed class TelemetryProcessingMiddlewareTests : IDisposable
 {
     private readonly List<Activity> _activities = [];
     private readonly ActivityListener _listener;
+    private readonly ServiceConnectInstrumentationOptions _options = new();
+    private readonly IMessagingSystemAttributes _attrs = new RabbitMqMessagingSystemAttributes();
 
     public TelemetryProcessingMiddlewareTests()
     {
         _listener = new ActivityListener
         {
-            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ConsumeActivitySourceName,
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = _activities.Add,
         };
@@ -27,7 +29,7 @@ public sealed class TelemetryProcessingMiddlewareTests : IDisposable
     [Fact]
     public async Task ProcessAsync_creates_consume_activity_on_success()
     {
-        var sut = new TelemetryProcessingMiddleware();
+        var sut = new TelemetryProcessingMiddleware(_options, _attrs);
         var envelope = MakeEnvelope();
 
         static async Task<ConsumeEventResult> Next(
@@ -59,7 +61,7 @@ public sealed class TelemetryProcessingMiddlewareTests : IDisposable
     [Fact]
     public async Task ProcessAsync_records_error_when_result_indicates_failure()
     {
-        var sut = new TelemetryProcessingMiddleware();
+        var sut = new TelemetryProcessingMiddleware(_options, _attrs);
         var envelope = MakeEnvelope();
         var ex = new InvalidOperationException("nope");
 
@@ -89,7 +91,7 @@ public sealed class TelemetryProcessingMiddlewareTests : IDisposable
     [Fact]
     public async Task ProcessAsync_records_exception_and_rethrows()
     {
-        var sut = new TelemetryProcessingMiddleware();
+        var sut = new TelemetryProcessingMiddleware(_options, _attrs);
         var envelope = MakeEnvelope();
         var boom = new InvalidOperationException("boom");
 

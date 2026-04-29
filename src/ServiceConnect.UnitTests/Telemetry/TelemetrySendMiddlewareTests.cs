@@ -10,14 +10,14 @@ public sealed class TelemetrySendMiddlewareTests : IDisposable
 {
     private readonly List<Activity> _activities = [];
     private readonly ActivityListener _listener;
+    private readonly ServiceConnectInstrumentationOptions _options = new();
+    private readonly IMessagingSystemAttributes _attrs = new RabbitMqMessagingSystemAttributes();
 
     public TelemetrySendMiddlewareTests()
     {
         _listener = new ActivityListener
         {
-            ShouldListenTo = src =>
-                src.Name == ServiceConnectActivitySource.PublishActivitySourceName
-                || src.Name == ServiceConnectActivitySource.SendActivitySourceName,
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = _activities.Add,
         };
@@ -29,7 +29,7 @@ public sealed class TelemetrySendMiddlewareTests : IDisposable
     [Fact]
     public async Task ProcessAsync_publish_creates_publish_activity_and_invokes_next()
     {
-        var sut = new TelemetrySendMiddleware(new ServiceConnectInstrumentationOptions());
+        var sut = new TelemetrySendMiddleware(_options, _attrs);
         var nextCalled = false;
 
         async Task Next(SendContext ctx, CancellationToken ct)
@@ -52,13 +52,13 @@ public sealed class TelemetrySendMiddlewareTests : IDisposable
 
         Assert.True(nextCalled);
         var span = Assert.Single(_activities);
-        Assert.Equal(ServiceConnectActivitySource.PublishActivitySourceName, span.Source.Name);
+        Assert.Equal(ServiceConnectActivitySource.ActivitySourceName, span.Source.Name);
     }
 
     [Fact]
     public async Task ProcessAsync_send_creates_send_activity()
     {
-        var sut = new TelemetrySendMiddleware(new ServiceConnectInstrumentationOptions());
+        var sut = new TelemetrySendMiddleware(_options, _attrs);
 
         static Task Next(SendContext ctx, CancellationToken ct) => Task.CompletedTask;
 
@@ -75,13 +75,13 @@ public sealed class TelemetrySendMiddlewareTests : IDisposable
         await sut.ProcessAsync(context, Next, CancellationToken.None);
 
         var span = Assert.Single(_activities);
-        Assert.Equal(ServiceConnectActivitySource.SendActivitySourceName, span.Source.Name);
+        Assert.Equal(ServiceConnectActivitySource.ActivitySourceName, span.Source.Name);
     }
 
     [Fact]
     public async Task ProcessAsync_records_exception_and_rethrows()
     {
-        var sut = new TelemetrySendMiddleware(new ServiceConnectInstrumentationOptions());
+        var sut = new TelemetrySendMiddleware(_options, _attrs);
         var boom = new InvalidOperationException("boom");
 
         Task Next(SendContext ctx, CancellationToken ct) => throw boom;
