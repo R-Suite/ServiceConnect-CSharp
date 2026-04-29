@@ -30,7 +30,11 @@ For CLR type information, the implementation stamps two additional headers along
 - `TypeName` — the type's `FullName` (for example, `"Payments.Messages.PaymentAuthorised"`).
 - `FullTypeName` — the type's `AssemblyQualifiedName` (includes assembly, version, and culture tokens).
 
-These reserved headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`) are always overwritten by the implementation. See the [envelope headers reference](/ServiceConnect-CSharp/reference/envelope/) for the full list and their wire semantics.
+The producer stamps these headers authoritatively — caller-supplied values are overwritten: `DestinationAddress`, `MessageType`, `SourceAddress`, `TimeSent`, `SourceMachine`, `TypeName`, `FullTypeName`, `ConsumerType`, `Language`.
+
+`MessageId` is preserved when supplied by the caller (the bus passes through its authoritative stamp); the producer only mints a new one if no caller value is present.
+
+See the [envelope headers reference](/ServiceConnect-CSharp/reference/envelope/) for the full list and their wire semantics.
 </Aside>
 
 ## Reference
@@ -120,7 +124,7 @@ Delivers a pre-framed byte packet to `endPoint` without any type-routing logic. 
 - `endPoint` — the queue name or address to deliver to.
 - `type` — the logical message type the packet represents (for example, the element type of a stream). The implementation uses this to stamp the reserved type headers (`TypeName`, `FullTypeName`) authoritatively — callers cannot override them via `headers`.
 - `packet` — the raw bytes to send; the caller is responsible for framing.
-- `headers` — optional string-valued transport headers. Reserved transport headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`) are always overwritten by the implementation and must not be smuggled here. `MessageType` is stamped `"ByteStream"` for this method (see the page-level note above for the full operation-flag semantics).
+- `headers` — optional string-valued transport headers. The producer stamps `DestinationAddress`, `MessageType`, `SourceAddress`, `TimeSent`, `SourceMachine`, `TypeName`, `FullTypeName`, `ConsumerType`, and `Language` authoritatively — caller values for these are overwritten. `MessageId` is preserved when the caller supplies one; the producer mints a new value only if absent. `MessageType` is stamped `"ByteStream"` for this method (see the page-level note above for the full operation-flag semantics).
 - `cancellationToken` — cancels the in-progress send.
 
 ---
