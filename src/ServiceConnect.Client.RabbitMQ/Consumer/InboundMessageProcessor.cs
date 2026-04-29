@@ -189,6 +189,19 @@ internal sealed class InboundMessageProcessor(
                 // leaves the message unacked for broker redelivery after reconnection.
                 throw;
             }
+            catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
+            {
+                // Transport-class failure — rethrow so the outer finally nacks-with-requeue
+                // and the broker redelivers after reconnect.
+                // See learn/operations/cancellation.
+                throw;
+            }
+            catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
+            {
+                // Transport-class failure — rethrow so the outer finally nacks-with-requeue
+                // and the broker redelivers after reconnect.
+                throw;
+            }
             catch (Exception terminalEx)
             {
                 _logger.LogError(terminalEx,
