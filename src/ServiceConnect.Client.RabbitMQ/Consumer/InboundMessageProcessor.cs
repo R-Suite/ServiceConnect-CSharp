@@ -167,7 +167,7 @@ internal sealed class InboundMessageProcessor(
 
             // Route via the terminal-failure path (error exchange) — a message with no
             // handler is not a retryable condition, so bypass the retry queue.
-            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw))
+            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw) || typeNameRaw is null)
             {
                 headers.TryGetValue(HeaderKeys.TypeName, out typeNameRaw);
             }
