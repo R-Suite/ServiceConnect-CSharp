@@ -96,13 +96,11 @@ Stamp an `X-Trace-Id` header on every outgoing message — filters as the cross-
 - Pattern: [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/)
 - Source: [`examples/Filters`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Filters)
 
-### MessageDeduplication
+### CustomFilterAndMiddleware
 
-Runnable end-to-end demo of the `ServiceConnect.Filters.MessageDeduplication` filter blocking a broker-redelivered message.
+Runnable end-to-end demo of how to build your own filter and middleware against the public extension points. The worked scenario is broker-redelivery deduplication using the `OnConsumedSuccessfully` pipeline stage.
 
-- Filter reference: [Message Deduplication](/ServiceConnect-CSharp/reference/filters/messagededuplication/)
-- Operations guide: [Idempotency](/ServiceConnect-CSharp/learn/operations/idempotency/)
-- Source: [`examples/MessageDeduplication`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/MessageDeduplication)
+[`IFilter`](/ServiceConnect-CSharp/reference/filters/ifilter/) · [`IMessageProcessingMiddleware`](/ServiceConnect-CSharp/reference/filters/imessageprocessingmiddleware/) · [`examples/CustomFilterAndMiddleware`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CustomFilterAndMiddleware)
 
 ### Streaming
 
