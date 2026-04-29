@@ -1,13 +1,13 @@
 ---
 title: ServiceConnect.Telemetry
-description: Distributed tracing for ServiceConnect — W3C traceparent propagation across the broker and three OTel ActivitySources for publish, send, and consume spans.
+description: Distributed tracing for ServiceConnect — W3C traceparent propagation across the broker and a single OTel ActivitySource for publish, send, and consume spans.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`ServiceConnect.Telemetry` is the optional package that emits OpenTelemetry-compatible activities for every publish, send, and consume on the bus. It is implemented as a pair of pipeline middleware (`TelemetrySendMiddleware`, `TelemetryProcessingMiddleware`) backed by a static `ServiceConnectActivitySource` that owns three independently sampleable `ActivitySource` instances.
+`ServiceConnect.Telemetry` is the optional package that emits OpenTelemetry-compatible activities for every publish, send, and consume on the bus. It is implemented as a pair of pipeline middleware (`TelemetrySendMiddleware`, `TelemetryProcessingMiddleware`) backed by a static `ServiceConnectActivitySource` that owns a single `ActivitySource` named `"ServiceConnect.Bus"`.
 
 When registered, the package:
 
@@ -37,15 +37,19 @@ public static ServiceConnectBuilder AddTelemetry(
     Action<ServiceConnectInstrumentationOptions>? configure = null);
 ```
 
-Registers `TelemetrySendMiddleware` and `TelemetryProcessingMiddleware` as the outermost middleware on the send and processing pipelines, registers `ServiceConnectInstrumentationOptions` as a singleton, and applies the configured options to `ServiceConnectActivitySource.Options`.
+Registers `TelemetrySendMiddleware` and `TelemetryProcessingMiddleware` as the outermost middleware on the send and processing pipelines, and registers both `ServiceConnectInstrumentationOptions` and `IMessagingSystemAttributes` (via `TryAddSingleton`) into the DI container.
 
 **Parameters**
 - `builder` — the `ServiceConnectBuilder` from inside `AddServiceConnect`.
-- `configure` — optional callback to mutate the `ServiceConnectInstrumentationOptions` (enrichment hooks, per-source enable flags). Omit to use defaults.
+- `configure` — optional callback to mutate the `ServiceConnectInstrumentationOptions` (enrichment hooks, per-direction enable flags, tag length bounds, PII sanitiser). Omit to use defaults.
 
 **Returns.** The same `builder`, for chaining.
 
 **Remarks.** `AddTelemetry` inserts the middleware at index 0 so it wraps every other middleware on the pipeline — the activity is opened before any application middleware runs and closed after they unwind, capturing the full pipeline duration. Call once per `AddServiceConnect`.
+
+`IMessagingSystemAttributes` is registered via `TryAddSingleton`. To substitute a custom implementation (for example, to change the `messaging.system` tag for a non-RabbitMQ transport), register your own `IMessagingSystemAttributes` in DI **before** calling `AddTelemetry` — the `Try` registration will leave yours in place.
+
+Two `AddTelemetry` calls in the same process (for example, two independently-scoped `AddServiceConnect` registrations) produce two distinct `ServiceConnectInstrumentationOptions` instances. Options are not shared across bus registrations; enrichment delegates and enable-flags are independent.
 
 ## ServiceConnectInstrumentationOptions
 
@@ -57,6 +61,8 @@ public sealed class ServiceConnectInstrumentationOptions
     public bool EnablePublishTelemetry { get; set; } = true;
     public bool EnableConsumeTelemetry { get; set; } = true;
     public bool EnableSendTelemetry { get; set; } = true;
+    public int MaxTagValueLength { get; set; } = 256;
+    public Func<Exception, string>? ExceptionMessageSanitiser { get; set; }
 }
 ```
 
@@ -76,55 +82,107 @@ Optional callback invoked on the consume side when the activity is started befor
 
 ### `Enable{Publish,Send,Consume}Telemetry`
 
-Per-source toggles. Setting any to `false` skips activity creation for that operation while still injecting the ambient W3C trace context into outgoing headers (so an upstream span — typically an ASP.NET Core request — propagates across the broker even when ServiceConnect's own spans are disabled).
+Per-direction toggles. Setting any to `false` skips activity creation for that operation while still injecting the ambient W3C trace context into outgoing headers (so an upstream span — typically an ASP.NET Core request — propagates across the broker even when ServiceConnect's own spans are disabled).
+
+### `MaxTagValueLength`
+
+Maximum number of characters stored in any user-controlled string tag (destination, routing key, MessageId, conversation id). Defaults to `256`. Long values are silently truncated to this bound before they are attached to the activity, providing a hard cardinality ceiling on tag values that originate from message headers.
+
+Set to `int.MaxValue` to disable truncation entirely.
+
+### `ExceptionMessageSanitiser`
+
+Optional `Func<Exception, string>?` called to produce the `exception.message` value written to the activity status description and the OTel `exception` event. Defaults to `null`, which means the raw `Exception.Message` is used unchanged.
+
+Supply a delegate when exception messages may contain PII that you do not want propagating to your observability backend:
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    opts.ExceptionMessageSanitiser = ex =>
+        ex is ValidationException ve ? ve.SafeSummary : "[redacted]";
+});
+```
+
+On .NET 9 and later, when `ExceptionMessageSanitiser` is set, `ServiceConnectActivitySource.SetError` opts out of `Activity.AddException` (which uses the CLR's built-in exception serialisation) and writes the `exception.*` event attributes manually using the sanitised string. On earlier runtimes the sanitised string is applied to the status description and the `exception.message` tag; other `exception.*` attributes still use the CLR path.
 
 ## ServiceConnectActivitySource
 
 ```csharp
 public static class ServiceConnectActivitySource
 {
-    public static ServiceConnectInstrumentationOptions Options { get; }
-    public static IMessagingSystemAttributes MessagingSystemAttributes { get; }
+    public static readonly string ActivitySourceName;  // "ServiceConnect.Bus"
 
-    public static readonly string PublishActivitySourceName;
-    public static readonly string ConsumeActivitySourceName;
-    public static readonly string SendActivitySourceName;
+    public static Activity? Publish(
+        PublishEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes,
+        ActivityContext linkedContext = default);
 
-    public static Activity? Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default);
-    public static Activity? Consume(ConsumeEventArgs eventArgs);
-    public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default);
+    public static Activity? Consume(
+        ConsumeEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes);
 
-    public static void SetError(Activity? activity, Exception exception);
-    public static bool TryGetExistingContext(IDictionary<string, string> headers, out ActivityContext context);
+    public static Activity? Send(
+        SendEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes,
+        ActivityContext linkedContext = default);
+
+    public static void SetError(
+        Activity? activity,
+        Exception exception,
+        ServiceConnectInstrumentationOptions options);
+
+    public static bool TryGetExistingContext(
+        IDictionary<string, string> headers,
+        out ActivityContext context);
+
+    public static bool IsConsumeTelemetryEnabled(
+        ServiceConnectInstrumentationOptions options);
+
+    public static void Shutdown();
 }
 ```
 
-Static façade that owns the three `ActivitySource` instances. The middleware calls `Publish`, `Send`, and `Consume`; the names and helpers are public so downstream code (handler-level instrumentation, custom transports) can hook into the same trace tree.
+Static façade that owns the `ActivitySource`. The middleware calls `Publish`, `Send`, and `Consume`; the constant and helpers are public so downstream code (handler-level instrumentation, custom transports) can hook into the same trace tree.
 
-### Activity-source names
+All methods that previously read from static `Options` and `MessagingSystemAttributes` properties now accept those as explicit parameters. This removes ambient global state and allows multiple independently-configured buses in the same process to each drive the façade with their own options and attributes.
 
-The three sources are named `<assembly-name>.Bus.{Publish,Send,Consume}`. With the shipped assembly that resolves to:
+### Activity-source name
 
-- `ServiceConnect.Telemetry.Bus.Publish` — producer-side `PublishAsync` spans.
-- `ServiceConnect.Telemetry.Bus.Send` — producer-side `SendAsync` and request/reply spans.
-- `ServiceConnect.Telemetry.Bus.Consume` — consumer-side spans started when an envelope is dispatched to a handler.
-
-Subscribe to them independently when configuring the OTel SDK to enable or sample each operation type separately:
+All activities — publish, send, and consume — are emitted from a single source named `"ServiceConnect.Bus"`, exposed as `ServiceConnectActivitySource.ActivitySourceName`. Register it once with the OTel SDK:
 
 ```csharp
 services.AddOpenTelemetry().WithTracing(b => b
-    .AddSource(ServiceConnectActivitySource.PublishActivitySourceName)
-    .AddSource(ServiceConnectActivitySource.SendActivitySourceName)
-    .AddSource(ServiceConnectActivitySource.ConsumeActivitySourceName));
+    .AddSource(ServiceConnectActivitySource.ActivitySourceName)
+    .AddOtlpExporter());
+// Equivalent literal form:
+// .AddSource("ServiceConnect.Bus")
 ```
+
+Per-direction sampling is controlled through `EnablePublishTelemetry`, `EnableConsumeTelemetry`, and `EnableSendTelemetry` in `ServiceConnectInstrumentationOptions` rather than through separate source registrations.
 
 ### `SetError`
 
-Marks an activity as errored using OTel semantic conventions (`Status = Error`, an `exception` event with `exception.{type,message,stacktrace}` attributes). No-op when the activity is null. Not wired into the bus host paths — exposed for handlers and custom middleware that want to record their own failures inside an existing ServiceConnect activity.
+Marks an activity as errored using OTel semantic conventions (`Status = Error`, an `exception` event with `exception.{type,message,stacktrace}` attributes). No-op when the activity is null. Pass the same `ServiceConnectInstrumentationOptions` instance used for the activity; the method honours `ExceptionMessageSanitiser` when writing the `exception.message` attribute. Not wired into the bus host paths — exposed for handlers and custom middleware that want to record their own failures inside an existing ServiceConnect activity.
+
+### `IsConsumeTelemetryEnabled`
+
+Returns `options.EnableConsumeTelemetry && ActivitySource.HasListeners()`. Used internally by `TelemetryProcessingMiddleware` to gate the `envelope.Body.ToArray()` copy that feeds `EnrichWithMessageBytes` — the allocation is skipped entirely when no listener is attached or consume telemetry is disabled.
 
 ### `TryGetExistingContext`
 
 Parses a W3C `traceparent` (and optional `tracestate`) out of a header dictionary. Useful when bridging into a non-pipeline activity (for example, a long-running batch job that should resume the trace started on the publish side).
+
+### `Shutdown`
+
+```csharp
+public static void Shutdown();
+```
+
+Disposes the underlying `ActivitySource`. Call this when unloading a collectible AssemblyLoadContext (ALC) that contains `ServiceConnect.Telemetry` — it signals the OTel SDK to detach its `ActivityListener` before the ALC is collected, preventing a use-after-free on the `ActivitySource` object. Normal host shutdown does not require this call; `IHostedService.StopAsync` handles disposal through the DI lifetime.
 
 ## IMessagingSystemAttributes
 
@@ -136,7 +194,18 @@ public interface IMessagingSystemAttributes
 }
 ```
 
-Supplies the OTel-semantic-convention `messaging.system` and `network.protocol.name` tag values stamped on every emitted activity. The default implementation (`RabbitMqMessagingSystemAttributes`) returns `rabbitmq` and `amqp`. Replace `ServiceConnectActivitySource.MessagingSystemAttributes` if you wire a different transport.
+Supplies the OTel-semantic-convention `messaging.system` and `network.protocol.name` tag values stamped on every emitted activity. The default implementation (`RabbitMqMessagingSystemAttributes`) returns `rabbitmq` and `amqp`.
+
+To override for a different transport, register your own `IMessagingSystemAttributes` implementation in DI **before** `AddTelemetry`:
+
+```csharp
+services.AddSingleton<IMessagingSystemAttributes, MyTransportAttributes>();
+services.AddServiceConnect(builder =>
+{
+    builder.AddTelemetry();
+    // AddTelemetry uses TryAddSingleton; MyTransportAttributes wins.
+});
+```
 
 ## Usage
 
@@ -159,15 +228,13 @@ services.AddServiceConnect(builder =>
 });
 
 services.AddOpenTelemetry().WithTracing(b => b
-    .AddSource(ServiceConnectActivitySource.PublishActivitySourceName)
-    .AddSource(ServiceConnectActivitySource.SendActivitySourceName)
-    .AddSource(ServiceConnectActivitySource.ConsumeActivitySourceName)
+    .AddSource(ServiceConnectActivitySource.ActivitySourceName)
     .AddOtlpExporter());
 ```
 
-`AddTelemetry` inserts the telemetry middleware at the head of both pipelines so its activities bracket every other middleware. The OTel SDK is configured to listen for the three ServiceConnect sources by name; without those `AddSource` calls the activities are created but never sampled. The enrichment hook adds a single high-signal tag and deliberately avoids the message body.
+`AddTelemetry` inserts the telemetry middleware at the head of both pipelines so its activities bracket every other middleware. The OTel SDK is configured to listen for the single ServiceConnect source by name; without that `AddSource` call activities are created but never sampled. The enrichment hook adds a single high-signal tag and deliberately avoids the message body.
 
-### Disabling a single operation
+### Disabling a single direction
 
 ```csharp
 builder.AddTelemetry(opts =>
@@ -179,6 +246,33 @@ builder.AddTelemetry(opts =>
 ```
 
 W3C context still propagates on the disabled side, so an enclosing ASP.NET Core request span continues to thread through the broker even when ServiceConnect itself does not emit a span.
+
+### Capping tag value length
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    // Allow up to 512 characters on tag values (default is 256).
+    opts.MaxTagValueLength = 512;
+});
+```
+
+Set to `int.MaxValue` to disable truncation entirely. The default of 256 prevents runaway cardinality from long destination names or message ids under high-cardinality routing topologies.
+
+### PII redaction in exception messages
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    opts.ExceptionMessageSanitiser = ex => ex switch
+    {
+        ValidationException ve => ve.PublicMessage,
+        _                      => ex.GetType().Name
+    };
+});
+```
+
+Without a sanitiser, `Exception.Message` is written verbatim to `exception.message` tags and the activity status description. If your handlers throw exceptions whose messages embed user data (email addresses, account numbers), supply a sanitiser before those strings leave the process boundary to your tracing backend.
 
 ## See also
 
