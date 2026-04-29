@@ -131,7 +131,7 @@ internal sealed class ProducerConnection
     {
         _logger.LogError(ex, "Error publishing message");
 
-        await DisposeConnectionAsync().ConfigureAwait(false);
+        await DisposeConnectionAsync(cancellationToken).ConfigureAwait(false);
         _declaredExchanges.Clear();
 
         if (ReconnectForTests != null)
@@ -225,16 +225,43 @@ internal sealed class ProducerConnection
         }
     }
 
-    private async Task DisposeConnectionAsync()
+    private async Task DisposeConnectionAsync(CancellationToken cancellationToken)
     {
-        await _connectionSemaphore.WaitAsync().ConfigureAwait(false);
+        var connectionLockAcquired = false;
         try
         {
-            await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+            // Bound the wait: a wedged in-flight (re)connect cannot stall this dispose.
+            // Token honours the publish path's cancellation; 30s ceiling keeps callers that
+            // pass a never-cancelled token from blocking indefinitely.
+            // See learn/operations/cancellation for the discipline.
+            connectionLockAcquired = await _connectionSemaphore
+                .WaitAsync(TimeSpan.FromSeconds(30), cancellationToken)
+                .ConfigureAwait(false);
+            if (!connectionLockAcquired)
+            {
+                _logger.LogWarning(
+                    "ProducerConnection.DisposeConnectionAsync timed out waiting for the connection semaphore; forcing teardown.");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                "ProducerConnection.DisposeConnectionAsync cancelled while waiting for the semaphore; forcing teardown.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ProducerConnection.DisposeConnectionAsync semaphore-wait failed; forcing teardown");
         }
         finally
         {
-            _connectionSemaphore.Release();
+            // Best-effort teardown ALWAYS runs, whether or not we held the lock — matches CloseAsync.
+            try { await TearDownChannelAndConnectionAsync().ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "ProducerConnection teardown after dispose failed"); }
+
+            if (connectionLockAcquired)
+            {
+                _connectionSemaphore.Release();
+            }
         }
     }
 
