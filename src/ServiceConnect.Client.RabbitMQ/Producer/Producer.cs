@@ -149,6 +149,8 @@ public sealed class Producer : IProducer
     /// <param name="cancellationToken">A token used to cancel the publish operation.</param>
     public async Task PublishAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         if (message.Length > MaximumMessageSize)
         {
@@ -198,6 +200,8 @@ public sealed class Producer : IProducer
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
     public async Task SendAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         if (message.Length > MaximumMessageSize)
         {
@@ -248,6 +252,8 @@ public sealed class Producer : IProducer
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
     public async Task SendAsync(string endPoint, Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
         {
@@ -293,6 +299,8 @@ public sealed class Producer : IProducer
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
     public async Task SendBytesAsync(string endPoint, Type type, byte[] packet, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(type);
+        ArgumentNullException.ThrowIfNull(packet);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
         {
