@@ -869,6 +869,203 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         ambient.Dispose();
     }
+
+    // ---------------- Task 14: MaxTagValueLength truncation ----------------
+
+    [Fact]
+    public void Publish_HeaderValueExceedsMaxTagValueLength_TruncatesTag()
+    {
+        var longRoutingKey = new string('a', 500);
+        var options = new ServiceConnectInstrumentationOptions { MaxTagValueLength = 100 };
+
+        var args = new PublishEventArgs
+        {
+            Message = new Message(Guid.NewGuid()),
+            Exchange = "exchange",
+            RoutingKey = longRoutingKey,
+            Headers = new Dictionary<string, string>(),
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args, options, _attrs);
+        Assert.NotNull(activity);
+
+        var routingKeyTag = activity.GetTagItem(MessagingAttributes.MessagingDestinationRoutingKey)?.ToString();
+        Assert.NotNull(routingKeyTag);
+        Assert.Equal(100, routingKeyTag.Length);
+        Assert.Equal(new string('a', 100), routingKeyTag);
+    }
+
+    [Fact]
+    public void Publish_HeaderValueWithinMaxTagValueLength_TagsVerbatim()
+    {
+        var shortRoutingKey = "short.routing.key";
+        var options = new ServiceConnectInstrumentationOptions { MaxTagValueLength = 100 };
+
+        var args = new PublishEventArgs
+        {
+            Message = new Message(Guid.NewGuid()),
+            Exchange = "exchange",
+            RoutingKey = shortRoutingKey,
+            Headers = new Dictionary<string, string>(),
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args, options, _attrs);
+        Assert.NotNull(activity);
+
+        var routingKeyTag = activity.GetTagItem(MessagingAttributes.MessagingDestinationRoutingKey)?.ToString();
+        Assert.Equal(shortRoutingKey, routingKeyTag);
+    }
+
+    // ---------------- Task 15: ExceptionMessageSanitiser ----------------
+
+    [Fact]
+    public void SetError_WithSanitiser_AppliesToStatusAndExceptionEventTag()
+    {
+        var options = new ServiceConnectInstrumentationOptions
+        {
+            ExceptionMessageSanitiser = ex => "REDACTED",
+        };
+
+        ActivityStatusCode observedStatus = ActivityStatusCode.Unset;
+        string? observedDescription = null;
+        Dictionary<string, object?>? observedExceptionTags = null;
+
+        var capturingListener = new ActivityListener
+        {
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = a =>
+            {
+                observedStatus = a.Status;
+                observedDescription = a.StatusDescription;
+                var ev = a.Events.FirstOrDefault(e => e.Name == "exception");
+                if (ev.Tags is not null)
+                {
+                    observedExceptionTags = ev.Tags.ToDictionary(t => t.Key, t => t.Value);
+                }
+            },
+        };
+        ActivitySource.AddActivityListener(capturingListener);
+        try
+        {
+            using var activity = new ActivitySource(ServiceConnectActivitySource.ActivitySourceName).StartActivity("test");
+            Assert.NotNull(activity);
+
+            ServiceConnectActivitySource.SetError(activity, new InvalidOperationException("sensitive: connection-string=secret"), options);
+
+            activity.Dispose();
+
+            Assert.Equal(ActivityStatusCode.Error, observedStatus);
+            Assert.Equal("REDACTED", observedDescription);
+            Assert.NotNull(observedExceptionTags);
+            Assert.Equal("REDACTED", observedExceptionTags!["exception.message"]);
+        }
+        finally
+        {
+            capturingListener.Dispose();
+        }
+    }
+
+    // ---------------- Task 16: IsAllDataRequested guards ----------------
+
+    [Fact]
+    public void Publish_SampleDroppedActivity_DoesNotSetUserTags()
+    {
+        var droppingListener = new ActivityListener
+        {
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.PropagationData,
+        };
+        ActivitySource.AddActivityListener(droppingListener);
+        try
+        {
+            var args = new PublishEventArgs
+            {
+                Message = new Message(Guid.NewGuid()),
+                Exchange = "exchange",
+                RoutingKey = "rk",
+                Headers = new Dictionary<string, string>(),
+            };
+
+            using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
+            Assert.NotNull(activity);
+            Assert.False(activity.IsAllDataRequested);
+
+            Assert.Null(activity.GetTagItem(MessagingAttributes.MessagingDestination));
+            Assert.Null(activity.GetTagItem(MessagingAttributes.MessagingDestinationRoutingKey));
+        }
+        finally
+        {
+            droppingListener.Dispose();
+        }
+    }
+
+    // ---------------- Task 17: Empty-Guid CorrelationId regression ----------------
+
+    [Fact]
+    public void Publish_EmptyCorrelationId_DoesNotSetConversationIdTag()
+    {
+        var args = new PublishEventArgs
+        {
+            Message = new Message(Guid.Empty),
+            Exchange = "exchange",
+            Headers = new Dictionary<string, string>(),
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
+        Assert.NotNull(activity);
+        Assert.Null(activity.GetTagItem(MessagingAttributes.MessageConversationId));
+    }
+
+    [Fact]
+    public void Publish_NonEmptyCorrelationId_SetsConversationIdTag()
+    {
+        var cid = Guid.NewGuid();
+        var args = new PublishEventArgs
+        {
+            Message = new Message(cid),
+            Exchange = "exchange",
+            Headers = new Dictionary<string, string>(),
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
+        Assert.NotNull(activity);
+        Assert.Equal(cid.ToString(), activity.GetTagItem(MessagingAttributes.MessageConversationId)?.ToString());
+    }
+
+    // ---------------- Task 19: Single ActivitySource verification ----------------
+
+    [Fact]
+    public void Publish_Send_Consume_AllEmitOnSingleActivitySource()
+    {
+        var sourceNames = new HashSet<string>();
+        var listener = new ActivityListener
+        {
+            ShouldListenTo = _ => true,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStarted = a => sourceNames.Add(a.Source.Name),
+        };
+        ActivitySource.AddActivityListener(listener);
+        try
+        {
+            using (ServiceConnectActivitySource.Publish(
+                new PublishEventArgs { Message = new Message(Guid.NewGuid()), Exchange = "x", Headers = new Dictionary<string, string>() },
+                _options, _attrs)) { }
+            using (ServiceConnectActivitySource.Send(
+                new SendEventArgs { Message = new Message(Guid.NewGuid()), EndPoint = "q", Headers = new Dictionary<string, string>() },
+                _options, _attrs)) { }
+            using (ServiceConnectActivitySource.Consume(
+                new ConsumeEventArgs { Message = [1], Type = "T", Headers = new Dictionary<string, object>() },
+                _options, _attrs)) { }
+
+            Assert.Single(sourceNames);
+            Assert.Contains(ServiceConnectActivitySource.ActivitySourceName, sourceNames);
+        }
+        finally
+        {
+            listener.Dispose();
+        }
+    }
 }
 
 [Collection("ActivityListener")]

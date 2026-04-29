@@ -62,12 +62,14 @@ public static class ServiceConnectActivitySource
             // L13: single inject. Activity non-null → propagate the new span's context.
             InjectTraceContext(activity, eventArgs.Headers);
 
-            activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
+            activity.SetTag(MessagingAttributes.MessageConversationId,
+                Truncate(eventArgs.Message?.CorrelationId.ToString(), options.MaxTagValueLength));
 
             if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
             {
-                activity.DisplayName = eventArgs.Exchange + " publish";
-                activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.Exchange);
+                activity.DisplayName = Truncate(eventArgs.Exchange + " publish", options.MaxTagValueLength);
+                activity.SetTag(MessagingAttributes.MessagingDestination,
+                    Truncate(eventArgs.Exchange, options.MaxTagValueLength));
             }
             else
             {
@@ -77,12 +79,14 @@ public static class ServiceConnectActivitySource
 
             if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
             {
-                activity.SetTag(MessagingAttributes.MessagingDestinationRoutingKey, eventArgs.RoutingKey);
+                activity.SetTag(MessagingAttributes.MessagingDestinationRoutingKey,
+                    Truncate(eventArgs.RoutingKey, options.MaxTagValueLength));
             }
 
             if (eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out string? messageId))
             {
-                activity.SetTag(MessagingAttributes.MessageId, messageId);
+                activity.SetTag(MessagingAttributes.MessageId,
+                    Truncate(messageId, options.MaxTagValueLength));
             }
 
             TryEnrich(activity, eventArgs.Message, options);
@@ -144,21 +148,24 @@ public static class ServiceConnectActivitySource
             string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
                 ? HeaderDecoder.Decode(ciVal) : null;
 
-            activity.DisplayName = (string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive";
+            activity.DisplayName = Truncate((string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive", options.MaxTagValueLength);
 
             if (messageId is not null)
             {
-                activity.SetTag(MessagingAttributes.MessageId, messageId);
+                activity.SetTag(MessagingAttributes.MessageId,
+                    Truncate(messageId, options.MaxTagValueLength));
             }
 
             if (correlationId is not null)
             {
-                activity.SetTag(MessagingAttributes.MessageConversationId, correlationId);
+                activity.SetTag(MessagingAttributes.MessageConversationId,
+                    Truncate(correlationId, options.MaxTagValueLength));
             }
 
             if (!string.IsNullOrEmpty(destinationAddress))
             {
-                activity.SetTag(MessagingAttributes.MessagingDestination, destinationAddress);
+                activity.SetTag(MessagingAttributes.MessagingDestination,
+                    Truncate(destinationAddress, options.MaxTagValueLength));
             }
             else
             {
@@ -241,11 +248,12 @@ public static class ServiceConnectActivitySource
                 destination = null;
             }
 
-            activity.DisplayName = (destination ?? "anonymous") + " send";
+            activity.DisplayName = Truncate((destination ?? "anonymous") + " send", options.MaxTagValueLength);
 
             if (destination is not null)
             {
-                activity.SetTag(MessagingAttributes.MessagingDestination, destination);
+                activity.SetTag(MessagingAttributes.MessagingDestination,
+                    Truncate(destination, options.MaxTagValueLength));
             }
             else
             {
@@ -257,7 +265,8 @@ public static class ServiceConnectActivitySource
                 return activity;
             }
 
-            activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
+            activity.SetTag(MessagingAttributes.MessageConversationId,
+                Truncate(eventArgs.Message.CorrelationId.ToString(), options.MaxTagValueLength));
 
             TryEnrich(activity, eventArgs.Message, options);
 
@@ -391,6 +400,21 @@ public static class ServiceConnectActivitySource
                 "ServiceConnectActivitySource.InjectHeader: unsupported carrier type {0}; trace context not propagated.",
                 carrier?.GetType().FullName ?? "<null>");
         }
+    }
+
+    private static string Truncate(string? value, int maxLength)
+    {
+        if (value is null)
+        {
+            return string.Empty;
+        }
+
+        if (maxLength <= 0 || value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..maxLength];
     }
 
     // Test seams — internal so the unit-test project can exercise the warning path.
