@@ -95,7 +95,7 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, options?.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 return;
@@ -105,7 +105,7 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, options?.Headers);
+            headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
         }
 
         if (options?.RoutingKey is { } routingKey)
@@ -149,7 +149,7 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId, options?.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, options?.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 return;
@@ -159,7 +159,7 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, options?.Headers);
+            headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
         }
 
         if (options?.EndPoints is { Count: > 0 } endpoints)
@@ -210,7 +210,7 @@ public sealed class Bus : IBus
             // RequestReplyManager will serialize again on its own path; the cost is one extra
             // serialize per filter-enabled request, kept localized to this branch.
             var messageBytes = _serializer.Serialize(message);
-            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
@@ -220,7 +220,7 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(TRequest), message.CorrelationId, requestOptions.Headers);
+            headers = BuildHeadersDirect(message.CorrelationId, requestOptions.Headers);
         }
 
         return await _requestReplyManager.SendRequestAsync<TRequest, TReply>(
@@ -243,7 +243,7 @@ public sealed class Bus : IBus
         {
             // See SendRequestAsync for why we serialize locally only on the filter branch.
             var messageBytes = _serializer.Serialize(message);
-            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
@@ -253,7 +253,7 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(TRequest), message.CorrelationId, requestOptions.Headers);
+            headers = BuildHeadersDirect(message.CorrelationId, requestOptions.Headers);
         }
 
         return await _requestReplyManager.SendRequestMultiAsync<TRequest, TReply>(
@@ -282,7 +282,7 @@ public sealed class Bus : IBus
         {
             // See SendRequestAsync for why we serialize locally only on the filter branch.
             var messageBytes = _serializer.Serialize(message);
-            var envelope = CreateEnvelope(typeof(TRequest), messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 throw new InvalidOperationException("Outgoing filters blocked the request message.");
@@ -292,7 +292,7 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(TRequest), message.CorrelationId, requestOptions.Headers);
+            headers = BuildHeadersDirect(message.CorrelationId, requestOptions.Headers);
         }
 
         await _requestReplyManager.PublishRequestAsync<TRequest, TReply>(
@@ -319,7 +319,7 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(typeof(T), messageBytes, message.CorrelationId);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 return;
@@ -329,7 +329,7 @@ public sealed class Bus : IBus
         }
         else
         {
-            headers = BuildHeadersDirect(typeof(T), message.CorrelationId, null);
+            headers = BuildHeadersDirect(message.CorrelationId, null);
         }
 
         if (destinations.Count > 1)
@@ -614,12 +614,11 @@ public sealed class Bus : IBus
     /// </summary>
     private static readonly HashSet<string> ReservedHeaders = new(StringComparer.Ordinal)
     {
-        HeaderKeys.MessageType,
         HeaderKeys.CorrelationId,
         HeaderKeys.MessageId,
     };
 
-    private Envelope CreateEnvelope(Type messageType, byte[] body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
+    private Envelope CreateEnvelope(byte[] body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
     {
         // Snapshot once up front so a concurrent caller mutating the source
         // dictionary can't throw "Collection was modified" inside the foreach
@@ -647,8 +646,9 @@ public sealed class Bus : IBus
         }
 
         // Bus-authoritative: stamp system headers last so callers cannot spoof via options.Headers.
-        // Outgoing filters and middleware rely on MessageId / CorrelationId / MessageType being present.
-        envelope.Headers[HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name;
+        // Outgoing filters and middleware rely on MessageId / CorrelationId being present. MessageType
+        // is stamped authoritatively by the producer (OutboundHeaderBuilder) as the operation name
+        // "Publish"|"Send"|"ByteStream"; type info is carried by TypeName / FullTypeName.
         envelope.Headers[HeaderKeys.CorrelationId] = correlationId.ToString();
         envelope.Headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
 
@@ -702,7 +702,7 @@ public sealed class Bus : IBus
     /// without allocating the intermediate <see cref="Envelope"/> or its
     /// <c>Dictionary&lt;string, object&gt;</c> headers map.
     /// </summary>
-    private Dictionary<string, string> BuildHeadersDirect(Type messageType, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders)
+    private Dictionary<string, string> BuildHeadersDirect(Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders)
     {
         // Snapshot-then-iterate: the caller still holds a reference to the
         // underlying dictionary, so a concurrent mutation during the foreach
@@ -727,7 +727,8 @@ public sealed class Bus : IBus
         }
 
         // Bus-authoritative: stamp system headers last so callers cannot spoof via options.Headers.
-        headers[HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name;
+        // MessageType is not stamped here; OutboundHeaderBuilder is the sole authoritative stamper
+        // of the operation name on the wire.
         headers[HeaderKeys.CorrelationId] = correlationId.ToString();
         headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
 

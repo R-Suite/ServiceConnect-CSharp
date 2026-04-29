@@ -1002,7 +1002,9 @@ public class BusTests
     [Fact]
     public async Task SendAsync_CallerCannotOverrideSystemHeaders()
     {
-        // MessageType/CorrelationId in options.Headers must not overwrite the system values
+        // Post-H21: CorrelationId and MessageId are Bus-reserved (callers cannot spoof them).
+        // MessageType is no longer reserved by the Bus — it flows through so the producer
+        // (OutboundHeaderBuilder) can overwrite it with the authoritative operation name.
         var spoofedMessageId = Guid.NewGuid().ToString();
         var options = new SendOptions
         {
@@ -1025,15 +1027,19 @@ public class BusTests
         await _bus.SendAsync(message, options, CancellationToken.None);
 
         Assert.NotNull(captured);
-        Assert.Equal(typeof(FakeMessage1).FullName, captured![HeaderKeys.MessageType]);
+        // MessageType is no longer Bus-reserved; caller value flows through to the producer.
+        Assert.Equal("SomeoneElsesType", captured![HeaderKeys.MessageType]);
+        // CorrelationId and MessageId are still Bus-authoritative.
         Assert.NotEqual("spoofed-correlation", captured[HeaderKeys.CorrelationId]);
         Assert.NotEqual(spoofedMessageId, captured[HeaderKeys.MessageId]);
     }
 
     [Fact]
-    public async Task SendAsync_CallerSuppliesReservedHeader_LogsWarningForDroppedKey()
+    public async Task SendAsync_CallerSuppliesMessageType_NoWarningLogged()
     {
-        // Observability: warn operators when a caller-supplied reserved header is dropped.
+        // Post-H21: MessageType is not in the Bus's reserved set, so no warning is emitted
+        // when a caller supplies it in options.Headers.  The producer is the authoritative
+        // stamper and will overwrite it with the operation name on the wire.
         var options = new SendOptions
         {
             Headers = new Dictionary<string, string>
@@ -1057,7 +1063,7 @@ public class BusTests
                 It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(HeaderKeys.MessageType)),
                 null,
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+            Times.Never);
     }
 
     // --- Semaphore dispose race ---
