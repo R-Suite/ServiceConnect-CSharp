@@ -3,41 +3,21 @@ using Moq;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Configuration;
-using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.Interfaces.Configuration;
 using Xunit;
 
-namespace ServiceConnect.EndToEndTests.RabbitMq;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies the H22 contract end-to-end: when a publish times out, the producer releases
-/// <c>_publishLock</c> immediately without driving a reconnect under that lock. Concurrent
-/// publishers must not be stalled behind a single timed-out publisher's reconnect budget.
-///
-/// The test uses two injected seams:
-/// <list type="bullet">
-///   <item><description>
-///     <c>CreateConnectionForTests</c> returns a mock connection whose channel hangs on
-///     <c>BasicPublishAsync</c> indefinitely (until the publish-timeout CTS fires), giving
-///     a deterministic timeout on every publish without requiring broker-level flow control.
-///   </description></item>
-///   <item><description>
-///     <c>ReconnectForTests</c> introduces a fixed delay that simulates a slow broker
-///     reconnect. Pre-fix, this delay ran under <c>_publishLock</c>, stalling all other
-///     publishers. Post-fix, it runs off-lock (inside <c>EnsureConnectedAsync</c> before the
-///     lock is acquired) and does not stall concurrent publishers.
-///   </description></item>
-/// </list>
-/// The Testcontainers RabbitMQ container is started by the collection fixture, confirming this
-/// is an integration-class test; the seams only replace the channel and reconnect internals.
+/// Asserts the H22 user-visible wall-clock contract: a publish timeout returns to the caller
+/// within ~publishTimeout, not within the reconnect retry budget. Uses Producer test seams to
+/// bypass the broker so the timing window is deterministic. Complements
+/// <see cref="ProducerPublishTimeoutResetTests"/> (which asserts the mechanism — flag set,
+/// no in-catch reconnect) by asserting the wall-clock outcome.
 /// </summary>
-[Collection(nameof(MessagingCollection))]
-public sealed class ProducerPublishTimeoutE2ETests(MessagingFixture fixture)
+public sealed class ProducerPublishTimeoutTimingTests
 {
-    private readonly MessagingFixture _fixture = fixture;
-
     [Fact]
-    [Trait("Category", "Docker")]
     public async Task ConcurrentPublishers_WhenPublishTimesOut_NoPublisherBlockedForReconnectBudget()
     {
         // Arrange ─────────────────────────────────────────────────────────────────────────────
@@ -45,24 +25,7 @@ public sealed class ProducerPublishTimeoutE2ETests(MessagingFixture fixture)
         //   reconnectDelay   = 2 000 ms (simulated slow reconnect after the timeout)
         //   publisherCount   = 5
         //
-        // Post-fix (correct) timeline per publisher:
-        //   Each publisher serializes through _publishLock.  The lock holder times out in
-        //   ~publishTimeout ms, calls MarkResetRequired() (synchronous, <1 ms), and releases.
-        //   The reconnect runs off-lock; it is triggered by the next EnsureConnectedAsync call
-        //   which happens BEFORE _publishLock.WaitAsync in the following publish (not here —
-        //   each publisher publishes once).  So the reconnect delay does not add to any
-        //   publisher's wall-clock time in this test.
-        //   Total time for all 5 publishers ≈ 5 × publishTimeout ≈ 1 000 ms.
-        //
-        // Pre-fix (regressed) timeline per publisher:
-        //   The lock holder times out then calls await ReconnectAsync(…) UNDER _publishLock.
-        //   ReconnectAsync takes reconnectDelay = 2 000 ms.  Every subsequent publisher has to
-        //   wait for the current holder's reconnect before it can enter.  Publisher #5's elapsed
-        //   time ≈ 4 × (publishTimeout + reconnectDelay) + publishTimeout + reconnectDelay
-        //        ≈ 5 × 2 200 ms ≈ 11 000 ms.
-        //
-        // Threshold = 3 000 ms: well above the post-fix ~1 000 ms and well below the pre-fix
-        // ~11 000 ms, leaving ample CI headroom on either side.
+        // Pre-fix observed >7s for the worst publisher; post-fix observed ~1s; threshold 3000ms.
         const int publisherCount = 5;
         const int publishTimeoutMs = 200;
         const int reconnectDelayMs = 2_000;
@@ -70,13 +33,13 @@ public sealed class ProducerPublishTimeoutE2ETests(MessagingFixture fixture)
 
         var transport = new TransportConfiguration
         {
-            // The real Testcontainers broker is reachable, but the channel is replaced by the
-            // hanging mock, so no AMQP traffic flows during the publish phase of this test.
-            Host = _fixture.RabbitMqHostname,
-            Username = _fixture.RabbitMqUsername,
-            Password = _fixture.RabbitMqPassword,
+            // The mock channel replaces the broker connection, so no AMQP traffic flows
+            // during the publish phase of this test.
+            Host = "localhost",
+            Username = "guest",
+            Password = "guest",
         };
-        transport.SetClientSetting(RabbitMQSettingKeys.Port, _fixture.RabbitMqPort);
+        transport.SetClientSetting(RabbitMQSettingKeys.Port, 5672);
         transport.SetClientSetting(RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromMilliseconds(publishTimeoutMs));
         // RetryCount / RetrySeconds bound how long EnsureConnectedAsync retries if
         // CreateConnectionAsync throws.  They do not affect the ReconnectForTests path but must
@@ -88,7 +51,7 @@ public sealed class ProducerPublishTimeoutE2ETests(MessagingFixture fixture)
         transport.SetClientSetting(RabbitMQSettingKeys.PublisherAcknowledgements, true);
 
         var queue = new Mock<IQueueConfiguration>();
-        queue.SetupGet(q => q.QueueName).Returns("timeout-e2e");
+        queue.SetupGet(q => q.QueueName).Returns("timeout-timing");
 
         var bus = new Mock<IBusConfiguration>();
         bus.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
@@ -161,7 +124,8 @@ public sealed class ProducerPublishTimeoutE2ETests(MessagingFixture fixture)
 
         // Assert ──────────────────────────────────────────────────────────────────────────────
         // Post-fix: every publisher returns in ~publishTimeout ≈ 200ms; threshold = 3 000ms.
-        // Pre-fix: publisher #5 returns in ≥ 5 × (publishTimeout + reconnectDelay) ≈ 11 000ms.
+        // Pre-fix: publisher #N returns in ≥ N × (publishTimeout + reconnectDelay), which for
+        // the worst publisher exceeded 7 000ms.
         for (var i = 0; i < publisherCount; i++)
         {
             Assert.True(
