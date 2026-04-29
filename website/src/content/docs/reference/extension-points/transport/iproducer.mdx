@@ -22,6 +22,17 @@ Note the header asymmetry: outgoing headers are `IDictionary<string, string>` (s
 
 See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for how the producer fits into the full message pipeline.
 
+<Aside title="Header semantics: MessageType, TypeName, FullTypeName">
+Every outbound method stamps the `MessageType` header with an operation flag that identifies how the message was sent: `"Publish"` for `PublishAsync`, `"Send"` for either `SendAsync` overload, and `"ByteStream"` for `SendBytesAsync`. The flag is set by the implementation and cannot be overridden by callers via the `headers` dictionary.
+
+For CLR type information, the implementation stamps two additional headers alongside `MessageType`:
+
+- `TypeName` — the type's `FullName` (for example, `"Payments.Messages.PaymentAuthorised"`).
+- `FullTypeName` — the type's `AssemblyQualifiedName` (includes assembly, version, and culture tokens).
+
+These reserved headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`) are always overwritten by the implementation. See the [envelope headers reference](/ServiceConnect-CSharp/reference/envelope/) for the full list and their wire semantics.
+</Aside>
+
 ## Reference
 
 ### `PublishAsync`
@@ -109,7 +120,7 @@ Delivers a pre-framed byte packet to `endPoint` without any type-routing logic. 
 - `endPoint` — the queue name or address to deliver to.
 - `type` — the logical message type the packet represents (for example, the element type of a stream). The implementation uses this to stamp the reserved type headers (`TypeName`, `FullTypeName`) authoritatively — callers cannot override them via `headers`.
 - `packet` — the raw bytes to send; the caller is responsible for framing.
-- `headers` — optional string-valued transport headers. Reserved transport headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`) are always overwritten by the implementation and must not be smuggled here. `MessageType` is the operation flag (`"ByteStream"` for this method); `TypeName`/`FullTypeName` carry the CLR type.
+- `headers` — optional string-valued transport headers. Reserved transport headers (`DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`) are always overwritten by the implementation and must not be smuggled here. `MessageType` is stamped `"ByteStream"` for this method (see the page-level note above for the full operation-flag semantics).
 - `cancellationToken` — cancels the in-progress send.
 
 ---
