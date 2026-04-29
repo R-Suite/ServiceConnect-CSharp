@@ -202,6 +202,43 @@ public class MessageDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAsync_OnHandlerThrow_DoesNotInvokeOnConsumedSuccessfullyFilters()
+    {
+        // Arrange — copied from Dispatch_HandlerThrows_ReturnsFailure
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "ErrorUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        var thrown = new InvalidOperationException("handler boom");
+        var handler = new TestDispatchHandler(throwOnHandle: thrown);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.NotNull(result.Exception);
+        // HandlerProcessor wraps handler exceptions in AggregateException; the original is an inner exception.
+        var aggregate = Assert.IsType<AggregateException>(result.Exception);
+        Assert.Same(thrown, aggregate.InnerException);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        // The existing finally-block behaviour is unchanged: AfterConsumingFilters still runs.
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task Dispatch_SetsConsumeContextOnHandler()
     {
         // Arrange
