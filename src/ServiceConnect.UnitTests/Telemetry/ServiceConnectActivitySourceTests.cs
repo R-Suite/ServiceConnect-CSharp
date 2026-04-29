@@ -732,6 +732,31 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         ambient.Dispose();
     }
+
+    [Fact]
+    public void Send_EnricherThrowsOce_DisposesActivity_AndRestoresAmbientCurrent()
+    {
+        var ambient = new Activity("ambient").Start();
+
+        var options = new ServiceConnectInstrumentationOptions
+        {
+            EnrichWithMessage = (_, _) => throw new OperationCanceledException("co-op cancel"),
+        };
+
+        var args = new SendEventArgs
+        {
+            Message = new Message(Guid.NewGuid()),
+            EndPoint = "queue-a",
+            Headers = new Dictionary<string, string>(),
+        };
+
+        Assert.Throws<OperationCanceledException>(() =>
+            ServiceConnectActivitySource.Send(args, options, _attrs));
+
+        Assert.Same(ambient, Activity.Current);
+
+        ambient.Dispose();
+    }
 }
 
 [Collection("ActivityListener")]

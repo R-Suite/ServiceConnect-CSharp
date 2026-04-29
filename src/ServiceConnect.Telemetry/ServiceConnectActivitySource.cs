@@ -207,52 +207,60 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
-        // Compute the effective destination from EndPoint (singular) first, then fall back
-        // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
-        // multi-destination fan-outs that would otherwise appear as anonymous sends in traces.
-        // Whitespace entries are filtered before joining so a stray ""/null slot cannot leak into
-        // traces as "queue-a,,queue-b"; if filtering empties the list, fall through to anonymous.
-        string? destination;
-        if (!string.IsNullOrWhiteSpace(eventArgs.EndPoint))
+        try
         {
-            destination = eventArgs.EndPoint;
-        }
-        else if (eventArgs.EndPoints.Count > 0)
-        {
-            var nonEmpty = eventArgs.EndPoints.Where(e => !string.IsNullOrWhiteSpace(e));
-            var joined = string.Join(",", nonEmpty);
-            destination = joined.Length > 0 ? joined : null;
-        }
-        else
-        {
-            destination = null;
-        }
+            // Compute the effective destination from EndPoint (singular) first, then fall back
+            // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
+            // multi-destination fan-outs that would otherwise appear as anonymous sends in traces.
+            // Whitespace entries are filtered before joining so a stray ""/null slot cannot leak into
+            // traces as "queue-a,,queue-b"; if filtering empties the list, fall through to anonymous.
+            string? destination;
+            if (!string.IsNullOrWhiteSpace(eventArgs.EndPoint))
+            {
+                destination = eventArgs.EndPoint;
+            }
+            else if (eventArgs.EndPoints.Count > 0)
+            {
+                var nonEmpty = eventArgs.EndPoints.Where(e => !string.IsNullOrWhiteSpace(e));
+                var joined = string.Join(",", nonEmpty);
+                destination = joined.Length > 0 ? joined : null;
+            }
+            else
+            {
+                destination = null;
+            }
 
-        activity.DisplayName = (destination ?? "anonymous") + " send";
+            activity.DisplayName = (destination ?? "anonymous") + " send";
 
-        if (destination is not null)
-        {
-            activity.SetTag(MessagingAttributes.MessagingDestination, destination);
-        }
-        else
-        {
-            activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
-        }
+            if (destination is not null)
+            {
+                activity.SetTag(MessagingAttributes.MessagingDestination, destination);
+            }
+            else
+            {
+                activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+            }
 
-        // Inject the started activity's trace context before the null-message early-return
-        // so payload-less sends still carry a traceparent header that downstream consumers can link.
-        InjectTraceContext(activity, eventArgs.Headers);
+            // Inject the started activity's trace context before the null-message early-return
+            // so payload-less sends still carry a traceparent header that downstream consumers can link.
+            InjectTraceContext(activity, eventArgs.Headers);
 
-        if (eventArgs.Message is null)
-        {
+            if (eventArgs.Message is null)
+            {
+                return activity;
+            }
+
+            activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
+
+            TryEnrich(activity, eventArgs.Message, options);
+
             return activity;
         }
-
-        activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
-
-        TryEnrich(activity, eventArgs.Message, options);
-
-        return activity;
+        catch
+        {
+            activity.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
