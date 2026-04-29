@@ -101,7 +101,9 @@ public static class Retry
                 if (shouldRetry != null && !shouldRetry(ex))
                 {
                     throw;
-                } (exceptions ??= []).Add(ex);
+                }
+
+                (exceptions ??= []).Add(ex);
                 try
                 {
                     await exceptionAction(ex).ConfigureAwait(false);
