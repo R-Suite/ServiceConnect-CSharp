@@ -28,13 +28,17 @@ internal sealed class TelemetryProcessingMiddleware(
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentNullException.ThrowIfNull(next);
 
-        var args = new ConsumeEventArgs
+        Activity? activity = null;
+        if (ServiceConnectActivitySource.IsConsumeTelemetryEnabled(_options))
         {
-            Message = envelope.Body.ToArray(),
-            Type = messageType.FullName ?? string.Empty,
-            Headers = headers,
-        };
-        Activity? activity = ServiceConnectActivitySource.Consume(args, _options, _attributes);
+            var args = new ConsumeEventArgs
+            {
+                Message = envelope.Body.ToArray(),
+                Type = messageType.FullName ?? string.Empty,
+                Headers = headers,
+            };
+            activity = ServiceConnectActivitySource.Consume(args, _options, _attributes);
+        }
 
         try
         {

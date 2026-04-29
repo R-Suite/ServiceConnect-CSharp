@@ -823,4 +823,11 @@ public sealed class ServiceConnectActivitySource_NoListenerTests
 
         Assert.Null(activity);
     }
+
+    [Fact]
+    public void IsConsumeTelemetryEnabled_NoListener_ReturnsFalse()
+    {
+        var options = new ServiceConnectInstrumentationOptions { EnableConsumeTelemetry = true };
+        Assert.False(ServiceConnectActivitySource.IsConsumeTelemetryEnabled(options));
+    }
 }
