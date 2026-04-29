@@ -155,7 +155,17 @@ public sealed class MessageDispatcher(
             // middleware lifetimes are honoured — a cached chain would pin the first instance for
             // the lifetime of the bus.
             var chain = BuildProcessingChain(scope.ServiceProvider);
-            return await chain(messageBytes, type!, message, headers, envelope, cancellationToken).ConfigureAwait(false);
+            var result = await chain(messageBytes, type!, message, headers, envelope, cancellationToken).ConfigureAwait(false);
+
+            if (result.Success && !result.NotHandled)
+            {
+                // Stop returned by an on-success filter halts further on-success filters
+                // (handled inside ExecuteFiltersAsync) but is not propagated here:
+                // consumption already succeeded.
+                await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+            }
+
+            return result;
         }
         catch (Exception ex)
         {

@@ -71,6 +71,7 @@ public class MessageDispatcherTests
         // Default: filters don't block
         _mockFilterPipeline.Setup(f => f.ExecuteBeforeConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
         _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
+        _mockFilterPipeline.Setup(f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
     }
 
     private static Mock<IPipelineConfiguration> CreateEmptyPipelineConfig()
@@ -168,6 +169,36 @@ public class MessageDispatcherTests
         Assert.NotNull(receivedMessage);
         Assert.Equal("TestUser", receivedMessage.Username);
         _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)), Times.Once);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_OnHandlerSuccess_InvokesOnConsumedSuccessfullyFilters()
+    {
+        // Arrange — copied verbatim from Dispatch_DeserializesAndCallsHandler
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "TestUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        FakeMessage1? receivedMessage = null;
+        var handler = new TestDispatchHandler(onHandle: m => receivedMessage = m);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.False(result.NotHandled);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
