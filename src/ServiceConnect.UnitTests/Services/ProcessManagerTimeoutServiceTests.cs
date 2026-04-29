@@ -481,8 +481,11 @@ public class ProcessManagerTimeoutServiceTests
     }
 
     [Fact]
-    public async Task PollOnce_WhenSendSucceeds_UsesNonCanceledTokenForRemove()
+    public async Task PollOnce_WhenSendSucceeds_PropagatesLifecycleTokenToRemove()
     {
+        // Previously this test asserted CancellationToken.None was passed (the old buggy behaviour).
+        // After the fix, the lifecycle token is propagated — it may already be cancelled if the
+        // token was signalled during SendAsync, but it is the same token supplied to PollOnceAsync.
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
 
         var timeoutId = Guid.NewGuid();
@@ -507,7 +510,6 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<TimeoutMessage>(),
                 It.IsAny<SendOptions>(),
                 It.IsAny<CancellationToken>()))
-            .Callback(cts.Cancel)
             .Returns(Task.CompletedTask);
 
         CancellationToken removeToken = default;
@@ -519,7 +521,8 @@ public class ProcessManagerTimeoutServiceTests
 
         await sut.PollOnceAsync(cts.Token);
 
-        Assert.False(removeToken.IsCancellationRequested);
+        // The token passed to Remove must be the lifecycle token, not CancellationToken.None.
+        Assert.Equal(cts.Token, removeToken);
     }
 
     [Fact]
@@ -555,6 +558,51 @@ public class ProcessManagerTimeoutServiceTests
         var sut = CreateSut(_mockFinder.Object);
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => sut.PollOnceAsync());
+    }
+
+    [Fact]
+    public async Task PollOnceAsync_RemoveDispatchedTimeout_ReceivesPropagatedCancellationToken()
+    {
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts =
+            [
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>(),
+                    Locked = false
+                }
+            ],
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>())).ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        CancellationToken? observedRemoveToken = null;
+        _mockFinder
+            .Setup(f => f.RemoveDispatchedTimeoutAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, Guid?, CancellationToken>((_, _, ct) => observedRemoveToken = ct)
+            .Returns(Task.CompletedTask);
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        using var cts = new CancellationTokenSource();
+
+        await sut.PollOnceAsync(cts.Token);
+
+        Assert.NotNull(observedRemoveToken);
+        Assert.Equal(cts.Token, observedRemoveToken.Value);
     }
 
     [Fact]

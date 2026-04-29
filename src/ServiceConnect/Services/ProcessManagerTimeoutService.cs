@@ -129,7 +129,11 @@ public sealed class ProcessManagerTimeoutService(
                     // Pass the captured lease owner only when one is set — the store treats null
                     // as the unconditional id-only path and a non-null Guid as lease-checked.
                     Guid? lockOwner = timeout.LockedBy != Guid.Empty ? timeout.LockedBy : null;
-                    await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, lockOwner, CancellationToken.None).ConfigureAwait(false);
+                    // See learn/operations/cancellation: token propagation rule. StopAsync becomes
+                    // bounded by the lifecycle token's deadline. A cancel-during-remove leaves the
+                    // timeout "dispatched but not removed" — next poll redispatches, consistent with
+                    // the existing at-least-once timeout semantics.
+                    await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, lockOwner, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
