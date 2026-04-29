@@ -1000,17 +1000,15 @@ public class BusTests
     // --- Reserved header spoof-proofing ---
 
     [Fact]
-    public async Task SendAsync_CallerCannotOverrideSystemHeaders()
+    public async Task SendAsync_CallerCannotOverride_CorrelationIdOrMessageId()
     {
-        // Post-H21: CorrelationId and MessageId are Bus-reserved (callers cannot spoof them).
-        // MessageType is no longer reserved by the Bus — it flows through so the producer
-        // (OutboundHeaderBuilder) can overwrite it with the authoritative operation name.
+        // CorrelationId and MessageId are Bus-authoritative; caller-supplied values are
+        // silently replaced by Bus-generated ones so consumers cannot be spoofed.
         var spoofedMessageId = Guid.NewGuid().ToString();
         var options = new SendOptions
         {
             Headers = new Dictionary<string, string>
             {
-                [HeaderKeys.MessageType] = "SomeoneElsesType",
                 [HeaderKeys.CorrelationId] = "spoofed-correlation",
                 [HeaderKeys.MessageId] = spoofedMessageId,
             }
@@ -1027,11 +1025,68 @@ public class BusTests
         await _bus.SendAsync(message, options, CancellationToken.None);
 
         Assert.NotNull(captured);
-        // MessageType is no longer Bus-reserved; caller value flows through to the producer.
-        Assert.Equal("SomeoneElsesType", captured![HeaderKeys.MessageType]);
-        // CorrelationId and MessageId are still Bus-authoritative.
-        Assert.NotEqual("spoofed-correlation", captured[HeaderKeys.CorrelationId]);
+        Assert.NotEqual("spoofed-correlation", captured![HeaderKeys.CorrelationId]);
         Assert.NotEqual(spoofedMessageId, captured[HeaderKeys.MessageId]);
+    }
+
+    [Fact]
+    public async Task SendAsync_CallerSuppliesMessageType_FlowsThroughToProducer()
+    {
+        // Post-H21: MessageType is no longer Bus-reserved; the caller-supplied value is
+        // forwarded so OutboundHeaderBuilder (the authoritative stamper) can overwrite it
+        // with the correct operation name on the wire.
+        var options = new SendOptions
+        {
+            Headers = new Dictionary<string, string>
+            {
+                [HeaderKeys.MessageType] = "SomeoneElsesType",
+            }
+        };
+
+        IDictionary<string, string>? captured = null;
+        _mockSendPipeline
+            .Setup(x => x.ExecuteSendMessagePipelineAsync(
+                It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
+            .Callback<SendContext, CancellationToken>((ctx, _) => captured = ctx.Headers)
+            .Returns(Task.CompletedTask);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        await _bus.SendAsync(message, options, CancellationToken.None);
+
+        Assert.NotNull(captured);
+        Assert.Equal("SomeoneElsesType", captured![HeaderKeys.MessageType]);
+    }
+
+    [Fact]
+    public async Task SendAsync_CallerSuppliesReservedHeader_LogsWarning()
+    {
+        // Supplying a still-reserved key (CorrelationId) must trigger exactly one
+        // LogWarning that names the offending key, so operators can diagnose
+        // misconfigured callers without silently swallowing the bad input.
+        var options = new SendOptions
+        {
+            Headers = new Dictionary<string, string>
+            {
+                [HeaderKeys.CorrelationId] = "spoofed-id",
+            }
+        };
+
+        _mockSendPipeline
+            .Setup(x => x.ExecuteSendMessagePipelineAsync(
+                It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        await _bus.SendAsync(message, options, CancellationToken.None);
+
+        _mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(HeaderKeys.CorrelationId)),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     [Fact]

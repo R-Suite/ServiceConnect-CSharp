@@ -610,7 +610,7 @@ public sealed class Bus : IBus
     /// <summary>
     /// Header keys that the Bus stamps authoritatively. Caller-supplied values for
     /// any of these keys are silently ignored so the bus remains the single source
-    /// of truth for message identity and type.
+    /// of truth for message identity.
     /// </summary>
     private static readonly HashSet<string> ReservedHeaders = new(StringComparer.Ordinal)
     {
