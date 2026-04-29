@@ -124,7 +124,6 @@ export default defineConfig({
               label: 'Filters & Middleware',
               items: [
                 { label: 'IFilter', link: '/reference/filters/ifilter/' },
-                { label: 'Message Deduplication', link: '/reference/filters/messagededuplication/' },
                 { label: 'IMessageProcessingMiddleware', link: '/reference/filters/imessageprocessingmiddleware/' },
                 { label: 'ISendMessageMiddleware', link: '/reference/filters/isendmessagemiddleware/' },
               ],
