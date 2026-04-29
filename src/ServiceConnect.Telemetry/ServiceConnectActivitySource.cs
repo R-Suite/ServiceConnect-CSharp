@@ -129,43 +129,51 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
-        // Targeted header lookups — decode only the headers actually used here
-        // rather than allocating a full decode dictionary for all 15-20 headers.
-        string? destinationAddress = eventArgs.Headers.TryGetValue(HeaderKeys.DestinationAddress, out var daVal)
-            ? HeaderDecoder.Decode(daVal) : null;
-        string? messageId = eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out var miVal)
-            ? HeaderDecoder.Decode(miVal) : null;
-        string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
-            ? HeaderDecoder.Decode(ciVal) : null;
-
-        activity.DisplayName = (string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive";
-
-        if (messageId is not null)
+        try
         {
-            activity.SetTag(MessagingAttributes.MessageId, messageId);
-        }
+            // Targeted header lookups — decode only the headers actually used here
+            // rather than allocating a full decode dictionary for all 15-20 headers.
+            string? destinationAddress = eventArgs.Headers.TryGetValue(HeaderKeys.DestinationAddress, out var daVal)
+                ? HeaderDecoder.Decode(daVal) : null;
+            string? messageId = eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out var miVal)
+                ? HeaderDecoder.Decode(miVal) : null;
+            string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
+                ? HeaderDecoder.Decode(ciVal) : null;
 
-        if (correlationId is not null)
-        {
-            activity.SetTag(MessagingAttributes.MessageConversationId, correlationId);
-        }
+            activity.DisplayName = (string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive";
 
-        if (!string.IsNullOrEmpty(destinationAddress))
-        {
-            activity.SetTag(MessagingAttributes.MessagingDestination, destinationAddress);
-        }
-        else
-        {
-            activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
-        }
+            if (messageId is not null)
+            {
+                activity.SetTag(MessagingAttributes.MessageId, messageId);
+            }
 
-        if (eventArgs.Message is not null)
-        {
-            activity.SetTag(MessagingAttributes.MessagingBodySize, eventArgs.Message.Length);
-            TryEnrich(activity, eventArgs.Message, options);
-        }
+            if (correlationId is not null)
+            {
+                activity.SetTag(MessagingAttributes.MessageConversationId, correlationId);
+            }
 
-        return activity;
+            if (!string.IsNullOrEmpty(destinationAddress))
+            {
+                activity.SetTag(MessagingAttributes.MessagingDestination, destinationAddress);
+            }
+            else
+            {
+                activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+            }
+
+            if (eventArgs.Message is not null)
+            {
+                activity.SetTag(MessagingAttributes.MessagingBodySize, eventArgs.Message.Length);
+                TryEnrich(activity, eventArgs.Message, options);
+            }
+
+            return activity;
+        }
+        catch
+        {
+            activity.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
