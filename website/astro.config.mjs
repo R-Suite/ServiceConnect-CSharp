@@ -67,6 +67,7 @@ export default defineConfig({
                 { label: 'Hosting & Lifecycle', link: '/learn/operations/hosting/' },
                 { label: 'Error Handling', link: '/learn/operations/error-handling/' },
                 { label: 'Idempotency', link: '/learn/operations/idempotency/' },
+                { label: 'Cancellation', link: '/learn/operations/cancellation/' },
                 { label: 'Observability', link: '/learn/operations/observability/' },
               ],
             },
