@@ -1,2 +1,6 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ServiceConnect.Examples.CustomFilterAndMiddleware.Contracts/ServiceConnect.Examples.CustomFilterAndMiddleware.Contracts.csproj" />
+  </Folder>
+  <Project Path="../../src/ServiceConnect.Interfaces/ServiceConnect.Interfaces.csproj" />
 </Solution>
