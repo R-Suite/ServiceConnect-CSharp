@@ -300,16 +300,35 @@ public static class ServiceConnectActivitySource
             return;
         }
 
-        activity.SetStatus(ActivityStatusCode.Error, exception.Message);
+        var message = options.ExceptionMessageSanitiser is { } sanitise
+            ? sanitise(exception)
+            : exception.Message;
+
+        activity.SetStatus(ActivityStatusCode.Error, message);
+
 #if NET9_0_OR_GREATER
-        // AddException is available on .NET 9+; it records the OTel "exception" event.
-        activity.AddException(exception);
+        if (options.ExceptionMessageSanitiser is null)
+        {
+            // No sanitiser — use the framework's AddException (records the raw message).
+            activity.AddException(exception);
+        }
+        else
+        {
+            // Sanitiser supplied — opt out of AddException (would re-record the unsanitised
+            // message). Record the OTel "exception" event manually with the sanitised message.
+            activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
+            {
+                ["exception.type"] = exception.GetType().FullName,
+                ["exception.message"] = message,
+                ["exception.stacktrace"] = exception.ToString(),
+            }));
+        }
 #else
         // .NET 8 fallback: record the OTel semantic-convention "exception" event manually.
         activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
         {
             ["exception.type"] = exception.GetType().FullName,
-            ["exception.message"] = exception.Message,
+            ["exception.message"] = message,
             ["exception.stacktrace"] = exception.ToString(),
         }));
 #endif
