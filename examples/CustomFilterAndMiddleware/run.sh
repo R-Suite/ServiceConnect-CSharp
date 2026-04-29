@@ -25,7 +25,11 @@ wait_for_rabbitmq() {
   local attempt=0
 
   while [ $attempt -lt $max_attempts ]; do
-    if docker exec custom-filter-rabbit rabbitmq-diagnostics -q ping 2>/dev/null; then
+    # Use a TCP connection check rather than docker-exec + rabbitmq-diagnostics.
+    # rabbitmq-diagnostics spawns an Erlang node on every call; doing that
+    # rapidly during broker startup destabilises the EPMD and causes the
+    # container to crash before the broker is ready.
+    if nc -z localhost 5672 2>/dev/null; then
       return 0
     fi
     sleep 1

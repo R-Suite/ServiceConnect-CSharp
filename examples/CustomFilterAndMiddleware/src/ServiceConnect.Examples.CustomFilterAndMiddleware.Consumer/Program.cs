@@ -38,4 +38,13 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
+// Signal readiness after all hosted services (including BusHostedService) have
+// started, so run.sh can proceed to launch the sender without a fixed sleep.
+host.Services.GetRequiredService<IHostApplicationLifetime>()
+    .ApplicationStarted.Register(() =>
+    {
+        Console.WriteLine("READY:custom-filter-consumer");
+        Console.Out.Flush();
+    });
+
 await host.RunAsync();
