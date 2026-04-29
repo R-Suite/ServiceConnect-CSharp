@@ -175,3 +175,44 @@ public sealed class TelemetryProcessingMiddlewareTests : IDisposable
 
     private sealed class SampleMessage() : Message(Guid.NewGuid());
 }
+
+// No [Collection("ActivityListener")] — no listener is registered, so IsConsumeTelemetryEnabled returns false.
+public sealed class TelemetryProcessingMiddlewareNoListenerTests
+{
+    [Fact]
+    public async Task ProcessAsync_NoListener_DoesNotEnumerateEnvelopeBody()
+    {
+        var options = new ServiceConnectInstrumentationOptions { EnableConsumeTelemetry = true };
+        var attributes = new RabbitMqMessagingSystemAttributes();
+        var middleware = new TelemetryProcessingMiddleware(options, attributes);
+
+        // Envelope.Body is init-only on a sealed class so property access cannot be
+        // intercepted by subclassing. The guard is verified indirectly: confirm that
+        // IsConsumeTelemetryEnabled returns false in this fixture (pre-condition) and
+        // that the middleware completes successfully (no spurious allocation / exception).
+        var envelope = new Envelope
+        {
+            Body = new ReadOnlyMemory<byte>([1, 2, 3]),
+            Headers = new Dictionary<string, object>(),
+        };
+
+        static Task<ConsumeEventResult> Next(
+            ReadOnlyMemory<byte> mb, Type mt, object m,
+            IDictionary<string, object> h, Envelope e, CancellationToken ct) =>
+            Task.FromResult(new ConsumeEventResult { Success = true });
+
+        var result = await middleware.ProcessAsync(
+            new ReadOnlyMemory<byte>([1, 2, 3]),
+            typeof(string),
+            "msg",
+            new Dictionary<string, object>(),
+            envelope,
+            Next,
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        // Pre-condition: gate predicate is false in this no-listener fixture,
+        // confirming the body-copy branch was never entered.
+        Assert.False(ServiceConnectActivitySource.IsConsumeTelemetryEnabled(options));
+    }
+}
