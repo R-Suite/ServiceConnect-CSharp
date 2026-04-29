@@ -161,7 +161,10 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
 
         try
         {
-            await channel.ExchangeDeclareAsync(retryDeadLetterExchangeName, ExchangeType.Direct, durable, autoDelete, null, cancellationToken: cancellationToken).ConfigureAwait(false);
+            // Retry DLX is always autoDelete:false: it must outlive any individual queue lifecycle so
+            // retried messages always have somewhere to land. The caller-supplied `autoDelete` parameter
+            // continues to govern the main queue (declared elsewhere) but the retry DLX is invariant.
+            await channel.ExchangeDeclareAsync(retryDeadLetterExchangeName, ExchangeType.Direct, durable, autoDelete: false, null, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (OperationInterruptedException ex)
         {
@@ -185,11 +188,16 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
             }
         }
 
-        Dictionary<string, object?> arguments = new(retryQueueArguments, StringComparer.Ordinal)
-        {
-            {RabbitMqQueueNaming.XDeadLetterExchangeArgument, retryDeadLetterExchangeName},
-            {RabbitMqQueueNaming.XMessageTtlArgument, retryDelayMs}
-        };
+        Dictionary<string, object?> arguments = new(retryQueueArguments, StringComparer.Ordinal);
+
+        // Framework values for these two keys are non-negotiable: they wire the retry queue to the
+        // retry DLX with the configured TTL. Caller-supplied values are overridden silently except
+        // for a Debug log so config drift surfaces without polluting Information.
+        LogIfOverriding(RabbitMqQueueNaming.XDeadLetterExchangeArgument, arguments, retryDeadLetterExchangeName);
+        LogIfOverriding(RabbitMqQueueNaming.XMessageTtlArgument, arguments, retryDelayMs);
+
+        arguments[RabbitMqQueueNaming.XDeadLetterExchangeArgument] = retryDeadLetterExchangeName;
+        arguments[RabbitMqQueueNaming.XMessageTtlArgument] = retryDelayMs;
 
         try
         {
@@ -202,6 +210,16 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
             {
                 throw;
             }
+        }
+    }
+
+    private void LogIfOverriding<T>(string key, IReadOnlyDictionary<string, object?> existing, T frameworkValue)
+    {
+        if (existing.TryGetValue(key, out var existingValue) && !Equals(existingValue, frameworkValue))
+        {
+            _logger.LogDebug(
+                "Overriding caller-supplied retry-queue argument {Key} (was '{ExistingValue}') with framework value '{FrameworkValue}'",
+                key, existingValue, frameworkValue);
         }
     }
 }
