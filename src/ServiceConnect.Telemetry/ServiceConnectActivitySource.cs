@@ -20,28 +20,25 @@ public static class ServiceConnectActivitySource
     public static IMessagingSystemAttributes MessagingSystemAttributes { get; internal set; } = new RabbitMqMessagingSystemAttributes();
 
     internal static readonly Version? Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
-    internal static readonly string ActivitySourceName = (typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect") + ".Bus";
 
     /// <summary>
-    /// Gets the activity-source name used for publish spans.
+    /// Gets the activity-source name used for all publish, send, and consume spans.
+    /// Register listeners via <c>AddSource("ServiceConnect.Bus")</c>.
     /// </summary>
-    public static readonly string PublishActivitySourceName = ActivitySourceName + ".Publish";
-    /// <summary>
-    /// Gets the activity-source name used for consume spans.
-    /// </summary>
-    public static readonly string ConsumeActivitySourceName = ActivitySourceName + ".Consume";
-    /// <summary>
-    /// Gets the activity-source name used for send spans.
-    /// </summary>
-    public static readonly string SendActivitySourceName = ActivitySourceName + ".Send";
+    public static readonly string ActivitySourceName = (typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect") + ".Bus";
 
-    private static readonly ActivitySource _publishActivitySource = new(PublishActivitySourceName, Version?.ToString() ?? "0.0.0");
-    private static readonly ActivitySource _consumeActivitySource = new(ConsumeActivitySourceName, Version?.ToString() ?? "0.0.0");
-    private static readonly ActivitySource _sendActivitySource = new(SendActivitySourceName, Version?.ToString() ?? "0.0.0");
+    private static readonly ActivitySource _activitySource = new(ActivitySourceName, Version?.ToString() ?? "0.0.0");
+
+    /// <summary>
+    /// Disposes the underlying <see cref="ActivitySource"/>. Call only when unloading
+    /// the assembly in a collectible <c>AssemblyLoadContext</c>; for normal long-running
+    /// processes the source lives for process lifetime and disposal is unnecessary.
+    /// </summary>
+    public static void Shutdown() => _activitySource.Dispose();
 
     /// <summary>
     /// Starts a publish-side activity. Returns <c>null</c> when no listeners are
-    /// registered for <see cref="PublishActivitySourceName"/>.
+    /// registered for <see cref="ActivitySourceName"/>.
     /// </summary>
     public static Activity? Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
     {
@@ -50,8 +47,8 @@ public static class ServiceConnectActivitySource
         InjectTraceContext(Activity.Current, eventArgs.Headers);
 
         Activity? activity = StartActivityWithLink(
-            _publishActivitySource,
-            PublishActivitySourceName,
+            _activitySource,
+            ActivitySourceName,
             ActivityKind.Producer,
             Options.EnablePublishTelemetry,
             "publish",
@@ -96,7 +93,7 @@ public static class ServiceConnectActivitySource
     /// Starts a consume-side activity, extracting the W3C traceparent/tracestate
     /// from <paramref name="eventArgs"/>.Headers so the resulting span is linked to
     /// the publishing activity. Returns <c>null</c> when no listeners are registered
-    /// for <see cref="ConsumeActivitySourceName"/>.
+    /// for <see cref="ActivitySourceName"/>.
     /// </summary>
     public static Activity? Consume(ConsumeEventArgs eventArgs)
     {
@@ -104,8 +101,8 @@ public static class ServiceConnectActivitySource
         ActivityContext.TryParse(traceId, traceState, out ActivityContext parentContext);
 
         Activity? activity = StartActivityWithParent(
-            _consumeActivitySource,
-            ConsumeActivitySourceName,
+            _activitySource,
+            ActivitySourceName,
             ActivityKind.Consumer,
             Options.EnableConsumeTelemetry,
             "receive",
@@ -157,7 +154,7 @@ public static class ServiceConnectActivitySource
 
     /// <summary>
     /// Starts a send-side activity. Returns <c>null</c> when no listeners are
-    /// registered for <see cref="SendActivitySourceName"/>.
+    /// registered for <see cref="ActivitySourceName"/>.
     /// </summary>
     public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
     {
@@ -169,12 +166,12 @@ public static class ServiceConnectActivitySource
 
         // SendAsync writes to a specific queue (point-to-point), but in OTel messaging
         // semantic conventions that is still classified as "publish" — the producer-side
-        // operation name. The point-to-point distinction is preserved by the dedicated
-        // _sendActivitySource and the per-destination DisplayName ("<queue> send"), so
-        // backends that need to disaggregate send from publish can do so by source name.
+        // operation name. The point-to-point distinction is preserved by the shared
+        // _activitySource and the per-destination DisplayName ("<queue> send"), so
+        // backends that need to disaggregate send from publish can filter by activity name.
         Activity? activity = StartActivityWithLink(
-            _sendActivitySource,
-            SendActivitySourceName,
+            _activitySource,
+            ActivitySourceName,
             ActivityKind.Producer,
             Options.EnableSendTelemetry,
             "publish",
@@ -446,6 +443,15 @@ public static class ServiceConnectActivitySource
             activity.SetTag("enrichment.exception", ex.GetType().FullName);
         }
     }
+
+    internal static bool IsPublishTelemetryEnabled(ServiceConnectInstrumentationOptions options)
+        => options.EnablePublishTelemetry && _activitySource.HasListeners();
+
+    internal static bool IsSendTelemetryEnabled(ServiceConnectInstrumentationOptions options)
+        => options.EnableSendTelemetry && _activitySource.HasListeners();
+
+    internal static bool IsConsumeTelemetryEnabled(ServiceConnectInstrumentationOptions options)
+        => options.EnableConsumeTelemetry && _activitySource.HasListeners();
 
     internal static void InvokeTryEnrichForTest(Activity activity, Message? message) =>
         TryEnrich(activity, message);
