@@ -43,9 +43,16 @@ internal sealed class TelemetryProcessingMiddleware(
         try
         {
             var result = await next(messageBytes, messageType, message, headers, envelope, cancellationToken).ConfigureAwait(false);
-            if (!result.Success && result.Exception is not null)
+            if (!result.Success)
             {
-                ServiceConnectActivitySource.SetError(activity, result.Exception, _options);
+                if (result.Exception is not null)
+                {
+                    ServiceConnectActivitySource.SetError(activity, result.Exception, _options);
+                }
+                else
+                {
+                    activity?.SetStatus(ActivityStatusCode.Error, "Dispatch returned Success=false without an exception");
+                }
             }
             return result;
         }

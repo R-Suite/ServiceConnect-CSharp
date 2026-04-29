@@ -118,6 +118,55 @@ public sealed class TelemetryProcessingMiddlewareTests : IDisposable
         Assert.Equal(ActivityStatusCode.Error, span.Status);
     }
 
+    [Fact]
+    public async Task ProcessAsync_ResultSuccessFalseNoException_TagsActivityError()
+    {
+        var middleware = new TelemetryProcessingMiddleware(_options, _attrs);
+
+        ActivityStatusCode observedStatus = ActivityStatusCode.Unset;
+        string? observedDescription = null;
+
+        var capturingListener = new ActivityListener
+        {
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = a =>
+            {
+                observedStatus = a.Status;
+                observedDescription = a.StatusDescription;
+            },
+        };
+        ActivitySource.AddActivityListener(capturingListener);
+        try
+        {
+            static Task<ConsumeEventResult> Next(ReadOnlyMemory<byte> mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct) =>
+                Task.FromResult(new ConsumeEventResult { Success = false, Exception = null });
+
+            var envelope = new Envelope
+            {
+                Body = new ReadOnlyMemory<byte>([1, 2, 3]),
+                Headers = new Dictionary<string, object>(),
+            };
+
+            var result = await middleware.ProcessAsync(
+                new ReadOnlyMemory<byte>([1, 2, 3]),
+                typeof(string),
+                "msg",
+                new Dictionary<string, object>(),
+                envelope,
+                Next,
+                CancellationToken.None);
+
+            Assert.False(result.Success);
+            Assert.Equal(ActivityStatusCode.Error, observedStatus);
+            Assert.Equal("Dispatch returned Success=false without an exception", observedDescription);
+        }
+        finally
+        {
+            capturingListener.Dispose();
+        }
+    }
+
     private static Envelope MakeEnvelope() => new()
     {
         Body = new byte[] { 1 },
