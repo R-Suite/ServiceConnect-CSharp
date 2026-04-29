@@ -239,6 +239,30 @@ public class MessageDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAsync_WhenNotHandled_DoesNotInvokeOnConsumedSuccessfullyFilters()
+    {
+        // Arrange — copied from Dispatch_NoProcessorHandlesMessage_ReturnsNotHandled
+        // Empty processor list → NotHandled=true. The on-success stage must NOT be invoked
+        // even though Success=true (NotHandled=true acks-and-drops without recording).
+        _mockSerializer
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+            .Returns(new FakeMessage1(Guid.NewGuid()));
+
+        var dispatcher = CreateDispatcherWithProcessors([]);
+        var headers = MakeHeaders();
+
+        // Act
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        // Assert
+        Assert.True(result.Success);
+        Assert.True(result.NotHandled);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task Dispatch_SetsConsumeContextOnHandler()
     {
         // Arrange
