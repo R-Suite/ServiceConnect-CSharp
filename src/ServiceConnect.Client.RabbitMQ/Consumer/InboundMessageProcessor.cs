@@ -229,11 +229,15 @@ internal sealed class InboundMessageProcessor(
             catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
             {
                 // Audit is fire-and-forget; shutdown cancellation is expected, not an error.
-                // See learn/operations/cancellation: dispose / observability paths log Debug, not Error.
+                // Swallow (do NOT rethrow) so the already-handled message gets ack'd — see the
+                // pre-existing fire-and-forget rationale comment above. Rethrowing here would
+                // leave processed=false in the caller, the outer finally nacks-with-requeue,
+                // and the broker redelivers a successfully-handled message → duplicate handler
+                // invocation. See learn/operations/cancellation: observability paths log Debug
+                // and continue.
                 _logger.LogDebug(
                     "Audit publish cancelled by shutdown for delivery {DeliveryTag}; continuing to ack the original message",
                     args.DeliveryTag);
-                throw;
             }
             catch (Exception ex)
             {

@@ -18,7 +18,7 @@ public sealed class InboundMessageProcessorAuditCancellationTests
     }
 
     [Fact]
-    public async Task ProcessAsync_AuditPublishOceDuringShutdown_PropagatesOceAndLogsAtDebug()
+    public async Task ProcessAsync_AuditPublishOceDuringShutdown_SwallowsOceAndLogsAtDebug()
     {
         using var shutdownCts = new CancellationTokenSource();
         shutdownCts.Cancel();   // shutdown grace expired
@@ -86,10 +86,11 @@ public sealed class InboundMessageProcessorAuditCancellationTests
             shutdownTimedOut: () => false,
             shutdownPublishToken: () => shutdownCts.Token);
 
-        // Before the fix: the generic catch swallows the OCE and logs Error.
-        // After the fix: the OCE-specific guard logs Debug and re-throws.
-        await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None));
+        // Corrected: the audit OCE is SWALLOWED — processor returns normally so the message is ack'd.
+        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None);
+
+        // Returns true (acks the original message).
+        Assert.True(processed);
 
         // No Error logs — OCE during shutdown is expected, not an error.
         Assert.DoesNotContain(logEntries, e => e.Level == LogLevel.Error);
