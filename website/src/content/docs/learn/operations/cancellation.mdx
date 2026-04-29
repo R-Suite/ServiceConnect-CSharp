@@ -77,7 +77,7 @@ public async Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToke
 
 ### 3. Fire-and-forget cleanup whitelist
 
-Dispose / teardown paths and observability publishes (`DisposeAsync`, `CloseAsync` of resources we're tearing down, audit publish, telemetry inject) are deliberately not cancellable. They run with `CancellationToken.None` (or no token) so cancellation can't leave a half-disposed resource.
+Dispose / teardown paths and observability publishes (`DisposeAsync`, `CloseAsync` of resources we're tearing down, audit publish, telemetry inject) are deliberately fire-and-forget. They may accept a cancellation token to honour a cooperative-shutdown deadline (so they can't block shutdown indefinitely), but they do NOT surface OCE as application errors — an OCE during these paths is swallowed (logged Debug) so the surrounding work can complete its normal flow. Cancellation cannot be used to abort one of these paths and short-circuit subsequent work.
 
 OCE handlers in these paths log at Debug, not Error — an OCE is expected in this regime, not an error.
 
