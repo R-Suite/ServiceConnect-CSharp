@@ -108,9 +108,12 @@ public static class Retry
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    // Cooperative cancellation — propagate so callers can distinguish shutdown
-                    // from a callback failure that should be retried. Mirrors the action-side
-                    // OCE handling at lines 94-97.
+                    // Cooperative cancellation tied to the supplied token — propagate so callers
+                    // can distinguish shutdown from a callback failure that should be retried.
+                    // The action-side catch (lines ~94-97) is broader: it propagates OCE regardless
+                    // of which token cancelled it. The narrower filter here keeps the existing
+                    // behaviour of treating a callback OCE NOT tied to this method's token as a
+                    // retryable failure.
                     // See learn/operations/cancellation.
                     throw;
                 }
