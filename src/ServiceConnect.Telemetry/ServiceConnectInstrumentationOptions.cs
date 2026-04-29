@@ -50,4 +50,19 @@ public sealed class ServiceConnectInstrumentationOptions
     /// If set to true, the instrumentation will collect telemetry information for send commands.
     /// </summary>
     public bool EnableSendTelemetry { get; set; } = true;
+
+    /// <summary>
+    /// Maximum length, in characters, of user-controlled string values written as activity tags
+    /// (destination, routing key, MessageId, conversation id). Values exceeding this length are
+    /// truncated. Defaults to 256. Set to <see cref="int.MaxValue"/> to disable truncation.
+    /// </summary>
+    public int MaxTagValueLength { get; set; } = 256;
+
+    /// <summary>
+    /// Optional sanitiser invoked on exception messages before they are written to
+    /// activity status descriptions and "exception.message" event tags. Use to redact
+    /// PII or sensitive content. Returns the message to record. If null (default),
+    /// the raw <see cref="Exception.Message"/> is recorded.
+    /// </summary>
+    public Func<Exception, string>? ExceptionMessageSanitiser { get; set; }
 }
