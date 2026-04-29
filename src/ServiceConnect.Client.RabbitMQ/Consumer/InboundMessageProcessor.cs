@@ -199,6 +199,15 @@ internal sealed class InboundMessageProcessor(
             {
                 await _auditPublisher.PublishAuditIfEnabledAsync(publishChannel, args, headers, shutdownToken).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+            {
+                // Audit is fire-and-forget; shutdown cancellation is expected, not an error.
+                // See learn/operations/cancellation: dispose / observability paths log Debug, not Error.
+                _logger.LogDebug(
+                    "Audit publish cancelled by shutdown for delivery {DeliveryTag}; continuing to ack the original message",
+                    args.DeliveryTag);
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to publish audit message for delivery {DeliveryTag}; continuing to ack the original message", args.DeliveryTag);
