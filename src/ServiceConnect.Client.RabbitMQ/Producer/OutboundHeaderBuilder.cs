@@ -139,7 +139,7 @@ internal sealed class OutboundHeaderBuilder(
     }
 
     // Avoid StringBuilder allocation inside DateTime.ToString("O").
-    private static string FormatTimestamp(DateTime dt)
+    internal static string FormatTimestamp(DateTime dt)
     {
         Span<char> buffer = stackalloc char[33]; // "O" format max length
         dt.TryFormat(buffer, out int charsWritten, "O");

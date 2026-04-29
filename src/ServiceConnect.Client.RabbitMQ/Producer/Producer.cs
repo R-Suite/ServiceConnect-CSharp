@@ -21,6 +21,7 @@ public sealed class Producer : IProducer
     private readonly OutboundHeaderBuilder _headerBuilder;
     private readonly ProducerConnection _producerConnection;
     private readonly ILogger<Producer> _logger;
+    private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _publishLock = new(1, 1);
     private readonly TimeSpan _publishTimeout;
     private readonly ushort _retryCount;
@@ -61,7 +62,8 @@ public sealed class Producer : IProducer
         _queueConfiguration = queueConfiguration;
         ArgumentNullException.ThrowIfNull(busConfiguration);
         _logger = logger;
-        _headerBuilder = new OutboundHeaderBuilder(busConfiguration, queueConfiguration, timeProvider ?? TimeProvider.System, logger);
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _headerBuilder = new OutboundHeaderBuilder(busConfiguration, queueConfiguration, _timeProvider, logger);
         _producerConnection = new ProducerConnection(transportConfiguration, logger);
 
         var settings = transportConfiguration.ClientSettings;
@@ -221,11 +223,19 @@ public sealed class Producer : IProducer
                 throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
             }
 
-            // Build base headers once outside the loop; only DestinationAddress varies per endpoint.
+            // Build base headers once outside the loop; DestinationAddress, MessageId, and
+            // TimeSent are re-stamped per endpoint so each on-wire message has a distinct
+            // identity. CorrelationId (Bus-stamped, copied in via BuildHeaders) is the
+            // cross-fan-out correlator and is deliberately NOT re-minted here.
             var baseHeaders = _headerBuilder.BuildHeaders(type, headers, string.Empty, "Send");
             foreach (string endPoint in endPoints)
             {
+                // Each delivery is an independent on-wire message: distinct MessageId + TimeSent per
+                // endpoint. CorrelationId (Bus-stamped, copied in via BuildHeaders) is the cross-fan-out
+                // correlator and is deliberately NOT re-minted.
                 baseHeaders[HeaderKeys.DestinationAddress] = endPoint;
+                baseHeaders[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+                baseHeaders[HeaderKeys.TimeSent] = OutboundHeaderBuilder.FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
                 var basicProperties = _headerBuilder.BuildBasicProperties(baseHeaders);
                 await ExecuteWithConnectionRetryAsync(
                     () => PublishWithTimeoutAsync(
