@@ -4,7 +4,9 @@ This area contains runnable console applications for the supported messaging and
 
 ## Patterns
 
-`PointToPoint`, `PublishSubscribe`, `RequestReply`, `CompetingConsumers`, `ContentBasedRouting`, `RoutingSlip`, `ScatterGather`, `Aggregator`, `ProcessManager`, `Filters`, and `Streaming` are implemented and runnable now.
+`PointToPoint`, `PublishSubscribe`, `RequestReply`, `CompetingConsumers`, `ContentBasedRouting`, `RoutingSlip`, `ScatterGather`, `Aggregator`, `ProcessManager`, `Filters`, `CustomFilterAndMiddleware`, and `Streaming` are implemented and runnable now.
+
+`CustomFilterAndMiddleware` shows how to build a custom filter (using the `BeforeConsuming` + `OnConsumedSuccessfully` pipeline stages) and a custom `IMessageProcessingMiddleware`. Worked scenario: broker-redelivery deduplication.
 
 - [PointToPoint](./PointToPoint/)
 - [PublishSubscribe](./PublishSubscribe/)
@@ -16,6 +18,7 @@ This area contains runnable console applications for the supported messaging and
 - [Aggregator](./Aggregator/)
 - [ProcessManager](./ProcessManager/)
 - [Filters](./Filters/)
+- [CustomFilterAndMiddleware](./CustomFilterAndMiddleware/)
 - [Streaming](./Streaming/)
 
 ## Shared Dependencies

@@ -24,9 +24,6 @@ dotnet add package ServiceConnect.Persistence.MongoDb
 
 # Distributed tracing (W3C traceparent injection, OTel messaging semconv)
 dotnet add package ServiceConnect.Telemetry
-
-# Built-in filter
-dotnet add package ServiceConnect.Filters.MessageDeduplication
 ```
 
 ## Quick start
@@ -109,7 +106,7 @@ Each pattern has a conceptual guide and worked example in [the docs](https://r-s
 
 Runnable console apps live in [`examples/`](examples), one per pattern:
 
-[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [PolymorphicMessages](examples/PolymorphicMessages) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [MessageDeduplication](examples/MessageDeduplication) · [Streaming](examples/Streaming) · [Telemetry](examples/Telemetry)
+[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [PolymorphicMessages](examples/PolymorphicMessages) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [CustomFilterAndMiddleware](examples/CustomFilterAndMiddleware) · [Streaming](examples/Streaming) · [Telemetry](examples/Telemetry)
 
 Each example ships with a `run.sh` and a `docker-compose.yml` at `examples/docker-compose.yml` for a local RabbitMQ broker.
 
@@ -120,7 +117,7 @@ ServiceConnect targets modern .NET only — by design.
 - **`net8.0`** — previous LTS. End of Microsoft support: **November 10, 2026**.
 - **`net10.0`** — current LTS. End of Microsoft support: November 14, 2028. Used to opt into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; `net8.0` paths take guarded fallbacks.
 
-All published packages — `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.*`, `ServiceConnect.Telemetry`, and `ServiceConnect.Filters.MessageDeduplication` — multi-target both.
+All published packages — `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.*`, `ServiceConnect.Telemetry`, and `ServiceConnect.HealthChecks` — multi-target both.
 
 We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
 
