@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer.csproj" />
     <Project Path="src/ServiceConnect.Examples.CustomFilterAndMiddleware.Contracts/ServiceConnect.Examples.CustomFilterAndMiddleware.Contracts.csproj" />
+    <Project Path="src/ServiceConnect.Examples.CustomFilterAndMiddleware.Sender/ServiceConnect.Examples.CustomFilterAndMiddleware.Sender.csproj" />
   </Folder>
   <Project Path="../../src/ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.csproj" />
   <Project Path="../../src/ServiceConnect.Interfaces/ServiceConnect.Interfaces.csproj" />
