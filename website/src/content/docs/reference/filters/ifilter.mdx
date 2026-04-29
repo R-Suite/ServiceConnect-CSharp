@@ -93,57 +93,66 @@ Runs the after-consuming filters once the handler has returned.
 
 **Remarks.** Useful for post-processing concerns such as metrics emission, audit trails, or cleanup that is cheaper to run as a predicate than a middleware.
 
+---
+
+### `ExecuteOnConsumedSuccessfullyFiltersAsync`
+
+```csharp
+Task<FilterAction> ExecuteOnConsumedSuccessfullyFiltersAsync(
+    Envelope envelope,
+    CancellationToken cancellationToken = default);
+```
+
+Runs only after a successful handler invocation — the dispatcher's chain
+returned `Success = true` and `NotHandled = false`. Failures and unhandled
+messages skip this stage.
+
+A filter throwing here propagates as a dispatch failure: the dispatcher's
+`catch` block sets `result.Success = false` and the broker redelivers. Use
+this to record at-most-once side effects (deduplication keys, audit events,
+outbox rows) that depend on the handler having actually completed.
+
+`FilterAction.Stop` halts further on-success filters but does **not** flip
+`result.Success` to false — consumption already succeeded.
+
 ## Usage
 
 ### Dropping duplicate messages with a distributed cache
 
 ```csharp
-public sealed class DuplicateDetectionFilter : IFilter
+public sealed class DuplicateCheckFilter : IFilter
 {
-    private static readonly TimeSpan DedupeWindow = TimeSpan.FromHours(6);
-
     private readonly IDistributedCache _cache;
-    private readonly ILogger<DuplicateDetectionFilter> _logger;
+    private const string CachePrefix = "msg:";
 
-    public DuplicateDetectionFilter(
-        IDistributedCache cache,
-        ILogger<DuplicateDetectionFilter> logger)
-    {
-        _cache = cache;
-        _logger = logger;
-    }
+    public DuplicateCheckFilter(IDistributedCache cache) { _cache = cache; }
 
     public async Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        if (!envelope.Headers.TryGetValue("MessageId", out var raw))
-        {
-            // No id header — we cannot dedupe, so let it through.
-            return FilterAction.Continue;
-        }
+        if (!envelope.Headers.TryGetValue("MessageId", out var raw)) return FilterAction.Continue;
+        var cacheKey = CachePrefix + raw;
+        var existing = await _cache.GetAsync(cacheKey, cancellationToken);
+        return existing is null ? FilterAction.Continue : FilterAction.Stop;
+    }
+}
 
-        var messageId = raw?.ToString();
-        if (string.IsNullOrEmpty(messageId))
-        {
-            return FilterAction.Continue;
-        }
+public sealed class DuplicateRecordFilter : IFilter
+{
+    private static readonly TimeSpan DedupeWindow = TimeSpan.FromHours(24);
+    private readonly IDistributedCache _cache;
+    private const string CachePrefix = "msg:";
 
-        var cacheKey = $"seen:{messageId}";
-        var seen = await _cache.GetAsync(cacheKey, cancellationToken);
-        if (seen is { Length: > 0 })
-        {
-            _logger.LogInformation(
-                "Dropping duplicate {MessageType} with MessageId {MessageId}",
-                envelope.Headers.GetValueOrDefault("MessageType"),
-                messageId);
-            return FilterAction.Stop;
-        }
+    public DuplicateRecordFilter(IDistributedCache cache) { _cache = cache; }
 
+    public async Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken cancellationToken = default)
+    {
+        if (!envelope.Headers.TryGetValue("MessageId", out var raw)) return FilterAction.Continue;
+        var cacheKey = CachePrefix + raw;
         await _cache.SetAsync(
             cacheKey,
             new byte[] { 1 },
             new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = DedupeWindow },
             cancellationToken);
-
         return FilterAction.Continue;
     }
 }
@@ -153,11 +162,12 @@ services.AddServiceConnect(builder =>
 {
     builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
     builder.ConfigureQueues(queues => queues.QueueName = "order-service");
-    builder.AddBeforeConsumingFilter<DuplicateDetectionFilter>();
+    builder.AddBeforeConsumingFilter<DuplicateCheckFilter>();
+    builder.AddOnConsumedSuccessfullyFilter<DuplicateRecordFilter>();
 });
 ```
 
-`DuplicateDetectionFilter` runs as a before-consuming stage in front of every handler in `OrderService`. It keys on the transport `MessageId` header, checks an `IDistributedCache` backed by Redis, and either records the id and forwards the message or returns `FilterAction.Stop` so the duplicate is silently dropped without the handler ever being invoked.
+The pair of filters runs in two stages: the before-consuming stage short-circuits the dispatch when the `MessageId` is already recorded; the on-success stage records the id only after the handler has completed. Recording in the before-consuming stage (or in `AfterConsuming`, which runs on both success and failure) silently drops legitimate broker redeliveries after a handler crash — the canonical reason this redesign uses two filters rather than one.
 
 ## See also
 
