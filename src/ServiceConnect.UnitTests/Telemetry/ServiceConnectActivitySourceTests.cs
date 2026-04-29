@@ -739,6 +739,31 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         }
     }
 
+    [Fact]
+    public void InjectHeader_StringDictionaryCarrier_WritesNoWarning()
+    {
+        var listener = new RecordingTraceListener();
+        Trace.Listeners.Add(listener);
+        try
+        {
+            ServiceConnectActivitySource.ResetCarrierWarnedFlagForTest();
+
+            // Correct carrier shape — should NOT trigger any warning.
+            var carrier = new Dictionary<string, string>();
+            ServiceConnectActivitySource.InvokeInjectHeaderForTest(carrier, "k", "v");
+            ServiceConnectActivitySource.InvokeInjectHeaderForTest(carrier, "k2", "v2");
+
+            Assert.DoesNotContain(listener.Warnings, w => w.Contains("InjectHeader"));
+            // Headers were correctly written:
+            Assert.Equal("v", carrier["k"]);
+            Assert.Equal("v2", carrier["k2"]);
+        }
+        finally
+        {
+            Trace.Listeners.Remove(listener);
+        }
+    }
+
     private sealed class RecordingTraceListener : TraceListener
     {
         public List<string> Warnings { get; } = [];
