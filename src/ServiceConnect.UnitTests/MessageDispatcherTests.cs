@@ -634,6 +634,66 @@ public class MessageDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAsync_HandlerThrowsOceDuringShutdown_PropagatesOce_AndDoesNotInvokeExceptionHandler()
+    {
+        // Arrange — same shape as Dispatch_HandlerThrows_ReturnsFailure, but the cancellation token
+        // is pre-cancelled to signal cooperative shutdown. The dispatcher must propagate the OCE
+        // rather than catching it and returning Success=false.
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "ShutdownUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        // The handler itself is never reached because HandlerProcessor.ThrowIfCancellationRequested
+        // fires first on a pre-cancelled token — the important property is that the OCE escapes the
+        // dispatcher catch block rather than being turned into Success=false.
+        var handler = new TestDispatchHandler(onHandle: _ => { });
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var exceptionHandlerInvocations = 0;
+        var mockConfig = new Mock<IBusConfiguration>();
+        mockConfig.Setup(c => c.ExceptionHandler).Returns((Action<Exception>)(ex => exceptionHandlerInvocations++));
+
+        var scopeAccessor = new ConsumeScopeAccessor();
+        var handlerRegistry = BuildHandlerRegistry(
+            (typeof(FakeMessage1), typeof(TestDispatchHandler)),
+            (typeof(PolyBaseMessage), typeof(PolyBaseHandler)));
+        var processors = new List<IMessageProcessor>
+        {
+            new ReplyProcessor(_replyManager),
+            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(sp.GetRequiredService<IBus>), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
+        };
+        var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
+        var dispatcher = new MessageDispatcher(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            processors,
+            NullLogger<MessageDispatcher>.Instance,
+            mockConfig.Object,
+            CreateEmptyPipelineConfig().Object,
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            scopeAccessor,
+            registry);
+
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert — OCE escapes (not swallowed as Success=false)
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers, cts.Token));
+
+        Assert.Equal(0, exceptionHandlerInvocations);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task Dispatch_DerivedMessageType_InvokesBaseTypeHandler()
     {
         // Arrange

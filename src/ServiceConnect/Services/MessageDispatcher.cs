@@ -167,6 +167,13 @@ public sealed class MessageDispatcher(
 
             return result;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cooperative shutdown — propagate so the outer finally leaves the message unacked
+            // for broker redelivery on next start. Not an application error.
+            // See learn/operations/cancellation for the full contract.
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error dispatching message of type {MessageType}", messageType);
