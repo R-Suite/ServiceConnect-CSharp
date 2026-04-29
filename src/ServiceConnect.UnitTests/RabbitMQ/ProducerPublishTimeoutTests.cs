@@ -204,11 +204,13 @@ public class ProducerPublishTimeoutTests
     }
 
     [Fact]
-    public async Task PublishAsync_ResetsConnection_WhenBasicPublishTimesOut()
+    public async Task PublishAsync_MarksResetRequired_WhenBasicPublishTimesOut_WithoutReconnectingUnderLock()
     {
         // Arrange: short timeout so the test doesn't wait long.
-        // Verify that ReconnectForTests (the test-seam for ReconnectAfterPublishFailureAsync)
-        // is invoked after the publish times out, clearing the stale confirm-tracker state.
+        // The publish-timeout catch path must NOT await ReconnectAsync inline (that would hold
+        // _publishLock for up to retryCount * retrySeconds — minutes — blocking concurrent
+        // publishers). Instead it sets the reset-required flag on ProducerConnection; the next
+        // EnsureConnectedAsync drives the actual reconnect off-lock.
         var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
         var channel = MakeHangingChannel();
         var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
@@ -228,8 +230,13 @@ public class ProducerPublishTimeoutTests
         await Assert.ThrowsAsync<TimeoutException>(() =>
             producer.PublishAsync(typeof(object), [1, 2, 3]));
 
-        // Assert: the reconnect hook must have been invoked to clear the confirm-tracker
-        Assert.True(reconnectCalled, "Expected the connection reset to be called after publish timeout.");
+        // Assert: reconnect was NOT invoked from inside the publish catch path.
+        Assert.False(reconnectCalled,
+            "PublishWithTimeoutAsync must not await ReconnectAsync under _publishLock; reset is deferred via MarkResetRequired.");
+
+        // Assert: the reset-required flag is set on _producerConnection so the next publish drives the reset.
+        var resetRequired = GetField<int>(producer, "_resetRequired");
+        Assert.Equal(1, resetRequired);
     }
 
     [Fact]

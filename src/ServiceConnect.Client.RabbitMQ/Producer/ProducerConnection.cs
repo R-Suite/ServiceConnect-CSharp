@@ -39,6 +39,11 @@ internal sealed class ProducerConnection
     private IConnection? _connection;
     private volatile bool _connected;
 
+    // Set by Producer.PublishWithTimeoutAsync when a publish times out (broker confirm did not
+    // arrive within the publish budget). The next EnsureConnectedAsync drives the reconnect off
+    // the publish lock so concurrent publishers are not blocked behind a worst-case retry budget.
+    private int _resetRequired;
+
     // Test hooks consumed by Producer's pass-through properties. Setting these on
     // Producer routes through to here so existing test code (`producer.ReconnectForTests = ...`)
     // is unchanged.
@@ -77,8 +82,32 @@ internal sealed class ProducerConnection
     /// </summary>
     public bool IsHealthy() => _connected && (_model?.IsOpen ?? false);
 
+    /// <summary>
+    /// Marks the connection for reset on the next call to <see cref="EnsureConnectedAsync"/>.
+    /// Synchronous and idempotent. Used by Producer.PublishWithTimeoutAsync to avoid awaiting
+    /// ReconnectAsync while holding the publish lock.
+    /// </summary>
+    internal void MarkResetRequired() => Interlocked.Exchange(ref _resetRequired, 1);
+
+    /// <summary>Test seam: snapshot of the reset flag for unit-test assertions.</summary>
+    internal bool ResetRequiredForTests => Volatile.Read(ref _resetRequired) == 1;
+
     public async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
+        // Atomically consume the reset-required flag set by a prior publish timeout. The
+        // ReconnectAsync below holds _connectionSemaphore (NOT the producer's _publishLock),
+        // so concurrent publishers waiting on the publish lock are not blocked here. Only one
+        // caller succeeds at the Exchange — the rest see flag == 0 and proceed normally.
+        if (Interlocked.Exchange(ref _resetRequired, 0) == 1)
+        {
+            await ReconnectAsync(
+                new InvalidOperationException("Channel reset required after publish timeout"),
+                cancellationToken).ConfigureAwait(false);
+            // ReconnectAsync calls EnsureConnectedAsync internally on the no-test-hook path, so
+            // we are already healthy on return. Fall through for explicit safety in case the
+            // test-hook path replaces ReconnectAsync.
+        }
+
         if (IsHealthy())
         {
             return;

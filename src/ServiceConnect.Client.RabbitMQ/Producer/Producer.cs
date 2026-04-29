@@ -457,13 +457,15 @@ public sealed class Producer : IProducer
         // Only remap to TimeoutException when our linked CTS fired AND the caller's token didn't.
         // A spurious OCE (neither token cancelled) propagates as cancellation; a caller-requested
         // cancellation wins priority over timeout mapping.
-        catch (OperationCanceledException oce) when (linked.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (linked.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            // Reset the channel: the broker may eventually ack this timed-out publish, which
-            // would contaminate the confirm slot of a later in-flight publish. A fresh
-            // connection + channel clears the confirm-tracker's state.
-            try { await _producerConnection.ReconnectAsync(oce, cancellationToken).ConfigureAwait(false); }
-            catch (Exception resetEx) { _logger.LogError(resetEx, "Failed to reset connection after publish timeout; channel state may be indeterminate."); }
+            // Mark the channel for reset on the next publish. The reset runs inside EnsureConnectedAsync,
+            // which is called BEFORE _publishLock.WaitAsync, so concurrent publishers are not blocked
+            // behind it. We do NOT reconnect here: doing so would hold _publishLock for up to
+            // retryCount * retrySeconds (default 60 * 10s = 10 minutes) blocking every other publisher.
+            // The broker may still eventually ack this timed-out publish; a fresh connection + channel
+            // on the next publish clears the confirm-tracker's state before any subsequent publish runs.
+            _producerConnection.MarkResetRequired();
 
             throw new TimeoutException(
                 $"BasicPublishAsync exceeded the configured publish timeout of {_publishTimeout.TotalSeconds:0.###}s " +
