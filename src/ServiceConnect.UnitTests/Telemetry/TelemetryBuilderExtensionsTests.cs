@@ -60,6 +60,72 @@ public sealed class TelemetryBuilderExtensionsTests
         Assert.False(options.EnablePublishTelemetry);
     }
 
+    [Fact]
+    public void AddTelemetry_TwoBuilders_ProduceDistinctOptionsInstances()
+    {
+        var builderA = new ServiceConnectBuilder();
+        var builderB = new ServiceConnectBuilder();
+
+        builderA.AddTelemetry(o => o.EnablePublishTelemetry = true);
+        builderB.AddTelemetry(o => o.EnablePublishTelemetry = false);
+
+        var servicesA = new ServiceCollection();
+        foreach (var reg in builderA.AdditionalRegistrations)
+        {
+            reg(servicesA);
+        }
+
+        var optionsA = servicesA.BuildServiceProvider().GetRequiredService<ServiceConnectInstrumentationOptions>();
+
+        var servicesB = new ServiceCollection();
+        foreach (var reg in builderB.AdditionalRegistrations)
+        {
+            reg(servicesB);
+        }
+
+        var optionsB = servicesB.BuildServiceProvider().GetRequiredService<ServiceConnectInstrumentationOptions>();
+
+        Assert.NotSame(optionsA, optionsB);
+        Assert.True(optionsA.EnablePublishTelemetry);
+        Assert.False(optionsB.EnablePublishTelemetry);
+    }
+
+    [Fact]
+    public void AddTelemetry_UserRegisteredAttributes_WinOverDefault()
+    {
+        var builder = new ServiceConnectBuilder();
+
+        var customAttrs = new TestKafkaMessagingSystemAttributes();
+        builder.AddRegistration(s => s.AddSingleton<IMessagingSystemAttributes>(customAttrs));
+
+        builder.AddTelemetry();
+
+        var services = new ServiceCollection();
+        foreach (var reg in builder.AdditionalRegistrations)
+        {
+            reg(services);
+        }
+
+        var resolved = services.BuildServiceProvider().GetRequiredService<IMessagingSystemAttributes>();
+        Assert.Same(customAttrs, resolved);
+    }
+
+    [Fact]
+    public void AddTelemetry_NoUserAttributesRegistration_DefaultsToRabbitMq()
+    {
+        var builder = new ServiceConnectBuilder();
+        builder.AddTelemetry();
+
+        var services = new ServiceCollection();
+        foreach (var reg in builder.AdditionalRegistrations)
+        {
+            reg(services);
+        }
+
+        var resolved = services.BuildServiceProvider().GetRequiredService<IMessagingSystemAttributes>();
+        Assert.IsType<RabbitMqMessagingSystemAttributes>(resolved);
+    }
+
     private sealed class DummySend : ISendMessageMiddleware
     {
         public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
@@ -74,5 +140,11 @@ public sealed class TelemetryBuilderExtensionsTests
             MessageProcessingDelegate next,
             CancellationToken cancellationToken)
             => next(messageBytes, messageType, message, headers, envelope, cancellationToken);
+    }
+
+    private sealed class TestKafkaMessagingSystemAttributes : IMessagingSystemAttributes
+    {
+        public string MessagingSystem => "kafka";
+        public string ProtocolName => "kafka";
     }
 }
