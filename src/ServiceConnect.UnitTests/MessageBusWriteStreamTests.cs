@@ -232,6 +232,39 @@ public class MessageBusWriteStreamTests
     }
 
     [Fact]
+    public async Task CloseAsync_TokenCancelledDuringClosePacketSend_PropagatesOce()
+    {
+        // The close-packet send blocks until the token is cancelled. If CloseAsync does NOT
+        // forward the token, the mock's WaitAsync(ct) receives CancellationToken.None and never
+        // unblocks — the test would hang indefinitely. The fix is line 195: pass cancellationToken.
+        var sendStarted = new TaskCompletionSource();
+        var sendBlock = new TaskCompletionSource();
+
+        var producer = new Mock<IProducer>();
+        producer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(),
+                It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string ep, Type t, byte[] body, IDictionary<string, string> h, CancellationToken ct) =>
+            {
+                sendStarted.SetResult();
+                // WaitAsync(ct) only cancels if ct is the real token; if ct is CancellationToken.None it blocks forever.
+                await sendBlock.Task.WaitAsync(ct).ConfigureAwait(false);
+            });
+
+        var stream = new MessageBusWriteStream(producer.Object, "queue", typeof(string));
+        using var cts = new CancellationTokenSource();
+
+        var closeTask = stream.CloseAsync(cts.Token);
+        await sendStarted.Task;
+
+        // Cancel the token — only propagates to SendBytesAsync if CloseAsync forwarded it.
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => closeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task CloseAsync_CancelledDuringDrain_ThrowsOperationCanceledException()
     {
         // A producer whose SendBytesAsync never completes simulates a stalled in-flight write.
