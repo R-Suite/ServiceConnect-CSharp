@@ -117,7 +117,7 @@ public static class ServiceConnectActivitySource
         PublishEventArgs eventArgs,
         ServiceConnectInstrumentationOptions options,
         IMessagingSystemAttributes attributes,
-        ActivityContext linkedContext = default);
+        ActivityContext parentContext = default);
 
     public static Activity? Consume(
         ConsumeEventArgs eventArgs,
@@ -128,7 +128,7 @@ public static class ServiceConnectActivitySource
         SendEventArgs eventArgs,
         ServiceConnectInstrumentationOptions options,
         IMessagingSystemAttributes attributes,
-        ActivityContext linkedContext = default);
+        ActivityContext parentContext = default);
 
     public static void SetError(
         Activity? activity,

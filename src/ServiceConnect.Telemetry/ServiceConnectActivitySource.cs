@@ -35,7 +35,7 @@ public static class ServiceConnectActivitySource
         PublishEventArgs eventArgs,
         ServiceConnectInstrumentationOptions options,
         IMessagingSystemAttributes attributes,
-        ActivityContext linkedContext = default)
+        ActivityContext parentContext = default)
     {
         ArgumentNullException.ThrowIfNull(eventArgs);
         ArgumentNullException.ThrowIfNull(options);
@@ -48,7 +48,7 @@ public static class ServiceConnectActivitySource
             options.EnablePublishTelemetry,
             attributes,
             "publish",
-            linkedContext);
+            parentContext);
 
         if (activity is null)
         {
@@ -204,7 +204,7 @@ public static class ServiceConnectActivitySource
         SendEventArgs eventArgs,
         ServiceConnectInstrumentationOptions options,
         IMessagingSystemAttributes attributes,
-        ActivityContext linkedContext = default)
+        ActivityContext parentContext = default)
     {
         ArgumentNullException.ThrowIfNull(eventArgs);
         ArgumentNullException.ThrowIfNull(options);
@@ -222,7 +222,7 @@ public static class ServiceConnectActivitySource
             options.EnableSendTelemetry,
             attributes,
             "publish",
-            linkedContext);
+            parentContext);
 
         if (activity is null)
         {
