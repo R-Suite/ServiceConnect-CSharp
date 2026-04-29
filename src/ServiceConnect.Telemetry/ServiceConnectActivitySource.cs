@@ -372,13 +372,32 @@ public static class ServiceConnectActivitySource
         DistributedContextPropagator.Current.Inject(activity, headers, InjectHeader);
     }
 
+    private static int _warnedAboutCarrierShape;
+
     private static void InjectHeader(object? carrier, string fieldName, string fieldValue)
     {
         if (carrier is IDictionary<string, string> headers)
         {
             headers[fieldName] = fieldValue;
+            return;
+        }
+
+        if (Interlocked.CompareExchange(ref _warnedAboutCarrierShape, 1, 0) == 0)
+        {
+            // Once-per-process diagnostic — a refactor that changes the carrier type
+            // silently disables trace propagation. Use Trace because static helpers
+            // don't have an ILogger; OTel users routinely route .NET trace listeners.
+            Trace.TraceWarning(
+                "ServiceConnectActivitySource.InjectHeader: unsupported carrier type {0}; trace context not propagated.",
+                carrier?.GetType().FullName ?? "<null>");
         }
     }
+
+    // Test seams — internal so the unit-test project can exercise the warning path.
+    internal static void InvokeInjectHeaderForTest(object? carrier, string fieldName, string fieldValue) =>
+        InjectHeader(carrier, fieldName, fieldValue);
+    internal static void ResetCarrierWarnedFlagForTest() =>
+        Interlocked.Exchange(ref _warnedAboutCarrierShape, 0);
 
     private static Activity? StartActivityWithParent(
         ActivitySource activitySource,

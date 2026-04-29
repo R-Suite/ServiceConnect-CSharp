@@ -718,6 +718,48 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         }
     }
 
+    [Fact]
+    public void InjectHeader_UnsupportedCarrier_WritesWarningOnce()
+    {
+        var listener = new RecordingTraceListener();
+        Trace.Listeners.Add(listener);
+        try
+        {
+            ServiceConnectActivitySource.ResetCarrierWarnedFlagForTest();
+
+            // Two invocations of InjectHeaderForTest with the wrong carrier shape:
+            ServiceConnectActivitySource.InvokeInjectHeaderForTest(new Dictionary<string, object>(), "k", "v");
+            ServiceConnectActivitySource.InvokeInjectHeaderForTest(new Dictionary<string, object>(), "k", "v");
+
+            Assert.Single(listener.Warnings, w => w.Contains("InjectHeader"));
+        }
+        finally
+        {
+            Trace.Listeners.Remove(listener);
+        }
+    }
+
+    private sealed class RecordingTraceListener : TraceListener
+    {
+        public List<string> Warnings { get; } = [];
+        public override void TraceEvent(TraceEventCache? cache, string source, TraceEventType type, int id, string? message)
+        {
+            if (type == TraceEventType.Warning && message is not null)
+            {
+                Warnings.Add(message);
+            }
+        }
+        public override void TraceEvent(TraceEventCache? cache, string source, TraceEventType type, int id, string? format, params object?[]? args)
+        {
+            if (type == TraceEventType.Warning && format is not null)
+            {
+                Warnings.Add(args is { Length: > 0 } ? string.Format(format, args) : format);
+            }
+        }
+        public override void Write(string? message) { }
+        public override void WriteLine(string? message) { }
+    }
+
     private sealed class CountingPropagator(Action onInject) : DistributedContextPropagator
     {
         public override IReadOnlyCollection<string> Fields => [];
