@@ -647,7 +647,7 @@ public sealed class Bus : IBus
         }
 
         // Bus-authoritative: stamp system headers last so callers cannot spoof via options.Headers.
-        // Outgoing filters (e.g. OutgoingDeduplicationFilter) rely on MessageId being present.
+        // Outgoing filters and middleware rely on MessageId / CorrelationId / MessageType being present.
         envelope.Headers[HeaderKeys.MessageType] = messageType.FullName ?? messageType.Name;
         envelope.Headers[HeaderKeys.CorrelationId] = correlationId.ToString();
         envelope.Headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
