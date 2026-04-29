@@ -62,9 +62,26 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
         {
             retryCount++;
             HeaderHelpers.SetHeader(headers, HeaderKeys.RetryCount, retryCount);
-            var props = new BasicProperties(args.BasicProperties)
+            // Explicit copy avoids the copy-constructor's "any malformed source field throws" risk.
+            // The set of fields here mirrors the AMQP BASIC properties RabbitMQ.Client exposes;
+            // adding a field to BasicProperties without updating this copy is a silent regression —
+            // MessageRetryHandlerCopyPropsTests guards against that.
+            var props = new BasicProperties
             {
-                Headers = HeaderHelpers.ToNullableHeaders(headers)
+                ContentType = args.BasicProperties.ContentType,
+                ContentEncoding = args.BasicProperties.ContentEncoding,
+                DeliveryMode = args.BasicProperties.DeliveryMode,
+                Priority = args.BasicProperties.Priority,
+                CorrelationId = args.BasicProperties.CorrelationId,
+                ReplyTo = args.BasicProperties.ReplyTo,
+                Expiration = args.BasicProperties.Expiration,
+                MessageId = args.BasicProperties.MessageId,
+                Timestamp = args.BasicProperties.Timestamp,
+                Type = args.BasicProperties.Type,
+                UserId = args.BasicProperties.UserId,
+                AppId = args.BasicProperties.AppId,
+                ClusterId = args.BasicProperties.ClusterId,
+                Headers = HeaderHelpers.ToNullableHeaders(headers),
             };
             await channel.BasicPublishAsync(string.Empty, retryQueueName, false, props, args.Body, cancellationToken).ConfigureAwait(false);
             return;
@@ -117,9 +134,23 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
             _logger.LogError(ex, "Rejecting permanently invalid inbound message with MessageId {MessageId}", args.BasicProperties.MessageId);
         }
 
-        var errorProps = new BasicProperties(args.BasicProperties)
+        // Same field-by-field copy as the retry-publish path — see comment there.
+        var errorProps = new BasicProperties
         {
-            Headers = HeaderHelpers.ToNullableHeaders(headers)
+            ContentType = args.BasicProperties.ContentType,
+            ContentEncoding = args.BasicProperties.ContentEncoding,
+            DeliveryMode = args.BasicProperties.DeliveryMode,
+            Priority = args.BasicProperties.Priority,
+            CorrelationId = args.BasicProperties.CorrelationId,
+            ReplyTo = args.BasicProperties.ReplyTo,
+            Expiration = args.BasicProperties.Expiration,
+            MessageId = args.BasicProperties.MessageId,
+            Timestamp = args.BasicProperties.Timestamp,
+            Type = args.BasicProperties.Type,
+            UserId = args.BasicProperties.UserId,
+            AppId = args.BasicProperties.AppId,
+            ClusterId = args.BasicProperties.ClusterId,
+            Headers = HeaderHelpers.ToNullableHeaders(headers),
         };
         await channel.BasicPublishAsync(_errorExchange, string.Empty, false, errorProps, args.Body, cancellationToken).ConfigureAwait(false);
     }
