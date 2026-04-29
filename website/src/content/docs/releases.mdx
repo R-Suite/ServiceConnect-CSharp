@@ -72,6 +72,26 @@ Caller-supplied headers can no longer override the framework's reserved keys. `D
 
 `ServiceConnect.Telemetry` now injects the W3C `traceparent`/`tracestate` onto outgoing messages (it already extracted on consume). Spans are tagged with the correct OTel messaging semconv — `publish` for pub/sub and `send` for point-to-point — so dashboards aggregate each traffic shape separately. Trace-context extraction now iterates via the dictionary interface, so header bags wrapped as `ReadOnlyDictionary` no longer silently lose the trace context. See [Observability](/ServiceConnect-CSharp/learn/operations/observability/).
 
+### Breaking — telemetry static state removed
+
+`ServiceConnectActivitySource.Options` and `ServiceConnectActivitySource.MessagingSystemAttributes` are gone. The public `Publish`/`Send`/`Consume`/`SetError` methods now take `ServiceConnectInstrumentationOptions options` and `IMessagingSystemAttributes attributes` as parameters. Two buses in the same process can now have truly independent enrichment delegates and enable-flags. The middlewares pick both up via DI; user code calling `ServiceConnectActivitySource` directly must update.
+
+### Breaking — single ActivitySource
+
+The three sources `ServiceConnect.Bus.Publish`, `ServiceConnect.Bus.Consume`, and `ServiceConnect.Bus.Send` collapse into one named `"ServiceConnect.Bus"`. OTel listener config simplifies to `AddSource("ServiceConnect.Bus")` (or `AddSource(ServiceConnectActivitySource.ActivitySourceName)`). Per-direction enablement remains via `EnablePublishTelemetry` / `EnableConsumeTelemetry` / `EnableSendTelemetry` flags.
+
+### New — `MaxTagValueLength` and `ExceptionMessageSanitiser` options
+
+`MaxTagValueLength` (default 256) bounds user-controlled string tags (destination, routing key, MessageId, conversation id) for cardinality safety. `ExceptionMessageSanitiser` (default null) lets callers redact PII in exception messages before they reach activity status descriptions and `exception.message` event tags. On .NET 9+, when a sanitiser is set, `SetError` opts out of `Activity.AddException` and writes the `exception.*` event attributes manually using the sanitised string.
+
+### Fix — telemetry activity leak on enricher OCE
+
+The user-supplied `EnrichWithMessage`/`EnrichWithMessageBytes` delegate rethrows `OperationCanceledException` by design. Previously, an OCE from the enricher leaked the started activity (the call site never reached the middleware's `finally { activity?.Dispose(); }`). The fix wraps post-`StartActivity` work in `try { ... } catch { activity.Dispose(); throw; }` at all three call sites.
+
+### Fix — body copy gated on listener presence
+
+`TelemetryProcessingMiddleware` previously copied `envelope.Body.ToArray()` for every consumed message regardless of whether any `ActivityListener` was attached. The fix gates the allocation on `ServiceConnectActivitySource.IsConsumeTelemetryEnabled(options)`, which checks both the enable-flag and `ActivitySource.HasListeners()`.
+
 ### Health checks
 
 `ServiceConnect.HealthChecks` is a new optional package that ships three opt-in `IHealthCheck` classes for `Microsoft.Extensions.Diagnostics.HealthChecks`: `BusConsumingHealthCheck` (observes `IBus.IsConsuming`), `ConsumerConnectionHealthCheck` (observes `IConsumer.IsConnected`), and `ProducerConnectionHealthCheck` (observes `IProducer.IsHealthy` — a new property promoted to the `IProducer` interface in this release, mirroring the existing `IConsumer.IsConnected`). The package is transport-agnostic and registered through standard `IHealthChecksBuilder` extension methods. See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/#health-checks) for wiring and the [`ServiceConnect.HealthChecks` reference](/ServiceConnect-CSharp/reference/healthchecks/) for the full API surface.
