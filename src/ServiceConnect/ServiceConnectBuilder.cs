@@ -172,6 +172,22 @@ public sealed class ServiceConnectBuilder
     }
 
     /// <summary>
+    /// Adds a filter that runs only after a successful handler invocation
+    /// (the dispatcher chain returned <c>Success = true</c> and
+    /// <c>NotHandled = false</c>). Failures and unhandled messages skip this stage.
+    /// Use for at-most-once side effects that depend on the handler having
+    /// completed — e.g. recording a deduplication key, publishing an audit
+    /// event, writing to an outbox.
+    /// </summary>
+    /// <typeparam name="T">The filter type.</typeparam>
+    /// <returns>The current builder instance.</returns>
+    public ServiceConnectBuilder AddOnConsumedSuccessfullyFilter<T>() where T : class, IFilter
+    {
+        BusConfig.Pipeline.OnConsumedSuccessfullyFilters.Add(typeof(T));
+        return this;
+    }
+
+    /// <summary>
     /// Adds middleware that wraps outgoing send and publish operations.
     /// </summary>
     /// <typeparam name="T">The middleware type.</typeparam>

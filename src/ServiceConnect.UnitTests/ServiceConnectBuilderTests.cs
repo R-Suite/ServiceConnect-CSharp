@@ -73,6 +73,16 @@ public class ServiceConnectBuilderTests
     }
 
     [Fact]
+    public void AddOnConsumedSuccessfullyFilter_AppendsTypeToConfig()
+    {
+        var builder = new ServiceConnectBuilder();
+
+        builder.AddOnConsumedSuccessfullyFilter<TestFilter>();
+
+        Assert.Contains(typeof(TestFilter), builder.BusConfig.Pipeline.OnConsumedSuccessfullyFilters);
+    }
+
+    [Fact]
     public void ScanAssemblies_NullArray_Throws()
     {
         var builder = new ServiceConnectBuilder();
