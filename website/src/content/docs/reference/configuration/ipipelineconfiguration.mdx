@@ -35,6 +35,22 @@ Gets the filters that run after handler invocation.
 
 ---
 
+### `OnConsumedSuccessfullyFilters`
+
+```csharp
+IReadOnlyList<Type> OnConsumedSuccessfullyFilters { get; }
+```
+
+The filters that run only after a successful handler invocation. The
+dispatcher invokes this stage when the chain returned
+`ConsumeEventResult.Success = true` and `NotHandled = false` — failures and
+unhandled messages skip it. Use for at-most-once side effects (dedup,
+outbox, audit) that depend on the handler having completed.
+
+See [`IFilter.ExecuteOnConsumedSuccessfullyFiltersAsync`](../../filters/ifilter/#executeonconsumedsuccessfullyfiltersasync) for filter-author semantics.
+
+---
+
 ### `OutgoingFilters`
 
 ```csharp
