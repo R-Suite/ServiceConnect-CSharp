@@ -189,6 +189,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, null, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Drives a delivery directly through the admission and processing pipeline.
+    /// Exposed so unit tests can exercise the full EventAsync path without going through
+    /// the RabbitMQ broker. Named deliberately so follow-on tests can find it by convention.
+    /// </summary>
+    internal Task RaiseDeliveryForTests(BasicDeliverEventArgs args, CancellationToken ct = default)
+        => EventAsync(this, args, ct);
+
     // Pass cancellationToken as a method parameter instead of storing it.
     private async Task EventAsync(object _, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
@@ -265,14 +273,32 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             {
                 foreach (var kvp in inboundHeaders)
                 {
-                    if (kvp.Value is byte[] bytes && bytes.Length > DefaultMaxHeaderValueBytes)
+                    int byteSize;
+                    if (kvp.Value is byte[] bytes)
+                    {
+                        byteSize = bytes.Length;
+                    }
+                    else if (kvp.Value is string s)
+                    {
+                        // string headers stamped by ServiceConnect (TypeName, FullTypeName, etc.) need
+                        // bounding too — a buggy producer could send a 100MB string and exhaust memory
+                        // on every consumer in the system. UTF-8 byte count matches the on-wire size.
+                        byteSize = System.Text.Encoding.UTF8.GetByteCount(s);
+                    }
+                    else
+                    {
+                        // Non-string, non-byte-array headers (int, bool, etc.) are size-bounded by their type.
+                        continue;
+                    }
+
+                    if (byteSize > DefaultMaxHeaderValueBytes)
                     {
                         await _retryHandler.HandleTerminalFailureAsync(
                             publishChannel!,
                             args,
                             CopyInboundHeaders(args),
                             new InvalidOperationException(
-                                $"Inbound header '{kvp.Key}' size {bytes.Length} bytes exceeds configured limit {DefaultMaxHeaderValueBytes} bytes."),
+                                $"Inbound header '{kvp.Key}' size {byteSize} bytes exceeds configured limit {DefaultMaxHeaderValueBytes} bytes."),
                             GetShutdownPublishToken())
                             .ConfigureAwait(false);
                         processed = true;
