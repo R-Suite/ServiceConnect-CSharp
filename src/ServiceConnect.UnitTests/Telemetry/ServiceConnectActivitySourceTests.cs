@@ -692,6 +692,27 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     }
 
     [Fact]
+    public void Consume_MalformedTraceparent_FallsBackToActivityCurrent()
+    {
+        using var ambient = new Activity("ambient").Start();
+
+        var args = new ConsumeEventArgs
+        {
+            Message = [1],
+            Type = "FakeMessage",
+            Headers = new Dictionary<string, object>
+            {
+                ["traceparent"] = "this-is-not-a-valid-traceparent",
+            },
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
+
+        Assert.NotNull(activity);
+        Assert.Equal(ambient.TraceId, activity!.TraceId);
+    }
+
+    [Fact]
     public void Publish_EnricherThrowsOce_DisposesActivity_AndRestoresAmbientCurrent()
     {
         var ambient = new Activity("ambient").Start();

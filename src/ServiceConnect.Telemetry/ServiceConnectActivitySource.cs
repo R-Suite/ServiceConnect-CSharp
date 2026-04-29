@@ -113,7 +113,12 @@ public static class ServiceConnectActivitySource
         ArgumentNullException.ThrowIfNull(attributes);
 
         DistributedContextPropagator.Current.ExtractTraceIdAndState(eventArgs.Headers, ExtractTraceIdAndState, out string? traceId, out string? traceState);
-        ActivityContext.TryParse(traceId, traceState, out ActivityContext parentContext);
+        if (!ActivityContext.TryParse(traceId, traceState, out ActivityContext parentContext))
+        {
+            // Malformed traceparent — fall through with default parentContext;
+            // ActivitySource.StartActivity then picks Activity.Current as the parent.
+            parentContext = default;
+        }
 
         Activity? activity = StartActivityWithParent(
             _activitySource,
