@@ -41,7 +41,7 @@ public static class ServiceConnectActivitySource
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(attributes);
 
-        Activity? activity = StartActivityWithLink(
+        Activity? activity = StartActivityWithParent(
             _activitySource,
             ActivitySourceName,
             ActivityKind.Producer,
@@ -215,7 +215,7 @@ public static class ServiceConnectActivitySource
         // operation name. The point-to-point distinction is preserved by the shared
         // _activitySource and the per-destination DisplayName ("<queue> send"), so
         // backends that need to disaggregate send from publish can filter by activity name.
-        Activity? activity = StartActivityWithLink(
+        Activity? activity = StartActivityWithParent(
             _activitySource,
             ActivitySourceName,
             ActivityKind.Producer,
@@ -476,40 +476,6 @@ public static class ServiceConnectActivitySource
         }
 
         Activity? activity = activitySource.StartActivity(activityName, kind, parentContext);
-        if (activity is null)
-        {
-            return null;
-        }
-
-        if (activity.IsAllDataRequested)
-        {
-            activity
-                .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
-                .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
-                .SetTag(MessagingAttributes.MessagingOperation, operation);
-        }
-
-        return activity;
-    }
-
-    private static Activity? StartActivityWithLink(
-        ActivitySource activitySource,
-        string activityName,
-        ActivityKind kind,
-        bool enabled,
-        IMessagingSystemAttributes attributes,
-        string operation,
-        ActivityContext linkedContext)
-    {
-        if (!enabled || !activitySource.HasListeners())
-        {
-            return null;
-        }
-
-        // L11: pass linkedContext as the parent so the activity is properly parented.
-        // When linkedContext is default, ActivitySource falls back to Activity.Current
-        // which is the desired ambient behaviour.
-        Activity? activity = activitySource.StartActivity(activityName, kind, linkedContext);
         if (activity is null)
         {
             return null;
