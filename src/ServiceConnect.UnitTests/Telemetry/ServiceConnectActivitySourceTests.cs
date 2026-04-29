@@ -692,6 +692,44 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     }
 
     [Fact]
+    public void Publish_InjectsTraceContextExactlyOnce_WhenListenerAttached()
+    {
+        var injectCount = 0;
+        var originalPropagator = DistributedContextPropagator.Current;
+        try
+        {
+            DistributedContextPropagator.Current = new CountingPropagator(() => injectCount++);
+
+            var args = new PublishEventArgs
+            {
+                Message = new Message(Guid.NewGuid()),
+                Exchange = "exchange",
+                Headers = new Dictionary<string, string>(),
+            };
+
+            using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
+            Assert.NotNull(activity);
+
+            Assert.Equal(1, injectCount);
+        }
+        finally
+        {
+            DistributedContextPropagator.Current = originalPropagator;
+        }
+    }
+
+    private sealed class CountingPropagator(Action onInject) : DistributedContextPropagator
+    {
+        public override IReadOnlyCollection<string> Fields => [];
+        public override void Inject(Activity? activity, object? carrier, PropagatorSetterCallback? setter)
+            => onInject();
+        public override void ExtractTraceIdAndState(object? carrier, PropagatorGetterCallback? getter, out string? traceId, out string? traceState)
+        { traceId = null; traceState = null; }
+        public override IEnumerable<KeyValuePair<string, string?>>? ExtractBaggage(object? carrier, PropagatorGetterCallback? getter)
+            => null;
+    }
+
+    [Fact]
     public void Consume_MalformedTraceparent_FallsBackToActivityCurrent()
     {
         using var ambient = new Activity("ambient").Start();

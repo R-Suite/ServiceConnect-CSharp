@@ -41,10 +41,6 @@ public static class ServiceConnectActivitySource
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(attributes);
 
-        // Inject ambient trace context unconditionally so outer (ASP.NET / OTel) spans
-        // propagate across the broker even when ServiceConnect's own spans are disabled.
-        InjectTraceContext(Activity.Current, eventArgs.Headers);
-
         Activity? activity = StartActivityWithLink(
             _activitySource,
             ActivitySourceName,
@@ -56,11 +52,16 @@ public static class ServiceConnectActivitySource
 
         if (activity is null)
         {
+            // L13: single inject. No activity → propagate ambient context for downstream linking.
+            InjectTraceContext(Activity.Current, eventArgs.Headers);
             return null;
         }
 
         try
         {
+            // L13: single inject. Activity non-null → propagate the new span's context.
+            InjectTraceContext(activity, eventArgs.Headers);
+
             activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
 
             if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
@@ -83,8 +84,6 @@ public static class ServiceConnectActivitySource
             {
                 activity.SetTag(MessagingAttributes.MessageId, messageId);
             }
-
-            InjectTraceContext(activity, eventArgs.Headers);
 
             TryEnrich(activity, eventArgs.Message, options);
 
@@ -195,12 +194,6 @@ public static class ServiceConnectActivitySource
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(attributes);
 
-        // Inject ambient trace context unconditionally — before any early-return — so
-        // payload-less sends and disabled-telemetry paths still propagate W3C context across
-        // the broker. Downstream inject (below) overwrites with the started activity's span
-        // when ServiceConnect's own span is available; otherwise the ambient span propagates.
-        InjectTraceContext(Activity.Current, eventArgs.Headers);
-
         // SendAsync writes to a specific queue (point-to-point), but in OTel messaging
         // semantic conventions that is still classified as "publish" — the producer-side
         // operation name. The point-to-point distinction is preserved by the shared
@@ -217,11 +210,16 @@ public static class ServiceConnectActivitySource
 
         if (activity is null)
         {
+            // L13: single inject. No activity → propagate ambient context for downstream linking.
+            InjectTraceContext(Activity.Current, eventArgs.Headers);
             return null;
         }
 
         try
         {
+            // L13: single inject. Activity non-null → propagate the new span's context.
+            InjectTraceContext(activity, eventArgs.Headers);
+
             // Compute the effective destination from EndPoint (singular) first, then fall back
             // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
             // multi-destination fan-outs that would otherwise appear as anonymous sends in traces.
@@ -253,10 +251,6 @@ public static class ServiceConnectActivitySource
             {
                 activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
             }
-
-            // Inject the started activity's trace context before the null-message early-return
-            // so payload-less sends still carry a traceparent header that downstream consumers can link.
-            InjectTraceContext(activity, eventArgs.Headers);
 
             if (eventArgs.Message is null)
             {
