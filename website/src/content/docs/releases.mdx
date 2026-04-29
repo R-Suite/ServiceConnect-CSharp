@@ -34,7 +34,7 @@ ServiceConnect targets modern .NET only — by design.
 - **`net8.0`** — previous LTS. End of Microsoft support: **November 10, 2026**.
 - **`net10.0`** — current LTS. End of Microsoft support: November 14, 2028. The library opts into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; `net8.0` paths take guarded fallbacks.
 
-All published packages multi-target both: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, `ServiceConnect.HealthChecks`, and `ServiceConnect.Filters.MessageDeduplication`.
+All published packages multi-target both: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, and `ServiceConnect.HealthChecks`.
 
 We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
 
@@ -48,9 +48,17 @@ If your scenario needs `netstandard2.1` (or you'd like to upstream the work), pl
 
 .NET 8 reaches end of Microsoft support on **November 10, 2026**. ServiceConnect will drop the `net8.0` target framework in the first major version released after that date — current consumers on .NET 8 should plan their migration to .NET 10 LTS during the second half of 2026 or pin to a pre-drop ServiceConnect major.
 
+### Breaking — `ServiceConnect.Filters.MessageDeduplication` removed
+
+The package shipped redelivery dedup in a way that silently dropped legitimate broker redeliveries after a handler crash, recorded keys before the handler ran, and shared in-memory state across instances via a static field. v7 deletes the package outright. Build per-consumer dedupe using the new `OnConsumedSuccessfully` pipeline stage; see the [`CustomFilterAndMiddleware` sample](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CustomFilterAndMiddleware) for a worked implementation. Handler-side idempotency remains the canonical answer.
+
+### New — `OnConsumedSuccessfully` filter stage
+
+A fourth pipeline stage that runs only after a successful handler invocation (`result.Success && !result.NotHandled`). Register filters via `builder.AddOnConsumedSuccessfullyFilter<T>()`. Use for at-most-once side effects that depend on the handler having completed: dedupe-key recording, outbox writes, audit events.
+
 ### Repository consolidation: 17 projects down to 8
 
-The solution has been pared back from 17 projects to 8: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, `ServiceConnect.Filters.MessageDeduplication`, and the test project. The dropped projects were either experimental transports, abandoned persistence providers, or internal utilities that had no external consumers — removing them cuts build time and clarifies the supported surface.
+The solution has been pared back from 17 projects to 8: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, `ServiceConnect.HealthChecks`, and the test project. The dropped projects were either experimental transports, abandoned persistence providers, or internal utilities that had no external consumers — removing them cuts build time and clarifies the supported surface.
 
 ### MIT relicense
 
