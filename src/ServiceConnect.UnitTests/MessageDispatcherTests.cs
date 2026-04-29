@@ -263,6 +263,45 @@ public class MessageDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAsync_OnSuccessFilterThrows_PropagatesAsFailure()
+    {
+        // Arrange — copied from DispatchAsync_OnHandlerSuccess_InvokesOnConsumedSuccessfullyFilters,
+        // but ExecuteOnConsumedSuccessfullyFiltersAsync is overridden to throw.
+        // The dispatcher's existing catch block turns this into Success=false. AfterConsumingFilters
+        // in the finally block must still run (existing behaviour unchanged).
+        var thrown = new InvalidOperationException("on-success boom");
+
+        _mockFilterPipeline
+            .Setup(f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(thrown);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "TestUser" };
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        FakeMessage1? receivedMessage = null;
+        var handler = new TestDispatchHandler(onHandle: m => receivedMessage = m);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<FakeMessage1>>(handler);
+        services.AddSingleton(_mockBus.Object);
+        var sp = services.BuildServiceProvider();
+
+        var dispatcher = CreateDispatcher(sp);
+        var headers = MakeHeaders();
+        var messageBytes = new byte[] { 1, 2, 3 };
+
+        // Act
+        var result = await dispatcher.DispatchAsync(messageBytes, "FakeMessage1", headers);
+
+        // Assert
+        Assert.False(result.Success);
+        Assert.Same(thrown, result.Exception);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task Dispatch_SetsConsumeContextOnHandler()
     {
         // Arrange
