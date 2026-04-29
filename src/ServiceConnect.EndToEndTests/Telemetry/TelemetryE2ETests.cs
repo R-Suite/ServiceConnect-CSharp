@@ -42,17 +42,15 @@ public class TelemetryE2ETests(MessagingFixture fixture)
 
         using var listener = new ActivityListener
         {
-            ShouldListenTo = static src =>
-                src.Name == ServiceConnectActivitySource.PublishActivitySourceName ||
-                src.Name == ServiceConnectActivitySource.ConsumeActivitySourceName,
+            ShouldListenTo = static src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
             Sample = static (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
             ActivityStopped = a =>
             {
-                if (a.Source.Name == ServiceConnectActivitySource.PublishActivitySourceName)
+                if (a.Kind == ActivityKind.Producer)
                 {
                     publishSpans.Add(a);
                 }
-                else if (a.Source.Name == ServiceConnectActivitySource.ConsumeActivitySourceName)
+                else if (a.Kind == ActivityKind.Consumer)
                 {
                     consumeSpans.Add(a);
                 }
