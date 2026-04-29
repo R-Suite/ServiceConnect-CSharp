@@ -94,7 +94,7 @@ internal sealed class InboundMessageProcessor(
             if (_consumerEventHandler == null)
             {
                 _logger.LogError("Consumer event handler not set — message will be nacked for redelivery. Queue: {Queue}", _queueConfiguration.QueueName);
-                result = new ConsumeEventResult { Success = false };
+                result = new ConsumeEventResult { Success = false, Exception = new InvalidOperationException("Consumer event handler not set; message could not be dispatched.") };
             }
             else
             {
