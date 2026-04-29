@@ -968,37 +968,10 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
     // ---------------- Task 16: IsAllDataRequested guards ----------------
 
-    [Fact]
-    public void Publish_SampleDroppedActivity_DoesNotSetUserTags()
-    {
-        var droppingListener = new ActivityListener
-        {
-            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.PropagationData,
-        };
-        ActivitySource.AddActivityListener(droppingListener);
-        try
-        {
-            var args = new PublishEventArgs
-            {
-                Message = new Message(Guid.NewGuid()),
-                Exchange = "exchange",
-                RoutingKey = "rk",
-                Headers = new Dictionary<string, string>(),
-            };
-
-            using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
-            Assert.NotNull(activity);
-            Assert.False(activity.IsAllDataRequested);
-
-            Assert.Null(activity.GetTagItem(MessagingAttributes.MessagingDestination));
-            Assert.Null(activity.GetTagItem(MessagingAttributes.MessagingDestinationRoutingKey));
-        }
-        finally
-        {
-            droppingListener.Dispose();
-        }
-    }
+    // NOTE: This test cannot use the fixture's pre-registered AllData listener because AllData
+    // beats PropagationData and IsAllDataRequested would always be true. The test is placed here
+    // for organisational proximity but uses its own isolated listener pattern: see
+    // ServiceConnectActivitySource_PropagationOnlyTests below for the actual guard coverage.
 
     // ---------------- Task 17: Empty-Guid CorrelationId regression ----------------
 
@@ -1113,5 +1086,48 @@ public sealed class ServiceConnectActivitySource_NoListenerTests
     {
         var options = new ServiceConnectInstrumentationOptions { EnableConsumeTelemetry = true };
         Assert.False(ServiceConnectActivitySource.IsConsumeTelemetryEnabled(options));
+    }
+}
+
+[Collection("ActivityListener")]
+public sealed class ServiceConnectActivitySource_PropagationOnlyTests
+{
+    private readonly ServiceConnectInstrumentationOptions _options = new();
+    private readonly IMessagingSystemAttributes _attrs = new RabbitMqMessagingSystemAttributes();
+
+    // Tests in this fixture register only a PropagationData listener so that
+    // IsAllDataRequested is false. A co-existing AllData listener would win and
+    // make IsAllDataRequested always true, defeating the guard coverage.
+
+    [Fact]
+    public void Publish_SampleDroppedActivity_DoesNotSetUserTags()
+    {
+        var droppingListener = new ActivityListener
+        {
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.PropagationData,
+        };
+        ActivitySource.AddActivityListener(droppingListener);
+        try
+        {
+            var args = new PublishEventArgs
+            {
+                Message = new Message(Guid.NewGuid()),
+                Exchange = "exchange",
+                RoutingKey = "rk",
+                Headers = new Dictionary<string, string>(),
+            };
+
+            using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
+            Assert.NotNull(activity);
+            Assert.False(activity.IsAllDataRequested);
+
+            Assert.Null(activity.GetTagItem(MessagingAttributes.MessagingDestination));
+            Assert.Null(activity.GetTagItem(MessagingAttributes.MessagingDestinationRoutingKey));
+        }
+        finally
+        {
+            droppingListener.Dispose();
+        }
     }
 }

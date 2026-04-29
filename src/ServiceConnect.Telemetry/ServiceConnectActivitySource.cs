@@ -62,31 +62,37 @@ public static class ServiceConnectActivitySource
             // L13: single inject. Activity non-null → propagate the new span's context.
             InjectTraceContext(activity, eventArgs.Headers);
 
-            activity.SetTag(MessagingAttributes.MessageConversationId,
-                Truncate(eventArgs.Message?.CorrelationId.ToString(), options.MaxTagValueLength));
+            if (activity.IsAllDataRequested)
+            {
+                if (eventArgs.Message?.CorrelationId is { } cid && cid != Guid.Empty)
+                {
+                    activity.SetTag(MessagingAttributes.MessageConversationId,
+                        Truncate(cid.ToString(), options.MaxTagValueLength));
+                }
 
-            if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
-            {
-                activity.DisplayName = Truncate(eventArgs.Exchange + " publish", options.MaxTagValueLength);
-                activity.SetTag(MessagingAttributes.MessagingDestination,
-                    Truncate(eventArgs.Exchange, options.MaxTagValueLength));
-            }
-            else
-            {
-                activity.DisplayName = "anonymous publish";
-                activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
-            }
+                if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
+                {
+                    activity.DisplayName = Truncate(eventArgs.Exchange + " publish", options.MaxTagValueLength);
+                    activity.SetTag(MessagingAttributes.MessagingDestination,
+                        Truncate(eventArgs.Exchange, options.MaxTagValueLength));
+                }
+                else
+                {
+                    activity.DisplayName = "anonymous publish";
+                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+                }
 
-            if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
-            {
-                activity.SetTag(MessagingAttributes.MessagingDestinationRoutingKey,
-                    Truncate(eventArgs.RoutingKey, options.MaxTagValueLength));
-            }
+                if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
+                {
+                    activity.SetTag(MessagingAttributes.MessagingDestinationRoutingKey,
+                        Truncate(eventArgs.RoutingKey, options.MaxTagValueLength));
+                }
 
-            if (eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out string? messageId))
-            {
-                activity.SetTag(MessagingAttributes.MessageId,
-                    Truncate(messageId, options.MaxTagValueLength));
+                if (eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out string? messageId))
+                {
+                    activity.SetTag(MessagingAttributes.MessageId,
+                        Truncate(messageId, options.MaxTagValueLength));
+                }
             }
 
             TryEnrich(activity, eventArgs.Message, options);
@@ -139,37 +145,40 @@ public static class ServiceConnectActivitySource
 
         try
         {
-            // Targeted header lookups — decode only the headers actually used here
-            // rather than allocating a full decode dictionary for all 15-20 headers.
-            string? destinationAddress = eventArgs.Headers.TryGetValue(HeaderKeys.DestinationAddress, out var daVal)
-                ? HeaderDecoder.Decode(daVal) : null;
-            string? messageId = eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out var miVal)
-                ? HeaderDecoder.Decode(miVal) : null;
-            string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
-                ? HeaderDecoder.Decode(ciVal) : null;
-
-            activity.DisplayName = Truncate((string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive", options.MaxTagValueLength);
-
-            if (messageId is not null)
+            if (activity.IsAllDataRequested)
             {
-                activity.SetTag(MessagingAttributes.MessageId,
-                    Truncate(messageId, options.MaxTagValueLength));
-            }
+                // Targeted header lookups — decode only the headers actually used here
+                // rather than allocating a full decode dictionary for all 15-20 headers.
+                string? destinationAddress = eventArgs.Headers.TryGetValue(HeaderKeys.DestinationAddress, out var daVal)
+                    ? HeaderDecoder.Decode(daVal) : null;
+                string? messageId = eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out var miVal)
+                    ? HeaderDecoder.Decode(miVal) : null;
+                string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
+                    ? HeaderDecoder.Decode(ciVal) : null;
 
-            if (correlationId is not null)
-            {
-                activity.SetTag(MessagingAttributes.MessageConversationId,
-                    Truncate(correlationId, options.MaxTagValueLength));
-            }
+                activity.DisplayName = Truncate((string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive", options.MaxTagValueLength);
 
-            if (!string.IsNullOrEmpty(destinationAddress))
-            {
-                activity.SetTag(MessagingAttributes.MessagingDestination,
-                    Truncate(destinationAddress, options.MaxTagValueLength));
-            }
-            else
-            {
-                activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+                if (messageId is not null)
+                {
+                    activity.SetTag(MessagingAttributes.MessageId,
+                        Truncate(messageId, options.MaxTagValueLength));
+                }
+
+                if (correlationId is not null)
+                {
+                    activity.SetTag(MessagingAttributes.MessageConversationId,
+                        Truncate(correlationId, options.MaxTagValueLength));
+                }
+
+                if (!string.IsNullOrEmpty(destinationAddress))
+                {
+                    activity.SetTag(MessagingAttributes.MessagingDestination,
+                        Truncate(destinationAddress, options.MaxTagValueLength));
+                }
+                else
+                {
+                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+                }
             }
 
             if (eventArgs.Message is not null)
@@ -227,46 +236,56 @@ public static class ServiceConnectActivitySource
             // L13: single inject. Activity non-null → propagate the new span's context.
             InjectTraceContext(activity, eventArgs.Headers);
 
-            // Compute the effective destination from EndPoint (singular) first, then fall back
-            // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
-            // multi-destination fan-outs that would otherwise appear as anonymous sends in traces.
-            // Whitespace entries are filtered before joining so a stray ""/null slot cannot leak into
-            // traces as "queue-a,,queue-b"; if filtering empties the list, fall through to anonymous.
-            string? destination;
-            if (!string.IsNullOrWhiteSpace(eventArgs.EndPoint))
+            if (activity.IsAllDataRequested)
             {
-                destination = eventArgs.EndPoint;
-            }
-            else if (eventArgs.EndPoints.Count > 0)
-            {
-                var nonEmpty = eventArgs.EndPoints.Where(e => !string.IsNullOrWhiteSpace(e));
-                var joined = string.Join(",", nonEmpty);
-                destination = joined.Length > 0 ? joined : null;
-            }
-            else
-            {
-                destination = null;
-            }
+                // Compute the effective destination from EndPoint (singular) first, then fall back
+                // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
+                // multi-destination fan-outs that would otherwise appear as anonymous sends in traces.
+                // Whitespace entries are filtered before joining so a stray ""/null slot cannot leak into
+                // traces as "queue-a,,queue-b"; if filtering empties the list, fall through to anonymous.
+                string? destination;
+                if (!string.IsNullOrWhiteSpace(eventArgs.EndPoint))
+                {
+                    destination = eventArgs.EndPoint;
+                }
+                else if (eventArgs.EndPoints.Count > 0)
+                {
+                    var nonEmpty = eventArgs.EndPoints.Where(e => !string.IsNullOrWhiteSpace(e));
+                    var joined = string.Join(",", nonEmpty);
+                    destination = joined.Length > 0 ? joined : null;
+                }
+                else
+                {
+                    destination = null;
+                }
 
-            activity.DisplayName = Truncate((destination ?? "anonymous") + " send", options.MaxTagValueLength);
+                activity.DisplayName = Truncate((destination ?? "anonymous") + " send", options.MaxTagValueLength);
 
-            if (destination is not null)
-            {
-                activity.SetTag(MessagingAttributes.MessagingDestination,
-                    Truncate(destination, options.MaxTagValueLength));
-            }
-            else
-            {
-                activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
-            }
+                if (destination is not null)
+                {
+                    activity.SetTag(MessagingAttributes.MessagingDestination,
+                        Truncate(destination, options.MaxTagValueLength));
+                }
+                else
+                {
+                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+                }
 
-            if (eventArgs.Message is null)
+                if (eventArgs.Message is null)
+                {
+                    return activity;
+                }
+
+                if (eventArgs.Message.CorrelationId != Guid.Empty)
+                {
+                    activity.SetTag(MessagingAttributes.MessageConversationId,
+                        Truncate(eventArgs.Message.CorrelationId.ToString(), options.MaxTagValueLength));
+                }
+            }
+            else if (eventArgs.Message is null)
             {
                 return activity;
             }
-
-            activity.SetTag(MessagingAttributes.MessageConversationId,
-                Truncate(eventArgs.Message.CorrelationId.ToString(), options.MaxTagValueLength));
 
             TryEnrich(activity, eventArgs.Message, options);
 
@@ -462,10 +481,13 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
-        activity
-            .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
-            .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
-            .SetTag(MessagingAttributes.MessagingOperation, operation);
+        if (activity.IsAllDataRequested)
+        {
+            activity
+                .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
+                .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
+                .SetTag(MessagingAttributes.MessagingOperation, operation);
+        }
 
         return activity;
     }
@@ -493,10 +515,13 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
-        activity
-            .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
-            .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
-            .SetTag(MessagingAttributes.MessagingOperation, operation);
+        if (activity.IsAllDataRequested)
+        {
+            activity
+                .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
+                .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
+                .SetTag(MessagingAttributes.MessagingOperation, operation);
+        }
 
         return activity;
     }
