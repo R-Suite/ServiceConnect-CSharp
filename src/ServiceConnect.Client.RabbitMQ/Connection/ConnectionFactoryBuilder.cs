@@ -29,7 +29,7 @@ internal static class ConnectionFactoryBuilder
 
         var explicitPortConfigured = transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal);
         var port = explicitPortConfigured
-            ? Convert.ToInt32(portVal, CultureInfo.InvariantCulture)
+            ? ConvertSettingToInt32(RabbitMQSettingKeys.Port, portVal)
             : AmqpTcpEndpoint.UseDefaultPort;
 
         var factory = new ConnectionFactory
@@ -70,6 +70,22 @@ internal static class ConnectionFactoryBuilder
         return factory;
     }
 
+    // Wraps Convert.ToInt32 so that any conversion failure carries the setting key and
+    // the offending value, making misconfiguration far easier to diagnose at runtime.
+    private static int ConvertSettingToInt32(string key, object? value)
+    {
+        try
+        {
+            return Convert.ToInt32(value, CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+        {
+            throw new InvalidOperationException(
+                $"Setting '{key}' must be convertible to Int32; got value '{value}' of type '{value?.GetType().FullName ?? "<null>"}'.",
+                ex);
+        }
+    }
+
     private static TimeSpan ResolveHeartbeat(ITransportConfiguration transport)
     {
         var settings = transport.ClientSettings;
@@ -83,7 +99,7 @@ internal static class ConnectionFactoryBuilder
 
         if (settings.TryGetValue(RabbitMQSettingKeys.HeartbeatTime, out var timeRaw))
         {
-            return TimeSpan.FromSeconds(Convert.ToInt32(timeRaw, CultureInfo.InvariantCulture));
+            return TimeSpan.FromSeconds(ConvertSettingToInt32(RabbitMQSettingKeys.HeartbeatTime, timeRaw));
         }
 
         return DefaultHeartbeat;
