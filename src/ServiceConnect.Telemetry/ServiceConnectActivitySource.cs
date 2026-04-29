@@ -59,34 +59,42 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
-        activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
-
-        if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
+        try
         {
-            activity.DisplayName = eventArgs.Exchange + " publish";
-            activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.Exchange);
+            activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message?.CorrelationId.ToString());
+
+            if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
+            {
+                activity.DisplayName = eventArgs.Exchange + " publish";
+                activity.SetTag(MessagingAttributes.MessagingDestination, eventArgs.Exchange);
+            }
+            else
+            {
+                activity.DisplayName = "anonymous publish";
+                activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+            }
+
+            if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
+            {
+                activity.SetTag(MessagingAttributes.MessagingDestinationRoutingKey, eventArgs.RoutingKey);
+            }
+
+            if (eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out string? messageId))
+            {
+                activity.SetTag(MessagingAttributes.MessageId, messageId);
+            }
+
+            InjectTraceContext(activity, eventArgs.Headers);
+
+            TryEnrich(activity, eventArgs.Message, options);
+
+            return activity;
         }
-        else
+        catch
         {
-            activity.DisplayName = "anonymous publish";
-            activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+            activity.Dispose();
+            throw;
         }
-
-        if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
-        {
-            activity.SetTag(MessagingAttributes.MessagingDestinationRoutingKey, eventArgs.RoutingKey);
-        }
-
-        if (eventArgs.Headers.TryGetValue(HeaderKeys.MessageId, out string? messageId))
-        {
-            activity.SetTag(MessagingAttributes.MessageId, messageId);
-        }
-
-        InjectTraceContext(activity, eventArgs.Headers);
-
-        TryEnrich(activity, eventArgs.Message, options);
-
-        return activity;
     }
 
     /// <summary>

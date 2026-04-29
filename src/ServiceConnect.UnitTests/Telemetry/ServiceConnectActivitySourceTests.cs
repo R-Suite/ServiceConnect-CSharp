@@ -704,6 +704,34 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         // Not exposed as a link; it's the actual parent.
         Assert.Empty(activity.Links);
     }
+
+    [Fact]
+    public void Publish_EnricherThrowsOce_DisposesActivity_AndRestoresAmbientCurrent()
+    {
+        var ambient = new Activity("ambient").Start();
+
+        var options = new ServiceConnectInstrumentationOptions
+        {
+            EnrichWithMessage = (_, _) => throw new OperationCanceledException("co-op cancel"),
+        };
+
+        var args = new PublishEventArgs
+        {
+            Message = new Message(Guid.NewGuid()),
+            Exchange = "exchange",
+            Headers = new Dictionary<string, string>(),
+        };
+
+        var thrown = Assert.Throws<OperationCanceledException>(() =>
+            ServiceConnectActivitySource.Publish(args, options, _attrs));
+
+        Assert.Equal("co-op cancel", thrown.Message);
+        // The activity that Publish started must be disposed before the OCE escapes,
+        // so Activity.Current is the outer ambient activity, not a leaked publish span.
+        Assert.Same(ambient, Activity.Current);
+
+        ambient.Dispose();
+    }
 }
 
 [Collection("ActivityListener")]
