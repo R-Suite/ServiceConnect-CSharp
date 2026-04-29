@@ -99,9 +99,16 @@ internal sealed class OutboundHeaderBuilder(
             {
                 basicProperties.Priority = Convert.ToByte(priority, System.Globalization.CultureInfo.InvariantCulture);
             }
-            catch (Exception ex)
+            // RabbitMQ priorities are advisory — failing the publish over a misconfigured priority is
+            // the wrong default. Soft-drop with enough context that the operator can see which value
+            // was bad and why. Catch only the conversion exceptions; anything else propagates.
+            catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
             {
-                _logger.LogError(ex, "Error setting message priority");
+                _logger.LogError(
+                    ex,
+                    "Could not set message priority from value '{Value}' (type '{ValueType}'); priority must be convertible to byte (0..255). Continuing without priority.",
+                    priority,
+                    priority?.GetType().FullName ?? "<null>");
             }
         }
 
