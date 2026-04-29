@@ -20,21 +20,19 @@ public sealed class OutboundHeaderBuilderPriorityTests
 
         var captured = new List<(LogLevel, string, Exception?)>();
         var logger = new Mock<ILogger>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         logger.Setup(l => l.Log(
             It.IsAny<LogLevel>(),
             It.IsAny<EventId>(),
             It.IsAny<It.IsAnyType>(),
-            It.IsAny<Exception>(),
+            It.IsAny<Exception?>(),
             (Func<It.IsAnyType, Exception?, string>)It.IsAny<object>()))
             .Callback(new InvocationAction(invocation =>
             {
                 var level = (LogLevel)invocation.Arguments[0];
-                var state = invocation.Arguments[2];
                 var ex = (Exception?)invocation.Arguments[3];
-                var formatter = invocation.Arguments[4];
-                var message = (string)formatter.GetType()
-                    .GetMethod("Invoke")!
-                    .Invoke(formatter, [state, ex])!;
+                var formatter = (Delegate)invocation.Arguments[4];
+                var message = (string)formatter.DynamicInvoke(invocation.Arguments[2], invocation.Arguments[3])!;
                 captured.Add((level, message, ex));
             }));
 
