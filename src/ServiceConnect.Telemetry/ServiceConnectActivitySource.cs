@@ -423,12 +423,10 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
-        ActivityLink[]? links = linkedContext == default
-            ? null
-            : [new ActivityLink(linkedContext)];
-
-        Activity? activity = activitySource.StartActivity(
-            activityName, kind, parentContext: default, tags: null, links: links);
+        // L11: pass linkedContext as the parent so the activity is properly parented.
+        // When linkedContext is default, ActivitySource falls back to Activity.Current
+        // which is the desired ambient behaviour.
+        Activity? activity = activitySource.StartActivity(activityName, kind, linkedContext);
         if (activity is null)
         {
             return null;

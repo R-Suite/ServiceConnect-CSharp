@@ -622,59 +622,45 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     }
 
     [Fact]
-    public void Publish_WithLinkedContext_AttachesAsLinkNotParent()
+    public void Publish_WithLinkedContext_SetsActivityParentNotLink()
     {
-        using var ambient = new Activity("ambient").Start();
-        var ambientTraceId = ambient.TraceId;
-
-        var linked = new ActivityContext(
-            ActivityTraceId.CreateRandom(),
-            ActivitySpanId.CreateRandom(),
-            ActivityTraceFlags.Recorded);
+        var parentTraceId = ActivityTraceId.CreateRandom();
+        var parentSpanId = ActivitySpanId.CreateRandom();
+        var linkedContext = new ActivityContext(parentTraceId, parentSpanId, ActivityTraceFlags.Recorded);
 
         var args = new PublishEventArgs
         {
-            Exchange = "ex",
+            Message = new Message(Guid.NewGuid()),
+            Exchange = "exchange",
             Headers = new Dictionary<string, string>(),
-            Message = null,
         };
 
-        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs, linked);
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs, linkedContext);
 
         Assert.NotNull(activity);
-        // Producer span inherits ambient trace, NOT the linked trace.
-        Assert.Equal(ambientTraceId, activity!.TraceId);
-        // The linked context is exposed as an Activity link.
-        var links = activity.Links.ToList();
-        Assert.Single(links);
-        Assert.Equal(linked.TraceId, links[0].Context.TraceId);
+        Assert.Equal(parentTraceId, activity!.TraceId);
+        Assert.Equal(parentSpanId, activity.ParentSpanId);
     }
 
     [Fact]
-    public void Send_WithLinkedContext_AttachesAsLinkNotParent()
+    public void Send_WithLinkedContext_SetsActivityParentNotLink()
     {
-        using var ambient = new Activity("ambient").Start();
-        var ambientTraceId = ambient.TraceId;
-
-        var linked = new ActivityContext(
-            ActivityTraceId.CreateRandom(),
-            ActivitySpanId.CreateRandom(),
-            ActivityTraceFlags.Recorded);
+        var parentTraceId = ActivityTraceId.CreateRandom();
+        var parentSpanId = ActivitySpanId.CreateRandom();
+        var linkedContext = new ActivityContext(parentTraceId, parentSpanId, ActivityTraceFlags.Recorded);
 
         var args = new SendEventArgs
         {
+            Message = new Message(Guid.NewGuid()),
             EndPoint = "queue-a",
             Headers = new Dictionary<string, string>(),
-            Message = null,
         };
 
-        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs, linked);
+        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs, linkedContext);
 
         Assert.NotNull(activity);
-        Assert.Equal(ambientTraceId, activity!.TraceId);
-        var links = activity.Links.ToList();
-        Assert.Single(links);
-        Assert.Equal(linked.TraceId, links[0].Context.TraceId);
+        Assert.Equal(parentTraceId, activity!.TraceId);
+        Assert.Equal(parentSpanId, activity.ParentSpanId);
     }
 
     [Fact]
