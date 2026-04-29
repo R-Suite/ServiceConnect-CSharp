@@ -139,9 +139,6 @@ public static class ServiceConnectActivitySource
         IDictionary<string, string> headers,
         out ActivityContext context);
 
-    public static bool IsConsumeTelemetryEnabled(
-        ServiceConnectInstrumentationOptions options);
-
     public static void Shutdown();
 }
 ```
@@ -167,10 +164,6 @@ Per-direction sampling is controlled through `EnablePublishTelemetry`, `EnableCo
 ### `SetError`
 
 Marks an activity as errored using OTel semantic conventions (`Status = Error`, an `exception` event with `exception.{type,message,stacktrace}` attributes). No-op when the activity is null. Pass the same `ServiceConnectInstrumentationOptions` instance used for the activity; the method honours `ExceptionMessageSanitiser` when writing the `exception.message` attribute. Not wired into the bus host paths — exposed for handlers and custom middleware that want to record their own failures inside an existing ServiceConnect activity.
-
-### `IsConsumeTelemetryEnabled`
-
-Returns `options.EnableConsumeTelemetry && ActivitySource.HasListeners()`. Used internally by `TelemetryProcessingMiddleware` to gate the `envelope.Body.ToArray()` copy that feeds `EnrichWithMessageBytes` — the allocation is skipped entirely when no listener is attached or consume telemetry is disabled.
 
 ### `TryGetExistingContext`
 
