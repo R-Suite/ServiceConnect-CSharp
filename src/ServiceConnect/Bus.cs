@@ -639,7 +639,7 @@ public sealed class Bus : IBus
             {
                 if (ReservedHeaders.Contains(header.Key))
                 {
-                    _logger.LogWarning("Ignoring caller-supplied reserved header '{Key}'", header.Key);
+                    _logger.LogWarning("Caller-supplied reserved header '{Key}' will be overwritten by the framework", header.Key);
                     continue;
                 }
                 envelope.Headers[header.Key] = header.Value;
@@ -719,7 +719,7 @@ public sealed class Bus : IBus
                 // Skip reserved keys — the bus stamps these authoritatively below.
                 if (ReservedHeaders.Contains(kvp.Key))
                 {
-                    _logger.LogWarning("Ignoring caller-supplied reserved header '{Key}'", kvp.Key);
+                    _logger.LogWarning("Caller-supplied reserved header '{Key}' will be overwritten by the framework", kvp.Key);
                     continue;
                 }
                 headers[kvp.Key] = kvp.Value;
