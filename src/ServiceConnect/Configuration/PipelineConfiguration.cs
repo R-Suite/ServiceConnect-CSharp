@@ -9,6 +9,7 @@ public sealed class PipelineConfiguration : IPipelineConfiguration
 {
     private readonly List<Type> _beforeConsumingFilters = [];
     private readonly List<Type> _afterConsumingFilters = [];
+    private readonly List<Type> _onConsumedSuccessfullyFilters = [];
     private readonly List<Type> _outgoingFilters = [];
     private readonly List<Type> _messageProcessingMiddleware = [];
     private readonly List<Type> _sendMessageMiddleware = [];
@@ -21,6 +22,10 @@ public sealed class PipelineConfiguration : IPipelineConfiguration
     /// Gets the filters that run after handler invocation.
     /// </summary>
     public IList<Type> AfterConsumingFilters => _afterConsumingFilters;
+    /// <summary>
+    /// Gets the filters that run only after a successful handler invocation.
+    /// </summary>
+    public IList<Type> OnConsumedSuccessfullyFilters => _onConsumedSuccessfullyFilters;
     /// <summary>
     /// Gets the filters that run for outgoing messages.
     /// </summary>
@@ -36,6 +41,7 @@ public sealed class PipelineConfiguration : IPipelineConfiguration
 
     IReadOnlyList<Type> IPipelineConfiguration.BeforeConsumingFilters => _beforeConsumingFilters;
     IReadOnlyList<Type> IPipelineConfiguration.AfterConsumingFilters => _afterConsumingFilters;
+    IReadOnlyList<Type> IPipelineConfiguration.OnConsumedSuccessfullyFilters => _onConsumedSuccessfullyFilters;
     IReadOnlyList<Type> IPipelineConfiguration.OutgoingFilters => _outgoingFilters;
     IReadOnlyList<Type> IPipelineConfiguration.MessageProcessingMiddleware => _messageProcessingMiddleware;
     IReadOnlyList<Type> IPipelineConfiguration.SendMessageMiddleware => _sendMessageMiddleware;

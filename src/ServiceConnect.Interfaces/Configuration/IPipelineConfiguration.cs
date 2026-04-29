@@ -16,6 +16,14 @@ public interface IPipelineConfiguration
     IReadOnlyList<Type> AfterConsumingFilters { get; }
 
     /// <summary>
+    /// Gets the filters that run only after a successful handler invocation
+    /// (the dispatcher chain returned <see cref="ConsumeEventResult.Success"/> = true
+    /// and <see cref="ConsumeEventResult.NotHandled"/> = false). Filters in this stage
+    /// observe successful consumption only; failures and unhandled messages skip them.
+    /// </summary>
+    IReadOnlyList<Type> OnConsumedSuccessfullyFilters { get; }
+
+    /// <summary>
     /// Gets the filters that run on outgoing messages.
     /// </summary>
     IReadOnlyList<Type> OutgoingFilters { get; }
