@@ -106,6 +106,14 @@ public static class Retry
                 {
                     await exceptionAction(ex).ConfigureAwait(false);
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Cooperative cancellation — propagate so callers can distinguish shutdown
+                    // from a callback failure that should be retried. Mirrors the action-side
+                    // OCE handling at lines 94-97.
+                    // See learn/operations/cancellation.
+                    throw;
+                }
                 catch (Exception callbackEx)
                 {
                     (exceptions ??= []).Add(callbackEx);

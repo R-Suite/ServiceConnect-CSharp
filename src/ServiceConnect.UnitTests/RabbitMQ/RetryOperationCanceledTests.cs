@@ -28,4 +28,35 @@ public class RetryOperationCanceledTests
 
         Assert.Equal(1, attempts);
     }
+
+    [Fact]
+    public async Task DoAsync_ExceptionActionThrowsOceUnderCancelledToken_PropagatesOce()
+    {
+        using var cts = new CancellationTokenSource();
+        var initialFailure = new InvalidOperationException("first attempt failed");
+        var oceFromCallback = new OperationCanceledException(cts.Token);
+
+        var actionInvocations = 0;
+        var callbackInvocations = 0;
+
+        Task<bool> Action()
+        {
+            actionInvocations++;
+            throw initialFailure;
+        }
+
+        Task ExceptionAction(Exception ex)
+        {
+            callbackInvocations++;
+            cts.Cancel();
+            throw oceFromCallback;
+        }
+
+        var thrown = await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            Retry.DoAsync(Action, ExceptionAction, retryInterval: TimeSpan.Zero, retryCount: 3, cancellationToken: cts.Token));
+
+        Assert.Same(oceFromCallback, thrown);
+        Assert.Equal(1, actionInvocations);
+        Assert.Equal(1, callbackInvocations);
+    }
 }
