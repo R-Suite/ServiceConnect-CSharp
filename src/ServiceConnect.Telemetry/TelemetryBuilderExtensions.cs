@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ServiceConnect;
 using ServiceConnect.Configuration;
 
@@ -12,8 +13,11 @@ public static class TelemetryBuilderExtensions
 {
     /// <summary>
     /// Registers the built-in telemetry middleware as the outermost middleware
-    /// on both the send and processing pipelines, and configures
-    /// <see cref="ServiceConnectActivitySource"/> with the supplied options.
+    /// on both the send and processing pipelines, and registers
+    /// <see cref="ServiceConnectInstrumentationOptions"/> +
+    /// <see cref="IMessagingSystemAttributes"/> in DI. Users can override the
+    /// messaging-system attributes by registering <c>IMessagingSystemAttributes</c>
+    /// before calling this method.
     /// </summary>
     /// <param name="builder">The builder to configure.</param>
     /// <param name="configure">Optional callback that mutates the instrumentation options.</param>
@@ -30,6 +34,7 @@ public static class TelemetryBuilderExtensions
         builder.AddRegistration(services =>
         {
             services.AddSingleton(options);
+            services.TryAddSingleton<IMessagingSystemAttributes, RabbitMqMessagingSystemAttributes>();
             services.AddSingleton<TelemetrySendMiddleware>();
             services.AddSingleton<TelemetryProcessingMiddleware>();
         });
@@ -39,8 +44,6 @@ public static class TelemetryBuilderExtensions
             p.SendMessageMiddleware.Insert(0, typeof(TelemetrySendMiddleware));
             p.MessageProcessingMiddleware.Insert(0, typeof(TelemetryProcessingMiddleware));
         });
-
-        ServiceConnectActivitySource.Options = options;
 
         return builder;
     }

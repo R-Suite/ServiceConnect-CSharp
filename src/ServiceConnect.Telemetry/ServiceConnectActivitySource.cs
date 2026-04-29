@@ -10,15 +10,6 @@ namespace ServiceConnect.Telemetry;
 /// </summary>
 public static class ServiceConnectActivitySource
 {
-    /// <summary>
-    /// Gets or sets the telemetry options that control enrichment and activity enablement.
-    /// </summary>
-    public static ServiceConnectInstrumentationOptions Options { get; internal set; } = new();
-    /// <summary>
-    /// Gets or sets the messaging-system semantic-convention values applied to generated activities.
-    /// </summary>
-    public static IMessagingSystemAttributes MessagingSystemAttributes { get; internal set; } = new RabbitMqMessagingSystemAttributes();
-
     internal static readonly Version? Version = typeof(ServiceConnectActivitySource).Assembly.GetName().Version;
 
     /// <summary>
@@ -40,8 +31,16 @@ public static class ServiceConnectActivitySource
     /// Starts a publish-side activity. Returns <c>null</c> when no listeners are
     /// registered for <see cref="ActivitySourceName"/>.
     /// </summary>
-    public static Activity? Publish(PublishEventArgs eventArgs, ActivityContext linkedContext = default)
+    public static Activity? Publish(
+        PublishEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes,
+        ActivityContext linkedContext = default)
     {
+        ArgumentNullException.ThrowIfNull(eventArgs);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(attributes);
+
         // Inject ambient trace context unconditionally so outer (ASP.NET / OTel) spans
         // propagate across the broker even when ServiceConnect's own spans are disabled.
         InjectTraceContext(Activity.Current, eventArgs.Headers);
@@ -50,7 +49,8 @@ public static class ServiceConnectActivitySource
             _activitySource,
             ActivitySourceName,
             ActivityKind.Producer,
-            Options.EnablePublishTelemetry,
+            options.EnablePublishTelemetry,
+            attributes,
             "publish",
             linkedContext);
 
@@ -84,7 +84,7 @@ public static class ServiceConnectActivitySource
 
         InjectTraceContext(activity, eventArgs.Headers);
 
-        TryEnrich(activity, eventArgs.Message);
+        TryEnrich(activity, eventArgs.Message, options);
 
         return activity;
     }
@@ -95,8 +95,15 @@ public static class ServiceConnectActivitySource
     /// the publishing activity. Returns <c>null</c> when no listeners are registered
     /// for <see cref="ActivitySourceName"/>.
     /// </summary>
-    public static Activity? Consume(ConsumeEventArgs eventArgs)
+    public static Activity? Consume(
+        ConsumeEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes)
     {
+        ArgumentNullException.ThrowIfNull(eventArgs);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(attributes);
+
         DistributedContextPropagator.Current.ExtractTraceIdAndState(eventArgs.Headers, ExtractTraceIdAndState, out string? traceId, out string? traceState);
         ActivityContext.TryParse(traceId, traceState, out ActivityContext parentContext);
 
@@ -104,7 +111,8 @@ public static class ServiceConnectActivitySource
             _activitySource,
             ActivitySourceName,
             ActivityKind.Consumer,
-            Options.EnableConsumeTelemetry,
+            options.EnableConsumeTelemetry,
+            attributes,
             "receive",
             parentContext);
 
@@ -146,7 +154,7 @@ public static class ServiceConnectActivitySource
         if (eventArgs.Message is not null)
         {
             activity.SetTag(MessagingAttributes.MessagingBodySize, eventArgs.Message.Length);
-            TryEnrich(activity, eventArgs.Message);
+            TryEnrich(activity, eventArgs.Message, options);
         }
 
         return activity;
@@ -156,8 +164,16 @@ public static class ServiceConnectActivitySource
     /// Starts a send-side activity. Returns <c>null</c> when no listeners are
     /// registered for <see cref="ActivitySourceName"/>.
     /// </summary>
-    public static Activity? Send(SendEventArgs eventArgs, ActivityContext linkedContext = default)
+    public static Activity? Send(
+        SendEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes,
+        ActivityContext linkedContext = default)
     {
+        ArgumentNullException.ThrowIfNull(eventArgs);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(attributes);
+
         // Inject ambient trace context unconditionally — before any early-return — so
         // payload-less sends and disabled-telemetry paths still propagate W3C context across
         // the broker. Downstream inject (below) overwrites with the started activity's span
@@ -173,7 +189,8 @@ public static class ServiceConnectActivitySource
             _activitySource,
             ActivitySourceName,
             ActivityKind.Producer,
-            Options.EnableSendTelemetry,
+            options.EnableSendTelemetry,
+            attributes,
             "publish",
             linkedContext);
 
@@ -225,7 +242,7 @@ public static class ServiceConnectActivitySource
 
         activity.SetTag(MessagingAttributes.MessageConversationId, eventArgs.Message.CorrelationId.ToString());
 
-        TryEnrich(activity, eventArgs.Message);
+        TryEnrich(activity, eventArgs.Message, options);
 
         return activity;
     }
@@ -241,8 +258,11 @@ public static class ServiceConnectActivitySource
     /// Not currently wired up by the Bus/Producer/Consumer host paths; exposed as a public
     /// integration point for downstream consumers instrumenting their own handler pipelines.
     /// </remarks>
-    public static void SetError(Activity? activity, Exception exception)
+    public static void SetError(Activity? activity, Exception exception, ServiceConnectInstrumentationOptions options)
     {
+        ArgumentNullException.ThrowIfNull(exception);
+        ArgumentNullException.ThrowIfNull(options);
+
         if (activity is null)
         {
             return;
@@ -342,6 +362,7 @@ public static class ServiceConnectActivitySource
         string activityName,
         ActivityKind kind,
         bool enabled,
+        IMessagingSystemAttributes attributes,
         string operation,
         ActivityContext parentContext)
     {
@@ -357,8 +378,8 @@ public static class ServiceConnectActivitySource
         }
 
         activity
-            .SetTag(MessagingAttributes.MessagingSystem, MessagingSystemAttributes.MessagingSystem)
-            .SetTag(MessagingAttributes.ProtocolName, MessagingSystemAttributes.ProtocolName)
+            .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
+            .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
             .SetTag(MessagingAttributes.MessagingOperation, operation);
 
         return activity;
@@ -369,6 +390,7 @@ public static class ServiceConnectActivitySource
         string activityName,
         ActivityKind kind,
         bool enabled,
+        IMessagingSystemAttributes attributes,
         string operation,
         ActivityContext linkedContext)
     {
@@ -389,14 +411,14 @@ public static class ServiceConnectActivitySource
         }
 
         activity
-            .SetTag(MessagingAttributes.MessagingSystem, MessagingSystemAttributes.MessagingSystem)
-            .SetTag(MessagingAttributes.ProtocolName, MessagingSystemAttributes.ProtocolName)
+            .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
+            .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
             .SetTag(MessagingAttributes.MessagingOperation, operation);
 
         return activity;
     }
 
-    private static void TryEnrich(Activity activity, Message? message)
+    private static void TryEnrich(Activity activity, Message? message, ServiceConnectInstrumentationOptions options)
     {
         if (message is null)
         {
@@ -405,7 +427,7 @@ public static class ServiceConnectActivitySource
 
         try
         {
-            Options.EnrichWithMessage?.Invoke(activity, message);
+            options.EnrichWithMessage?.Invoke(activity, message);
         }
         catch (OperationCanceledException)
         {
@@ -421,7 +443,7 @@ public static class ServiceConnectActivitySource
         }
     }
 
-    private static void TryEnrich(Activity activity, byte[]? message)
+    private static void TryEnrich(Activity activity, byte[]? message, ServiceConnectInstrumentationOptions options)
     {
         if (message is null)
         {
@@ -430,7 +452,7 @@ public static class ServiceConnectActivitySource
 
         try
         {
-            Options.EnrichWithMessageBytes?.Invoke(activity, message);
+            options.EnrichWithMessageBytes?.Invoke(activity, message);
         }
         catch (OperationCanceledException)
         {
@@ -453,9 +475,9 @@ public static class ServiceConnectActivitySource
     internal static bool IsConsumeTelemetryEnabled(ServiceConnectInstrumentationOptions options)
         => options.EnableConsumeTelemetry && _activitySource.HasListeners();
 
-    internal static void InvokeTryEnrichForTest(Activity activity, Message? message) =>
-        TryEnrich(activity, message);
+    internal static void InvokeTryEnrichForTest(Activity activity, Message? message, ServiceConnectInstrumentationOptions options) =>
+        TryEnrich(activity, message, options);
 
-    internal static void InvokeTryEnrichForTest(Activity activity, byte[]? bytes) =>
-        TryEnrich(activity, bytes);
+    internal static void InvokeTryEnrichForTest(Activity activity, byte[]? bytes, ServiceConnectInstrumentationOptions options) =>
+        TryEnrich(activity, bytes, options);
 }
