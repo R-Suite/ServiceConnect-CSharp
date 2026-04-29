@@ -44,7 +44,7 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
                 candidate = decoded is not null && int.TryParse(decoded, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : -1;
             }
 
-            if (candidate < 0 || candidate > _maxRetries + 1)
+            if (candidate < 0 || candidate > _maxRetries)
             {
                 // Never silently reset to 0 here — a corrupt or attacker-controlled header
                 // would otherwise force infinite retries. Route to error so an operator
