@@ -159,26 +159,62 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
             var batchFilter = dueUnlockedFilter &
                               Builders<TimeoutData>.Filter.In(x => x.Id, candidateIds);
-            if (session is not null)
-            {
-                await collection.UpdateManyAsync(session, batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
 
-            // Read back exactly the rows we just claimed (LockedBy == sessionId, lease still valid).
-            // The LockExpiresAt > utcNow guard prevents a race where the lease expired between
-            // the UpdateMany claim and this read-back; without it, a stale claim could return
-            // rows the reaper has already unlocked and re-assigned to another worker.
-            var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
-                            & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true)
-                            & Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
-            using var cursor = session is not null
-                ? await collection.FindAsync(session, ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false)
-                : await collection.FindAsync(ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false);
-            await cursor.ForEachAsync(retval.DueTimeouts.Add, cancellationToken).ConfigureAwait(false);
+            // Track whether the lease claim succeeded so the OCE handler below knows
+            // whether there is anything to release. Initialised false: if UpdateMany
+            // throws (or is cancelled before it starts), there is nothing to clean up.
+            var leaseClaimed = false;
+            try
+            {
+                if (session is not null)
+                {
+                    await collection.UpdateManyAsync(session, batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                leaseClaimed = true;
+
+                // Read back exactly the rows we just claimed (LockedBy == sessionId, lease still valid).
+                // The LockExpiresAt > utcNow guard prevents a race where the lease expired between
+                // the UpdateMany claim and this read-back; without it, a stale claim could return
+                // rows the reaper has already unlocked and re-assigned to another worker.
+                var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
+                                & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true)
+                                & Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
+                using var cursor = session is not null
+                    ? await collection.FindAsync(session, ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false)
+                    : await collection.FindAsync(ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false);
+                await cursor.ForEachAsync(retval.DueTimeouts.Add, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // OCE between the claim succeeding and the read-back orphans the lease: it
+                // is held by a sessionId no caller will use. Best-effort release inside the
+                // catch lets the next poll see the rows immediately rather than waiting on
+                // the reaper / lease-expiry. Use CancellationToken.None — the cancelling
+                // token must not preempt cleanup. Swallow any failure here; reaper /
+                // lease-expiry is the ultimate recovery.
+                if (leaseClaimed)
+                {
+                    try
+                    {
+                        var releaseFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
+                                          & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
+                        var releaseUpdate = Builders<TimeoutData>.Update
+                            .Set(x => x.Locked, false)
+                            .Set(x => x.LockedBy, Guid.Empty)
+                            .Set(x => x.LockExpiresAt, null);
+                        await collection.UpdateManyAsync(releaseFilter, releaseUpdate, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Best-effort lease release after cancellation failed for session {SessionId}; reaper will reclaim.", sessionId);
+                    }
+                }
+                throw;
+            }
 
             return retval;
         }

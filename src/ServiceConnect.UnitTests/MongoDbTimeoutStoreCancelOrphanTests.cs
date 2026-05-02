@@ -1,0 +1,157 @@
+using Microsoft.Extensions.Logging;
+using MongoDB.Driver;
+using Moq;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Persistence.MongoDb;
+using Xunit;
+
+namespace ServiceConnect.UnitTests;
+
+public class MongoDbTimeoutStoreCancelOrphanTests
+{
+    static MongoDbTimeoutStoreCancelOrphanTests()
+    {
+        MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
+    }
+
+    private static (MongoDbTimeoutStore Store, Mock<IMongoCollection<TimeoutData>> Collection, Mock<ILogger<MongoDbTimeoutStore>> Logger)
+        BuildStore()
+    {
+        var indexes = new Mock<IMongoIndexManager<TimeoutData>>();
+        indexes.Setup(m => m.CreateManyAsync(It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["ok"]);
+        indexes.Setup(m => m.DropOneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var collection = new Mock<IMongoCollection<TimeoutData>>();
+        collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
+
+        // Candidate-id FindAsync returns one id so the read-back path fires.
+        var oneIdCursor = new Mock<IAsyncCursor<Guid>>();
+        var seq = oneIdCursor.SetupSequence(c => c.MoveNextAsync(It.IsAny<CancellationToken>()));
+        seq.ReturnsAsync(true).ReturnsAsync(false);
+        oneIdCursor.SetupGet(c => c.Current).Returns([Guid.NewGuid()]);
+        collection.Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<FindOptions<TimeoutData, Guid>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(oneIdCursor.Object);
+
+        var database = new Mock<IMongoDatabase>();
+        database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null)).Returns(collection.Object);
+
+        var client = new Mock<IMongoClient>();
+        client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
+        // Force unsessioned path for simplicity.
+        client.Setup(c => c.StartSessionAsync(It.IsAny<ClientSessionOptions>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NotSupportedException("standalone"));
+
+        var logger = new Mock<ILogger<MongoDbTimeoutStore>>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+
+        var store = new MongoDbTimeoutStore(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "test" },
+            logger.Object);
+
+        return (store, collection, logger);
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatch_CancelAfterUpdateMany_ReleasesLeaseBestEffort()
+    {
+        var (store, collection, _) = BuildStore();
+
+        var updateManyCalls = 0;
+        var releaseUsedCancellationTokenNone = false;
+        collection.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<FilterDefinition<TimeoutData>, UpdateDefinition<TimeoutData>, UpdateOptions, CancellationToken>(
+                (filter, _, _, ct) =>
+                {
+                    updateManyCalls++;
+                    if (updateManyCalls == 2)
+                    {
+                        // Release call should use CancellationToken.None.
+                        releaseUsedCancellationTokenNone = ct == CancellationToken.None;
+                    }
+                })
+            .ReturnsAsync(new UpdateResult.Acknowledged(0, 0, null));
+
+        // Wire FindAsync<TimeoutData> (the read-back) to throw OCE.
+        collection.Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<FindOptions<TimeoutData, TimeoutData>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException("simulated"));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => store.GetTimeoutsBatchAsync());
+
+        Assert.Equal(2, updateManyCalls); // claim + release
+        Assert.True(releaseUsedCancellationTokenNone);
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatch_CancelBeforeUpdateMany_DoesNotAttemptRelease()
+    {
+        var (store, collection, _) = BuildStore();
+
+        var updateManyCalls = 0;
+        collection.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Callback(() => updateManyCalls++)
+            .ThrowsAsync(new OperationCanceledException("simulated"));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => store.GetTimeoutsBatchAsync());
+
+        Assert.Equal(1, updateManyCalls); // only the failed claim attempt
+    }
+
+    [Fact]
+    public async Task GetTimeoutsBatch_CancelDuringBestEffortRelease_SwallowsAndPropagatesOriginalOce()
+    {
+        var (store, collection, logger) = BuildStore();
+
+        var updateManyCalls = 0;
+        collection.Setup(c => c.UpdateManyAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<UpdateDefinition<TimeoutData>>(),
+                It.IsAny<UpdateOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns<FilterDefinition<TimeoutData>, UpdateDefinition<TimeoutData>, UpdateOptions, CancellationToken>(
+                (_, _, _, _) =>
+                {
+                    updateManyCalls++;
+                    if (updateManyCalls == 1)
+                    {
+                        return Task.FromResult<UpdateResult>(new UpdateResult.Acknowledged(0, 0, null));
+                    }
+                    // Release fails too — should be swallowed and logged.
+                    throw new MongoException("simulated release failure");
+                });
+
+        collection.Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<TimeoutData>>(),
+                It.IsAny<FindOptions<TimeoutData, TimeoutData>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new OperationCanceledException("simulated"));
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => store.GetTimeoutsBatchAsync());
+
+        Assert.Equal(2, updateManyCalls);
+        // Verify a Warning was logged (the release failure).
+        logger.Verify(l => l.Log(
+            LogLevel.Warning,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            It.IsAny<MongoException>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+}
