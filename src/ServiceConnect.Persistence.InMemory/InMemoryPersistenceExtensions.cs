@@ -12,12 +12,25 @@ public static class InMemoryPersistenceExtensions
     /// <summary>
     /// Registers the in-memory persistence implementation with the builder.
     /// </summary>
-    public static ServiceConnectBuilder UseInMemoryPersistence(this ServiceConnectBuilder builder)
+    /// <param name="builder">The ServiceConnect builder.</param>
+    /// <param name="configure">
+    /// Optional delegate to customise <see cref="InMemoryPersistenceOptions"/> before registration.
+    /// When omitted the defaults (e.g. a five-minute lock-lease duration) are used.
+    /// </param>
+    public static ServiceConnectBuilder UseInMemoryPersistence(
+        this ServiceConnectBuilder builder,
+        Action<InMemoryPersistenceOptions>? configure = null)
     {
+        // Build the options instance once at extension-call time so the configure
+        // delegate's customisations are captured before AddRegistration's callback
+        // is invoked (the callback may be called more than once; options must not change).
+        var options = new InMemoryPersistenceOptions();
+        configure?.Invoke(options);
+
         builder.AddRegistration(services =>
         {
             services.TryAddSingleton<ProcessManagerPredicateCache>();
-            services.TryAddSingleton<InMemoryPersistenceOptions>();
+            services.TryAddSingleton(options);
             services.TryAddSingleton<InMemoryPersistenceState>(sp =>
                 new InMemoryPersistenceState(sp.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<ICacheProvider>(sp =>
