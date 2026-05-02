@@ -17,6 +17,7 @@ public static class InMemoryPersistenceExtensions
         builder.AddRegistration(services =>
         {
             services.TryAddSingleton<ProcessManagerPredicateCache>();
+            services.TryAddSingleton<InMemoryPersistenceOptions>();
             services.TryAddSingleton<InMemoryPersistenceState>(sp =>
                 new InMemoryPersistenceState(sp.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<ICacheProvider>(sp =>
@@ -31,6 +32,7 @@ public static class InMemoryPersistenceExtensions
                     sp.GetRequiredService<InMemoryPersistenceState>()));
             services.TryAddSingleton<InMemoryTimeoutStore>(sp =>
                 new InMemoryTimeoutStore(
+                    sp.GetRequiredService<InMemoryPersistenceOptions>(),
                     sp.GetRequiredService<InMemoryPersistenceState>(),
                     sp.GetRequiredService<TimeProvider>()));
             services.TryAddSingleton<IProcessManagerFinder>(sp =>

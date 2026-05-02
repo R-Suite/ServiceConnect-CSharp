@@ -287,7 +287,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task InsertTimeout_StoresTimeoutData()
     {
-        ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        ITimeoutStore finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         var id = Guid.NewGuid();
         await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddHours(-1)), CancellationToken.None);
 
@@ -299,7 +299,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task InsertTimeout_ThrowsWhenDuplicateId()
     {
-        ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        ITimeoutStore finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         var id = Guid.NewGuid();
         await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddMinutes(5)), CancellationToken.None);
 
@@ -309,7 +309,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task GetTimeoutsBatch_WhenNoTimeouts_ReturnEmptyDueList()
     {
-        ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        ITimeoutStore finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
 
         var batch = await finder.GetTimeoutsBatchAsync(cancellationToken: CancellationToken.None);
 
@@ -319,7 +319,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task GetTimeoutsBatch_FutureTimeout_NotInDueList()
     {
-        ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        ITimeoutStore finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTimeOffset.UtcNow.AddHours(1)), CancellationToken.None);
 
         var batch = await finder.GetTimeoutsBatchAsync(cancellationToken: CancellationToken.None);
@@ -330,7 +330,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task GetTimeoutsBatch_PastTimeout_IsInDueList()
     {
-        ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        ITimeoutStore finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         await finder.InsertTimeoutAsync(MakeTimeoutData(Guid.NewGuid(), DateTimeOffset.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
         var batch = await finder.GetTimeoutsBatchAsync(cancellationToken: CancellationToken.None);
@@ -341,7 +341,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task RemoveDispatchedTimeout_RemovesTimeoutFromBatch()
     {
-        ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        ITimeoutStore finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         var id = Guid.NewGuid();
         await finder.InsertTimeoutAsync(MakeTimeoutData(id, DateTimeOffset.UtcNow.AddSeconds(-1)), CancellationToken.None);
 
@@ -354,7 +354,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task RemoveDispatchedTimeout_WhenIdDoesNotExist_DoesNotThrow()
     {
-        ITimeoutStore finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        ITimeoutStore finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
 
         var ex = await Record.ExceptionAsync(() => finder.RemoveDispatchedTimeoutAsync(Guid.NewGuid(), cancellationToken: CancellationToken.None));
 
@@ -410,7 +410,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task InsertTimeoutAsync_PreCancelledToken_ThrowsOCE()
     {
-        var finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        var finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -421,7 +421,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task GetTimeoutsBatchAsync_PreCancelledToken_ThrowsOCE()
     {
-        var finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        var finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -432,7 +432,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task RemoveDispatchedTimeoutAsync_PreCancelledToken_ThrowsOCE()
     {
-        var finder = new InMemoryTimeoutStore(string.Empty, string.Empty);
+        var finder = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 

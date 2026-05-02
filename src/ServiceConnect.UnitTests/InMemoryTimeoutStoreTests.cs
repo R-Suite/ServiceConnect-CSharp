@@ -14,7 +14,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         await store.InsertTimeoutAsync(new TimeoutData { Id = Guid.NewGuid(), Time = now.AddMinutes(-5) });    // due
         await store.InsertTimeoutAsync(new TimeoutData { Id = Guid.NewGuid(), Time = now.AddMinutes(-1) });    // due
@@ -35,7 +35,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
@@ -56,7 +56,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
@@ -77,7 +77,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         var headerValue = new byte[] { 1, 2, 3 };
@@ -111,7 +111,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
@@ -136,7 +136,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
@@ -155,7 +155,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData
@@ -180,7 +180,7 @@ public class InMemoryTimeoutStoreTests
     [Fact]
     public async Task ReleaseDispatchedTimeout_UnknownId_DoesNotThrow()
     {
-        var store = new InMemoryTimeoutStore();
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
 
         var exception = await Record.ExceptionAsync(() =>
             store.ReleaseDispatchedTimeoutAsync(Guid.NewGuid()));
@@ -191,7 +191,7 @@ public class InMemoryTimeoutStoreTests
     [Fact]
     public async Task ReleaseDispatchedTimeout_PreCancelledToken_Throws()
     {
-        var store = new InMemoryTimeoutStore();
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -204,7 +204,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
         for (int i = 0; i < 50; i++)
         {
             await store.InsertTimeoutAsync(new TimeoutData
@@ -227,7 +227,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
         for (int i = 0; i < 5; i++)
         {
             await store.InsertTimeoutAsync(new TimeoutData
@@ -248,7 +248,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
         for (int i = 0; i < 5; i++)
         {
             await store.InsertTimeoutAsync(new TimeoutData
@@ -269,7 +269,7 @@ public class InMemoryTimeoutStoreTests
     [InlineData(-1)]
     public async Task GetTimeoutsBatchAsync_BatchSizeZeroOrNegative_Throws(int invalidBatchSize)
     {
-        var store = new InMemoryTimeoutStore();
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
 
         var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             store.GetTimeoutsBatchAsync(batchSize: invalidBatchSize));
@@ -282,7 +282,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
         var sharedList = new List<byte> { 1, 2, 3 };
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData
@@ -306,7 +306,7 @@ public class InMemoryTimeoutStoreTests
     {
         var now = new DateTimeOffset(2026, 4, 26, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore("", "", timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData

@@ -16,7 +16,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // keeps test doubles against the InMemory implementation honest.
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
@@ -40,7 +40,7 @@ public class InMemoryTimeoutStoreLeaseTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
@@ -66,7 +66,7 @@ public class InMemoryTimeoutStoreLeaseTests
     {
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
@@ -92,7 +92,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // is also Guid.Empty.
         var now = new DateTimeOffset(2026, 4, 22, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
         // Do NOT claim — row is unleased (Locked=false, LockedBy=Guid.Empty).
@@ -108,7 +108,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // by a caller passing Guid.Empty, because Mongo's filter would reject it.
         var now = new DateTimeOffset(2026, 4, 22, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });
 
@@ -119,7 +119,7 @@ public class InMemoryTimeoutStoreLeaseTests
     [Fact]
     public async Task RemoveDispatchedTimeoutAsync_LeaseAware_PreCancelledToken_Throws()
     {
-        var store = new InMemoryTimeoutStore();
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -130,7 +130,7 @@ public class InMemoryTimeoutStoreLeaseTests
     [Fact]
     public async Task ReleaseDispatchedTimeoutAsync_LeaseAware_PreCancelledToken_Throws()
     {
-        var store = new InMemoryTimeoutStore();
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -144,7 +144,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // A non-null lockOwner against a missing row must throw, not silently no-op.
         // A missing row's "current lock owner" is nobody, so the caller's lease is
         // already invalidated — surface as ConcurrencyException to match Mongo.
-        var store = new InMemoryTimeoutStore();
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         var randomId = Guid.NewGuid();
         var ownerThatNeverHadIt = Guid.NewGuid();
 
@@ -157,7 +157,7 @@ public class InMemoryTimeoutStoreLeaseTests
     {
         // A non-null lockOwner against a missing row must throw, not silently no-op.
         // Mirrors RemoveDispatchedTimeoutAsync contract and Mongo behaviour.
-        var store = new InMemoryTimeoutStore();
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions());
         var randomId = Guid.NewGuid();
         var ownerThatNeverHadIt = Guid.NewGuid();
 
@@ -172,7 +172,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // elapsed before dispatching.  An expired lease is as invalid as a mismatched
         // owner — the InMemory store must mirror the Mongo contract.
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero));
-        var store = new InMemoryTimeoutStore(timeProvider: clock);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: clock);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData
@@ -201,7 +201,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // Mirror of the Remove test: ReleaseDispatchedTimeoutAsync must also reject
         // expired leases rather than silently clearing the lock on a stale claim.
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero));
-        var store = new InMemoryTimeoutStore(timeProvider: clock);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: clock);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData
@@ -229,7 +229,7 @@ public class InMemoryTimeoutStoreLeaseTests
         // be removed when the caller explicitly opts out of the lease check by passing null.
         var now = new DateTimeOffset(2026, 4, 18, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         var id = Guid.NewGuid();
         await store.InsertTimeoutAsync(new TimeoutData { Id = id, Time = now.AddMinutes(-1) });

@@ -24,7 +24,7 @@ public class InMemoryTimeoutStoreConcurrencyTests
     {
         var now = new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         const int writers = 8;
         const int perWriter = 100;
@@ -79,7 +79,7 @@ public class InMemoryTimeoutStoreConcurrencyTests
 
         var now = new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         for (var r = 0; r < rounds; r++)
         {
@@ -113,7 +113,7 @@ public class InMemoryTimeoutStoreConcurrencyTests
     {
         var now = new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         const int rounds = 500;
         var inserted = new ConcurrentBag<Guid>();
@@ -162,7 +162,7 @@ public class InMemoryTimeoutStoreConcurrencyTests
         // releasing it (also valid). Both branches must complete without throwing.
         var now = new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero);
         var time = new FakeTimeProvider(now);
-        var store = new InMemoryTimeoutStore(timeProvider: time);
+        var store = new InMemoryTimeoutStore(new InMemoryPersistenceOptions(), timeProvider: time);
 
         const int rounds = 100;
 

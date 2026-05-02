@@ -10,19 +10,30 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 {
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
-
-    private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan _lockLeaseDuration;
 
     /// <summary>
-    /// Initializes a new <see cref="InMemoryTimeoutStore"/> instance.
+    /// Initializes a new <see cref="InMemoryTimeoutStore"/> instance with the supplied options.
     /// </summary>
-    public InMemoryTimeoutStore(string connectionString = "", string databaseName = "", TimeProvider? timeProvider = null)
-        : this(new InMemoryPersistenceState(timeProvider), timeProvider) { }
+    public InMemoryTimeoutStore(InMemoryPersistenceOptions options, TimeProvider? timeProvider = null)
+        : this(options, new InMemoryPersistenceState(timeProvider), timeProvider) { }
 
-    internal InMemoryTimeoutStore(InMemoryPersistenceState state, TimeProvider? timeProvider = null)
+    internal InMemoryTimeoutStore(
+        InMemoryPersistenceOptions options,
+        InMemoryPersistenceState state,
+        TimeProvider? timeProvider = null)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.LockLeaseDuration <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.LockLeaseDuration,
+                $"{nameof(InMemoryPersistenceOptions.LockLeaseDuration)} must be positive.");
+        }
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _lockLeaseDuration = options.LockLeaseDuration;
     }
 
     /// <summary>
@@ -85,7 +96,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 {
                     entry.Data.Locked = true;
                     entry.Data.LockedBy = sessionId;
-                    entry.Data.LockExpiresAt = utcNow + LockLeaseDuration;
+                    entry.Data.LockExpiresAt = utcNow + _lockLeaseDuration;
                     retval.DueTimeouts.Add(Clone(entry.Data));
 
                     if (batchSize is { } cap && retval.DueTimeouts.Count >= cap)
