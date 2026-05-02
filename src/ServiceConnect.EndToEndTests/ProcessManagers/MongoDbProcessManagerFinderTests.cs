@@ -265,60 +265,21 @@ public class MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
         Assert.Equal(1, count);
     }
 
-    // Under WriteConcern.Unacknowledged, UpdateDataAsync must not silently swallow
-    // the operation result — concurrency guards are disabled with a one-time Warning.
+    // H26 (Phase 9): MongoDbProcessManagerFinder rejects WriteConcern.Unacknowledged at
+    // construction. Saga state is correctness-sensitive; w:0 silently loses concurrent
+    // updates and wedges sagas on the next real conflict because the version field
+    // advances. Operators must use w:1 or higher.
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task UpdateDataAsync_WithW0_DoesNotThrow()
+    public void Constructor_WithW0_ThrowsInvalidOperationException()
     {
-        var (finder, connectionString, dbName) = CreateFinderWithWriteConcern(WriteConcern.Unacknowledged);
-
-        var correlationId = Guid.NewGuid();
-        await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v1" });
-
-        // Retrieve via a normal (acknowledged) client so we can get a real version snapshot.
-        var normalOptions = new MongoDbPersistenceOptions
+        var ex = Assert.Throws<InvalidOperationException>(() =>
         {
-            ConnectionString = connectionString,
-            DatabaseName = dbName
-        };
-        var normalClient = MongoClientFactory.Create(normalOptions);
-        var normalFinder = new MongoDbProcessManagerFinder(normalClient, normalOptions, NullLogger<MongoDbProcessManagerFinder>.Instance);
-        var mapper = CreateMapper();
-        var message = new Message(correlationId);
-        var found = await normalFinder.FindDataAsync<TestData>(mapper, message);
-        Assert.NotNull(found);
+            _ = CreateFinderWithWriteConcern(WriteConcern.Unacknowledged);
+        });
 
-        found.Data.Name = "v2";
-        // Under w:0, UpdateDataAsync must complete without throwing.
-        await finder.UpdateDataAsync(found);
-    }
-
-    // Under WriteConcern.Unacknowledged, DeleteDataAsync must not spuriously throw.
-    [Fact]
-    [Trait("Category", "Docker")]
-    public async Task DeleteDataAsync_WithW0_DoesNotSpuriouslyThrow()
-    {
-        var (finder, connectionString, dbName) = CreateFinderWithWriteConcern(WriteConcern.Unacknowledged);
-
-        var correlationId = Guid.NewGuid();
-        await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v1" });
-
-        // Retrieve via acknowledged client to get a valid version token.
-        var normalOptions = new MongoDbPersistenceOptions
-        {
-            ConnectionString = connectionString,
-            DatabaseName = dbName
-        };
-        var normalClient = MongoClientFactory.Create(normalOptions);
-        var normalFinder = new MongoDbProcessManagerFinder(normalClient, normalOptions, NullLogger<MongoDbProcessManagerFinder>.Instance);
-        var mapper = CreateMapper();
-        var message = new Message(correlationId);
-        var found = await normalFinder.FindDataAsync<TestData>(mapper, message);
-        Assert.NotNull(found);
-
-        // Under w:0, DeleteDataAsync returns DeletedCount=0 by design — must NOT throw.
-        await finder.DeleteDataAsync(found);
+        Assert.Contains("WriteConcern", ex.Message);
+        Assert.Contains("acknowledged", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private (MongoDbProcessManagerFinder finder, string connectionString, string dbName) CreateFinderWithWriteConcern(WriteConcern writeConcern)
