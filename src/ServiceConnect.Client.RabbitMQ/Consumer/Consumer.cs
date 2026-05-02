@@ -199,21 +199,25 @@ public sealed class Consumer : IConsumer
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        foreach (IAsyncDisposable consumer in _clients)
-        {
-            try
+        // Each host's DisposeAsync is independently bounded by its own gracefulShutdownTimeout.
+        // Sequential disposal made aggregate latency O(N * timeout); parallel makes it O(timeout).
+        // Per-host failures stay isolated via the inner try/catch — without it, Task.WhenAll's
+        // aggregate-exception path would short-circuit other hosts' awaits.
+        var disposeTasks = _clients
+            .Select(async consumer =>
             {
-                await consumer.DisposeAsync().ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                throw; // let shutdown cancellation propagate
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to dispose consumer host - continuing");
-            }
-        }
+                try
+                {
+                    await consumer.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to dispose consumer host - continuing");
+                }
+            })
+            .ToArray();
+
+        await Task.WhenAll(disposeTasks).ConfigureAwait(false);
         // Reset the bag so a subsequent StartConsumingAsync starts from empty;
         // otherwise per-cycle entries accumulate and the disposed-host references
         // are retained for the lifetime of the Consumer.
