@@ -3,9 +3,15 @@ title: Routing Slip
 description: Send a message through an ordered chain of services — each stage does its work and the message advances automatically.
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 **Routing Slip** is the pattern for an ordered, multi-stage pipeline: inventory, then billing, then shipping. Each stage runs on its own service; between stages, the message carries its own itinerary. The initiator declares the route once; the stages don't need to know about each other.
 
 Think of it like a physical inter-office envelope with a list of offices clipped to the front. Each office does its work, crosses itself off, and passes the envelope to whoever is next on the list.
+
+<Aside type="note" title="What changed in v7">
+  v7 tightens routing-slip validation: `IBus.RouteAsync` now throws `ArgumentException` if any destination is null, empty/whitespace, or contains a comma. Pre-v7.x these inputs silently corrupted the slip or demoted the route to a single send.
+</Aside>
 
 ## When to use it
 

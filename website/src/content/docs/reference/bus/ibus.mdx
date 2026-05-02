@@ -79,6 +79,12 @@ Sends a request to a single endpoint and awaits exactly one reply. Use when the 
 
 **Returns.** The single reply returned by the respondent.
 
+**Exceptions**
+
+- `RequestTimeoutException` — request-side timeout fired before a matching reply arrived.
+- `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
+- `OperationCanceledException` — the caller's cancellation token fired.
+
 **Remarks.** If the reply does not arrive before the configured timeout, the task faults. The reply type must derive from `Message`.
 
 ---
@@ -102,6 +108,12 @@ Sends a request that may fan out to multiple respondents and collects every repl
 - `cancellationToken` — cancels the aggregate wait.
 
 **Returns.** The list of replies that arrived before the timeout or the expected count was reached.
+
+**Exceptions**
+
+- `RequestTimeoutException` — request-side timeout fired before a matching reply arrived.
+- `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
+- `OperationCanceledException` — the caller's cancellation token fired.
 
 **Remarks.** Returns whatever replies arrived — a partial result is a valid outcome. Inspect the list length against `RequestOptions.ExpectedReplyCount` to decide whether the scatter-gather succeeded.
 
@@ -127,6 +139,12 @@ Publishes a request to every subscriber of the request type and invokes `onReply
 - `options` — expected reply count and timeout.
 - `cancellationToken` — stops dispatching replies to the callback.
 
+**Exceptions**
+
+- `RequestTimeoutException` — request-side timeout fired before a matching reply arrived.
+- `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
+- `OperationCanceledException` — the caller's cancellation token fired.
+
 **Remarks.** The callback may be invoked concurrently; keep it thread-safe and short-lived. The task completes when the expected reply count is reached or the timeout elapses.
 
 ---
@@ -149,6 +167,10 @@ Starts a routing slip: sends the message to the first destination with a routing
 - `cancellationToken` — cancels the initial send.
 
 **Remarks.** Routing-slip forwarding is handled by the consumer side and requires `IBusConfiguration.EnableRoutingSlipProcessing` (the default) to be true on every intermediate service.
+
+<Aside type="caution" title="Destination validation">
+  Throws `ArgumentException` if `destinations` is null, empty, or contains any null/whitespace/comma-containing entries. Commas are reserved as the routing-slip separator.
+</Aside>
 
 ---
 

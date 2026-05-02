@@ -84,6 +84,15 @@ Not every failure is retryable. A message with no `TypeName` header, a message t
 
 This is the right distinction. A message that is malformed at the wire level can't be fixed by trying harder; retrying it just wastes broker time. A message that a handler *chose* to reject (because its own dependencies are down) gets the full retry budget.
 
+### Unregistered message types
+
+When a message arrives with a type that isn't in the dispatch registry, ServiceConnect treats it as a **terminal failure** — retrying never resolves the type. The message is routed via the not-handled path:
+
+- If `DeadLetterUnhandledMessages` is enabled, the message goes directly to the error queue.
+- Otherwise the message is acked and dropped.
+
+Pre-v7.x ServiceConnect returned `Success=false` from the dispatcher, causing the consumer host to nack-with-requeue and burn the full retry budget before landing the message in the error queue. The new behaviour is faster and more accurate.
+
 ## Observing failures in code
 
 `IBusConfiguration.ExceptionHandler` is a callback invoked on every dispatch-level exception. It runs alongside the retry machinery — not instead of it:

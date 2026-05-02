@@ -3,6 +3,8 @@ title: Request/Reply
 description: Send a message and await a response — point-to-point, asynchronous on the wire, synchronous at the call site.
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 **Request/Reply** is the pattern for "I need an answer." You send a message, another service handles it and replies, and your `await` returns the response when it arrives. Asynchronous over the network, synchronous in your code.
 
 It is still point-to-point — one request, one responder — but unlike plain [Send](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/), the caller blocks on the reply rather than walking away.
@@ -118,6 +120,10 @@ The responder's bootstrap is structurally identical to any other consumer — re
 Request/reply has **timeout semantics**, not retry semantics. If the responder is slow or unreachable, the caller eventually sees a timeout exception; the request itself is not automatically re-sent. This is deliberate — a request is usually a user-facing operation where the caller wants to know quickly that something is wrong, rather than wait another 30 seconds for a retry.
 
 If you need resilient at-least-once delivery with background retries, a plain `SendAsync` + an event-based reply path is the right shape, not a blocking request/reply.
+
+<Aside type="note" title="What changed in v7">
+  v7 introduces `RequestSendCancelledException` (inheriting from `OperationCanceledException`) thrown by `SendRequestAsync` / `SendRequestMultiAsync` / `PublishRequestAsync` when the outbound send pipeline cancels before the request reaches the broker. Distinct from a timeout (`RequestTimeoutException`) and from caller-token cancellation (`OperationCanceledException`).
+</Aside>
 
 ## Correlation-id flow
 
