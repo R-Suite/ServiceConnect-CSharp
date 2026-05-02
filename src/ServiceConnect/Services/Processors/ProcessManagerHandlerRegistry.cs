@@ -7,11 +7,16 @@ using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Services.Processors;
 
-internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
+internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcessManagerTypeRegistry
 {
     // Built once at construction, never written to afterwards. FrozenDictionary gives
     // ~20–40% faster lookups than Dictionary for the per-message hot path.
     private readonly FrozenDictionary<Type, ProcessManagerDescriptor> _descriptors;
+
+    // Snapshot of distinct saga data types built at construction. Exposed via
+    // IProcessManagerTypeRegistry so persistence providers can pre-create per-saga
+    // structures (e.g. Mongo unique CorrelationId indexes) at startup.
+    private readonly IReadOnlyList<Type> _sagaDataTypes;
 
     internal ProcessManagerHandlerRegistry(
         IList<HandlerReference> handlerReferences,
@@ -57,10 +62,14 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry
         }
 
         _descriptors = builder.ToFrozenDictionary();
+        _sagaDataTypes = [.. _descriptors.Values.Select(d => d.DataType).Distinct()];
     }
 
     internal bool TryGet(Type messageType, [NotNullWhen(true)] out ProcessManagerDescriptor? descriptor)
         => _descriptors.TryGetValue(messageType, out descriptor);
+
+    /// <inheritdoc />
+    public IEnumerable<Type> SagaDataTypes => _sagaDataTypes;
 
     internal static ProcessManagerDescriptor BuildDescriptor(
         Type messageType, Type dataType, Type processHandlerInterfaceType)

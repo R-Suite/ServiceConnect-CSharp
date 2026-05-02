@@ -150,6 +150,10 @@ public static class MongoDbPersistenceExtensions
             services.TryAddSingleton<IMongoClient>(_ => MongoClientFactory.Create(options));
             services.TryAddSingleton<IAggregatorPersistor, MongoDbAggregatorPersistor>();
             services.TryAddSingleton<MongoDbProcessManagerFinder>();
+            // Pre-create per-saga unique CorrelationId indexes at startup. Closes the
+            // cross-process race window where two cold-started processes could insert
+            // duplicate saga rows before either one called the lazy index-creation path.
+            services.AddHostedService<MongoDbProcessManagerIndexInitializer>();
             services.TryAddSingleton<MongoDbTimeoutStore>();
             services.TryAddSingleton<IProcessManagerFinder>(sp =>
                 sp.GetRequiredService<MongoDbProcessManagerFinder>());

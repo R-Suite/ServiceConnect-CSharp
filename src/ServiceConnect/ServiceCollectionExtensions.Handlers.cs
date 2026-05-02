@@ -66,6 +66,12 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton<IHandlerRegistry>(sp =>
             sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>());
 
+        // Register the same instance under IProcessManagerTypeRegistry so persistence
+        // providers that need to pre-create per-saga structures (e.g. Mongo unique
+        // CorrelationId indexes) at startup can enumerate the saga data types.
+        services.AddSingleton<IProcessManagerTypeRegistry>(sp =>
+            sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>());
+
         // Message-handler descriptor registry (eagerly built, singleton)
         services.TryAddSingleton<Services.Processors.MessageHandlerRegistry>(sp => new Services.Processors.MessageHandlerRegistry(
             sp.GetRequiredService<IList<HandlerReference>>(),

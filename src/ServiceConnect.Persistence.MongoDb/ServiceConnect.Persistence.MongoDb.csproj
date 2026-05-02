@@ -11,6 +11,9 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>ServiceConnect.UnitTests</_Parameter1>
         </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>ServiceConnect.EndToEndTests</_Parameter1>
+        </AssemblyAttribute>
     </ItemGroup>
     <!-- DynamicProxyGenAssembly2 is only needed in Debug builds (Moq/Castle DynamicProxy for unit tests).
          Exclude from Release so the production assembly does not expose its internals surface to a

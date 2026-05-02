@@ -25,6 +25,12 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>>
         InsertDelegateCache = new();
 
+    // Cached compiled delegates for the EnsureCorrelationIdIndexAsync<T> startup-time
+    // dispatch path. Built once per saga data type and reused for every subsequent
+    // hosted-service invocation.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<MongoDbProcessManagerFinder, CancellationToken, Task>>
+        EnsureIndexDelegateCache = new();
+
     static MongoDbProcessManagerFinder()
     {
         // Ensure the canonical Guid serializer is registered before any direct-ctor
@@ -204,6 +210,70 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         };
 
         await collection.InsertOneAsync(mongoDbData, cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Pre-creates the unique CorrelationId index for the supplied saga data type,
+    /// dispatching by reflection to the generic <see cref="EnsureCorrelationIdIndexAsync{T}"/>.
+    /// Used by the startup-time hosted service to close the cross-process race window
+    /// where two cold-started processes could insert duplicate saga rows before either
+    /// one called the lazy index-creation path on the I/O hot path.
+    /// </summary>
+    /// <remarks>
+    /// The compiled delegate is cached per type so the reflection / expression-tree
+    /// cost is paid once per saga data type for the lifetime of the process.
+    /// </remarks>
+    internal Task EnsureCorrelationIdIndexForTypeAsync(Type dataType, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(dataType);
+
+        var del = EnsureIndexDelegateCache.GetOrAdd(dataType, static t =>
+        {
+            // Build a delegate equivalent to:
+            //   (finder, ct) =>
+            //   {
+            //       var collection = finder._mongoDatabase.GetCollection<MongoDbData<T>>(collectionName, null);
+            //       return finder.EnsureCorrelationIdIndexAsync<T>(collection, collectionName, ct);
+            //   }
+            // Collection name is computed at delegate-build time (deterministic per
+            // type T) using the same FullName-or-Name convention as GetCollectionName<T>().
+            var dataMongoType = typeof(MongoDbData<>).MakeGenericType(t);
+
+            var collectionMethod = typeof(IMongoDatabase)
+                .GetMethods()
+                .First(m => string.Equals(m.Name, nameof(IMongoDatabase.GetCollection), StringComparison.Ordinal)
+                    && m.IsGenericMethodDefinition
+                    && m.GetParameters().Length == 2)
+                .MakeGenericMethod(dataMongoType);
+
+            var ensureMethod = typeof(MongoDbProcessManagerFinder)
+                .GetMethod(nameof(EnsureCorrelationIdIndexAsync), BindingFlags.NonPublic | BindingFlags.Instance)!
+                .MakeGenericMethod(t);
+
+            var finderParam = Expression.Parameter(typeof(MongoDbProcessManagerFinder), "finder");
+            var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
+
+            var collectionName = t.FullName ?? t.Name;
+
+            var dbField = Expression.Field(finderParam, nameof(_mongoDatabase));
+            var getCollectionCall = Expression.Call(
+                dbField,
+                collectionMethod,
+                Expression.Constant(collectionName),
+                Expression.Constant(null, typeof(MongoCollectionSettings)));
+
+            var call = Expression.Call(
+                finderParam,
+                ensureMethod,
+                getCollectionCall,
+                Expression.Constant(collectionName),
+                ctParam);
+
+            return Expression.Lambda<Func<MongoDbProcessManagerFinder, CancellationToken, Task>>(
+                call, finderParam, ctParam).Compile();
+        });
+
+        return del(this, cancellationToken);
     }
 
     /// <inheritdoc />
