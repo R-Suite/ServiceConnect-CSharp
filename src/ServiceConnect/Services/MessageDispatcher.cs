@@ -118,8 +118,12 @@ public sealed class MessageDispatcher(
             {
                 if (!hasResponseMessageId)
                 {
-                    _logger.LogWarning("Unregistered message type '{TypeName}'. Rejecting", fullTypeName);
-                    return new ConsumeEventResult { Success = false };
+                    // Unregistered type is a terminal failure — retrying never resolves it.
+                    // Reuse the existing not-handled path so the consumer host either dead-letters
+                    // (when DeadLetterUnhandledMessages is enabled) or ack-and-drops, instead of
+                    // burning the full retry budget through Success=false → nack/requeue.
+                    _logger.LogWarning("Unregistered message type '{TypeName}'. Routing as not-handled.", fullTypeName);
+                    return new ConsumeEventResult { Success = true, NotHandled = true };
                 }
 
                 type = typeof(Message);
@@ -146,7 +150,9 @@ public sealed class MessageDispatcher(
 
             if (!typeResolvedFromRegistry)
             {
-                return new ConsumeEventResult { Success = false };
+                // Same rationale as the earlier unresolved-type branch: terminal failure, route
+                // as not-handled rather than driving nack/requeue → retry → DLQ.
+                return new ConsumeEventResult { Success = true, NotHandled = true };
             }
 
             var message = _serializer.Deserialize(messageBytes, type!);

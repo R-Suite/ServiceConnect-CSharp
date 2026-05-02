@@ -760,9 +760,12 @@ public class MessageDispatcherTests
     }
 
     [Fact]
-    public async Task Dispatch_UnregisteredType_ReturnsFailure()
+    public async Task Dispatch_UnregisteredType_ReturnsNotHandled()
     {
-        // Arrange — empty registry, no types registered
+        // Unregistered types are a terminal condition — retrying never resolves them.
+        // The dispatcher routes them as not-handled (Success=true, NotHandled=true) so the
+        // consumer host acks and either dead-letters or drops, rather than nack/requeue looping
+        // through the full retry budget.
         var emptyRegistry = new MessageTypeRegistry();
         var sp = new ServiceCollection().BuildServiceProvider();
         var scopeAccessor = new ConsumeScopeAccessor();
@@ -791,7 +794,8 @@ public class MessageDispatcherTests
         var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
 
         // Assert
-        Assert.False(result.Success);
+        Assert.True(result.Success);
+        Assert.True(result.NotHandled);
     }
 
     // ---------------- messageType parameter is authoritative ----------------
