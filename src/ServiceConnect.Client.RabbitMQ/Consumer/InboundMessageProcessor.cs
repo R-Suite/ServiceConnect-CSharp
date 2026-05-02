@@ -49,9 +49,9 @@ internal sealed class InboundMessageProcessor(
     public async Task<bool> ProcessAsync(IChannel publishChannel, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
         ConsumeEventResult result;
-        // Pre-size the dict to the incoming header count plus 3 consumer-added
-        // headers (TimeReceived, DestinationMachine, DestinationAddress) so we
-        // avoid rehashes during the copy on this per-message hot path.
+        // Pre-size to incoming header count plus 3 consumer-added entries to avoid rehashes.
+        // Ordinal comparer is correct: AMQP keys are case-sensitive, and all downstream readers
+        // (MessageDispatcher, StreamProcessor, ConsumeContextPool, telemetry) use HeaderKeys.X constants. (2026-05-02)
         var sourceHeaders = args.BasicProperties.Headers;
 
         var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3, StringComparer.Ordinal);
