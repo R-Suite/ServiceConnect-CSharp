@@ -19,6 +19,13 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     private readonly IMessageTypeRegistry _typeRegistry;
     private readonly TimeProvider _timeProvider;
 
+    // Monotonic per-process counter: assigned to each insert via Interlocked.Increment so
+    // rows that share an InsertedAtTicks value are still totally ordered within this process.
+    // Cross-process ties remain unsolved (the existing Id sort is the final tie-break) but
+    // per-(Name, CorrelationId) aggregator state is processed by a single consumer at a time,
+    // so per-process order matches the actual usage pattern.
+    private long _insertSequence;
+
     // Mongo returns these codes when concurrent index creation detects that an index with
     // the same keys (86) or options (85) already exists. Either way the index is present,
     // so the ensure call has succeeded as far as the caller is concerned.
@@ -99,6 +106,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 DataTypeName = dataType.FullName!,
                 Version = 1,
                 InsertedAtTicks = _timeProvider.GetUtcNow().UtcTicks,
+                InsertSequence = Interlocked.Increment(ref _insertSequence),
             }, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (BsonException ex)
@@ -126,13 +134,14 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         {
             await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
-            // Sort by InsertedAtTicks (insertion-order) with Id as a stable
-            // tie-break — without an explicit sort MongoDB returns documents
-            // in cursor order, which is not guaranteed to match insertion
-            // order (and differs between wire protocol versions).
+            // Sort by InsertedAtTicks (insertion-order), then InsertSequence (per-process
+            // monotonic counter for same-tick ties), then Id as a final stable tie-break
+            // for cross-process ties. Without an explicit sort MongoDB returns documents
+            // in cursor order, which is not guaranteed to match insertion order.
             var sort = Builders<AggregatorDocument>.Sort
                 .Ascending(x => x.InsertedAtTicks)
-                .Ascending(x => x.Id);
+                .Ascending(x => x.InsertSequence)
+                .Ascending(x => x.Id);  // final tie-break for cross-process ties
             var docs = await _collection.Find(filter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false);
 
             var messages = new List<object>(docs.Count);
@@ -298,13 +307,22 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             var nameIndex = new CreateIndexModel<AggregatorDocument>(
                 Builders<AggregatorDocument>.IndexKeys.Ascending(x => x.Name));
 
+            // Compound index on (Name, InsertedAtTicks, InsertSequence) covers the sort
+            // path in GetSnapshotAsync so MongoDB can satisfy the query with an index scan.
+            var nameInsertOrderIndex = new CreateIndexModel<AggregatorDocument>(
+                Builders<AggregatorDocument>.IndexKeys
+                    .Ascending(x => x.Name)
+                    .Ascending(x => x.InsertedAtTicks)
+                    .Ascending(x => x.InsertSequence));
+
             // Compound index on (Name, DataBson.CorrelationId) supports RemoveDataAsync.
             var nameCorrelationIndex = new CreateIndexModel<AggregatorDocument>(
                 Builders<AggregatorDocument>.IndexKeys
                     .Ascending(x => x.Name)
                     .Ascending("DataBson.CorrelationId"));
 
-            await _collection.Indexes.CreateManyAsync([nameIndex, nameCorrelationIndex], cancellationToken).ConfigureAwait(false);
+            await _collection.Indexes.CreateManyAsync(
+                [nameIndex, nameInsertOrderIndex, nameCorrelationIndex], cancellationToken).ConfigureAwait(false);
         }
         catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
         {
@@ -328,5 +346,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         // date handling and so legacy documents (missing the field) deserialize
         // to 0 rather than throw — 0 sorts first, preserving sensible order.
         public long InsertedAtTicks { get; set; }
+
+        // Existing documents missing this field deserialize to 0 — same default as
+        // InsertedAtTicks's introduction in a prior phase. New inserts populate via
+        // Interlocked.Increment(ref _insertSequence).
+        public long InsertSequence { get; set; }
     }
 }
