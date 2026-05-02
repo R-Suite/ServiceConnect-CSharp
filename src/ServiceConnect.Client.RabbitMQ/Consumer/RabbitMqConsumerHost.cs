@@ -55,10 +55,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private bool _autoDelete;
     private string _queueName = "";
     private string _retryQueueName = "";
-    // All reads/writes use atomic primitives (Interlocked.Increment/Decrement, Volatile.Read).
-    // The _callbackAdmissionGate lock gates the _shutdownStarted admission decision only — it
-    // does NOT protect this counter. Mixing lock-protected mutation with lock-free atomic mutation
-    // causes lost updates when concurrent threads use different disciplines.
+    // All reads/writes use atomic primitives (Interlocked.Increment, Interlocked.Decrement,
+    // Volatile.Read). The pre-fix bug was a non-atomic `_messagesBeingProcessed++` (read-modify-write)
+    // inside the admission lock racing with a lock-free Interlocked.Decrement: a concurrent
+    // decrement between the increment's read and write would be silently overwritten. The
+    // increment now uses Interlocked.Increment, but is kept INSIDE the admission lock so
+    // DisposeAsync (which sets _shutdownStarted under the same lock) cannot release the drain
+    // wait before an admitted delivery has been counted.
     private int _messagesBeingProcessed;
     private int _shutdownTimedOut;
     private bool _shutdownStarted;
@@ -251,9 +254,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                     return;
                 }
 
+                // Increment INSIDE the lock so DisposeAsync, which sets _shutdownStarted under the
+                // same lock, cannot release the drain wait before this admitted delivery has been
+                // counted. Interlocked.Increment is atomic — calling it under the lock matches the
+                // atomic discipline of the matching Interlocked.Decrement at the bottom of the
+                // EventAsync finally block.
+                Interlocked.Increment(ref _messagesBeingProcessed);
                 callbackAdmitted = true;
             }
-            Interlocked.Increment(ref _messagesBeingProcessed);
 
             // ContainsKey admits a key whose value is null; use TryGetValue+non-null instead.
             // A null-valued TypeName passes ContainsKey but CopyInboundHeaders skips null values,
