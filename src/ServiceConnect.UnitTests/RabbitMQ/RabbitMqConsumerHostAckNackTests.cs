@@ -83,12 +83,13 @@ public sealed class RabbitMqConsumerHostAckNackTests
                 It.IsAny<It.IsAnyType>(),
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()))
-            .Callback<LogLevel, EventId, object, Exception?, Delegate>(
-                (level, _, state, _, formatter) =>
-                {
-                    var msg = formatter.DynamicInvoke(state, null) as string ?? string.Empty;
-                    capturedLogs.Add(new CapturedLog(level, msg));
-                });
+            .Callback(new InvocationAction(invocation =>
+            {
+                var level = (LogLevel)invocation.Arguments[0];
+                var formatter = (Delegate)invocation.Arguments[4];
+                var message = (string)formatter.DynamicInvoke(invocation.Arguments[2], invocation.Arguments[3])!;
+                capturedLogs.Add(new CapturedLog(level, message));
+            }));
 
         // ── Consumer channel ─────────────────────────────────────────────────
         var consumerChannel = new Mock<IChannel>(MockBehavior.Strict);
