@@ -108,7 +108,19 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
                 left = Expression.Property(left, left.Type, prop.Key);
             }
 
-            Expression right = Expression.Constant(msgPropValue, msgPropValue.GetType());
+            // Coerce the runtime value's type to the declared property type. msgPropValue's
+            // runtime type can differ from the saga property's declared type (e.g., the
+            // message has int but the saga has long, the message has T but the saga has
+            // Nullable<T>, or the message has a concrete type but the saga has an interface).
+            // Without the convert, Expression.Equal rejects mismatched primitive types
+            // outright (InvalidOperationException), and even when types are compatible the
+            // BSON filter renderer uses the runtime type — the BSON path projection silently
+            // misses against documents stored under the declared type. Mirror the InMemory
+            // finder's GetPredicate(), which has used Convert(valueParam, key.PropertyType)
+            // since inception.
+            Expression right = Expression.Convert(
+                Expression.Constant(msgPropValue, msgPropValue.GetType()),
+                left.Type);
             Expression expression;
 
             try
