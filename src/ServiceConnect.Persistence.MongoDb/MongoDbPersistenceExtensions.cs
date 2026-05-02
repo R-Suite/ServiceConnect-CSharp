@@ -89,10 +89,22 @@ public static class MongoDbPersistenceExtensions
             {
                 BsonSerializer.RegisterSerializer(typeof(Guid), new GuidSerializer(GuidRepresentation.Standard));
             }
-            catch (BsonSerializationException)
+            catch (BsonSerializationException ex)
             {
-                // Another component registered a different Guid serializer first — respect that,
-                // but keep the Standard-representation query literals in our own filters.
+                // Another component already registered a Guid serializer. Accept it only if it is
+                // already Standard — reusing it is safe because our filter literals will match.
+                // Any other representation causes silent query misses (filter literals use
+                // subtype 4 while stored Guids use a different subtype), so we fail loudly.
+                var registered = BsonSerializer.LookupSerializer<Guid>() as GuidSerializer;
+                if (registered?.GuidRepresentation != GuidRepresentation.Standard)
+                {
+                    throw new InvalidOperationException(
+                        "ServiceConnect MongoDB persistence requires GuidRepresentation.Standard but another " +
+                        "component has already registered a different Guid serializer. Configure your driver " +
+                        "initialisation to either skip Guid serializer registration or register " +
+                        "GuidRepresentation.Standard before any other component does so.",
+                        ex);
+                }
             }
 
             // Only commit the success flag after every step above has completed without
