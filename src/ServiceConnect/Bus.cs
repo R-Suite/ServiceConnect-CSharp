@@ -310,12 +310,34 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        if (destinations == null || destinations.Count == 0)
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(destinations);
+
+        // Snapshot to defend against caller mutation between validation and use.
+        var snapshot = destinations.ToArray();
+        if (snapshot.Length == 0)
         {
-            throw new ArgumentException("At least one destination is required.", nameof(destinations));
+            throw new ArgumentException(
+                "RouteAsync requires at least one destination.",
+                nameof(destinations));
+        }
+        for (int i = 0; i < snapshot.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(snapshot[i]))
+            {
+                throw new ArgumentException(
+                    $"Destination at index {i} is null or whitespace; routing requires a non-empty queue name.",
+                    nameof(destinations));
+            }
+            if (snapshot[i].Contains(','))
+            {
+                throw new ArgumentException(
+                    $"Destination at index {i} contains a comma ('{snapshot[i]}'); commas are reserved as the routing-slip separator.",
+                    nameof(destinations));
+            }
         }
 
-        var firstDestination = destinations[0];
+        var firstDestination = snapshot[0];
         var messageBytes = _serializer.Serialize(message);
         Dictionary<string, string> headers;
 
@@ -334,9 +356,9 @@ public sealed class Bus : IBus
             headers = BuildHeadersDirect(message.CorrelationId, null);
         }
 
-        if (destinations.Count > 1)
+        if (snapshot.Length > 1)
         {
-            headers[HeaderKeys.RoutingSlip] = BuildRoutingSlip(destinations);
+            headers[HeaderKeys.RoutingSlip] = BuildRoutingSlip(snapshot);
         }
 
         var context = new SendContext
@@ -647,20 +669,28 @@ public sealed class Bus : IBus
             return string.Empty;
         }
 
-        // destinations[0] is the immediate send target; the routing slip describes
-        // the *subsequent* hops, so the loop deliberately starts at index 1.
-        var builder = new System.Text.StringBuilder();
-        for (var index = 1; index < destinations.Count; index++)
+        // RouteAsync's caller-validation already screened these, but BuildRoutingSlip is
+        // also reachable from internal paths (RoutingSlipProcessor); revalidate for defence
+        // in depth. The comma split is non-recoverable on the receiving side.
+        for (int i = 0; i < destinations.Count; i++)
         {
-            if (index > 1)
+            if (string.IsNullOrWhiteSpace(destinations[i]))
             {
-                builder.Append(',');
+                throw new ArgumentException(
+                    $"Destination at index {i} is null or whitespace.",
+                    nameof(destinations));
             }
-
-            builder.Append(destinations[index]);
+            if (destinations[i].Contains(','))
+            {
+                throw new ArgumentException(
+                    $"Destination at index {i} contains a comma; commas are reserved as the routing-slip separator.",
+                    nameof(destinations));
+            }
         }
 
-        return builder.ToString();
+        // destinations[0] is the immediate send target; the routing slip describes
+        // the *subsequent* hops, so the join deliberately starts at index 1.
+        return string.Join(',', destinations.Skip(1));
     }
 
     /// <summary>
