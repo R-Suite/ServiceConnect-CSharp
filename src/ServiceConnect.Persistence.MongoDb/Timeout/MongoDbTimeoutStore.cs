@@ -148,7 +148,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             // the due-unlocked predicate so anything another worker raced in between is
             // silently skipped. The caller-supplied cap overrides the configured default.
             var candidateIds = await FindAsync(collection, dueUnlockedFilter,
-                    Builders<TimeoutData>.Sort.Ascending(x => x.Time),
+                    Builders<TimeoutData>.Sort.Ascending(x => x.Time).Ascending(x => x.Id),
                     batchSize ?? _batchSize, session, cancellationToken)
                 .ConfigureAwait(false);
 
