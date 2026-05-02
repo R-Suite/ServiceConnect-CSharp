@@ -14,14 +14,14 @@ public sealed class InboundMessageProcessorNotHandledFallbackTests
     [Fact]
     public async Task ProcessAsync_NotHandled_FullTypeNameNullFallsBackToTypeName()
     {
-        // The not-handled DLQ path builds the exception message from the type name
-        // derived via the FullTypeName/TypeName header fallback. When FullTypeName is
-        // present in the wire headers but carries a null value, the null-filtering
-        // loop that builds the internal headers dict drops the key entirely, which
-        // means the TryGetValue at lines 170-173 already falls back to TypeName.
-        // The || typeNameRaw is null guard mirrors the established pattern at lines
-        // 87-90 and defends against any future path that could insert a null-valued
-        // FullTypeName entry into the headers dict after the filtering loop.
+        // Regression guard for the not-handled fallback type-name resolution. Note: the production
+        // fix at InboundMessageProcessor.cs:169-172 (`|| typeNameRaw is null`) is defensive symmetry
+        // with the line-87 pattern. The internal `headers` dict is built from
+        // args.BasicProperties.Headers via a loop that filters out null-valued entries (lines 60-66
+        // of InboundMessageProcessor), so a wire-headers `FullTypeName=null` never reaches the
+        // fallback site. This test exercises the resolved type name in the not-handled exception
+        // payload; it does NOT exercise the fix in isolation. The fix protects against any future
+        // path that bypasses the upstream null filter.
         BasicProperties? capturedProps = null;
         var channel = new Mock<IChannel>();
         channel
