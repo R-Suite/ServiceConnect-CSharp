@@ -51,6 +51,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // process and route it" operation.
     private InboundMessageProcessor? _messageProcessor;
     private AsyncEventingBasicConsumer? _consumer;
+    // RabbitMQ.Client v7 auto-recovery may re-issue BasicConsumeAsync on reconnect with a
+    // different consumer tag. We subscribe to IConnection.ConsumerTagChangeAfterRecoveryAsync
+    // to keep _consumerTag current, so a later BasicCancelAsync during DisposeAsync targets
+    // the live consumer rather than a stale tag that no longer exists on the broker.
     private string? _consumerTag;
     private bool _autoDelete;
     private string _queueName = "";
@@ -207,6 +211,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
         _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer, cancellationToken).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
+        SubscribeToConsumerTagRecovery();
     }
 
     /// <summary>
@@ -508,6 +513,30 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    private void SubscribeToConsumerTagRecovery()
+    {
+        var underlying = _connection.UnderlyingConnection;
+        if (underlying is not null)
+        {
+            underlying.ConsumerTagChangeAfterRecoveryAsync += OnConsumerTagChangedAfterRecoveryAsync;
+        }
+    }
+
+    private Task OnConsumerTagChangedAfterRecoveryAsync(object? sender, ConsumerTagChangedAfterRecoveryEventArgs args)
+    {
+        // After auto-recovery the broker may assign a new tag for our consumer. Update
+        // _consumerTag so the BasicCancelAsync call during DisposeAsync targets the live consumer.
+        if (string.Equals(args.TagBefore, _consumerTag, StringComparison.Ordinal))
+        {
+            _logger.LogDebug(
+                "Consumer tag refreshed after auto-recovery on queue '{Queue}': '{TagBefore}' -> '{TagAfter}'",
+                _queueName, args.TagBefore, args.TagAfter);
+            _consumerTag = args.TagAfter;
+        }
+
+        return Task.CompletedTask;
+    }
+
     public async ValueTask DisposeAsync()
     {
         lock (_callbackAdmissionGate)
@@ -593,6 +622,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             underlyingConn.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
             underlyingConn.ConnectionBlockedAsync -= OnConnectionBlockedAsync;
             underlyingConn.ConnectionUnblockedAsync -= OnConnectionUnblockedAsync;
+            underlyingConn.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
         }
 
         await CloseChannelAsync(deadline).ConfigureAwait(false);
