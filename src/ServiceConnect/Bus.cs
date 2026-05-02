@@ -714,6 +714,9 @@ public sealed class Bus : IBus
         // below would throw "Collection was modified". ToArray grabs a stable
         // copy with a single enumeration.
         var snapshot = additionalHeaders?.ToArray();
+        // Capacity tracks ReservedHeaders.Count (currently 2: MessageId + CorrelationId) plus the
+        // caller's headers. Post-Phase-4 H21 removed MessageType from the reserved set, so this
+        // is already tight; the dynamic count adjusts automatically if the set evolves.
         var capacity = ReservedHeaders.Count + (snapshot?.Length ?? 0);
         var headers = new Dictionary<string, string>(capacity, StringComparer.Ordinal);
 
