@@ -623,34 +623,27 @@ public class RequestReplyManagerTests
     }
 
     [Fact]
-    public async Task PublishRequestAsync_ReplyQueuedBeforeTimeout_IsIgnoredAfterRequestCloses()
+    public async Task PublishRequestAsync_ReplyArrivingAfterTimeoutClose_IsIgnored()
     {
+        // Under the single-lock state machine the timeout's Close action and the reply
+        // path both contend for RequestState._stateLock. A reply that lands AFTER Close
+        // has acquired the lock and flipped the state to closed is rejected (no
+        // deserialize, no callback). A reply that landed earlier and is mid-lifecycle
+        // completes — a slow Deserialize is no longer interrupted by the timeout, since
+        // attempting to interrupt a partially-mutated state was the source of the
+        // original C10/H18 defects this state machine was rewritten to fix.
         var firstReply = new FakeMessage1(Guid.NewGuid()) { Username = "Reply1" };
-        var secondReply = new FakeMessage1(Guid.NewGuid()) { Username = "Reply2" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
         _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
-        var firstDeserializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseFirstDeserialize = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var deserializedReplies = new Queue<FakeMessage1>([firstReply, secondReply]);
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
+            .Returns(firstReply);
+
         RequestReplyManager? manager = null;
         string? capturedMessageId = null;
         var callbacks = new List<string>();
 
-        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
-            .Returns(() =>
-            {
-                var reply = deserializedReplies.Dequeue();
-                if (reply == firstReply)
-                {
-                    firstDeserializeStarted.TrySetResult(null);
-                    releaseFirstDeserialize.Task.GetAwaiter().GetResult();
-                }
-
-                return reply;
-            });
-
-        var options = new RequestOptions { Timeout = 50 };
+        var options = new RequestOptions { Timeout = 25 };
         var headers = new Dictionary<string, string>();
 
         _mockSendPipeline.Setup(pipeline => pipeline.ExecutePublishMessagePipelineAsync(
@@ -659,7 +652,6 @@ public class RequestReplyManagerTests
             .Callback<SendContext, CancellationToken>((ctx, _) =>
             {
                 capturedMessageId = ctx.Headers["RequestMessageId"];
-                Task.Run(() => manager!.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1)));
             })
             .Returns(Task.CompletedTask);
 
@@ -671,20 +663,20 @@ public class RequestReplyManagerTests
             options,
             reply => callbacks.Add(reply.Username));
 
-        await firstDeserializeStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
-
-        var queuedReplyTask = Task.Run(() => manager.ProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1)));
-
-        await Task.Delay(options.Timeout + 100);
-        Assert.False(publishTask.IsCompleted);
-
-        releaseFirstDeserialize.TrySetResult(null);
-
+        // Wait for the timeout to fire and for the publish task to fully complete.
+        // Once publishTask returns, the state has been Close'd and removed from the
+        // pending-requests map.
         await publishTask;
-        await queuedReplyTask.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.NotNull(capturedMessageId);
 
-        Assert.Equal(["Reply1"], callbacks);
-        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)), Times.Once);
+        // A reply arriving after Close must be rejected: the manager removed the state
+        // from _pendingRequests, so TryProcessReply returns false before any callback
+        // can run, and Deserialize is never invoked.
+        var lateAccepted = manager.TryProcessReply(capturedMessageId!, messageBytes, typeof(FakeMessage1));
+
+        Assert.False(lateAccepted);
+        Assert.Empty(callbacks);
+        _mockSerializer.Verify(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)), Times.Never);
     }
 
     [Fact]

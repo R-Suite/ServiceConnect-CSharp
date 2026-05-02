@@ -318,65 +318,29 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             return false;
         }
 
-        lock (state.SyncRoot)
+        // The whole reply lifecycle (deserialize, OnReply callback, completion bookkeeping)
+        // runs under RequestState._stateLock so concurrent replies cannot re-enter the
+        // user callback. Use the expected reply type stored at request time, not the
+        // wire-provided type — this prevents deserialization into attacker-controlled
+        // types via crafted reply messages.
+        if (!state.TryHandleReply(
+            replyType => _serializer.Deserialize(messageBytes, replyType),
+            out var requestCompleted,
+            out var completionWork))
         {
-            try
-            {
-                if (!state.TryAcceptReply(out var completesRequest))
-                {
-                    return false;
-                }
-
-                // Use the expected reply type stored at request time, not the wire-provided type.
-                // This prevents deserialization into attacker-controlled types via crafted reply messages.
-                object reply;
-                try
-                {
-                    reply = _serializer.Deserialize(messageBytes, state.ReplyType);
-                }
-                catch (Exception ex)
-                {
-                    state.Close();
-                    _pendingRequests.TryRemove(requestId, out _);
-                    state.Tcs.TrySetException(ex);
-                    return true;
-                }
-
-                if (state.OnReply != null)
-                {
-                    try
-                    {
-                        state.OnReply(reply);
-                    }
-                    catch (Exception ex)
-                    {
-                        state.Close();
-                        _pendingRequests.TryRemove(requestId, out _);
-                        state.Tcs.TrySetException(ex);
-                        return true;
-                    }
-
-                    if (completesRequest)
-                    {
-                        state.Close();
-                        _pendingRequests.TryRemove(requestId, out _);
-                        state.Tcs.TrySetResult(null!);
-                    }
-                }
-                else
-                {
-                    state.Close();
-                    state.Tcs.TrySetResult(reply);
-                    _pendingRequests.TryRemove(requestId, out _);
-                }
-
-                return true;
-            }
-            finally
-            {
-                state.EndReply();
-            }
+            return false;
         }
+
+        if (requestCompleted)
+        {
+            _pendingRequests.TryRemove(requestId, out _);
+        }
+
+        // TaskCompletionSource continuations may run inline on the calling thread; running
+        // them outside the state lock keeps a slow continuation from blocking another
+        // request's reply path that lands on the same state.
+        completionWork?.Invoke();
+        return true;
     }
 
     /// <inheritdoc />
@@ -403,15 +367,12 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 #endif
         private bool _closed;
         private bool _hasAcceptedReplies;
-        private Action? _pendingCloseAction;
-        private int _inFlightReplies;
         private int _remainingReplies = expectedCount;
 
         public TaskCompletionSource<object> Tcs { get; } = tcs;
         public int ExpectedCount { get; } = expectedCount;
         public Type ReplyType { get; } = replyType;
         public Action<object>? OnReply { get; } = onReply;
-        public object SyncRoot { get; } = new();
         public bool HasAcceptedReplies
         {
             get
@@ -426,7 +387,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         /// <summary>
         /// True when the caller specified a positive <see cref="ExpectedCount"/> and all
         /// expected replies have been accepted. Used by PublishRequestAsync's timeout path
-        /// to distinguish "got enough" from "timed out with partial replies" (3.3).
+        /// to distinguish "got enough" from "timed out with partial replies".
         /// </summary>
         public bool HasReceivedAllExpectedReplies
         {
@@ -439,76 +400,109 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             }
         }
 
-        public void EndReply()
+        /// <summary>
+        /// Close runs the supplied close action exactly once (the first caller wins).
+        /// The action runs outside the lock so a slow continuation cannot pin the
+        /// dispatch thread that observed the close.
+        /// </summary>
+        internal void Close(Action? onClose = null)
         {
-            Action? closeAction = null;
-
-            lock (_stateLock)
-            {
-                _inFlightReplies--;
-                if (_closed && _inFlightReplies == 0 && _pendingCloseAction != null)
-                {
-                    closeAction = _pendingCloseAction;
-                    _pendingCloseAction = null;
-                }
-            }
-
-            closeAction?.Invoke();
-        }
-
-        public void Close(Action? onClose = null)
-        {
-            Action? closeAction = null;
-
             lock (_stateLock)
             {
                 if (_closed)
                 {
                     return;
                 }
-
                 _closed = true;
-                if (_inFlightReplies == 0)
-                {
-                    closeAction = onClose;
-                }
-                else
-                {
-                    _pendingCloseAction = onClose;
-                }
             }
-
-            closeAction?.Invoke();
+            onClose?.Invoke();
         }
 
-        public bool TryAcceptReply(out bool completesRequest)
+        /// <summary>
+        /// Processes a deserialized reply under the state lock. Returns <see langword="true"/>
+        /// when the reply was accepted (state was open and the reply-count budget allowed)
+        /// or <see langword="false"/> when rejected (state already closed or budget exhausted).
+        /// The user-supplied <see cref="OnReply"/> callback runs under the state lock so
+        /// concurrent replies cannot re-enter it.
+        /// <paramref name="completionWork"/> contains TCS continuations (TrySetResult / TrySetException);
+        /// the caller invokes it outside the lock so a slow continuation does not pin the
+        /// reply dispatch thread.
+        /// </summary>
+        internal bool TryHandleReply(
+            Func<Type, object> deserialize,
+            out bool requestCompleted,
+            out Action? completionWork)
         {
+            completionWork = null;
+            requestCompleted = false;
+
             lock (_stateLock)
             {
                 if (_closed)
                 {
-                    completesRequest = false;
                     return false;
                 }
 
+                bool acceptedAndCompletes;
                 if (ExpectedCount <= 0)
                 {
                     _hasAcceptedReplies = true;
-                    _inFlightReplies++;
-                    completesRequest = false;
+                    acceptedAndCompletes = false;
+                }
+                else
+                {
+                    if (_remainingReplies <= 0)
+                    {
+                        return false;
+                    }
+                    _remainingReplies--;
+                    _hasAcceptedReplies = true;
+                    acceptedAndCompletes = _remainingReplies == 0;
+                }
+
+                // Deserialize inside the lock so a corrupted-payload exception attributes
+                // to this reply without leaking partial state mutations to a concurrent reply.
+                object reply;
+                try
+                {
+                    reply = deserialize(ReplyType);
+                }
+                catch (Exception ex)
+                {
+                    _closed = true;
+                    requestCompleted = true;
+                    completionWork = () => Tcs.TrySetException(ex);
                     return true;
                 }
 
-                if (_remainingReplies <= 0)
+                if (OnReply is not null)
                 {
-                    completesRequest = false;
-                    return false;
+                    try
+                    {
+                        OnReply(reply);
+                    }
+                    catch (Exception ex)
+                    {
+                        _closed = true;
+                        requestCompleted = true;
+                        completionWork = () => Tcs.TrySetException(ex);
+                        return true;
+                    }
+
+                    if (acceptedAndCompletes)
+                    {
+                        _closed = true;
+                        requestCompleted = true;
+                        completionWork = () => Tcs.TrySetResult(null!);
+                    }
+                }
+                else
+                {
+                    _closed = true;
+                    requestCompleted = true;
+                    completionWork = () => Tcs.TrySetResult(reply);
                 }
 
-                _remainingReplies--;
-                _hasAcceptedReplies = true;
-                _inFlightReplies++;
-                completesRequest = _remainingReplies == 0;
                 return true;
             }
         }
