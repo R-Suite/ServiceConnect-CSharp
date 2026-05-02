@@ -209,6 +209,8 @@ bool IsConsuming { get; }
 
 Indicates whether the bus is currently consuming messages. Useful in health checks and tests that must wait for the consumer to become ready.
 
+Returns `false` before `StartConsumingAsync` has been called and after `StopConsumingAsync` returns. It also returns `false` when the broker has cancelled the consumer (queue deleted, policy expired, mirror promoted) — the underlying transport surfaces AMQP's `basic.cancel` event and ServiceConnect propagates it through this property. Callers using `IsConsuming` for purposes other than health-checking should be aware of the broker-cancel case.
+
 ---
 
 ### `RequestTimeoutAsync`

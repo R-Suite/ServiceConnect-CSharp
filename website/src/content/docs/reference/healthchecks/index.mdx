@@ -95,6 +95,12 @@ Returns `HealthCheckResult.Healthy("Bus is consuming.")` when `IBus.IsConsuming`
 
 `IsConsuming` flips to `true` after `IBus.StartConsumingAsync` succeeds and back to `false` after `StopConsumingAsync` (which is terminal — the bus cannot be restarted). For the standard `BusHostedService` wiring, `StartConsumingAsync` is awaited during host startup, so the check returns `Healthy` for the lifetime of a normally-running host.
 
+The check reports `Unhealthy` (i.e. `IsConsuming` is `false`) in three cases:
+
+- Before `StartConsumingAsync` has been called (or after `StopConsumingAsync`).
+- After a broker-initiated `basic.cancel` event — queue deleted, policy expired, mirror promoted. See [Observability — Broker-initiated cancellation](/ServiceConnect-CSharp/learn/operations/observability/#broker-initiated-cancellation).
+- When the underlying `IConsumer` has not yet started consuming on at least one queue.
+
 ### `ConsumerConnectionHealthCheck`
 
 ```csharp

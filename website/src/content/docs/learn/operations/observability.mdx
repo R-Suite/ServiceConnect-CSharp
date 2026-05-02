@@ -169,6 +169,15 @@ app.MapHealthChecks("/health/live",  new HealthCheckOptions { Predicate = c => c
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
 ```
 
+### Broker-initiated cancellation
+
+When the broker cancels a ServiceConnect consumer (queue deleted, queue policy expired, mirror promoted), the consumer's deliveries stop. ServiceConnect detects this via AMQP's `basic.cancel` event and propagates the signal:
+
+- `IBus.IsConsuming` returns `false`.
+- `BusConsumingHealthCheck` reports `Unhealthy`.
+
+Operator action: investigate the broker-side cause, fix it (re-create the queue with the right arguments, restore the policy, etc.), then restart the host. ServiceConnect does **not** auto-redeclare the queue — that would defeat an operator's deliberate deletion.
+
 ### Steady-state semantics
 
 Each check inspects the *last known* state from the transport client's event stream. There is no active probing — that would compete with real traffic and amplify failure modes (a probe interval of 5 seconds × N replicas would mean steady channel churn against the broker for what is, in practice, a one-bit signal).

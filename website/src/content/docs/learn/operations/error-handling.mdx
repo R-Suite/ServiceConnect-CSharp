@@ -72,6 +72,12 @@ builder.ConfigureQueues(q =>
 
 With this on, retries still happen, but exhausted messages are dropped silently instead of going to the error queue. The audit publish path is also bypassed. This is a scalpel — don't use it in a consumer that processes real traffic.
 
+## Retry-publish failure modes
+
+ServiceConnect publishes retry and error-queue messages with `mandatory: true`. If the target queue/exchange is missing (e.g. the retry queue was deleted out-of-band), the broker returns the message and `BasicPublishAsync` raises `PublishException`. ServiceConnect logs this at `Error` level and acknowledges the original delivery to break the redelivery loop. **The message is lost in this scenario** — operator action is required to restore the topology before the next failure can be retried.
+
+Pre-v7.x ServiceConnect used `mandatory: false`, which silently dropped these messages with no log signal. The change in v7.x makes the failure visible.
+
 ## Terminal failures
 
 Not every failure is retryable. A message with no `TypeName` header, a message that exceeds the transport's `MessageSize` limit, a payload the serialiser can't parse — these land straight in the error queue on the first attempt, without consuming retry budget. The log line for these reads `"Rejecting permanently invalid inbound message..."` rather than `"Max retries exceeded..."`.

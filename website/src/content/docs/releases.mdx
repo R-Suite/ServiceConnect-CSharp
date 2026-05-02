@@ -138,6 +138,31 @@ A pass over the RabbitMQ producer's outbound path and the retry-queue declaratio
 
 **`MessageType` header semantics formalised.** The `MessageType` header is the **operation flag** — `"Publish"`, `"Send"`, or `"ByteStream"` — not a CLR type name. **No observable wire change**: the on-wire value has always been one of those three strings. For type information, read `TypeName` (the type's `FullName`) or `FullTypeName` (its `AssemblyQualifiedName`). Downstream auditors that read `MessageType` expecting a type FullName based on out-of-date documentation should switch to `FullTypeName`. Caller-supplied `MessageType` in `IBus.Publish`/`Send` `options.Headers` now flows through to the producer instead of being silently dropped (the producer continues to overwrite it before the wire) — no code-level breakage; existing callers see no change.
 
+### RabbitMQ consumer-host hardening
+
+A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observability, retry/error publish visibility, and a handful of latent races. Mirrors the producer-side pass above.
+
+**Bug fixes**
+
+- **Atomic in-flight counter.** `_messagesBeingProcessed` is now consistently mutated via `Interlocked` operations under the same admission lock as the shutdown latch; the previous mix of lock-protected `++` and lock-free `Interlocked.Decrement` could lose updates under contention.
+- **Broker `basic.cancel` reports unhealthy.** When the broker cancels the consumer (queue deleted, policy expired, mirror promoted), `IBus.IsConsuming` now returns `false` and `BusConsumingHealthCheck` reports `Unhealthy`. Pre-v7.x the consumer was silently dead while the health check still reported healthy.
+- **Retry/error publishes use `mandatory:true`.** Unroutable retry/error publishes now surface as `PublishException` (logged at Error, original message acked to break the loop). Pre-v7.x they were silently dropped.
+- **Bind queues before `BasicConsume`.** Per-queue bindings now run on the consumer channel BEFORE `BasicConsumeAsync` is issued, honouring RabbitMQ.Client's per-channel serialisation contract.
+- **Synthetic exception when handler is null.** A misconfigured consumer (no `ConsumerEventHandler` registered) now stamps a synthetic `InvalidOperationException` into the error-queue header instead of writing a `null` JSON value.
+- **Null-aware `FullTypeName` fallback in not-handled path.** Defensive symmetry with the equivalent pattern at the dispatch site; protects against any future path that bypasses the upstream null filter.
+- **String header values are size-bounded.** `RabbitMqConsumerHost`'s header-size guard now bounds string headers (UTF-8 byte count) in addition to byte-array headers.
+- **Ack/nack channel-state log levels.** Concurrent-teardown ack/nack races now log at `Debug` (expected race) instead of `Warning`. An `IsOpen` pre-check skips the call entirely when the channel is known-closed.
+- **Defensive null-check on `_messageProcessor`.** A null processor now logs `Warning` and nacks-with-requeue instead of throwing `NullReferenceException`.
+- **Off-by-one retry-count validation.** `RetryCount = maxRetries + 1` (which the framework never legitimately stamps) is now rejected as malformed.
+- **Explicit-field `BasicProperties` copy.** `MessageRetryHandler` now copies `BasicProperties` field-by-field instead of using the copy-constructor; protects against malformed source-property fields throwing inside the copy.
+- **Consumer-tag refresh on auto-recovery.** `RabbitMqConsumerHost` now subscribes to `IConnection.ConsumerTagChangeAfterRecoveryAsync` and refreshes its cached tag when RabbitMQ.Client's auto-recovery re-issues `BasicConsumeAsync` with a different tag.
+
+**Behaviour changes**
+
+- **`IConsumer` gains a new `IsCancelledByBroker` property.** External implementations of `IConsumer` (custom transport adapters) MUST add this property; the default implementation should return `false`. Consumed by `IBus.IsConsuming` to short-circuit to `false` on broker-cancel.
+- **`IBus.IsConsuming` semantic expansion.** Now returns `false` not just before `StartConsumingAsync` / after `StopConsumingAsync`, but ALSO when the broker has cancelled the consumer. Callers using `IsConsuming` for purposes other than health-checking should be aware of this expanded semantic.
+- **Retry/error publishes now use `mandatory:true`.** Operators who relied on the pre-v7.x silent-drop behaviour to mask missing topology will see new `PublishException` Error logs; the topology gap should be fixed.
+
 ### API-shape changes
 
 - **`PublishOptions`** is now a `readonly record struct` matching `SendOptions`. Concurrent `PublishAsync` callers can no longer mutate a shared instance between construction and the async read.
