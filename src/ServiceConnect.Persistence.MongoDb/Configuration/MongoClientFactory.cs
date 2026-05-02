@@ -74,7 +74,10 @@ public static class MongoClientFactory
         {
             var cert = GetOrLoadCertificate(sslOptions.CertPath, sslOptions.CertPassphrase);
             ssl.ClientCertificates = [cert];
-            ssl.ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0];
+            // Fall back to the server-supplied certificate when the driver passes a null or
+            // empty collection (edge case in some driver versions) to avoid NRE / IndexOutOfRange.
+            ssl.ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) =>
+                certificates is { Count: > 0 } ? certificates[0] : certificate;
         }
 
         settings.SslSettings = ssl;
