@@ -381,12 +381,23 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         // Note: TimeoutData.Id maps to the MongoDB _id field (driver convention).
         // _id is always unique; creating an explicit unique index on it is rejected
         // by MongoDB with "The field 'unique' is not valid for an _id index specification".
-        // The three composite indexes below are the only ones we need to create.
+        // The three indexes below are the only ones we need to create.
         //
-        // Drop the legacy (Locked, Time) index from prior versions. v8 uses
-        // (Time, Locked, LockExpiresAt) which covers both branches of the OR-shaped
-        // due filter and the Time-prefix sort. Idempotent over IndexNotFound (code 27)
-        // so fresh databases and re-runs are no-ops.
+        // Drop the legacy (Locked, Time) index from prior versions. The H31 due-query
+        // shape is `Time <= utcNow AND (Locked == false OR LockExpiresAt <= utcNow)`
+        // sorted by Time. A single compound (Time, Locked, LockExpiresAt) — and even
+        // a 2-key (Time, LockExpiresAt) — is rejected by MongoDB with code 171
+        // ("cannot index parallel arrays") because the C# driver serialises
+        // DateTimeOffset as a 2-element BSON array [DateTimeTicks, OffsetMinutes]
+        // and a compound index cannot span two array-typed fields. We therefore use:
+        //   - (Time, Locked): one DateTimeOffset + one bool, no parallel arrays;
+        //     covers the `Locked == false` branch with the Time-prefix sort.
+        //   - (LockedBy, Locked): scalar fields only; supports lookups by lock owner.
+        //   - (LockExpiresAt) single-field: covers the `LockExpiresAt <= utcNow`
+        //     branch (a single array-valued field is fine; only compounds spanning
+        //     two arrays are rejected).
+        // The migration is idempotent over IndexNotFound (code 27) so fresh
+        // databases and re-runs are no-ops.
         try
         {
             await collection.Indexes.DropOneAsync("Locked_1_Time_1", cancellationToken).ConfigureAwait(false);
@@ -398,22 +409,27 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
         try
         {
-            var dueQueryIndexModel = new CreateIndexModel<TimeoutData>(
+            // (Time, Locked) covers the Locked == false branch of the due filter
+            // with the Time-prefix sort. Time is array-valued (DateTimeOffset),
+            // Locked is scalar, so this compound has no parallel arrays.
+            var timeLockedIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys
                     .Ascending(x => x.Time)
-                    .Ascending(x => x.Locked)
-                    .Ascending(x => x.LockExpiresAt));
+                    .Ascending(x => x.Locked));
 
             var lockedByIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys
                     .Ascending(x => x.LockedBy)
                     .Ascending(x => x.Locked));
 
+            // Single-field index on LockExpiresAt covers the LockExpiresAt <= utcNow
+            // branch of the OR. A single array-valued field is allowed; only
+            // compounds spanning two arrays trip MongoDB's parallel-arrays rule.
             var lockExpiresAtIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
 
             await collection.Indexes.CreateManyAsync(
-                [dueQueryIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
+                [timeLockedIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
                 cancellationToken: cancellationToken
             ).ConfigureAwait(false);
         }

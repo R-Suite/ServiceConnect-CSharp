@@ -63,8 +63,19 @@ public class MongoDbTimeoutStoreIndexMigrationTests
     }
 
     [Fact]
-    public async Task EnsureTimeoutIndex_CreatesTimeLockedLockExpiresAtComposite()
+    public async Task EnsureTimeoutIndex_CreatesTimeLockedCompoundAndLockExpiresAtSingle()
     {
+        // The pre-Phase-9 single (Time, Locked, LockExpiresAt) compound was rejected
+        // by real MongoDB with code 171 ("cannot index parallel arrays") because the
+        // C# driver serialises DateTimeOffset as a 2-element BSON array, and a
+        // compound spanning two array-typed fields trips that rule. The same applies
+        // to a hypothetical (Time, LockExpiresAt) — both fields are DateTimeOffset.
+        //
+        // The fix uses (Time, Locked) — one array + one scalar, OK — for the
+        // Locked == false branch of the due filter (with Time as the sort prefix),
+        // plus a single-field (LockExpiresAt) index for the LockExpiresAt <= utcNow
+        // branch. Single array-valued fields are fine; only multi-array compounds
+        // are rejected.
         IEnumerable<CreateIndexModel<TimeoutData>>? captured = null;
         var (store, _) = BuildStore(indexes =>
         {
@@ -86,8 +97,18 @@ public class MongoDbTimeoutStoreIndexMigrationTests
 
         Assert.NotNull(captured);
         var keysJsonList = captured!.Select(m => RenderKeys(m.Keys)).ToList();
+
+        // (Time, Locked) — covers the Locked == false branch of the due filter.
         Assert.Contains(keysJsonList, k =>
-            k.Contains("\"Time\" : 1") && k.Contains("\"Locked\" : 1") && k.Contains("\"LockExpiresAt\" : 1"));
+            k.Contains("\"Time\" : 1") && k.Contains("\"Locked\" : 1") && !k.Contains("\"LockExpiresAt\""));
+
+        // Single-field (LockExpiresAt) — covers the LockExpiresAt <= utcNow branch.
+        Assert.Contains(keysJsonList, k =>
+            k.Contains("\"LockExpiresAt\" : 1") && !k.Contains("\"Time\"") && !k.Contains("\"Locked\" :"));
+
+        // No multi-array compound — that's the parallel-arrays trap.
+        Assert.DoesNotContain(keysJsonList, k =>
+            k.Contains("\"Time\" : 1") && k.Contains("\"LockExpiresAt\" : 1"));
     }
 
     [Fact]

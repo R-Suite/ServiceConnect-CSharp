@@ -37,7 +37,7 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         });
 
         var firstIndexes = await ListIndexNamesAsync(client, dbName, "Timeouts");
-        Assert.Contains("Locked_1_Time_1", firstIndexes);
+        Assert.Contains("Time_1_Locked_1", firstIndexes);
 
         // Simulate an admin dropping the database while the process is still running.
         await client.DropDatabaseAsync(dbName);
@@ -51,7 +51,7 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         });
 
         var secondIndexes = await ListIndexNamesAsync(client, dbName, "Timeouts");
-        Assert.Contains("Locked_1_Time_1", secondIndexes);
+        Assert.Contains("Time_1_Locked_1", secondIndexes);
         Assert.Contains("LockedBy_1_Locked_1", secondIndexes);
         Assert.Contains("LockExpiresAt_1", secondIndexes);
     }
