@@ -126,8 +126,11 @@ public class BusTests
     }
 
     [Fact]
-    public async Task DisposeAsync_CompletesWhenConsumerDisposeStalls()
+    public async Task DisposeAsync_DoesNotBlockOnConsumerDispose()
     {
+        // Bus.DisposeAsync no longer calls IConsumer.DisposeAsync — the IConsumer is a DI
+        // singleton and the host's IServiceProvider disposes it on shutdown. Even if a hostile
+        // mock would block on its own DisposeAsync, the Bus dispose path is decoupled from it.
         var releaseDispose = new TaskCompletionSource();
         var mockConsumer = new Mock<IConsumer>();
         mockConsumer
@@ -149,9 +152,7 @@ public class BusTests
             _mockPipelineConfig.Object,
             _scopeFactory,
             _scopeAccessor,
-            mockConsumer.Object,
-            null,
-            TimeSpan.FromMilliseconds(50));
+            mockConsumer.Object);
 
         await bus.StartConsumingAsync();
 
@@ -159,6 +160,7 @@ public class BusTests
         await Task.WhenAny(disposeTask, Task.Delay(500));
 
         Assert.True(disposeTask.IsCompleted);
+        mockConsumer.Verify(x => x.DisposeAsync(), Times.Never);
     }
 
     [Fact]
@@ -1137,12 +1139,14 @@ public class BusTests
             () => bus.StartConsumingAsync(CancellationToken.None));
     }
 
-    // --- OperationCanceledException in StopConsumingCoreAsync must still dispose consumer ---
+    // --- Cancellation during StopConsuming surfaces OCE; transport dispose is DI's job ---
 
     [Fact]
-    public async Task StopConsumingAsync_WhenCancellationRequested_StillDisposesConsumer()
+    public async Task StopConsumingAsync_WhenCancellationRequested_DoesNotDisposeConsumer()
     {
-        // Cancellation during StopConsuming must not skip consumer teardown.
+        // The IConsumer is a DI singleton; the host's IServiceProvider disposes it on shutdown.
+        // A cancelled StopConsuming must surface the cancellation but must NOT touch the
+        // transport — there is no Bus-owned dispose path on the consumer any more.
         var mockConsumer = new Mock<IConsumer>();
         mockConsumer
             .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
@@ -1160,12 +1164,11 @@ public class BusTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => bus.StopConsumingAsync(cts.Token));
 
-        // Consumer dispose must have been called despite the cancellation
-        mockConsumer.Verify(x => x.DisposeAsync(), Times.Once);
+        mockConsumer.Verify(x => x.DisposeAsync(), Times.Never);
 
-        // Explicit dispose to clean up; the cancelled stop already cleared _consuming
-        // so there is no consumer left to receive a second DisposeAsync.
+        // Explicit dispose to clean up the bus's own owned resources (semaphore + send pipeline).
         await bus.DisposeAsync();
+        mockConsumer.Verify(x => x.DisposeAsync(), Times.Never);
     }
 
     // --- StopConsuming before start must not poison _stopped ---
@@ -1336,7 +1339,6 @@ public class BusTests
             "scopeAccessor" => _scopeAccessor,
             "consumer" => null,
             "producer" => null,
-            "disposeTimeout" => null,
             "timeoutStore" => timeoutStore,
             "consumeContextAccessor" => accessor,
             _ => throw new InvalidOperationException($"Unexpected Bus constructor parameter '{parameter.Name}'.")

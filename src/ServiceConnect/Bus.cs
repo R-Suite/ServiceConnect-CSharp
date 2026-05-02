@@ -28,7 +28,6 @@ public sealed class Bus : IBus
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly bool _hasOutgoingFilters;
-    private readonly TimeSpan _disposeTimeout;
 #if NET9_0_OR_GREATER
     private readonly System.Threading.Lock _stateLock = new();
 #else
@@ -55,7 +54,6 @@ public sealed class Bus : IBus
         ConsumeScopeAccessor scopeAccessor,
         IConsumer? consumer = null,
         IProducer? producer = null,
-        TimeSpan? disposeTimeout = null,
         ITimeoutStore? timeoutStore = null,
         ConsumeContextAccessor? consumeContextAccessor = null)
     {
@@ -77,7 +75,6 @@ public sealed class Bus : IBus
         _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
         _consumer = consumer;
         _producer = producer;
-        _disposeTimeout = disposeTimeout ?? TimeSpan.FromSeconds(30);
         _timeoutStore = timeoutStore;
         _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
     }
@@ -484,79 +481,37 @@ public sealed class Bus : IBus
     /// </summary>
     private async Task StopConsumingCoreAsync(CancellationToken cancellationToken = default)
     {
-        // Acquire the lifecycle semaphore — this may throw OperationCanceledException if
-        // the caller cancels before the wait completes. In that case we fall through to the
-        // catch below to still tear down any in-flight consumer before rethrowing.
         bool semaphoreAcquired = false;
-        IConsumer? localConsumer = null;
-        OperationCanceledException? pendingCancellation = null;
-
         try
         {
             await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             semaphoreAcquired = true;
-        }
-        catch (OperationCanceledException oce)
-        {
-            pendingCancellation = oce;
-        }
-        catch (ObjectDisposedException)
-        {
-            // The semaphore was disposed by a concurrent DisposeAsync — translate to a typed
-            // Bus disposal so callers see a consistent exception type rather than a raw semaphore disposal.
-            throw new ObjectDisposedException(typeof(Bus).FullName);
-        }
 
-        try
-        {
             lock (_stateLock)
             {
                 _logger.LogInformation("Bus stopping message consumption.");
                 if (_consuming)
                 {
                     _consuming = false;
-                    localConsumer = _consumer;
-                    // Stop is terminal only when consumption actually ran: the shared
-                    // consumer is disposed and cannot be restarted. Mark the bus stopped
-                    // so attempted restarts throw a clear error instead of silently failing.
+                    // Stop is terminal: the IConsumer singleton is owned by DI and is reused
+                    // across the host's lifetime, but once the bus has signalled stop we do
+                    // not restart consumption on this Bus instance. Mark the bus stopped so
+                    // attempted restarts throw a clear error instead of silently failing.
                     // A defensive stop on a bus that never started must leave it restartable.
                     _stopped = true;
                 }
             }
-
-            if (localConsumer != null)
-            {
-                if (pendingCancellation != null)
-                {
-                    // Cancellation already signalled — dispose immediately without a grace-period wait.
-                    try
-                    {
-                        await localConsumer.DisposeAsync().ConfigureAwait(false);
-                    }
-                    catch (Exception disposeEx)
-                    {
-                        _logger.LogWarning(disposeEx, "Consumer dispose failed during cancellation.");
-                    }
-                }
-                else
-                {
-                    try
-                    {
-                        await localConsumer.DisposeAsync().AsTask().WaitAsync(_disposeTimeout, cancellationToken).ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // Cancellation arrived after we acquired the semaphore — still dispose.
-                        try { await localConsumer.DisposeAsync().ConfigureAwait(false); }
-                        catch (Exception disposeEx) { _logger.LogWarning(disposeEx, "Consumer dispose failed during cancellation."); }
-                        throw;
-                    }
-                    catch (TimeoutException)
-                    {
-                        _logger.LogWarning("Timed out waiting {Timeout} for consumer disposal.", _disposeTimeout);
-                    }
-                }
-            }
+            // _consumer.DisposeAsync() is intentionally NOT called here. IConsumer is registered
+            // as a DI singleton; the host's IServiceProvider disposes it on host shutdown. The
+            // earlier double-dispose path (Bus disposing the transport directly) raced with DI's
+            // own teardown and forced a WaitAsync timeout-mask to keep the dispose path bounded.
+            // Removing the dispose call removes the timeout-mask path.
+        }
+        catch (ObjectDisposedException)
+        {
+            // The semaphore was disposed by a concurrent DisposeAsync — translate to a typed
+            // Bus disposal so callers see a consistent exception type rather than a raw semaphore disposal.
+            throw new ObjectDisposedException(typeof(Bus).FullName);
         }
         finally
         {
@@ -569,11 +524,6 @@ public sealed class Bus : IBus
                 catch (ObjectDisposedException) { }
             }
         }
-
-        if (pendingCancellation != null)
-        {
-            throw pendingCancellation;
-        }
     }
 
     /// <inheritdoc />
@@ -584,12 +534,19 @@ public sealed class Bus : IBus
             return;
         }
 
-        await StopConsumingCoreAsync().ConfigureAwait(false);
-        await _sendPipeline.DisposeAsync().ConfigureAwait(false);
-        if (_producer != null)
+        // Stop consuming under the lifecycle semaphore. _consumer and _producer are DI singletons;
+        // the host's IServiceProvider disposes them when the host shuts down — Bus.DisposeAsync
+        // does not double-dispose them. _sendPipeline is owned by the Bus and is disposed here.
+        try
         {
-            await _producer.DisposeAsync().ConfigureAwait(false);
+            await StopConsumingCoreAsync().ConfigureAwait(false);
         }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Bus.StopConsumingCoreAsync failed during dispose.");
+        }
+
+        await _sendPipeline.DisposeAsync().ConfigureAwait(false);
 
         _lifecycleSemaphore.Dispose();
     }
