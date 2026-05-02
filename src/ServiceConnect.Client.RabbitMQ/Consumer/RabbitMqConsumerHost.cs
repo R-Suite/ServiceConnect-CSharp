@@ -112,7 +112,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             : 64 * 1024;
     }
 
-    public async Task StartConsumingAsync(
+    /// <summary>
+    /// Sets up the consumer channel, publish channel, message processor, and broker-event subscriptions.
+    /// Does NOT call BasicConsumeAsync — the caller must invoke <see cref="ConsumeMessageTypeAsync"/>
+    /// for any required bindings, then <see cref="BeginConsumingAsync"/> to start consuming.
+    /// </summary>
+    public async Task PrepareAsync(
         ConsumerEventHandler messageReceived, string queueName,
         bool? autoDelete = null, CancellationToken cancellationToken = default)
     {
@@ -182,9 +187,36 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             underlying.ConnectionBlockedAsync += OnConnectionBlockedAsync;
             underlying.ConnectionUnblockedAsync += OnConnectionUnblockedAsync;
         }
+    }
+
+    /// <summary>
+    /// Issues the BasicConsumeAsync that puts this host into the actively-consuming state.
+    /// MUST be called AFTER all <see cref="ConsumeMessageTypeAsync"/> bindings are complete —
+    /// running QueueBindAsync on the consumer channel after BasicConsume violates RabbitMQ.Client's
+    /// per-channel serialisation contract.
+    /// </summary>
+    public async Task BeginConsumingAsync(CancellationToken cancellationToken = default)
+    {
+        if (_model == null || _consumer == null)
+        {
+            throw new InvalidOperationException("PrepareAsync must be called before BeginConsumingAsync.");
+        }
 
         _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer, cancellationToken).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
+    }
+
+    /// <summary>
+    /// Backward-compatible shorthand: <see cref="PrepareAsync"/> followed by <see cref="BeginConsumingAsync"/>.
+    /// Bind any per-message-type queues via <see cref="ConsumeMessageTypeAsync"/> BETWEEN these two calls
+    /// to honour RabbitMQ.Client's per-channel serialisation contract.
+    /// </summary>
+    public async Task StartConsumingAsync(
+        ConsumerEventHandler messageReceived, string queueName,
+        bool? autoDelete = null, CancellationToken cancellationToken = default)
+    {
+        await PrepareAsync(messageReceived, queueName, autoDelete, cancellationToken).ConfigureAwait(false);
+        await BeginConsumingAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task ConsumeMessageTypeAsync(string messageTypeName, CancellationToken cancellationToken = default)
