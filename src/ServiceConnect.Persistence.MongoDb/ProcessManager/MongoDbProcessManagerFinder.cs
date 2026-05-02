@@ -17,6 +17,12 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private readonly IMongoDatabase _mongoDatabase;
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _indexedCollections = new(StringComparer.Ordinal);
+    // _indexCreationSemaphore is intentionally NOT Disposed:
+    // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and we never call
+    // AvailableWaitHandle, so disposal is a functional no-op. A concurrent caller's Release()
+    // on a disposed semaphore would throw ObjectDisposedException out of the unwind path,
+    // which we cannot prevent without holding GC references to every caller. Mirrors the
+    // Connection / ProducerConnection / Producer / Bus pattern (Phases 4 + 6 + 7).
     private readonly SemaphoreSlim _indexCreationSemaphore = new(1, 1);
     private static readonly HashSet<int> BenignIndexCodes = [85, 86]; // IndexOptionsConflict, IndexKeySpecsConflict
 
