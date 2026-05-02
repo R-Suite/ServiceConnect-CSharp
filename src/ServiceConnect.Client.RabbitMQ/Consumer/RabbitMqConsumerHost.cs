@@ -55,6 +55,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private bool _autoDelete;
     private string _queueName = "";
     private string _retryQueueName = "";
+    // All reads/writes use atomic primitives (Interlocked.Increment/Decrement, Volatile.Read).
+    // The _callbackAdmissionGate lock gates the _shutdownStarted admission decision only — it
+    // does NOT protect this counter. Mixing lock-protected mutation with lock-free atomic mutation
+    // causes lost updates when concurrent threads use different disciplines.
     private int _messagesBeingProcessed;
     private int _shutdownTimedOut;
     private bool _shutdownStarted;
@@ -215,9 +219,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                     return;
                 }
 
-                _messagesBeingProcessed++;
                 callbackAdmitted = true;
             }
+            Interlocked.Increment(ref _messagesBeingProcessed);
 
             // ContainsKey admits a key whose value is null; use TryGetValue+non-null instead.
             // A null-valued TypeName passes ContainsKey but CopyInboundHeaders skips null values,
