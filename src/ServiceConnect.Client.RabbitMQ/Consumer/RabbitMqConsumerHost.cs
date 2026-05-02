@@ -321,7 +321,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 {
                     if (model == null)
                     {
-                        _logger.LogWarning("Channel was null during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
+                        // Channel was nulled by concurrent DisposeAsync. Expected during teardown;
+                        // broker will redeliver unacked messages on next consumer start.
+                        _logger.LogDebug("Channel was null during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
+                    }
+                    else if (!model.IsOpen)
+                    {
+                        // Channel closed concurrently. Expected during teardown / connection drop.
+                        _logger.LogDebug("Channel was closed during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
                     }
                     else if (Volatile.Read(ref _shutdownTimedOut) != 0)
                     {
