@@ -20,11 +20,6 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     private readonly SemaphoreSlim _indexCreationSemaphore = new(1, 1);
     private static readonly HashSet<int> BenignIndexCodes = [85, 86]; // IndexOptionsConflict, IndexKeySpecsConflict
 
-    // Under WriteConcern.Unacknowledged the driver does not report MatchedCount/DeletedCount.
-    // Accessing those properties on an unacknowledged result throws NotSupportedException.
-    // When guards are disabled we skip the concurrency assertions and log a one-time Warning.
-    private readonly bool _concurrencyGuardsEnabled;
-
     // Cached compiled delegates for InsertDataTypedAsync<T>, keyed by concrete data type.
     // Avoid MakeGenericMethod + MethodInfo.Invoke on every insert call.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<MongoDbProcessManagerFinder, IProcessManagerData, string, CancellationToken, Task>>
@@ -60,18 +55,16 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             throw new PersistenceException("Failed to connect to MongoDB for process manager persistence.", ex);
         }
 
-        // Detect WriteConcern.Unacknowledged (w:0) at construction time.
-        // Under w:0 the driver does not populate MatchedCount/DeletedCount and accessing
-        // them throws NotSupportedException. Disable the concurrency assertions and log a
-        // one-time Warning so operators are aware the guarantees are relaxed.
-        var effectiveWriteConcern = mongoClient.Settings.WriteConcern;
-        _concurrencyGuardsEnabled = effectiveWriteConcern.IsAcknowledged;
-        if (!_concurrencyGuardsEnabled)
+        // Saga state is correctness-sensitive: w:0 silently loses concurrent updates and
+        // wedges the saga on the next real conflict because the version field advances
+        // without the matching ReplaceOne hitting a row. Reject loudly at startup.
+        if (!mongoClient.Settings.WriteConcern.IsAcknowledged)
         {
-            _logger.LogWarning(
-                "MongoDbProcessManagerFinder: WriteConcern.Unacknowledged (w:0) detected. " +
-                "Optimistic-concurrency guards (MatchedCount/DeletedCount checks) are DISABLED. " +
-                "Concurrent saga updates will not be detected.");
+            throw new InvalidOperationException(
+                "MongoDbProcessManagerFinder requires an acknowledged WriteConcern (w:1 or higher). " +
+                "WriteConcern.Unacknowledged (w:0) silently loses concurrent saga updates and " +
+                "wedges sagas on the next real conflict because the version field advances. " +
+                "Configure mongoClient.Settings.WriteConcern to a value where IsAcknowledged is true.");
         }
     }
 
@@ -233,7 +226,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             );
             var result = await collection.ReplaceOneAsync(filter, writeRecord, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            if (_concurrencyGuardsEnabled && result.IsAcknowledged && result.MatchedCount == 0)
+            if (result.IsAcknowledged && result.MatchedCount == 0)
             {
                 throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {versionData.Data.CorrelationId} and Version {currentVersion} could not be updated.");
@@ -287,7 +280,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
                 $"Failed to delete process manager data with CorrelationId '{correlationId}'.", ex);
         }
 
-        if (_concurrencyGuardsEnabled && result.IsAcknowledged && result.DeletedCount == 0)
+        if (result.IsAcknowledged && result.DeletedCount == 0)
         {
             throw new ConcurrencyException(
                 $"Concurrency conflict: ProcessManagerData with CorrelationId {correlationId} and Version {expectedVersion} could not be deleted.");
