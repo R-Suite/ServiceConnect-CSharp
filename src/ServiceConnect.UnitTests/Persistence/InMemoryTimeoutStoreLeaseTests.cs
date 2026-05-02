@@ -166,6 +166,63 @@ public class InMemoryTimeoutStoreLeaseTests
     }
 
     [Fact]
+    public async Task RemoveDispatchedTimeout_ExpiredLease_ThrowsConcurrencyException()
+    {
+        // The caller held a valid lease at claim time, but the 5-minute window has
+        // elapsed before dispatching.  An expired lease is as invalid as a mismatched
+        // owner — the InMemory store must mirror the Mongo contract.
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryTimeoutStore(timeProvider: clock);
+
+        var id = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = id,
+            Destination = "dest",
+            ProcessManagerId = Guid.NewGuid(),
+            Time = clock.GetUtcNow(),
+            Headers = new Dictionary<string, object>(StringComparer.Ordinal),
+        });
+
+        var batch = await store.GetTimeoutsBatchAsync();
+        Assert.Single(batch.DueTimeouts);
+        var owner = batch.DueTimeouts[0].LockedBy;
+
+        // Advance past the 5-minute default lease.
+        clock.Advance(TimeSpan.FromMinutes(6));
+
+        await Assert.ThrowsAsync<ConcurrencyException>(() =>
+            store.RemoveDispatchedTimeoutAsync(id, owner));
+    }
+
+    [Fact]
+    public async Task ReleaseDispatchedTimeout_ExpiredLease_ThrowsConcurrencyException()
+    {
+        // Mirror of the Remove test: ReleaseDispatchedTimeoutAsync must also reject
+        // expired leases rather than silently clearing the lock on a stale claim.
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero));
+        var store = new InMemoryTimeoutStore(timeProvider: clock);
+
+        var id = Guid.NewGuid();
+        await store.InsertTimeoutAsync(new TimeoutData
+        {
+            Id = id,
+            Destination = "dest",
+            ProcessManagerId = Guid.NewGuid(),
+            Time = clock.GetUtcNow(),
+            Headers = new Dictionary<string, object>(StringComparer.Ordinal),
+        });
+
+        var batch = await store.GetTimeoutsBatchAsync();
+        var owner = batch.DueTimeouts[0].LockedBy;
+
+        clock.Advance(TimeSpan.FromMinutes(6));
+
+        await Assert.ThrowsAsync<ConcurrencyException>(() =>
+            store.ReleaseDispatchedTimeoutAsync(id, owner));
+    }
+
+    [Fact]
     public async Task RemoveDispatchedTimeoutAsync_NullLockOwner_RemovesLeasedRow()
     {
         // lockOwner == null is the unconditional id-only path. A leased row must still

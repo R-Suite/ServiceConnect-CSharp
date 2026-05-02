@@ -147,11 +147,16 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 
             if (lockOwner is { } owner)
             {
-                // Lease-checked: a missing/unleased/mismatched-owner row all mean
-                // "this caller no longer holds the lease" — surface as ConcurrencyException
-                // so parity with Mongo is preserved and callers don't silently miss
-                // invalidations.
-                if (!found || !entry!.Data.Locked || entry.Data.LockedBy != owner)
+                // Lease-checked: a missing/unleased/mismatched-owner row, or a row whose
+                // lease window has elapsed, all mean "this caller no longer holds the lease"
+                // — surface as ConcurrencyException so parity with Mongo is preserved and
+                // callers don't silently miss invalidations.
+                var utcNow = _timeProvider.GetUtcNow();
+                if (!found
+                    || !entry!.Data.Locked
+                    || entry.Data.LockedBy != owner
+                    || entry.Data.LockExpiresAt is null
+                    || entry.Data.LockExpiresAt <= utcNow)
                 {
                     throw new ConcurrencyException(
                         $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
@@ -186,11 +191,16 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 
             if (lockOwner is { } owner)
             {
-                // Lease-checked: a missing/unleased/mismatched-owner row all mean
-                // "this caller no longer holds the lease" — surface as ConcurrencyException
-                // so parity with Mongo is preserved and callers don't silently miss
-                // invalidations.
-                if (!found || !entry!.Data.Locked || entry.Data.LockedBy != owner)
+                // Lease-checked: a missing/unleased/mismatched-owner row, or a row whose
+                // lease window has elapsed, all mean "this caller no longer holds the lease"
+                // — surface as ConcurrencyException so parity with Mongo is preserved and
+                // callers don't silently miss invalidations.
+                var utcNow = _timeProvider.GetUtcNow();
+                if (!found
+                    || !entry!.Data.Locked
+                    || entry.Data.LockedBy != owner
+                    || entry.Data.LockExpiresAt is null
+                    || entry.Data.LockExpiresAt <= utcNow)
                 {
                     throw new ConcurrencyException(
                         $"Lease for timeout '{id}' was invalidated; lock owner '{owner}' no longer holds the lease.");
