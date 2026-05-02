@@ -11,8 +11,8 @@ namespace ServiceConnect.Interfaces.Exceptions;
 /// <c>catch (OperationCanceledException)</c> handlers continue to catch it; callers can
 /// catch this type specifically to react to send-layer failures.
 /// </summary>
-public sealed class RequestSendCancelledException(Guid messageId, string message)
-    : OperationCanceledException(message)
+public sealed class RequestSendCancelledException(Guid messageId, string message, CancellationToken cancellationToken = default)
+    : OperationCanceledException(message, cancellationToken)
 {
     /// <summary>
     /// Gets the request id of the send that was cancelled.
