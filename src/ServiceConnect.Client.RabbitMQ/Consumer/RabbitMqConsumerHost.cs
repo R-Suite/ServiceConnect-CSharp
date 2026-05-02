@@ -307,7 +307,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 }
             }
 
-            processed = await _messageProcessor!.ProcessAsync(publishChannel!, args, cancellationToken).ConfigureAwait(false);
+            var messageProcessor = _messageProcessor;
+            if (messageProcessor == null)
+            {
+                _logger.LogWarning("Message processor not initialised — message {DeliveryTag} will be nacked for redelivery", args.DeliveryTag);
+                return;  // processed stays false; finally nacks-with-requeue
+            }
+
+            processed = await messageProcessor.ProcessAsync(publishChannel!, args, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

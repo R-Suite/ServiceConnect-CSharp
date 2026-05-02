@@ -1,0 +1,175 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
+using Xunit;
+
+namespace ServiceConnect.UnitTests.RabbitMQ;
+
+/// <summary>
+/// Verifies that EventAsync handles a null _messageProcessor defensively:
+/// logs a Warning and nacks-with-requeue rather than throwing an NRE.
+/// </summary>
+public sealed class RabbitMqConsumerHostMessageProcessorNullTests
+{
+    [Fact]
+    public async Task EventAsync_MessageProcessorNull_LogsWarning_AndNacksWithRequeue()
+    {
+        var (host, consumerChannel, _, capturedLogs) = await BuildHostAsync();
+
+        // Null out _messageProcessor via reflection so the new defensive check fires.
+        var field = typeof(RabbitMqConsumerHost).GetField("_messageProcessor",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        field!.SetValue(host, null);
+
+        var args = MakeArgs();
+        await host.RaiseDeliveryForTests(args);
+
+        // Assert: Warning log emitted with "Message processor not initialised".
+        Assert.Contains(capturedLogs, l => l.Level == LogLevel.Warning && l.Message.Contains("Message processor not initialised"));
+
+        // Assert: the message took the processed=false path (BasicNackAsync called with requeue:true,
+        // BasicAckAsync NOT called).
+        consumerChannel.Verify(c => c.BasicNackAsync(args.DeliveryTag, false, true, It.IsAny<CancellationToken>()), Times.Once);
+        consumerChannel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ── Harness ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a <see cref="RabbitMqConsumerHost"/> with mocked channels and a
+    /// capturing <see cref="ILogger"/>. Follows the pattern from
+    /// RabbitMqConsumerHostAckNackTests.
+    /// </summary>
+    private static async Task<(
+        RabbitMqConsumerHost Host,
+        Mock<IChannel> ConsumerChannel,
+        Mock<IChannel> PublishChannel,
+        List<CapturedLog> CapturedLogs)> BuildHostAsync(
+        bool consumerChannelIsOpen = true)
+    {
+        var capturedLogs = new List<CapturedLog>();
+
+        // ── Logger that captures all LogXxx calls ────────────────────────────
+        var logger = new Mock<ILogger>();
+        logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        logger
+            .Setup(l => l.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()))
+            .Callback<LogLevel, EventId, object, Exception?, Delegate>(
+                (level, _, state, _, formatter) =>
+                {
+                    var msg = formatter.DynamicInvoke(state, null) as string ?? string.Empty;
+                    capturedLogs.Add(new CapturedLog(level, msg));
+                });
+
+        // ── Consumer channel ─────────────────────────────────────────────────
+        var consumerChannel = new Mock<IChannel>(MockBehavior.Strict);
+        consumerChannel.Setup(c => c.IsOpen).Returns(consumerChannelIsOpen);
+        consumerChannel.Setup(c => c.BasicQosAsync(
+                It.IsAny<uint>(), It.IsAny<ushort>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        consumerChannel.Setup(c => c.BasicConsumeAsync(
+                It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string>(),
+                It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<IDictionary<string, object?>?>(),
+                It.IsAny<IAsyncBasicConsumer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("tag");
+        if (consumerChannelIsOpen)
+        {
+            consumerChannel.Setup(c => c.BasicAckAsync(
+                    It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .Returns(ValueTask.CompletedTask);
+            consumerChannel.Setup(c => c.BasicNackAsync(
+                    It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .Returns(ValueTask.CompletedTask);
+        }
+
+        consumerChannel.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        consumerChannel.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        consumerChannel.SetupAdd(c => c.ChannelShutdownAsync += It.IsAny<AsyncEventHandler<ShutdownEventArgs>>());
+        consumerChannel.SetupRemove(c => c.ChannelShutdownAsync -= It.IsAny<AsyncEventHandler<ShutdownEventArgs>>());
+
+        // ── Publish channel ──────────────────────────────────────────────────
+        var publishChannel = new Mock<IChannel>(MockBehavior.Loose);
+        publishChannel
+            .Setup(c => c.BasicPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+        publishChannel.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
+
+        // ── Connection ───────────────────────────────────────────────────────
+        var conn = new Mock<IServiceConnectConnection>();
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(consumerChannel.Object);
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(publishChannel.Object);
+        conn.SetupGet(c => c.UnderlyingConnection).Returns((IConnection?)null);
+
+        // ── Transport / queue / bus configuration ────────────────────────────
+        var transport = new Mock<ITransportConfiguration>();
+        transport.SetupGet(t => t.MaxRetries).Returns(3);
+        transport.SetupGet(t => t.PrefetchCount).Returns((ushort)10);
+        transport.SetupProperty(t => t.GracefulShutdownTimeoutMilliseconds, 5000);
+        transport.SetupGet(t => t.ClientSettings).Returns(new Dictionary<string, object>());
+
+        var queue = new Mock<IQueueConfiguration>();
+        queue.SetupGet(q => q.QueueName).Returns("q");
+        queue.SetupGet(q => q.ErrorQueueName).Returns("err");
+        queue.SetupGet(q => q.AuditQueueName).Returns("audit");
+        queue.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
+        queue.SetupGet(q => q.DisableErrors).Returns(false);
+        queue.SetupGet(q => q.AuditingEnabled).Returns(false);
+
+        var bus = new Mock<IBusConfiguration>();
+        bus.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
+        bus.SetupGet(b => b.DeadLetterUnhandledMessages).Returns(false);
+
+        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(queue.Object);
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object, transport.Object, queue.Object, bus.Object,
+            retry, audit, logger.Object);
+
+        await host.StartConsumingAsync(
+            (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }),
+            queueName: "q");
+
+        return (host, consumerChannel, publishChannel, capturedLogs);
+    }
+
+    /// <summary>
+    /// Builds a delivery with the minimal headers that get past the type-name
+    /// admission guard so the processor path is reached.
+    /// </summary>
+    private static BasicDeliverEventArgs MakeArgs()
+        => new(
+            consumerTag: "ct",
+            deliveryTag: 1,
+            redelivered: false,
+            exchange: "",
+            routingKey: "q",
+            properties: new BasicProperties
+            {
+                Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [HeaderKeys.FullTypeName] = "Foo.Bar",
+                },
+            },
+            body: new byte[] { 1 });
+
+    private sealed record CapturedLog(LogLevel Level, string Message);
+}
