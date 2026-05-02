@@ -34,4 +34,21 @@ public sealed class QueueConfigurationCachedMappingsTests
         Assert.NotSame(first, second);
         Assert.Equal(2, second.Count);
     }
+
+    [Fact]
+    public void QueueMappings_AfterListOverloadMutation_ReturnsFreshWrapper()
+    {
+        var config = new QueueConfiguration();
+        config.AddQueueMapping(typeof(string), "queue-1");
+        var first = config.QueueMappings;
+
+        // The list overload also nulls _mappingsView; a regression that removes that
+        // invalidation would leave first and second as the same reference, and second
+        // would reflect only one key instead of two.
+        config.AddQueueMapping(typeof(int), ["queue-2", "queue-3"]);
+        var second = config.QueueMappings;
+
+        Assert.NotSame(first, second);
+        Assert.Equal(2, second.Count);
+    }
 }

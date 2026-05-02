@@ -41,6 +41,12 @@ public sealed class QueueConfiguration : IQueueConfiguration
                 nameof(messageType));
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Cache invalidation on mutation is not synchronised; callers must not mutate
+    /// (<see cref="AddQueueMapping(Type, string)"/> / <see cref="AddQueueMapping(Type, IList{string})"/>)
+    /// concurrently with reads. Mappings are intended to be populated at startup and
+    /// read at dispatch time.
+    /// </remarks>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> QueueMappings =>
         _mappingsView ??= new QueueMappingsView(_queueMappings);
 
