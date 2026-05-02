@@ -358,6 +358,7 @@ public sealed class Bus : IBus
     /// <inheritdoc />
     public IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(endpoint);
         ThrowIfDisposed();
         if (_producer == null)
         {
