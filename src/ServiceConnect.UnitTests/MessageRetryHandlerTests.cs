@@ -44,7 +44,7 @@ public class MessageRetryHandlerTests
 
         Assert.Equal(1, (int)headers[HeaderKeys.RetryCount]);
         channel.Verify(c => c.BasicPublishAsync(
-            string.Empty, "q.Retries", false,
+            string.Empty, "q.Retries", true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -66,7 +66,7 @@ public class MessageRetryHandlerTests
         await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: new InvalidOperationException("oops"));
 
         channel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -93,7 +93,7 @@ public class MessageRetryHandlerTests
 
         Assert.Equal(2, (int)headers[HeaderKeys.RetryCount]);
         channel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -168,7 +168,7 @@ public class MessageRetryHandlerTests
         await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         Assert.False(headers.ContainsKey(HeaderKeys.Exception));
@@ -213,11 +213,11 @@ public class MessageRetryHandlerTests
         await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicPublishAsync(
-            string.Empty, "q.Retries", false,
+            string.Empty, "q.Retries", true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -242,11 +242,11 @@ public class MessageRetryHandlerTests
         await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicPublishAsync(
-            string.Empty, "q.Retries", false,
+            string.Empty, "q.Retries", true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -278,11 +278,11 @@ public class MessageRetryHandlerTests
         // Should increment to 4 and publish to retry queue, NOT to error exchange.
         Assert.Equal(4, (int)headers[HeaderKeys.RetryCount]);
         channel.Verify(c => c.BasicPublishAsync(
-            string.Empty, "q.Retries", false,
+            string.Empty, "q.Retries", true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -306,7 +306,7 @@ public class MessageRetryHandlerTests
         await handler.HandleFailureAsync(channel.Object, "q.Retries", args, headers, ex: null);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }

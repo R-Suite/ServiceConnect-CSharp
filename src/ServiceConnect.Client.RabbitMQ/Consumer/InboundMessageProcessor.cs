@@ -152,10 +152,9 @@ internal sealed class InboundMessageProcessor(
                 _logger.LogError(retryEx,
                     "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
                     args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
-                // Intentionally swallow: the message is already failed and we cannot retry-publish it.
-                // Acking now (processed = true, returned below) prevents the broker from redelivering it
-                // into the same failed path. Letting the exception propagate would cause the finally block
-                // to nack with requeue:true and hot-loop the broker on a poison message.
+                // Intentionally swallow: includes PublishException (mandatory:true, retry queue gone).
+                // Acking now prevents the broker from redelivering into the same failed path; letting
+                // this propagate would nack with requeue:true and hot-loop on a poison message.
             }
         }
         else if (result.NotHandled && _deadLetterUnhandledMessages && !_errorsDisabled)
@@ -208,6 +207,8 @@ internal sealed class InboundMessageProcessor(
                     "Terminal-failure publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
                     args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
                 // Intentionally swallow — same rationale as the HandleFailureAsync catch above.
+                // Includes PublishException (mandatory:true, error exchange gone); acking
+                // prevents unbounded redelivery of a message with no viable error destination.
             }
         }
         else if (!_errorsDisabled)

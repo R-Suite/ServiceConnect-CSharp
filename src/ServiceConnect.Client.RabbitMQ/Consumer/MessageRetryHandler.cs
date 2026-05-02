@@ -83,7 +83,10 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
                 ClusterId = args.BasicProperties.ClusterId,
                 Headers = HeaderHelpers.ToNullableHeaders(headers),
             };
-            await channel.BasicPublishAsync(string.Empty, retryQueueName, false, props, args.Body, cancellationToken).ConfigureAwait(false);
+            // mandatory:true so publisher confirms surface unroutable returns as PublishException;
+            // otherwise the broker silently drops the message and we lose the failure signal.
+            // The catch in InboundMessageProcessor logs Error and acks-to-break-the-loop on PublishException.
+            await channel.BasicPublishAsync(string.Empty, retryQueueName, true, props, args.Body, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -152,6 +155,9 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
             ClusterId = args.BasicProperties.ClusterId,
             Headers = HeaderHelpers.ToNullableHeaders(headers),
         };
-        await channel.BasicPublishAsync(_errorExchange, string.Empty, false, errorProps, args.Body, cancellationToken).ConfigureAwait(false);
+        // mandatory:true — see comment in HandleFailureAsync. PublishException on unroutable
+        // surfaces through the InboundMessageProcessor catch; logged at Error and acked to
+        // prevent unbounded redelivery.
+        await channel.BasicPublishAsync(_errorExchange, string.Empty, true, errorProps, args.Body, cancellationToken).ConfigureAwait(false);
     }
 }
