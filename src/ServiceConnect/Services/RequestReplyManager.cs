@@ -15,6 +15,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     private readonly ISendMessagePipeline _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The internal cancellation registration is asynchronously disposed when the request
+    /// completes (success, timeout, or cancellation), matching the <c>await using</c> pattern
+    /// used in this implementation.
+    /// </remarks>
     public async Task<TReply> SendRequestAsync<TRequest, TReply>(
         TRequest message,
         IDictionary<string, string> headers,
@@ -120,6 +125,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The internal cancellation registration is asynchronously disposed when the request
+    /// completes (success, timeout, or cancellation), matching the <c>await using</c> pattern
+    /// used in this implementation.
+    /// </remarks>
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         TRequest message,
         IDictionary<string, string> headers,
@@ -258,6 +268,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The internal cancellation registration is asynchronously disposed when the request
+    /// completes (success, timeout, or cancellation), matching the <c>await using</c> pattern
+    /// used in this implementation.
+    /// </remarks>
     public async Task PublishRequestAsync<TRequest, TReply>(
         TRequest message,
         IDictionary<string, string> headers,
