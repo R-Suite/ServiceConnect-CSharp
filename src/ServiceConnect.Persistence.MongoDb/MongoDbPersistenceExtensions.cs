@@ -95,8 +95,8 @@ public static class MongoDbPersistenceExtensions
                 // already Standard — reusing it is safe because our filter literals will match.
                 // Any other representation causes silent query misses (filter literals use
                 // subtype 4 while stored Guids use a different subtype), so we fail loudly.
-                var registered = BsonSerializer.LookupSerializer<Guid>() as GuidSerializer;
-                if (registered?.GuidRepresentation != GuidRepresentation.Standard)
+                var registered = BsonSerializer.LookupSerializer<Guid>();
+                if (!IsCompatibleGuidSerializer(registered))
                 {
                     throw new InvalidOperationException(
                         "ServiceConnect MongoDB persistence requires GuidRepresentation.Standard but another " +
@@ -105,6 +105,8 @@ public static class MongoDbPersistenceExtensions
                         "GuidRepresentation.Standard before any other component does so.",
                         ex);
                 }
+                // Compatible Standard already registered (by another component or our own
+                // duplicate call); proceed.
             }
 
             // Only commit the success flag after every step above has completed without
@@ -112,6 +114,17 @@ public static class MongoDbPersistenceExtensions
             // caller retries the whole setup instead of short-circuiting on broken state.
             Volatile.Write(ref _guidSerializerRegistered, 1);
         }
+    }
+
+    /// <summary>
+    /// Returns true when an existing Guid serializer registration is compatible with
+    /// ServiceConnect's requirement (GuidRepresentation.Standard). False otherwise —
+    /// indicating a mismatch that should be reported loudly.
+    /// </summary>
+    internal static bool IsCompatibleGuidSerializer(IBsonSerializer<Guid>? registered)
+    {
+        return registered is GuidSerializer guidSerializer
+            && guidSerializer.GuidRepresentation == GuidRepresentation.Standard;
     }
 
     /// <summary>

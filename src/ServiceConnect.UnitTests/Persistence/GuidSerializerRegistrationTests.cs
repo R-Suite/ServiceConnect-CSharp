@@ -1,5 +1,8 @@
 using System.Reflection;
 using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Serializers;
+using Moq;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
 
@@ -99,5 +102,45 @@ public class GuidSerializerRegistrationTests
         Assert.False(
             (persistorType.Attributes & TypeAttributes.BeforeFieldInit) != 0,
             $"{persistorType.Name} must declare an explicit `static {persistorType.Name}()` so the Guid serializer registrar fires before any field access on direct-ctor paths.");
+    }
+
+    // --- IsCompatibleGuidSerializer unit tests ---
+    // These exercise the pure compatibility-check helper in isolation, without touching
+    // BSON's process-global serializer registry. The helper's return value drives whether
+    // the catch block in EnsureGuidSerializerRegistered re-throws; testing it here ensures
+    // that a regression on the throw path is caught deterministically in CI regardless of
+    // which process-global state the E2E test happened to observe.
+
+    [Fact]
+    public void IsCompatibleGuidSerializer_StandardRepresentation_ReturnsTrue()
+    {
+        var serializer = new GuidSerializer(GuidRepresentation.Standard);
+        Assert.True(MongoDbPersistenceExtensions.IsCompatibleGuidSerializer(serializer));
+    }
+
+    [Theory]
+    [InlineData(GuidRepresentation.CSharpLegacy)]
+    [InlineData(GuidRepresentation.JavaLegacy)]
+    [InlineData(GuidRepresentation.PythonLegacy)]
+    [InlineData(GuidRepresentation.Unspecified)]
+    public void IsCompatibleGuidSerializer_NonStandardRepresentation_ReturnsFalse(GuidRepresentation representation)
+    {
+        var serializer = new GuidSerializer(representation);
+        Assert.False(MongoDbPersistenceExtensions.IsCompatibleGuidSerializer(serializer));
+    }
+
+    [Fact]
+    public void IsCompatibleGuidSerializer_NullSerializer_ReturnsFalse()
+    {
+        Assert.False(MongoDbPersistenceExtensions.IsCompatibleGuidSerializer(null));
+    }
+
+    [Fact]
+    public void IsCompatibleGuidSerializer_NonGuidSerializerImplementation_ReturnsFalse()
+    {
+        // A custom IBsonSerializer<Guid> that isn't the BSON driver's GuidSerializer should
+        // be rejected — we can't introspect its representation.
+        var fakeSerializer = new Mock<IBsonSerializer<Guid>>();
+        Assert.False(MongoDbPersistenceExtensions.IsCompatibleGuidSerializer(fakeSerializer.Object));
     }
 }
