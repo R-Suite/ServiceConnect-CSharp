@@ -201,8 +201,9 @@ public sealed class Consumer : IConsumer
     {
         // Each host's DisposeAsync is independently bounded by its own gracefulShutdownTimeout.
         // Sequential disposal made aggregate latency O(N * timeout); parallel makes it O(timeout).
-        // Per-host failures stay isolated via the inner try/catch — without it, Task.WhenAll's
-        // aggregate-exception path would short-circuit other hosts' awaits.
+        // Per-host failures (including any OCE — this dispose path is on the Phase 3 fire-and-forget
+        // cleanup whitelist) stay isolated via the inner try/catch so a single host's failure cannot
+        // short-circuit the rest of the disposal via Task.WhenAll's aggregate-exception path.
         var disposeTasks = _clients
             .Select(async consumer =>
             {
