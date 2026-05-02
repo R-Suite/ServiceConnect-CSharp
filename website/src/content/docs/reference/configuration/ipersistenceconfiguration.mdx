@@ -109,8 +109,59 @@ services.AddServiceConnect(builder =>
 
 `UseMongoDbPersistence(...)` registers `MongoDbProcessManagerFinder`, `MongoDbTimeoutStore`, and `MongoDbAggregatorPersistor` against a single shared `IMongoClient`. The `OrderService` database holds the `ShippingSaga` state documents alongside the timeout collection; the poll interval controls how quickly scheduled `TimeoutMessage` deliveries fire.
 
+## Provider options
+
+### `InMemoryPersistenceOptions`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `LockLeaseDuration` | `TimeSpan` | `TimeSpan.FromMinutes(5)` | Lease duration applied when claiming a timeout for dispatch. Mirrors `MongoDbPersistenceOptions.TimeoutLockLeaseDuration`. Must be positive. |
+
+Configure via the `UseInMemoryPersistence` extension's optional `configure` delegate:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseInMemoryPersistence(o => o.LockLeaseDuration = TimeSpan.FromSeconds(30));
+});
+```
+
+Or register an instance directly before calling `UseInMemoryPersistence` (the extension's `TryAddSingleton` call will skip registration if the instance is already present):
+
+```csharp
+services.AddSingleton(new InMemoryPersistenceOptions { LockLeaseDuration = TimeSpan.FromSeconds(30) });
+services.AddServiceConnect(builder =>
+{
+    builder.UseInMemoryPersistence();
+});
+```
+
+### `MongoDbPersistenceOptions`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ConnectionString` | `string` | `""` | MongoDB connection URI. Required for production deployments. |
+| `DatabaseName` | `string` | `""` | Database name for process manager, aggregator, and timeout collections. |
+| `TimeoutLockLeaseDuration` | `TimeSpan` | `TimeSpan.FromMinutes(5)` | Lease duration applied when claiming a timeout row for dispatch. See [Timeout lease semantics](../../extension-points/persistence/itimeoutstore/#timeout-lease-semantics). |
+| `TimeoutBatchSize` | `int` | `100` | Maximum number of due timeout rows returned by a single `GetTimeoutsBatchAsync` call. |
+
+Configure via the `UseMongoDbPersistence` extension's options delegate:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseMongoDbPersistence(options =>
+    {
+        options.ConnectionString = Environment.GetEnvironmentVariable("MONGO_URI");
+        options.DatabaseName = "order-service";
+        options.TimeoutLockLeaseDuration = TimeSpan.FromMinutes(2);
+    });
+});
+```
+
 ## See also
 
 - [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept
+- [`ITimeoutStore`](../../extension-points/persistence/itimeoutstore/) — timeout dispatch reference
 - [`IAggregatorPersistor`](../../extension-points/persistence/iaggregatorpersistor/) — related reference
 - [`IProcessManagerFinder`](../../extension-points/persistence/iprocessmanagerfinder/) — related reference

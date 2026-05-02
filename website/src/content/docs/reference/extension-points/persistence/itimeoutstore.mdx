@@ -98,9 +98,17 @@ Releases a dispatched timeout so it may be retried later.
 
 2. **Idempotency.** `RemoveDispatchedTimeoutAsync` and `ReleaseDispatchedTimeoutAsync` must be idempotent. The manager may retry either call on transient storage failures. A second call for an already-removed or already-released record should be a silent no-op.
 
+### Timeout lease semantics
+
+`RemoveDispatchedTimeoutAsync` and `ReleaseDispatchedTimeoutAsync` accept an optional lock owner when called on an [`ILeaseAwareTimeoutStore`](./ileaseawaretimeoutstore/). When supplied, the operation is lease-checked: a worker that no longer holds a valid lease observes `ConcurrencyException` so the row is not double-dispatched by a second worker that reclaimed it.
+
+Both the Mongo and InMemory persistors honour identical semantics. The `LockLeaseDuration` setting — `MongoDbPersistenceOptions.TimeoutLockLeaseDuration` or `InMemoryPersistenceOptions.LockLeaseDuration` — governs how long a worker may hold a row before the reaper reclaims it. Both default to five minutes.
+
+Operators running the Mongo persistor should call `ReapStaleLeasesAsync` on a timer at roughly `LockLeaseDuration / 4` cadence to reclaim rows held by crashed handlers promptly.
+
 ### Skeletal in-memory implementation
 
-The `InMemoryTimeoutStore` shipped with the library (in `ServiceConnect.Persistence.InMemory`) is the reference single-instance implementation. It stores timeouts in a sorted set, uses a write lock for all mutations, and applies a 5-minute per-record lease so that a crashed dispatcher does not hold records indefinitely:
+The `InMemoryTimeoutStore` shipped with the library (in `ServiceConnect.Persistence.InMemory`) is the reference single-instance implementation. It stores timeouts in a sorted set, uses a write lock for all mutations, and reads its lease duration from `InMemoryPersistenceOptions` so that a crashed dispatcher does not hold records indefinitely. The constructor accepts an options instance:
 
 ```csharp
 public sealed class InMemoryTimeoutStore : ITimeoutStore
@@ -108,7 +116,15 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     private readonly ReaderWriterLockSlim _lock = new();
     private readonly SortedSet<TimeoutEntry> _index = new(TimeoutEntryComparer.Instance);
     private readonly Dictionary<Guid, TimeoutEntry> _byId = new();
-    private static readonly TimeSpan LockLeaseDuration = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan _lockLeaseDuration;
+
+    public InMemoryTimeoutStore(InMemoryPersistenceOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.LockLeaseDuration <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(options), "LockLeaseDuration must be positive.");
+        _lockLeaseDuration = options.LockLeaseDuration;
+    }
 
     public Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
     {
@@ -127,7 +143,6 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     {
         var batch = new TimeoutsBatch { DueTimeouts = [] };
         var utcNow = DateTimeOffset.UtcNow;
-        var nextQueryTime = utcNow.AddMinutes(1);
 
         _lock.EnterWriteLock();
         try
@@ -137,19 +152,17 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 if (entry.Time <= utcNow && (!entry.Data.Locked || entry.Data.LockExpiresAt <= utcNow))
                 {
                     entry.Data.Locked = true;
-                    entry.Data.LockExpiresAt = utcNow + LockLeaseDuration;
+                    entry.Data.LockExpiresAt = utcNow + _lockLeaseDuration;
                     batch.DueTimeouts.Add(entry.Data);
                 }
                 else if (entry.Time > utcNow)
                 {
-                    nextQueryTime = entry.Time;
                     break;
                 }
             }
         }
         finally { _lock.ExitWriteLock(); }
 
-        batch.NextQueryTime = nextQueryTime;
         return Task.FromResult(batch);
     }
 
