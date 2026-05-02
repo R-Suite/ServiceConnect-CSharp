@@ -337,12 +337,27 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         // _id is always unique; creating an explicit unique index on it is rejected
         // by MongoDB with "The field 'unique' is not valid for an _id index specification".
         // The three composite indexes below are the only ones we need to create.
+        //
+        // Drop the legacy (Locked, Time) index from prior versions. v8 uses
+        // (Time, Locked, LockExpiresAt) which covers both branches of the OR-shaped
+        // due filter and the Time-prefix sort. Idempotent over IndexNotFound (code 27)
+        // so fresh databases and re-runs are no-ops.
         try
         {
-            var lockedTimeIndexModel = new CreateIndexModel<TimeoutData>(
+            await collection.Indexes.DropOneAsync("Locked_1_Time_1", cancellationToken).ConfigureAwait(false);
+        }
+        catch (MongoCommandException ex) when (ex.Code == 27)
+        {
+            // IndexNotFound — already dropped, or never existed.
+        }
+
+        try
+        {
+            var dueQueryIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys
+                    .Ascending(x => x.Time)
                     .Ascending(x => x.Locked)
-                    .Ascending(x => x.Time));
+                    .Ascending(x => x.LockExpiresAt));
 
             var lockedByIndexModel = new CreateIndexModel<TimeoutData>(
                 Builders<TimeoutData>.IndexKeys
@@ -353,7 +368,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
 
             await collection.Indexes.CreateManyAsync(
-                [lockedTimeIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
+                [dueQueryIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
                 cancellationToken: cancellationToken
             ).ConfigureAwait(false);
         }

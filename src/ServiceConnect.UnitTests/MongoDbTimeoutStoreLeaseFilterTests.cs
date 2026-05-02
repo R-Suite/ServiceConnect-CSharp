@@ -26,6 +26,8 @@ public class MongoDbTimeoutStoreLeaseFilterTests
                 It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(["ok"]);
+        indexes.Setup(m => m.DropOneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var collection = new Mock<IMongoCollection<TimeoutData>>();
         collection.SetupGet(c => c.Indexes).Returns(indexes.Object);

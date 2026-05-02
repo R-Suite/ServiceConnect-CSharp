@@ -79,6 +79,8 @@ public class MongoDbTimeoutStoreTests
         {
             indexSetup.ReturnsAsync(["ok"]);
         }
+        indexes.Setup(m => m.DropOneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var collection = new Mock<IMongoCollection<TimeoutData>>();
         collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
@@ -115,6 +117,8 @@ public class MongoDbTimeoutStoreTests
                     It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(["ok"]);
+            indexes.Setup(m => m.DropOneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
             collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
         }
 
@@ -423,6 +427,8 @@ public class MongoDbTimeoutStoreTests
                 It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(["ok"]);
+        indexes.Setup(m => m.DropOneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
         collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
 
         var database = new Mock<IMongoDatabase>();
@@ -500,6 +506,8 @@ public class MongoDbTimeoutStoreTests
                 It.IsAny<IEnumerable<CreateIndexModel<TimeoutData>>>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(["ok"]);
+        indexes.Setup(m => m.DropOneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
         collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
 
         var client = new Mock<IMongoClient>();
