@@ -1,3 +1,4 @@
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Interfaces;
@@ -17,6 +18,11 @@ public interface IRequestReplyManager
     /// <param name="options">Request routing and timeout options.</param>
     /// <param name="cancellationToken">A token that cancels the request.</param>
     /// <returns>The deserialized reply.</returns>
+    /// <exception cref="RequestSendCancelledException">
+    /// Thrown when the outbound send pipeline cancelled before the request reached the broker.
+    /// Distinct from a timeout (<see cref="RequestTimeoutException"/>) and from caller-token
+    /// cancellation (<see cref="OperationCanceledException"/>).
+    /// </exception>
     Task<TReply> SendRequestAsync<TRequest, TReply>(
         TRequest message,
         IDictionary<string, string> headers,
@@ -35,6 +41,11 @@ public interface IRequestReplyManager
     /// <param name="options">Request routing and timeout options.</param>
     /// <param name="cancellationToken">A token that cancels the request.</param>
     /// <returns>The replies collected before completion.</returns>
+    /// <exception cref="RequestSendCancelledException">
+    /// Thrown when the outbound send pipeline cancelled before the request reached the broker.
+    /// Distinct from a timeout (<see cref="RequestTimeoutException"/>) and from caller-token
+    /// cancellation (<see cref="OperationCanceledException"/>).
+    /// </exception>
     Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         TRequest message,
         IDictionary<string, string> headers,
@@ -53,6 +64,11 @@ public interface IRequestReplyManager
     /// <param name="options">Request routing and timeout options.</param>
     /// <param name="onReply">The callback to invoke for each reply.</param>
     /// <param name="cancellationToken">A token that cancels the request.</param>
+    /// <exception cref="RequestSendCancelledException">
+    /// Thrown when the outbound publish pipeline cancelled before the request reached the broker.
+    /// Distinct from a timeout (<see cref="RequestTimeoutException"/>) and from caller-token
+    /// cancellation (<see cref="OperationCanceledException"/>).
+    /// </exception>
     Task PublishRequestAsync<TRequest, TReply>(
         TRequest message,
         IDictionary<string, string> headers,

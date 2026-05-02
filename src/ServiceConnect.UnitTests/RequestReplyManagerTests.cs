@@ -1001,7 +1001,7 @@ public class RequestReplyManagerTests
     }
 
     [Fact]
-    public async Task PublishRequestAsync_ThrowsRequestTimeoutException_WhenOutboundPublishStallsBeforeCompletion()
+    public async Task PublishRequestAsync_ThrowsRequestSendCancelled_WhenOutboundPublishStallsBeforeCompletion()
     {
         var observedCancellation = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
         var callbackCount = 0;
@@ -1033,11 +1033,13 @@ public class RequestReplyManagerTests
         Assert.True(pipelineToken.CanBeCanceled);
         Assert.True(pipelineToken.IsCancellationRequested);
         Assert.Equal(0, callbackCount);
-        await Assert.ThrowsAsync<RequestTimeoutException>(() => publishTask);
+        // Stalled-send-then-timeout now fails fast with the typed cancellation exception
+        // rather than waiting on the reply TCS to surface RequestTimeoutException.
+        await Assert.ThrowsAsync<RequestSendCancelledException>(() => publishTask);
     }
 
     [Fact]
-    public async Task SendRequestAsync_TimesOutWhileOutboundSendIsStalled()
+    public async Task SendRequestAsync_ThrowsRequestSendCancelled_WhenOutboundSendIsStalled()
     {
         var observedCancellation = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
         var request = new FakeMessage1(Guid.NewGuid());
@@ -1066,7 +1068,9 @@ public class RequestReplyManagerTests
         Assert.Same(requestTask, completedTask);
         Assert.True(pipelineToken.CanBeCanceled);
         Assert.True(pipelineToken.IsCancellationRequested);
-        await Assert.ThrowsAsync<RequestTimeoutException>(() => requestTask);
+        // The send pipeline never finished before the linked CTS fired, so the typed
+        // send-cancelled exception must surface instead of the reply-side timeout.
+        await Assert.ThrowsAsync<RequestSendCancelledException>(() => requestTask);
     }
 
     // --- CancellationToken tests (Task 8) ---

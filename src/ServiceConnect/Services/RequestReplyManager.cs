@@ -39,6 +39,12 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedCts.CancelAfter(options.Timeout);
 
+        // Tracks whether the outbound pipeline finished its work before the linked CTS
+        // fired. Used by the typed-cancel catch below to distinguish "send pipeline was
+        // cancelled mid-flight" (fail fast) from "send completed and reply never arrived"
+        // (let the timeout path surface RequestTimeoutException).
+        var sendCompleted = 0;
+
         await using var reg = linkedCts.Token.Register(() =>
         {
             state.Close(() =>
@@ -68,9 +74,24 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 Operation = SendOperation.Request,
             };
             await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
+            Interlocked.Exchange(ref sendCompleted, 1);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && linkedCts.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // Caller's own token fired. Drop the pending entry and let the bare OCE
+            // propagate so existing handlers continue to observe a vanilla cancellation.
+            _pendingRequests.TryRemove(messageId, out _);
+            throw;
+        }
+        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
+        {
+            // The linked CTS fired (timeout) BEFORE the send pipeline finished and the
+            // caller's token did not. The reply will never arrive, so fail fast with the
+            // typed exception instead of waiting on the TCS until the timeout deadline.
+            _pendingRequests.TryRemove(messageId, out _);
+            throw new RequestSendCancelledException(messageId,
+                $"Request {messageId} send pipeline was cancelled before delivery.",
+                linkedCts.Token);
         }
         catch
         {
@@ -127,6 +148,10 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linkedCts.CancelAfter(options.Timeout);
 
+        // See SendRequestAsync for the rationale; sendCompleted is flipped only after
+        // the entire fan-out loop succeeds so a mid-loop cancellation also fails fast.
+        var sendCompleted = 0;
+
         await using var reg = linkedCts.Token.Register(() =>
         {
             state.Close(() =>
@@ -176,9 +201,23 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 };
                 await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
             }
+            Interlocked.Exchange(ref sendCompleted, 1);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && linkedCts.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _pendingRequests.TryRemove(messageId, out _);
+            throw;
+        }
+        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
+        {
+            // Timeout cancelled the send fan-out before it finished. Surface the typed
+            // exception immediately rather than returning the partial-results path,
+            // which would otherwise hand the caller an empty list and obscure the
+            // transport-layer failure.
+            _pendingRequests.TryRemove(messageId, out _);
+            throw new RequestSendCancelledException(messageId,
+                $"Request {messageId} send pipeline was cancelled before delivery.",
+                linkedCts.Token);
         }
         catch
         {
@@ -274,8 +313,21 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             await _sendPipeline.ExecutePublishMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
             Interlocked.Exchange(ref publishCompletedSuccessfully, 1);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && linkedCts.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _pendingRequests.TryRemove(messageId, out _);
+            throw;
+        }
+        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref publishCompletedSuccessfully) == 0)
+        {
+            // Publish pipeline was cancelled by the timeout before delivery; reuse the
+            // existing publishCompletedSuccessfully flag (it doubles as the sendCompleted
+            // signal) and surface the typed exception so the caller sees a fail-fast
+            // outcome instead of the timeout-shaped completion of the reply TCS.
+            _pendingRequests.TryRemove(messageId, out _);
+            throw new RequestSendCancelledException(messageId,
+                $"Publish {messageId} send pipeline was cancelled before delivery.",
+                linkedCts.Token);
         }
         catch
         {
