@@ -159,9 +159,13 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
 
-            // Read back exactly the rows we just claimed (LockedBy == sessionId).
+            // Read back exactly the rows we just claimed (LockedBy == sessionId, lease still valid).
+            // The LockExpiresAt > utcNow guard prevents a race where the lease expired between
+            // the UpdateMany claim and this read-back; without it, a stale claim could return
+            // rows the reaper has already unlocked and re-assigned to another worker.
             var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
-                            & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true);
+                            & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true)
+                            & Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
             using var cursor = session is not null
                 ? await collection.FindAsync(session, ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false)
                 : await collection.FindAsync(ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -196,8 +200,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             FilterDefinition<TimeoutData> filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id);
             if (lockOwner is { } owner)
             {
+                var utcNow = _timeProvider.GetUtcNow();
                 filter &= Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
-                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner);
+                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner) &
+                          Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
             }
             result = await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
@@ -230,8 +236,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             FilterDefinition<TimeoutData> filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id);
             if (lockOwner is { } owner)
             {
+                var utcNow = _timeProvider.GetUtcNow();
                 filter &= Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
-                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner);
+                          Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner) &
+                          Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
             }
 
             var update = Builders<TimeoutData>.Update
