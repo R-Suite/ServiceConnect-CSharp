@@ -83,6 +83,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // accessing _deliveryCts.Token would throw ObjectDisposedException. A late delivery
     // fired after DisposeAsync has disposed the CTS must still be able to observe cancellation.
     private CancellationToken _deliveryToken;
+    // Captured at subscribe time so DisposeAsync can unsubscribe against the SAME IConnection
+    // reference. Re-fetching _connection.UnderlyingConnection at unsubscribe time would return
+    // null after the parent Connection's DisposeAsync nulls _connection, leaking these handlers
+    // on the original IConnection until GC reclaims it.
+    private global::RabbitMQ.Client.IConnection? _subscribedUnderlyingConnection;
 
     public RabbitMqConsumerHost(
         IServiceConnectConnection connection,
@@ -191,12 +196,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _consumer.ShutdownAsync += OnConsumerShutdownAsync;
         _consumer.UnregisteredAsync += OnConsumerUnregisteredAsync;
         _model.ChannelShutdownAsync += OnChannelShutdownAsync;
-        var underlying = _connection.UnderlyingConnection;
-        if (underlying is not null)
+        _subscribedUnderlyingConnection = _connection.UnderlyingConnection;
+        if (_subscribedUnderlyingConnection is not null)
         {
-            underlying.ConnectionShutdownAsync += OnConnectionShutdownAsync;
-            underlying.ConnectionBlockedAsync += OnConnectionBlockedAsync;
-            underlying.ConnectionUnblockedAsync += OnConnectionUnblockedAsync;
+            _subscribedUnderlyingConnection.ConnectionShutdownAsync += OnConnectionShutdownAsync;
+            _subscribedUnderlyingConnection.ConnectionBlockedAsync += OnConnectionBlockedAsync;
+            _subscribedUnderlyingConnection.ConnectionUnblockedAsync += OnConnectionUnblockedAsync;
         }
     }
 
@@ -530,10 +535,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
     private void SubscribeToConsumerTagRecovery()
     {
-        var underlying = _connection.UnderlyingConnection;
-        if (underlying is not null)
+        // _subscribedUnderlyingConnection was populated by PrepareAsync; reuse the same captured
+        // reference here so the matching unsubscribe in DisposeAsync targets the right instance.
+        if (_subscribedUnderlyingConnection is not null)
         {
-            underlying.ConsumerTagChangeAfterRecoveryAsync += OnConsumerTagChangedAfterRecoveryAsync;
+            _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync += OnConsumerTagChangedAfterRecoveryAsync;
         }
     }
 
@@ -631,13 +637,18 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
         }
 
-        var underlyingConn = _connection.UnderlyingConnection;
-        if (underlyingConn is not null)
+        // Unsubscribe against the SAME IConnection reference we subscribed to. Re-fetching
+        // _connection.UnderlyingConnection here would return null after the parent Connection's
+        // DisposeAsync has already nulled the field, leaking these handlers on the original
+        // IConnection until GC reclaims it.
+        var subscribedConn = _subscribedUnderlyingConnection;
+        if (subscribedConn is not null)
         {
-            underlyingConn.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
-            underlyingConn.ConnectionBlockedAsync -= OnConnectionBlockedAsync;
-            underlyingConn.ConnectionUnblockedAsync -= OnConnectionUnblockedAsync;
-            underlyingConn.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
+            subscribedConn.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
+            subscribedConn.ConnectionBlockedAsync -= OnConnectionBlockedAsync;
+            subscribedConn.ConnectionUnblockedAsync -= OnConnectionUnblockedAsync;
+            subscribedConn.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
+            _subscribedUnderlyingConnection = null;
         }
 
         await CloseChannelAsync(deadline).ConfigureAwait(false);
