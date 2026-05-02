@@ -170,6 +170,24 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **Connection-event subscriptions captured at subscribe time.** `RabbitMqConsumerHost` now captures the `IConnection` reference when subscribing to `ConnectionShutdownAsync` / `ConnectionBlockedAsync` / `ConnectionUnblockedAsync` / `ConsumerTagChangeAfterRecoveryAsync`, and unsubscribes against the captured reference. Pre-v7.x the unsubscribe re-fetched via the parent `Connection`, which could return `null` if the parent's dispose ran first, leaking handlers on the original `IConnection`.
 - **Internal log/`Volatile.Read` alignment.** `Connection.IsConnected` now reads `_connection` via `Volatile.Read`, matching the rest of the class. `Connection.DisposeAsync` now logs teardown failures at `Warning` (was `Debug`), matching `Producer.DisposeAsync` and `RabbitMqConsumerHost.DisposeAsync`.
 
+### Bus, dispatcher, and request-reply correctness
+
+**Bug fixes**
+
+- **Unresolved message types no longer drive retry loops.** `MessageDispatcher` previously returned `Success=false` when the inbound type was not in the registry, causing the consumer host to nack-with-requeue → exhaust the retry budget → land in the error queue. Unresolved types are terminal — retrying never resolves them. They now route via the existing not-handled path: dead-letter when `DeadLetterUnhandledMessages` is enabled, otherwise ack-and-drop.
+- **Request-reply state-machine race.** The `_inFlightReplies` counter could underflow when concurrent or duplicate replies arrived after a request closed, causing the close action to fire spuriously or leak. The state machine has been redesigned around a single internal lock; the underflow is structurally impossible.
+- **Send-time cancellation distinguishable from timeout.** When the request-reply send pipeline cancels before the request reaches the broker, callers now receive `RequestSendCancelledException` immediately rather than waiting the full timeout. Inherits from `OperationCanceledException` so existing `catch (OperationCanceledException)` handlers continue to work.
+- **Bus stops disposing transport singletons.** `Bus.DisposeAsync` and `Bus.StopConsumingCoreAsync` no longer call `IConsumer.DisposeAsync` / `IProducer.DisposeAsync`. The DI container owns those singletons and disposes them on host shutdown; the previous double-dispose path was harmless but architecturally wrong.
+- **Bus lifecycle cancellation hardened.** `Bus.StopConsumingCoreAsync` now propagates cancellation cleanly without mutating lifecycle state under partial-acquisition.
+- **Routing-slip validation.** `IBus.RouteAsync` and `BuildRoutingSlip` now throw `ArgumentException` for null, empty/whitespace, or comma-containing destinations. Pre-v7.x these inputs silently corrupted the routing slip or demoted the route to a single-destination send.
+- **Internal hygiene.** `Bus._lifecycleSemaphore` no longer disposed (mirrors Connection pattern); `Bus.CreateStream<T>` validates endpoint; `QueueConfiguration.QueueMappings` caches the wrapper instead of allocating per access; `SendMessagePipeline` lifetime validation now covers middleware registered directly via DI.
+
+**Behaviour changes**
+
+- `IBus.RouteAsync(destinations: ["", "queue-2"])` previously routed silently (or corrupted the slip); now throws `ArgumentException`. Operators relying on the old lenient behaviour should validate destinations at the call site.
+- Request-reply callers can now catch `RequestSendCancelledException` to react specifically to send-layer cancellation. Existing `catch (OperationCanceledException)` handlers continue to catch it (the new type derives from `OperationCanceledException`).
+- `IConsumer` / `IProducer` lifetime is now solely owned by the DI container. External implementations that previously expected `Bus.DisposeAsync` to call their `DisposeAsync` should register them as singletons in DI (or verify the DI container disposes them).
+
 ### API-shape changes
 
 - **`PublishOptions`** is now a `readonly record struct` matching `SendOptions`. Concurrent `PublishAsync` callers can no longer mutate a shared instance between construction and the async read.
