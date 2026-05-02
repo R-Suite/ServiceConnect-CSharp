@@ -89,6 +89,15 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             // caller's token did not. The reply will never arrive, so fail fast with the
             // typed exception instead of waiting on the TCS until the timeout deadline.
             _pendingRequests.TryRemove(messageId, out _);
+            // The registration callback may have already (or will momentarily) fault the TCS
+            // with RequestTimeoutException. Since we're throwing the typed cancel exception
+            // now and never awaiting tcs.Task, attach a fault observer to prevent the
+            // unawaited faulted task from triggering TaskScheduler.UnobservedTaskException
+            // at finalization.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw new RequestSendCancelledException(messageId,
                 $"Request {messageId} send pipeline was cancelled before delivery.",
                 linkedCts.Token);
@@ -215,6 +224,15 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             // which would otherwise hand the caller an empty list and obscure the
             // transport-layer failure.
             _pendingRequests.TryRemove(messageId, out _);
+            // The registration callback may have already (or will momentarily) fault the TCS
+            // with RequestTimeoutException. Since we're throwing the typed cancel exception
+            // now and never awaiting tcs.Task, attach a fault observer to prevent the
+            // unawaited faulted task from triggering TaskScheduler.UnobservedTaskException
+            // at finalization.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw new RequestSendCancelledException(messageId,
                 $"Request {messageId} send pipeline was cancelled before delivery.",
                 linkedCts.Token);
@@ -258,7 +276,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         var messageId = Guid.NewGuid();
         var expectedCount = options.ExpectedReplyCount ?? -1;
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var publishCompletedSuccessfully = 0;
+        var sendCompleted = 0;
 
         var state = new RequestState(tcs, expectedCount, typeof(TReply), reply => onReply((TReply)reply));
         _pendingRequests[messageId] = state;
@@ -278,7 +296,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     return;
                 }
 
-                if (Volatile.Read(ref publishCompletedSuccessfully) == 0 && !state.HasAcceptedReplies)
+                if (Volatile.Read(ref sendCompleted) == 0 && !state.HasAcceptedReplies)
                 {
                     tcs.TrySetException(new RequestTimeoutException(messageId, TimeSpan.FromMilliseconds(options.Timeout)));
                     return;
@@ -311,20 +329,28 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 Operation = SendOperation.Request,
             };
             await _sendPipeline.ExecutePublishMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
-            Interlocked.Exchange(ref publishCompletedSuccessfully, 1);
+            Interlocked.Exchange(ref sendCompleted, 1);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _pendingRequests.TryRemove(messageId, out _);
             throw;
         }
-        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref publishCompletedSuccessfully) == 0)
+        catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
         {
-            // Publish pipeline was cancelled by the timeout before delivery; reuse the
-            // existing publishCompletedSuccessfully flag (it doubles as the sendCompleted
-            // signal) and surface the typed exception so the caller sees a fail-fast
-            // outcome instead of the timeout-shaped completion of the reply TCS.
+            // Publish pipeline was cancelled by the timeout before delivery; surface the
+            // typed exception so the caller sees a fail-fast outcome instead of the
+            // timeout-shaped completion of the reply TCS.
             _pendingRequests.TryRemove(messageId, out _);
+            // The registration callback may have already (or will momentarily) fault the TCS
+            // with RequestTimeoutException. Since we're throwing the typed cancel exception
+            // now and never awaiting tcs.Task, attach a fault observer to prevent the
+            // unawaited faulted task from triggering TaskScheduler.UnobservedTaskException
+            // at finalization.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw new RequestSendCancelledException(messageId,
                 $"Publish {messageId} send pipeline was cancelled before delivery.",
                 linkedCts.Token);
