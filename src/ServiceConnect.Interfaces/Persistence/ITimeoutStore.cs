@@ -4,10 +4,17 @@ namespace ServiceConnect.Interfaces;
 /// Persists scheduled timeout messages for later dispatch.
 /// </summary>
 /// <remarks>
-/// The remove and release operations accept an optional lock owner. When supplied,
-/// the operation is lease-checked: implementations throw
-/// <see cref="Exceptions.ConcurrencyException"/> when the lease has been reassigned
-/// to another worker. When the lock owner is null, the operation is unconditional.
+/// Lease semantics — consistent across all <see cref="ITimeoutStore"/> implementations:
+/// <list type="bullet">
+/// <item>Remove and release operations accept an optional lock owner. When supplied,
+/// the operation is lease-checked.</item>
+/// <item>A worker passing a non-null <c>lockOwner</c> must hold an unexpired lease for
+/// the row. An expired-but-not-yet-reaped lease is treated as already invalidated.</item>
+/// <item>A reaper (or the natural lease-expiry path) wins any race with a worker; the
+/// worker observes <see cref="Exceptions.ConcurrencyException"/>.</item>
+/// <item>When the lock owner is null, the operation is unconditional and never throws
+/// <see cref="Exceptions.ConcurrencyException"/>.</item>
+/// </list>
 /// </remarks>
 public interface ITimeoutStore
 {
