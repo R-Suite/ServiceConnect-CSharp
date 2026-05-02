@@ -163,6 +163,13 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **`IBus.IsConsuming` semantic expansion.** Now returns `false` not just before `StartConsumingAsync` / after `StopConsumingAsync`, but ALSO when the broker has cancelled the consumer. Callers using `IsConsuming` for purposes other than health-checking should be aware of this expanded semantic.
 - **Retry/error publishes now use `mandatory:true`.** Operators who relied on the pre-v7.x silent-drop behaviour to mask missing topology will see new `PublishException` Error logs; the topology gap should be fixed.
 
+### Connection-lifecycle hygiene
+
+- **Parallel host disposal.** `Consumer.DisposeAsync` now disposes its hosts in parallel rather than sequentially. Aggregate dispose latency drops from `O(N × gracefulShutdownTimeout)` to `O(gracefulShutdownTimeout)` when `ConsumerCount > 1`.
+- **`Connection.DisposeAsync` no longer disposes the internal semaphore.** A concurrent `ConnectAsync` whose acquisition raced past the dispose-time semaphore-release window could observe `ObjectDisposedException` from its own `finally { Release(); }`. The semaphore is now left to GC, mirroring `ProducerConnection`. No public-API change.
+- **Connection-event subscriptions captured at subscribe time.** `RabbitMqConsumerHost` now captures the `IConnection` reference when subscribing to `ConnectionShutdownAsync` / `ConnectionBlockedAsync` / `ConnectionUnblockedAsync` / `ConsumerTagChangeAfterRecoveryAsync`, and unsubscribes against the captured reference. Pre-v7.x the unsubscribe re-fetched via the parent `Connection`, which could return `null` if the parent's dispose ran first, leaking handlers on the original `IConnection`.
+- **Internal log/`Volatile.Read` alignment.** `Connection.IsConnected` now reads `_connection` via `Volatile.Read`, matching the rest of the class. `Connection.DisposeAsync` now logs teardown failures at `Warning` (was `Debug`), matching `Producer.DisposeAsync` and `RabbitMqConsumerHost.DisposeAsync`.
+
 ### API-shape changes
 
 - **`PublishOptions`** is now a `readonly record struct` matching `SendOptions`. Concurrent `PublishAsync` callers can no longer mutate a shared instance between construction and the async read.
