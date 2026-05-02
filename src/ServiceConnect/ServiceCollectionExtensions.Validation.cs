@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect;
@@ -23,6 +24,24 @@ public static partial class ServiceCollectionExtensions
             {
                 throw new InvalidOperationException(
                     $"Send message middleware '{middlewareType.FullName}' must be registered as a singleton.");
+            }
+        }
+
+        // Also catch middleware registered directly against the ISendMessageMiddleware interface
+        // (e.g., services.AddTransient<ISendMessageMiddleware, MyMiddleware>()). The pipeline caches
+        // instances at first use, so a non-singleton registration would be silently promoted to
+        // singleton lifetime, risking cross-request state leaks.
+        var directDescriptors = services
+            .Where(d => d.ServiceType == typeof(ISendMessageMiddleware))
+            .ToList();
+
+        foreach (var descriptor in directDescriptors)
+        {
+            if (descriptor.Lifetime != ServiceLifetime.Singleton)
+            {
+                var implName = descriptor.ImplementationType?.FullName ?? "<unknown>";
+                throw new InvalidOperationException(
+                    $"Send message middleware '{implName}' must be registered as a singleton.");
             }
         }
     }

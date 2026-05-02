@@ -385,6 +385,25 @@ public class ServiceCollectionExtensionsTests
         Assert.Contains(nameof(TestSendMiddleware), exception.Message);
         Assert.Contains("singleton", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void AddServiceConnect_ThrowsWhenDirectDiSendMiddlewareIsTransient()
+    {
+        // Middleware registered directly via DI against the ISendMessageMiddleware interface
+        // (rather than through AddSendMessageMiddleware<>) must also be rejected when non-singleton.
+        // The pipeline caches instances at first use, so transient registrations would be silently
+        // promoted to singleton lifetime, risking cross-request state leaks.
+        var services = CreateServices();
+        services.AddTransient<ISendMessageMiddleware, TestSendMiddleware>();
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => b
+                .ConfigureQueues(q => q.QueueName = "test")
+                .ConfigureBus(c => c.ScanForMessageHandlers = false)));
+
+        Assert.Contains(nameof(TestSendMiddleware), exception.Message);
+        Assert.Contains("singleton", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public sealed class H5Msg : Message
