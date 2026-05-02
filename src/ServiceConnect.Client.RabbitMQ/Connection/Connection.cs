@@ -17,6 +17,10 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private volatile bool _disposed;
     private readonly TimeSpan _disposeLockTimeout = TimeSpan.FromSeconds(30);
 
+    // Test seam: when set, replaces the call to ConnectionFactory.CreateConnectionAsync
+    // with the supplied factory. Mirrors ProducerConnection.CreateConnectionForTests.
+    internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests;
+
     private readonly string[] _hosts = transportSettings.Host.Split(',');
 
     private async Task ConnectAsync(CancellationToken cancellationToken)
@@ -45,7 +49,8 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     {
         logger.LogDebug("Creating connection to queue {QueueName}", queueName);
         var connectionFactory = BuildConnectionFactory();
-        _connection = await connectionFactory.CreateConnectionAsync(_hosts, queueName, cancellationToken).ConfigureAwait(false);
+        var connector = CreateConnectionForTests ?? ((f, h, n, ct) => f.CreateConnectionAsync(h, n, ct));
+        _connection = await connector(connectionFactory, _hosts, queueName, cancellationToken).ConfigureAwait(false);
     }
 
     private ConnectionFactory BuildConnectionFactory() =>
@@ -143,7 +148,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Error closing connection during async dispose");
+                logger.LogWarning(ex, "Error closing connection during async dispose");
             }
         }
 
