@@ -548,7 +548,12 @@ public sealed class Bus : IBus
 
         await _sendPipeline.DisposeAsync().ConfigureAwait(false);
 
-        _lifecycleSemaphore.Dispose();
+        // _lifecycleSemaphore is intentionally NOT Disposed:
+        // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and we never call
+        // AvailableWaitHandle, so disposal is a functional no-op. A concurrent caller's Release()
+        // on a disposed semaphore would throw ObjectDisposedException out of the unwind path,
+        // which we cannot prevent without holding GC references to every caller. Mirrors the
+        // Connection / ProducerConnection / Producer pattern (Phases 4 + 6).
     }
 
     private void ThrowIfDisposed()
