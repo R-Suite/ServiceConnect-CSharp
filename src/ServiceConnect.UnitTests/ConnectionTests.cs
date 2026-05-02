@@ -68,13 +68,18 @@ public class ConnectionTests
     }
 
     [Fact]
-    public async Task DisposeAsync_DisposesConnectionLockSemaphore()
+    public async Task DisposeAsync_DoesNotDisposeConnectionLockSemaphore()
     {
+        // The connection-lock semaphore is intentionally NOT disposed (mirrors ProducerConnection)
+        // so a concurrent ConnectAsync whose Release() races with DisposeAsync's lock-timeout
+        // path doesn't observe ObjectDisposedException. The semaphore is GC'd with the Connection.
         var connection = CreateConnection();
 
         await connection.DisposeAsync();
 
         var semaphore = GetField<SemaphoreSlim>(connection, "_connectionLock");
-        Assert.Throws<ObjectDisposedException>(() => semaphore.Wait(0));
+        // Wait(0) succeeds (returns true) because the semaphore is alive and immediately available.
+        Assert.True(semaphore.Wait(0));
+        semaphore.Release();
     }
 }

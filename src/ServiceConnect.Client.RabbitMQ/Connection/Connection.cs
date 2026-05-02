@@ -152,7 +152,13 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
             }
         }
 
-        _connectionLock.Dispose();
+        // _connectionLock is intentionally NOT Disposed:
+        // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and
+        // we never call AvailableWaitHandle, so disposal is a functional no-op. A
+        // concurrent ConnectAsync's `finally { Release(); }` running on a disposed
+        // semaphore would throw ObjectDisposedException out of the unwind path,
+        // which we cannot prevent without holding GC references to every caller.
+        // The field is GC'd with this Connection instance.
     }
 
 }
