@@ -19,11 +19,14 @@ namespace ServiceConnect.UnitTests;
 /// did not internally lock. Post-refactor TryHandleReply holds the state lock for the
 /// whole reply lifecycle (deserialize, OnReply, completion), so concurrent replies
 /// serialize through the callback.
+///
+/// Uses <c>PublishRequestAsync</c> because its <c>onReply</c> delegate is supplied
+/// directly by the caller, making re-entrancy observable at the user-callback boundary.
 /// </summary>
 public sealed class RequestReplyManagerCallbackReentrancyTests
 {
     [Fact]
-    public async Task SendRequestMultiAsync_ConcurrentReplies_OnReplyNotInvokedConcurrently()
+    public async Task PublishRequestAsync_ConcurrentReplies_OnReplyNotInvokedConcurrently()
     {
         const int expectedReplyCount = 5;
 

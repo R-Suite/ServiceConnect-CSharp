@@ -12,13 +12,15 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Pins down the post-refactor invariants for the RequestState machine. Pre-refactor,
-/// RequestState carried a separate _inFlightReplies counter that EndReply decremented
-/// outside the close-action ordering — under pathological scheduling the counter could
-/// underflow and a late close-action could fire after Close had already returned.
+/// Regression-guards: duplicate replies are rejected at the manager boundary, and
+/// replies arriving after timeout-driven Close are rejected. C10's
+/// <c>_inFlightReplies</c> underflow is structurally eliminated by removing the
+/// counter; these tests guard the user-visible invariant (no extra OnReply, no
+/// exception) rather than the internal counter.
 ///
-/// Post-refactor the counter is gone and Close + reply handling share a single lock,
-/// so these scenarios are structurally impossible. The tests guard against regression.
+/// Both facts exercise the <c>_pendingRequests.TryGetValue</c> early-return in
+/// <c>TryProcessReply</c>: once a request completes or times out the entry is removed,
+/// so late replies exit before reaching any per-request state.
 /// </summary>
 public sealed class RequestReplyManagerInFlightCounterTests
 {
@@ -82,11 +84,13 @@ public sealed class RequestReplyManagerInFlightCounterTests
     [Fact]
     public async Task ProcessReply_AfterCloseFromTimeout_DoesNotInvokeOnReply()
     {
-        // The timeout's Close() callback wins the race against a late reply. Once Close
-        // has flipped _closed = true, TryHandleReply must return false without calling
-        // OnReply — even if that reply was already deserialized and queued by the
-        // transport. Pre-refactor this was also true under the lock, but the separate
-        // _inFlightReplies counter created an underflow window after EndReply ran.
+        // The timeout's cancellation removes the request from _pendingRequests before
+        // returning. A late reply arriving after that removal hits the TryGetValue
+        // early-return in TryProcessReply and returns false without ever reaching
+        // per-request state. Post-refactor: _pendingRequests is removed during request
+        // completion, so late replies exit at the dictionary lookup. Test guards the
+        // user-visible invariant: no OnReply for replies arriving after the request
+        // completes.
         var serializer = new Mock<IMessageSerializer>();
         serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
         serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
