@@ -63,7 +63,6 @@ public class MongoDbTimeoutStoreCancelOrphanTests
         var (store, collection, _) = BuildStore();
 
         var updateManyCalls = 0;
-        var releaseUsedCancellationTokenNone = false;
         collection.Setup(c => c.UpdateManyAsync(
                 It.IsAny<FilterDefinition<TimeoutData>>(),
                 It.IsAny<UpdateDefinition<TimeoutData>>(),
@@ -75,8 +74,8 @@ public class MongoDbTimeoutStoreCancelOrphanTests
                     updateManyCalls++;
                     if (updateManyCalls == 2)
                     {
-                        // Release call should use CancellationToken.None.
-                        releaseUsedCancellationTokenNone = ct == CancellationToken.None;
+                        // Release call must use CancellationToken.None so it isn't cancelled.
+                        Assert.Equal(CancellationToken.None, ct);
                     }
                 })
             .ReturnsAsync(new UpdateResult.Acknowledged(0, 0, null));
@@ -91,7 +90,6 @@ public class MongoDbTimeoutStoreCancelOrphanTests
         await Assert.ThrowsAsync<OperationCanceledException>(() => store.GetTimeoutsBatchAsync());
 
         Assert.Equal(2, updateManyCalls); // claim + release
-        Assert.True(releaseUsedCancellationTokenNone);
     }
 
     [Fact]
