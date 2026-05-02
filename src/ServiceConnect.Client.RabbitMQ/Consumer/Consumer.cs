@@ -71,6 +71,13 @@ public sealed class Consumer : IConsumer
     public bool IsConnected => _connection?.IsConnected() ?? false;
 
     /// <summary>
+    /// Gets a value indicating whether the broker has cancelled at least one of our hosts'
+    /// consumers (queue deleted, policy expired, mirror promoted). The Bus surfaces this via
+    /// <see cref="IBus.IsConsuming"/> = false so <c>BusConsumingHealthCheck</c> reports Unhealthy.
+    /// </summary>
+    public bool IsCancelledByBroker => _clients.OfType<RabbitMqConsumerHost>().Any(c => c.IsCancelledByBroker);
+
+    /// <summary>
     /// Declares the required RabbitMQ topology and starts consuming messages for the configured queue.
     /// </summary>
     /// <param name="queueName">The queue to consume from.</param>

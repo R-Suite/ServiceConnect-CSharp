@@ -83,7 +83,12 @@ public sealed class Bus : IBus
     }
 
     /// <inheritdoc />
-    public bool IsConsuming => _consuming;
+    // IsConsuming is true only when (a) we have started consuming AND (b) the broker has not
+    // cancelled us. Broker-initiated basic.cancel (queue deleted, policy expired, mirror
+    // promoted) flips the consumer's IsCancelledByBroker flag, which short-circuits this
+    // getter to false so BusConsumingHealthCheck reports Unhealthy without needing its own
+    // broker-cancel logic.
+    public bool IsConsuming => _consuming && !(_consumer?.IsCancelledByBroker ?? false);
 
     /// <inheritdoc />
     public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message

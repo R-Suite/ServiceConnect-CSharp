@@ -63,4 +63,24 @@ public class BusConsumingHealthCheckTests
 
         Assert.Equal(HealthStatus.Unhealthy, result.Status);
     }
+
+    [Fact]
+    public async Task CheckHealthAsync_BusReportsConsumingFalse_DueToBrokerCancel_ReturnsUnhealthy()
+    {
+        // The broker-cancel side is exercised at Bus / Consumer level — see BusIsConsumingTests
+        // and RabbitMqConsumerHostBrokerCancelTests. From the health-check's vantage the only
+        // observable is IsConsuming = false; this test asserts the existing mapping still holds
+        // for that path so the integrated chain (host broker-cancel → Consumer.IsCancelledByBroker
+        // → Bus.IsConsuming = false → BusConsumingHealthCheck Unhealthy) is end-to-end covered.
+        _bus.SetupGet(b => b.IsConsuming).Returns(false);
+
+        var ctx = new HealthCheckContext
+        {
+            Registration = new HealthCheckRegistration("bus-consuming", _ => CreateSut(), HealthStatus.Unhealthy, null),
+        };
+        var result = await CreateSut().CheckHealthAsync(ctx);
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Contains("not consuming", result.Description, StringComparison.OrdinalIgnoreCase);
+    }
 }

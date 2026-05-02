@@ -68,6 +68,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // wait before an admitted delivery has been counted.
     private int _messagesBeingProcessed;
     private int _shutdownTimedOut;
+    // Set by OnConsumerUnregisteredAsync when the broker cancels our consumer (queue deleted,
+    // policy expired, mirror promoted). Bubbled up through Consumer.IsCancelledByBroker → Bus.IsConsuming
+    // → BusConsumingHealthCheck so operators see the bus go Unhealthy when this happens.
+    private int _consumerCancelledByBroker;
     private bool _shutdownStarted;
     private CancellationTokenSource _shutdownPublishCts = new();
     // Consumer-lifetime token: created at StartConsumingAsync, cancelled on DisposeAsync.
@@ -232,6 +236,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         cancellationToken.ThrowIfCancellationRequested();
         await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, null, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// True once the broker has issued a basic.cancel against this host's consumer
+    /// (queue deleted, policy expired, mirror promoted). Aggregated by <see cref="Consumer"/>
+    /// and surfaced through <see cref="IBus.IsConsuming"/> so <c>BusConsumingHealthCheck</c>
+    /// flips to Unhealthy without needing its own broker-cancel logic.
+    /// </summary>
+    internal bool IsCancelledByBroker => Volatile.Read(ref _consumerCancelledByBroker) != 0;
 
     /// <summary>
     /// Drives a delivery directly through the admission and processing pipeline.
@@ -475,8 +487,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private Task OnConsumerUnregisteredAsync(object? sender, ConsumerEventArgs args)
     {
         // Fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
+        // Set the flag *before* logging so a downstream health probe racing with the log call
+        // observes Unhealthy on the same tick the operator first sees the warning.
+        Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
         _logger.LogWarning(
-            "AMQP consumer '{ConsumerTag}' unregistered by broker (broker-initiated shutdown) on queue '{Queue}'",
+            "AMQP consumer '{ConsumerTag}' unregistered by broker (broker-initiated shutdown) on queue '{Queue}'; reporting unhealthy via BusConsumingHealthCheck",
             _consumerTag, _queueName);
         return Task.CompletedTask;
     }
