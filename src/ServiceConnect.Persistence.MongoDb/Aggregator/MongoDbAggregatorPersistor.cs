@@ -26,6 +26,12 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     // so per-process order matches the actual usage pattern.
     private long _insertSequence;
 
+    // Once the indexes are present we don't need to call createIndexes on every operation.
+    // MongoDB's createIndexes is idempotent server-side, but the round-trip is per-message
+    // on the hot path. After first success (or benign 85/86 conflict), short-circuit.
+    // Non-benign errors leave the flag at 0 so the next caller retries.
+    private int _indexed;
+
     // Mongo returns these codes when concurrent index creation detects that an index with
     // the same keys (86) or options (85) already exists. Either way the index is present,
     // so the ensure call has succeeded as far as the caller is concerned.
@@ -303,15 +309,17 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 
     /// <summary>
     /// Ensures indexes on Name and the compound (Name, DataBson.CorrelationId) exist.
-    /// Every call hits MongoDB. createIndexes is idempotent server-side: if matching
-    /// indexes already exist MongoDB returns immediately without additional work. No
-    /// in-process cache means that if an administrator drops and recreates the database
-    /// while this process is running, the next write naturally recreates the indexes.
-    /// Codes 85 (IndexOptionsConflict) and 86 (IndexKeySpecsConflict) are swallowed to
-    /// keep multi-process startup races safe.
+    /// A per-instance flag short-circuits subsequent calls after the first success or benign
+    /// conflict (codes 85/86), avoiding a MongoDB round-trip on every message operation.
+    /// Non-benign errors leave the flag unset so the next caller retries index creation.
     /// </summary>
     private async Task EnsureIndexesAsync(CancellationToken cancellationToken)
     {
+        if (Volatile.Read(ref _indexed) != 0)
+        {
+            return;
+        }
+
         try
         {
             // Single-field index on Name supports GetDataAsync, RemoveAllAsync, CountAsync
@@ -340,6 +348,8 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             // Another process / thread created the same index concurrently. Their work is ours;
             // the indexes are present regardless of which side succeeded.
         }
+
+        Volatile.Write(ref _indexed, 1);
     }
 
     /// <summary>
