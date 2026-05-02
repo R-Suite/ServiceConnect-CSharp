@@ -197,6 +197,23 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **`IQueueConfiguration`** gains **`AuditRoutingKey`** for routing audit publishes into a topic/direct exchange.
 - **`RequestOptions.Default`** returns a fresh instance per access; the previous singleton was mutable and leaked between callers.
 
+### Mongo timeout-store + lease guards
+
+**Bug fixes**
+
+- **Lease-expiry semantics restored across both persistors.** `MongoDbTimeoutStore.RemoveDispatchedTimeoutAsync` and `ReleaseDispatchedTimeoutAsync` now reject calls whose lease has expired, throwing `ConcurrencyException`. `InMemoryTimeoutStore` matches the contract exactly (cross-persistor parity). The owned-row read-back inside `GetTimeoutsBatchAsync` also re-checks the lease before returning rows.
+- **Mongo timeout-store indexes match the actual due query.** Added composite index `(Time, Locked, LockExpiresAt)` covering both branches of the OR-shaped due filter. Legacy `(Locked, Time)` index is dropped on first startup of v8 (idempotent over `IndexNotFound`).
+- **Mongo session-establishment fallback broadened.** Standalone-mongod / configuration / transient driver errors during `StartSessionAsync` no longer fail the whole poll — the persistor falls back to the unsessioned path with a Warning log.
+- **Cancellation between UpdateMany and FindAsync no longer orphans leases.** A best-effort lease release runs in a `catch (OperationCanceledException)` block before propagating the cancellation. Recovery is immediate; reaper / lease-expiry remains the ultimate fallback.
+- **Candidate sort tie-breaker.** Timeouts with identical `Time` are now ordered by `Id` ascending, eliminating starvation under heavy bursts.
+- **InMemory parity tightening.** `InsertTimeoutAsync` rejects `Guid.Empty` Id (parity with Mongo); a `Debug.Assert` documents the SortedSet-removal invariant; an in-place-mutation comment documents the under-lock single-source-of-truth design.
+
+**Behaviour changes**
+
+- **Mongo index migration on first startup.** Existing v7 deployments upgrading to v8 will issue `DropOneAsync("Locked_1_Time_1")` once on first startup. Idempotent over `IndexNotFound`.
+- **`InMemoryPersistenceOptions` (breaking).** `InMemoryTimeoutStore`'s ctor changes to take `InMemoryPersistenceOptions` (and an internal `(options, state, timeProvider)` overload). Callers using `new InMemoryTimeoutStore("", "", clock)` must pass `new InMemoryPersistenceOptions()` instead. `UseInMemoryPersistence` accepts an optional `Action<InMemoryPersistenceOptions>? configure = null` delegate (mirrors `UseMongoDbPersistence`). The DI registration honours the existing default lease duration (`TimeSpan.FromMinutes(5)`) so most users see no change.
+- **Expired-lease tolerance removed.** Workers holding a stale lease that previously got away with `Remove`/`Release` now observe `ConcurrencyException`. This matches the documented contract; callers were silently incorrect under v7.
+
 ## Source and tags
 
 Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.
