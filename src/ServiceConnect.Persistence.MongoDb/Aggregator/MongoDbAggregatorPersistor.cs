@@ -57,6 +57,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
+        ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _timeProvider = timeProvider ?? TimeProvider.System;

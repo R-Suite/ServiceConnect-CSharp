@@ -48,6 +48,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
     public MongoDbProcessManagerFinder(IMongoClient mongoClient, MongoDbPersistenceOptions options, ILogger<MongoDbProcessManagerFinder> logger, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
+        ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
 
         try
