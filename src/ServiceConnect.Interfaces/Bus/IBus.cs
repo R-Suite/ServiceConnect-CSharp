@@ -74,7 +74,12 @@ public interface IBus : IAsyncDisposable
     Task StopConsumingAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets whether the bus is currently consuming messages.
+    /// Gets whether the bus is currently consuming messages. Returns <see langword="true"/> only
+    /// when <see cref="StartConsumingAsync"/> has completed AND the broker has not cancelled
+    /// the consumer. Broker-initiated <c>basic.cancel</c> events (queue deleted, policy expired,
+    /// mirror promoted) flip this getter to <see langword="false"/> via
+    /// <see cref="IConsumer.IsCancelledByBroker"/>; <c>BusConsumingHealthCheck</c> reports
+    /// <c>Unhealthy</c> as a result.
     /// </summary>
     bool IsConsuming { get; }
 
