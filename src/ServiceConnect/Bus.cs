@@ -669,9 +669,10 @@ public sealed class Bus : IBus
             return string.Empty;
         }
 
-        // RouteAsync's caller-validation already screened these, but BuildRoutingSlip is
-        // also reachable from internal paths (RoutingSlipProcessor); revalidate for defence
-        // in depth. The comma split is non-recoverable on the receiving side.
+        // RouteAsync's caller-validation already screened these. Today RouteAsync is the only
+        // caller of BuildRoutingSlip, but the slip's comma-separated wire format is non-recoverable
+        // on the receiving side; revalidate here as defence in depth so a future internal caller
+        // can't accidentally bypass the check.
         for (int i = 0; i < destinations.Count; i++)
         {
             if (string.IsNullOrWhiteSpace(destinations[i]))
