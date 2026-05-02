@@ -30,6 +30,10 @@ public sealed class QueueConfiguration : IQueueConfiguration
     // for callers while the set gives O(1) duplicate checks.
     private readonly ConcurrentDictionary<string, QueueMappingEntry> _queueMappings = new(StringComparer.Ordinal);
 
+    // Cached wrapper so repeated reads of QueueMappings don't allocate a new object each time.
+    // Nulled out after every mutation so the next read gets a fresh wrapper over the updated dictionary.
+    private IReadOnlyDictionary<string, IReadOnlyList<string>>? _mappingsView;
+
     private static string GetMappingKey(Type messageType) =>
         messageType.AssemblyQualifiedName
             ?? throw new ArgumentException(
@@ -38,7 +42,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
 
     /// <inheritdoc />
     public IReadOnlyDictionary<string, IReadOnlyList<string>> QueueMappings =>
-        new QueueMappingsView(_queueMappings);
+        _mappingsView ??= new QueueMappingsView(_queueMappings);
 
     /// <inheritdoc />
     public void AddQueueMapping(Type messageType, string queue)
@@ -54,6 +58,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
             key,
             _ => QueueMappingEntry.Create(queue),
             (_, existing) => existing.Contains(queue) ? existing : existing.Add(queue));
+        _mappingsView = null;
     }
 
     /// <inheritdoc />
@@ -86,6 +91,7 @@ public sealed class QueueConfiguration : IQueueConfiguration
                 }
                 return updated;
             });
+        _mappingsView = null;
     }
 
     /// <inheritdoc />
