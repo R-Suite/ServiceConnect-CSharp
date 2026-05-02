@@ -145,7 +145,7 @@ Publishes a request to every subscriber of the request type and invokes `onReply
 - `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
 - `OperationCanceledException` — the caller's cancellation token fired.
 
-**Remarks.** The callback may be invoked concurrently; keep it thread-safe and short-lived. The task completes when the expected reply count is reached or the timeout elapses.
+**Remarks.** The callback is invoked one-at-a-time per request (serialized under an internal lock). Keep it short-lived and non-blocking — heavy work or further bus calls from inside the callback can stall reply processing for the same request. The task completes when the expected reply count is reached or the timeout elapses.
 
 ---
 
