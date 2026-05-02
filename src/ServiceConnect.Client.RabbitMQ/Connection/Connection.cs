@@ -57,7 +57,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// <returns><see langword="true"/> when the connection is open; otherwise, <see langword="false"/>.</returns>
     public bool IsConnected()
     {
-        return _connection?.IsOpen ?? false;
+        return Volatile.Read(ref _connection)?.IsOpen ?? false;
     }
 
     /// <summary>
