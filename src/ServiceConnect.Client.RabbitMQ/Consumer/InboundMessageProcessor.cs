@@ -50,8 +50,8 @@ internal sealed class InboundMessageProcessor(
     {
         ConsumeEventResult result;
         // Pre-size to incoming header count plus 3 consumer-added entries to avoid rehashes.
-        // Ordinal comparer is correct: AMQP keys are case-sensitive, and all downstream readers
-        // (MessageDispatcher, StreamProcessor, ConsumeContextPool, telemetry) use HeaderKeys.X constants. (2026-05-02)
+        // Ordinal comparer matches AMQP's case-sensitive wire contract: a sender that writes
+        // "X-Trace-Id" reads it back exactly. User filters / middleware look up by string literal.
         var sourceHeaders = args.BasicProperties.Headers;
 
         var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3, StringComparer.Ordinal);
