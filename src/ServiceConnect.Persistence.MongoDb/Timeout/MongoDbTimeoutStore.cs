@@ -13,6 +13,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 {
     private readonly IMongoClient _mongoClient;
     private readonly IMongoDatabase _mongoDatabase;
+    private readonly ILogger<MongoDbTimeoutStore> _logger;
     private readonly TimeProvider _timeProvider;
     private readonly int _batchSize;
     private readonly TimeSpan _lockLeaseDuration;
@@ -43,6 +44,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         ArgumentNullException.ThrowIfNull(mongoClient);
         ArgumentNullException.ThrowIfNull(logger);
         _mongoClient = mongoClient;
+        _logger = logger;
         _timeProvider = timeProvider ?? TimeProvider.System;
         if (options.TimeoutBatchSize <= 0)
         {
@@ -125,6 +127,13 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             {
                 // Standalone mongods / older servers don't support sessions; fall back to
                 // the unsessioned path — still better than failing the whole poll.
+            }
+            catch (MongoException ex)
+            {
+                // Configuration/transient driver errors during session establishment shouldn't
+                // fail the whole poll — fall back to the unsessioned path. The fallback is
+                // less safe under primary failover (read-after-write lag) but better than zero.
+                _logger.LogWarning(ex, "MongoDB session establishment failed; falling back to unsessioned poll.");
             }
 
             var sessionId = Guid.NewGuid();
