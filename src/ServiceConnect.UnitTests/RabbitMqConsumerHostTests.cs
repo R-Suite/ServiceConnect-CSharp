@@ -613,7 +613,7 @@ public class RabbitMqConsumerHostTests
         await deliveryTask;
 
         channel.Verify(c => c.BasicPublishAsync(
-            string.Empty, "q.Retries", false,
+            string.Empty, "q.Retries", true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -819,7 +819,7 @@ public class RabbitMqConsumerHostTests
         publishChannel.Setup(c => c.BasicPublishAsync(
                 string.Empty,
                 "q.Retries",
-                false,
+                true,
                 It.IsAny<BasicProperties>(),
                 It.IsAny<ReadOnlyMemory<byte>>(),
                 It.IsAny<CancellationToken>()))
@@ -1073,7 +1073,7 @@ public class RabbitMqConsumerHostTests
         Assert.False(handlerInvoked, "Consumer event handler must not be called for oversized messages.");
         // Error-exchange publishes flow through the dedicated publish channel.
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
@@ -1132,7 +1132,7 @@ public class RabbitMqConsumerHostTests
 
         Assert.False(handlerInvoked, "Handler must not be invoked when header count exceeds limit.");
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
@@ -1165,7 +1165,7 @@ public class RabbitMqConsumerHostTests
 
         Assert.False(handlerInvoked, "Handler must not be invoked when a header value exceeds size limit.");
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
@@ -1198,7 +1198,7 @@ public class RabbitMqConsumerHostTests
 
         Assert.False(handlerInvoked);
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
@@ -1261,7 +1261,7 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
 
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
         // Audit publish still runs — backward-compat invariant.
@@ -1299,7 +1299,7 @@ public class RabbitMqConsumerHostTests
         // Terminal-failure publishes flow through the dedicated publish channel to
         // the error exchange — no retry queue involvement.
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         // The original delivery is acked once its terminal publish is confirmed.
@@ -1334,7 +1334,7 @@ public class RabbitMqConsumerHostTests
         await DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
 
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
@@ -1376,11 +1376,11 @@ public class RabbitMqConsumerHostTests
         Assert.False(handlerInvoked, "Handler must not be invoked when TypeName value is null.");
         // Must route to error (terminal rejection), NOT to retry queue.
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         publishChannel.Verify(c => c.BasicPublishAsync(
-            string.Empty, "q.Retries", false,
+            string.Empty, "q.Retries", true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
@@ -1414,7 +1414,7 @@ public class RabbitMqConsumerHostTests
 
         Assert.False(handlerInvoked, "Handler must not be invoked when FullTypeName value is null.");
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "err", string.Empty, false,
+            "err", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
