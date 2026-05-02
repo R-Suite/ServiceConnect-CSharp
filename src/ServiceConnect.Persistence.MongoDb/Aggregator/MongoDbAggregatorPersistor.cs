@@ -202,14 +202,25 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             // collection scan after the first match.
             var result = await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
             // IsAcknowledged is false under w:0 — we can't detect no-op then, so don't throw.
-            // When acknowledged, DeletedCount==0 means the row wasn't there: either a concurrent
-            // removal won the race or the caller used a mismatched (name, correlationId). Raise
-            // ConcurrencyException so the caller can distinguish the race from a structural
-            // persistence failure (which would have surfaced as MongoException).
+            // When acknowledged, DeletedCount==0 means the row wasn't there. We distinguish two
+            // sub-cases: (a) no rows at all for this Name — structural mismatch, the caller used
+            // the wrong aggregator name or all rows were already removed via RemoveAllAsync; and
+            // (b) the Name bucket has rows but none matched this CorrelationId — a concurrency
+            // race where another consumer won the delete, or the caller passed a mismatched key.
             if (result.IsAcknowledged && result.DeletedCount == 0)
             {
+                var nameOnly = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
+                var nameCount = await _collection.CountDocumentsAsync(nameOnly, cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (nameCount == 0)
+                {
+                    throw new KeyNotFoundException(
+                        $"Aggregator has no rows for Name='{name}'. Caller may have used the wrong " +
+                        $"aggregator name or the rows were already removed (RemoveAllAsync) by another path.");
+                }
                 throw new ConcurrencyException(
-                    $"Aggregator row not found: Name='{name}', CorrelationId='{correlationId}'. Row was concurrently removed or caller passed a mismatched key.");
+                    $"Aggregator row not found: Name='{name}', CorrelationId='{correlationId}'. " +
+                    $"{nameCount} row(s) exist for this Name but none with this CorrelationId — " +
+                    $"row was concurrently removed or caller passed a mismatched key.");
             }
         }
         catch (BsonException ex)
