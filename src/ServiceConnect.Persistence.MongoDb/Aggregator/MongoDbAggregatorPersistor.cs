@@ -67,6 +67,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             var database = mongoClient.GetDatabase(options.DatabaseName);
             _collection = database.GetCollection<AggregatorDocument>(collectionName);
         }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException("Failed to connect to MongoDB for aggregator persistence.", ex);
+        }
         catch (MongoException ex)
         {
             throw new PersistenceException("Failed to connect to MongoDB for aggregator persistence.", ex);
@@ -96,6 +100,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 Version = 1,
                 InsertedAtTicks = _timeProvider.GetUtcNow().UtcTicks,
             }, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to insert aggregator data for '{name}'.", ex);
         }
         catch (MongoException ex)
         {
@@ -161,6 +169,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 
             return new AggregatorSnapshot(messages, ids, unresolved);
         }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to get aggregator data for '{name}'.", ex);
+        }
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to get aggregator data for '{name}'.", ex);
@@ -191,6 +203,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                     $"Aggregator row not found: Name='{name}', CorrelationId='{correlationId}'. Row was concurrently removed or caller passed a mismatched key.");
             }
         }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to remove aggregator data for '{name}' with correlationId '{correlationId}'.", ex);
+        }
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to remove aggregator data for '{name}' with correlationId '{correlationId}'.", ex);
@@ -205,6 +221,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
+        }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to remove all aggregator data for '{name}'.", ex);
         }
         catch (MongoException ex)
         {
@@ -231,6 +251,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 Builders<AggregatorDocument>.Filter.In(x => x.Id, snapshot.ResolvedIds));
             await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
         }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to remove snapshot aggregator data for '{name}'.", ex);
+        }
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to remove snapshot aggregator data for '{name}'.", ex);
@@ -246,6 +270,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             var count = await _collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken).ConfigureAwait(false);
             return count > int.MaxValue ? int.MaxValue : (int)count;
+        }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to count aggregator data for '{name}'.", ex);
         }
         catch (MongoException ex)
         {

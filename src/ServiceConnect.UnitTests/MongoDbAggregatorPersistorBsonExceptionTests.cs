@@ -3,6 +3,7 @@ using MongoDB.Bson;
 using MongoDB.Driver;
 using Moq;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
 
@@ -89,6 +90,125 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
         Assert.Single(snapshot.ResolvedMessages);
         var resolved = Assert.IsType<CorruptTarget>(snapshot.ResolvedMessages[0]);
         Assert.Equal("ok", resolved.Body);
+    }
+
+    // ── M31: BsonException must be wrapped in PersistenceException ─────────────
+
+    [Fact]
+    public async Task InsertDataAsync_BsonSerializationException_WrappedInPersistenceException()
+    {
+        var (persistor, mockCollection, _) = CreateMockedPersistor();
+
+        mockCollection
+            .Setup(c => c.InsertOneAsync(
+                It.IsAny<MongoDbAggregatorPersistor.AggregatorDocument>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BsonSerializationException("bson boom"));
+
+        var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
+            persistor.InsertDataAsync(new { Foo = "bar" }, "test-name"));
+
+        Assert.IsAssignableFrom<BsonException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_BsonSerializationException_WrappedInPersistenceException()
+    {
+        var (persistor, mockCollection, _) = CreateMockedPersistor();
+
+        // FindAsync is called by the Find(...) extension inside GetSnapshotAsync.
+        mockCollection
+            .Setup(c => c.FindAsync(
+                It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<FindOptions<MongoDbAggregatorPersistor.AggregatorDocument, MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BsonSerializationException("bson boom"));
+
+        var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
+            persistor.GetSnapshotAsync("test-name"));
+
+        Assert.IsAssignableFrom<BsonException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task RemoveDataAsync_BsonSerializationException_WrappedInPersistenceException()
+    {
+        var (persistor, mockCollection, _) = CreateMockedPersistor();
+
+        mockCollection
+            .Setup(c => c.DeleteOneAsync(
+                It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BsonSerializationException("bson boom"));
+
+        var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
+            persistor.RemoveDataAsync("test-name", Guid.NewGuid()));
+
+        Assert.IsAssignableFrom<BsonException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task RemoveAllAsync_BsonSerializationException_WrappedInPersistenceException()
+    {
+        var (persistor, mockCollection, _) = CreateMockedPersistor();
+
+        mockCollection
+            .Setup(c => c.DeleteManyAsync(
+                It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BsonSerializationException("bson boom"));
+
+        var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
+            persistor.RemoveAllAsync("test-name"));
+
+        Assert.IsAssignableFrom<BsonException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task RemoveSnapshotAsync_BsonSerializationException_WrappedInPersistenceException()
+    {
+        var (persistor, mockCollection, _) = CreateMockedPersistor();
+
+        mockCollection
+            .Setup(c => c.DeleteManyAsync(
+                It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BsonSerializationException("bson boom"));
+
+        // A snapshot with at least one id so RemoveSnapshotAsync doesn't early-return.
+        var snapshot = new TestSnapshot([Guid.NewGuid()]);
+
+        var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
+            persistor.RemoveSnapshotAsync("test-name", snapshot));
+
+        Assert.IsAssignableFrom<BsonException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task CountAsync_BsonSerializationException_WrappedInPersistenceException()
+    {
+        var (persistor, mockCollection, _) = CreateMockedPersistor();
+
+        mockCollection
+            .Setup(c => c.CountDocumentsAsync(
+                It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<CountOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new BsonSerializationException("bson boom"));
+
+        var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
+            persistor.CountAsync("test-name"));
+
+        Assert.IsAssignableFrom<BsonException>(ex.InnerException);
+    }
+
+    // Minimal IAggregatorSnapshot implementation used by RemoveSnapshotAsync tests.
+    private sealed class TestSnapshot(IReadOnlyList<Guid> ids) : IAggregatorSnapshot
+    {
+        public IReadOnlyList<object> ResolvedMessages => [];
+        public IReadOnlyList<Guid> ResolvedIds => ids;
+        public int UnresolvedCount => 0;
     }
 
     private static (MongoDbAggregatorPersistor persistor,
