@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 
@@ -41,6 +42,12 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
     /// </summary>
     public Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(timeoutData);
+        if (timeoutData.Id == Guid.Empty)
+        {
+            throw new ArgumentException("TimeoutData.Id must not be Guid.Empty.", nameof(timeoutData));
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var storedTimeout = Clone(timeoutData);
@@ -94,6 +101,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 
                 if (!entry.Data.Locked || entry.Data.LockExpiresAt <= utcNow)
                 {
+                    // In-place mutation under the write lock: _state.TimeoutsById and _state.TimeoutIndex
+                    // hold the same TimeoutEntry reference, so the index is the single source of truth.
+                    // The clone in retval.DueTimeouts.Add isolates the caller from subsequent mutations.
                     entry.Data.Locked = true;
                     entry.Data.LockedBy = sessionId;
                     entry.Data.LockExpiresAt = utcNow + _lockLeaseDuration;
@@ -180,7 +190,8 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
             }
 
             _state.TimeoutsById.Remove(id);
-            _state.TimeoutIndex.Remove(entry!);
+            var removed = _state.TimeoutIndex.Remove(entry!);
+            Debug.Assert(removed, "TimeoutIndex.Remove returned false; comparer drift between insert and remove.");
         }
         finally
         {
