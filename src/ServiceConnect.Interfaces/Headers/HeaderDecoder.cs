@@ -52,21 +52,33 @@ public static class HeaderDecoder
         }
     }
 
-    private static string Render(object value)
+    private const int MaxDepth = 32;
+
+    private static string Render(object value, int depth = 0)
     {
+        // Guard against pathologically nested input (e.g. crafted AMQP x-table
+        // headers). Without the limit a 1000-level chain would StackOverflow the
+        // consumer thread; with it Decode's catch produces a graceful type-name
+        // fallback instead.
+        if (depth > MaxDepth)
+        {
+            throw new InvalidOperationException(
+                $"Header value exceeds nesting depth {MaxDepth}.");
+        }
+
         return value switch
         {
             null => "null",
             byte[] bytes => "\"" + EscapeJsonString(Encoding.UTF8.GetString(bytes)) + "\"",
             string s => "\"" + EscapeJsonString(s) + "\"",
-            IDictionary<string, object> dict => RenderDictionary(dict),
-            IDictionary nonGeneric => RenderNonGenericDictionary(nonGeneric),
-            IEnumerable seq => RenderEnumerable(seq),
+            IDictionary<string, object> dict => RenderDictionary(dict, depth + 1),
+            IDictionary nonGeneric => RenderNonGenericDictionary(nonGeneric, depth + 1),
+            IEnumerable seq => RenderEnumerable(seq, depth + 1),
             _ => RenderScalar(value),
         };
     }
 
-    private static string RenderDictionary(IDictionary<string, object> dict)
+    private static string RenderDictionary(IDictionary<string, object> dict, int depth)
     {
         var sb = new StringBuilder("{");
         bool first = true;
@@ -78,12 +90,12 @@ public static class HeaderDecoder
             }
 
             first = false;
-            sb.Append('"').Append(EscapeJsonString(kv.Key)).Append("\":").Append(Render(kv.Value));
+            sb.Append('"').Append(EscapeJsonString(kv.Key)).Append("\":").Append(Render(kv.Value, depth));
         }
         return sb.Append('}').ToString();
     }
 
-    private static string RenderNonGenericDictionary(IDictionary dict)
+    private static string RenderNonGenericDictionary(IDictionary dict, int depth)
     {
         var sb = new StringBuilder("{");
         bool first = true;
@@ -96,12 +108,12 @@ public static class HeaderDecoder
 
             first = false;
             var keyStr = kv.Key?.ToString() ?? "null";
-            sb.Append('"').Append(EscapeJsonString(keyStr)).Append("\":").Append(Render(kv.Value!));
+            sb.Append('"').Append(EscapeJsonString(keyStr)).Append("\":").Append(Render(kv.Value!, depth));
         }
         return sb.Append('}').ToString();
     }
 
-    private static string RenderEnumerable(IEnumerable seq)
+    private static string RenderEnumerable(IEnumerable seq, int depth)
     {
         var sb = new StringBuilder("[");
         bool first = true;
@@ -113,7 +125,7 @@ public static class HeaderDecoder
             }
 
             first = false;
-            sb.Append(Render(item!));
+            sb.Append(Render(item!, depth));
         }
         return sb.Append(']').ToString();
     }
