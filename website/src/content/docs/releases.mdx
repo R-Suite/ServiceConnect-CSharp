@@ -307,6 +307,67 @@ The dispatcher `await`s the handler and passes the shutdown cancellation token. 
 - **`IProcessManagerFinder.FindDataAsync<T>` MUST return a fresh `Data` reference per call.** Both built-in persistors comply (InMemory clones via `DeepClone`; Mongo via BSON deserialize). Third-party persistors that cache rows internally MUST clone before returning. The `ProcessManagerProcessor` dispatch loop's retry path depends on this so handler-mutated `Data` doesn't leak across retries.
 - **`HandlerProcessor` drops the routing slip from in-flight forward on any handler throw.** The slip data is preserved in the message envelope (the `RoutingSlip` header is not stripped); DLQ-routed messages and manual retries can still resume the chain.
 
+### Interfaces + health checks + remaining polish
+
+**v8 breaking changes**
+
+- **`IMessageHandler` / `IProcessHandler` / `IStreamHandler` signatures.** `HandleAsync` (and `IStreamHandler.ExecuteAsync`) now take the per-message context as a parameter; the `Context` (or `Stream`) property is removed. Pre-v8 the framework wrote `handler.Context = ...` before each call, which was unsafe for singleton-registered handlers (concurrent dispatches raced). Migration:
+
+```csharp
+// before (v7)
+public class OrderHandler : IMessageHandler<OrderPlaced>
+{
+    public IConsumeContext Context { get; set; } = null!;
+    public Task HandleAsync(OrderPlaced msg, CancellationToken ct = default)
+    {
+        var bus = Context.Bus;
+        // ...
+    }
+}
+
+// after (v8)
+public class OrderHandler : IMessageHandler<OrderPlaced>
+{
+    public Task HandleAsync(OrderPlaced msg, IConsumeContext context, CancellationToken ct = default)
+    {
+        var bus = context.Bus;
+        // ...
+    }
+}
+```
+
+- **`Message.CorrelationId`** is now `init`-only (was `private set`). Object-initializer syntax still works; in-class post-construction reassignment no longer compiles.
+
+- **`TimeoutData.Headers`** and **`ConsumeEventArgs.Headers`** are now `IReadOnlyDictionary<string, object>`. Producers construct via init; consumers read only. Middleware that mutates these headers post-receive must construct a new instance with the modified dictionary.
+
+**v8 contract clarifications (non-breaking)**
+
+- **`Aggregator<T>.Timeout()`** default returns `Timeout.InfiniteTimeSpan` (was `default(TimeSpan)` = `TimeSpan.Zero`). The dispatcher gates scheduling on `> TimeSpan.Zero`, so `InfiniteTimeSpan` cleanly disables the timeout-based flush. Subclasses that overrode `Timeout()` to return positive durations are unaffected.
+
+- **`ProducerConnectionHealthCheck`** returns `Healthy` for the lazy-not-yet-tried state. Once the producer attempts a publish/send and fails, it transitions to `Unhealthy`. Readiness probes no longer crash-loop pods that haven't published at startup. New API: `IProducer.HasAttemptedConnection`.
+
+- **`HeaderDecoder.Render`** throws `InvalidOperationException` for header values nested deeper than 32 levels. The existing `Decode` catch swallows the throw and falls back to `type.FullName`, so a pathological header degrades gracefully.
+
+- **`HeaderDecoder.Render`** now emits valid JSON for all input. Pre-v8 only `"` was escaped; `\`, `\n`, `\r`, `\t`, and U+0000-U+001F control characters were emitted raw, breaking downstream JSON parsing.
+
+- **`IBus.RequestTimeoutAsync`** default-interface-method now defers the `NotSupportedException` via `Task.FromException` (was synchronous throw).
+
+- **`RequestTimeoutException`** message uses invariant culture for the elapsed-milliseconds value (was current culture).
+
+**Bug fixes**
+
+- **Health checks honour `cancellationToken`** — `BusConsumingHealthCheck`, `ConsumerConnectionHealthCheck`, `ProducerConnectionHealthCheck` all call `ThrowIfCancellationRequested()` at entry.
+
+- **Health-check instances cached per registration** — `LazyInitializer.EnsureInitialized` ensures the check object is constructed once per `AddServiceConnect*` call, not per probe.
+
+**New API**
+
+- **Multi-bus health-check overloads.** `AddServiceConnectBus`, `AddServiceConnectConsumer`, `AddServiceConnectProducer` each gain:
+  - A factory overload: `(string name, Func<IServiceProvider, IBus> busFactory, ...)`.
+  - A keyed-services convenience overload: `(string name, object serviceKey, ...)` resolving via `GetRequiredKeyedService<IBus>(serviceKey)`.
+
+- **`IProducer.HasAttemptedConnection`** — `true` once a publish/send call has begun (whether or not it succeeded), `false` for a freshly-constructed producer. Used by `ProducerConnectionHealthCheck` to distinguish lazy-state from failure.
+
 ## Source and tags
 
 Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.
