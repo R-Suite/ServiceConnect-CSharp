@@ -214,6 +214,33 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **`InMemoryPersistenceOptions` (breaking).** `InMemoryTimeoutStore`'s ctor changes to take `InMemoryPersistenceOptions` (and an internal `(options, state, timeProvider)` overload). Callers using `new InMemoryTimeoutStore("", "", clock)` must pass `new InMemoryPersistenceOptions()` instead. `UseInMemoryPersistence` accepts an optional `Action<InMemoryPersistenceOptions>? configure = null` delegate (mirrors `UseMongoDbPersistence`). The DI registration honours the existing default lease duration (`TimeSpan.FromMinutes(5)`) so most users see no change.
 - **Expired-lease tolerance removed.** Workers holding a stale lease that previously got away with `Remove`/`Release` now observe `ConcurrencyException`. This matches the documented contract; callers were silently incorrect under v7.
 
+### Mongo aggregator + process-manager + serializer
+
+**Bug fixes**
+
+- **Saga property-hierarchy queries handle type coercion.** `MongoDbProcessManagerFinder.FindDataAsync` now wraps the message-side property value in `Expression.Convert` against the saga property's declared type. Previously, a message-side `int` against a saga-side `long` (or `Nullable<T>`, or interface-typed) silently missed.
+- **Guid serializer registration fails loudly on conflict.** `EnsureGuidSerializerRegistered` now throws `InvalidOperationException` if another component has registered a different Guid serializer first. Pre-fix, the registration was silently skipped while the aggregator's filter literals still used `GuidRepresentation.Standard` — causing reads to silently miss writes.
+- **Saga store rejects unacknowledged WriteConcern at startup.** `MongoDbProcessManagerFinder` now throws `InvalidOperationException` if the supplied `IMongoClient` has `WriteConcern.Unacknowledged` (w:0). Pre-fix, the persistor logged a Warning and disabled concurrency guards — silently advancing the version on missed updates and wedging sagas on the next real conflict.
+- **CorrelationId unique index pre-created at startup.** A new `IHostedService` enumerates registered saga data types via the new `IProcessManagerTypeRegistry` and pre-creates the unique CorrelationId index for each before any consumer host begins polling. Closes the cross-process startup race that admitted duplicate saga rows.
+- **Aggregator `RemoveDataAsync` distinguishes structural from concurrency errors.** `KeyNotFoundException` is now thrown when no rows exist for the given Name (caller error / cleanup race); `ConcurrencyException` retains its meaning of "rows for Name exist but not for this CorrelationId" (genuine race). The `ConcurrencyException` message includes the row count.
+- **Aggregator `InsertSequence` tie-break.** Inserts sharing an `InsertedAtTicks` value (e.g., two messages within a single `DateTime.Tick`) now sort in actual insertion order via a per-process monotonic counter. Cross-process ties remain unsolved; per-process correctness matches the actual aggregator usage pattern.
+- **Aggregator catches `BsonException` in the persistence contract.** `BsonSerializationException` (and other `BsonException` subtypes) now wrap as `PersistenceException` rather than escaping to the caller raw.
+- **Aggregator `EnsureIndexesAsync` cached after first success.** Index creation runs once per persistor instance instead of on every operation. Round-trip per message on the hot path is eliminated.
+- **Constructors null-check the logger.** Both `MongoDbAggregatorPersistor` and `MongoDbProcessManagerFinder` now throw `ArgumentNullException` on null `logger`.
+- **Cert selection callback bounds-checked.** `MongoClientFactory.ClientCertificateSelectionCallback` now falls back to the server-supplied certificate parameter when the client-cert collection is null or empty. Pre-fix it dereferenced `[0]` and threw `NullReferenceException` / `IndexOutOfRangeException`.
+- **Generic saga collection names sanitized.** Mongo collection names produced from `typeof(T).FullName` for generic saga types contained `+`, backticks, `[`, `]`, `,` — illegal in mongosh autocomplete and various Mongo tooling. v8 sanitizes these to `_`. **Migration required**: deployments with generic saga types must rename existing collections to the sanitized form before upgrading.
+- **Internal hygiene.** `MongoDbProcessManagerFinder._indexCreationSemaphore` no longer disposed (mirrors Connection / Producer / Bus pattern).
+
+**Behaviour changes**
+
+- **`WriteConcern.Unacknowledged` rejected at startup.** Existing deployments using w:0 with the saga store break loudly. Configure `mongoClient.Settings.WriteConcern` to `WriteConcern.W1` or higher.
+- **Conflicting Guid serializer registration rejected at startup.** Existing deployments with a custom Guid serializer registered before ServiceConnect break loudly. Either skip your existing registration or register `GuidRepresentation.Standard` to match.
+- **Generic saga collection names changed.** Deployments with generic saga data types had data in collection names containing `+`/backtick/`[`/`]`/`,`. v8 reads from sanitized names. **Manual migration required**: rename existing collections via `db.runCommand({ renameCollection: "old", to: "new" })`.
+
+**New surface**
+
+- `IProcessManagerTypeRegistry` (in `ServiceConnect.Interfaces`) — enumerates registered saga data types. Implemented by `ProcessManagerHandlerRegistry`. Used by Mongo's index initializer; downstream persistence providers can consume the same enumeration.
+
 ## Source and tags
 
 Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.
