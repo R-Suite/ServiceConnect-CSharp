@@ -389,6 +389,28 @@ services.AddServiceConnect(builder =>
 });
 ```
 
+## MongoDB aggregator contract
+
+The MongoDB implementation (`MongoDbAggregatorPersistor`) adds several behaviours and exception contracts beyond the base interface.
+
+### Insertion order semantics
+
+Records inserted with identical `InsertedAtTicks` values — for example, two messages processed within a single `DateTime.Tick` — are ordered by a per-process monotonic counter (`InsertSequence`). This ensures that within a single process, records appear in their actual insertion order regardless of clock resolution. Cross-process ties (two processes inserting the same tick value simultaneously) remain unresolved and produce an arbitrary but stable order.
+
+### `RemoveDataAsync` exception contract
+
+`RemoveDataAsync(name, correlationId)` distinguishes two error conditions:
+
+- **`KeyNotFoundException`** — thrown when no records exist for the given `name` at all. This indicates a caller error (the aggregator partition does not exist) or a cleanup race where the partition was already fully removed.
+- **`ConcurrencyException`** — thrown when records exist for `name` but none match the given `correlationId`. This is a genuine concurrent-removal race; the exception message includes the row count for the partition. The caller may retry or treat it as resolved depending on their semantics.
+- **`PersistenceException`** — thrown when the underlying BSON serialization layer raises a `BsonException` (for example, `BsonSerializationException` on schema drift). The original `BsonException` is wrapped as the inner exception.
+
+Custom implementations targeting a different storage engine should map their equivalent error conditions to the same exception types to maintain cross-provider behavioural consistency.
+
+### Index caching
+
+`EnsureIndexesAsync` is called on the first operation and its result cached for the lifetime of the persistor instance. Subsequent operations bypass the index-creation round-trip, eliminating per-message overhead on the hot path.
+
 ## See also
 
 - [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) — concept

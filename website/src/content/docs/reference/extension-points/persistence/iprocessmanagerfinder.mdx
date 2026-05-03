@@ -305,6 +305,35 @@ services.AddServiceConnect(builder =>
 
 When the `PaymentSaga` receives a `PaymentAuthorised` message, the dispatch pipeline calls `FindDataAsync<PaymentSagaData>` to load the correlating record, invokes the handler, and on a successful return calls `UpdateDataAsync<PaymentSagaData>` with the same wrapper. If another consumer processed a concurrent message and incremented `version` in the interim, `UpdateDataAsync<PaymentSagaData>` throws and the pipeline retries the whole handler invocation from `FindDataAsync<PaymentSagaData>` again.
 
+## MongoDB saga store contract
+
+The MongoDB implementation (`MongoDbProcessManagerFinder`) adds several requirements and behaviours beyond the base interface contract.
+
+### WriteConcern.Unacknowledged rejected
+
+If the `IMongoClient` supplied to the MongoDB provider is configured with `WriteConcern.Unacknowledged` (w:0), `MongoDbProcessManagerFinder` throws `InvalidOperationException` during startup — before any consumer host begins polling. Unacknowledged writes disable the optimistic concurrency version checks, which would silently advance the version on missed updates and wedge sagas on the next real conflict.
+
+### CorrelationId uniqueness via pre-created unique index
+
+A startup `IHostedService` pre-creates a unique index on `CorrelationId` for each saga data type registered via `AddProcessManager<TSaga>` before consumer polling starts. This closes the cross-process startup race that could admit duplicate saga rows. The index creation is idempotent — running it again on an existing index is safe.
+
+### Property-hierarchy type coercion
+
+`FindDataAsync<T>` wraps the message-side correlation property value in `Expression.Convert` against the saga property's declared type before building the filter. Without this, a message-side `int` matched against a saga-side `long`, `Nullable<long>`, or interface-typed property silently produces zero results. The conversion is applied for all property mappings registered via `IProcessManagerPropertyMapper`.
+
+### Generic saga collection-name sanitization
+
+Mongo collection names are derived from `typeof(T).FullName`. For generic saga types, `FullName` contains characters (`+`, backticks, `[`, `]`, `,`) that are illegal in mongosh autocomplete and many Mongo tooling contexts. The MongoDB provider sanitizes all of these characters to `_`.
+
+**Migration required for existing deployments with generic saga types.** If your saga data type is generic (for example, `OrderSagaData<OrderState>`), the collection name used by v7 and earlier contained these illegal characters. After upgrading, rename the existing collection to the sanitized form before the new version starts consuming:
+
+```javascript
+db.runCommand({ renameCollection: "mydb.OrderSagaData`1[[OrderState, MyAssembly]]",
+                to:               "mydb.OrderSagaData_1__OrderState__MyAssembly__" })
+```
+
+Run this during a maintenance window or blue/green cutover. The exact old and new names depend on the type's `FullName`; apply the substitution rule (`+`, `` ` ``, `[`, `]`, `,` → `_`) to derive both sides.
+
 ## See also
 
 - [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept

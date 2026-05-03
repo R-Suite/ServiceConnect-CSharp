@@ -159,6 +159,38 @@ services.AddServiceConnect(builder =>
 });
 ```
 
+## MongoDB provider contract
+
+The MongoDB provider enforces several requirements at startup. Violating them throws `InvalidOperationException` before any consumer host begins polling, so failures are loud and immediate rather than silent data corruption.
+
+### WriteConcern requirement
+
+`MongoDbProcessManagerFinder` requires the `IMongoClient` to be configured with an acknowledged write concern (`w:1` or higher). If the client's `WriteConcern` is `WriteConcern.Unacknowledged` (w:0), startup throws `InvalidOperationException`.
+
+```csharp
+// Correct — acknowledged writes (default for most connection strings)
+var client = new MongoClient("mongodb://localhost:27017");
+
+// Incorrect — will throw at startup
+var settings = MongoClientSettings.FromConnectionString("mongodb://localhost:27017");
+settings.WriteConcern = WriteConcern.Unacknowledged;
+var client = new MongoClient(settings);
+```
+
+Unacknowledged writes disable the optimistic concurrency version checks that guard against lost saga updates. Rejecting w:0 at startup prevents silent data corruption.
+
+### Guid representation requirement
+
+The MongoDB provider registers `GuidRepresentation.Standard` (RFC 4122 byte order) for all Guid serialization. If another component registers a different Guid serializer before `UseMongoDbPersistence` is called, startup throws `InvalidOperationException`.
+
+To avoid the conflict: either remove your custom Guid serializer registration, or ensure it also uses `GuidRepresentation.Standard` before ServiceConnect registers. Two registrations of `Standard` are accepted; two registrations with different representations are not.
+
+### Startup-time index pre-creation
+
+A hosted service (`IHostedService`) runs during `IHost.StartAsync` and pre-creates the unique CorrelationId index for each registered saga data type before any consumer host begins polling. This closes the cross-process startup race that could admit duplicate saga rows when multiple instances start simultaneously.
+
+The hosted service uses `IProcessManagerTypeRegistry` to enumerate all saga data types registered via `AddProcessManager<TSaga>`. No additional configuration is required; `UseMongoDbPersistence` registers both the hosted service and the registry automatically.
+
 ## See also
 
 - [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept
