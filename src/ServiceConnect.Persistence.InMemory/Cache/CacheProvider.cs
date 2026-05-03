@@ -47,12 +47,16 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
     public void Add<TKey, TValue>(TKey key, TValue value, DateTimeOffset absoluteExpiry, CacheItemPriority priority = CacheItemPriority.Normal)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        if (absoluteExpiry < _timeProvider.GetUtcNow())
+
+        // Single clock read — defensive against a non-monotonic test TimeProvider where
+        // a second GetUtcNow() call could observe an earlier time, producing a negative diff.
+        var now = _timeProvider.GetUtcNow();
+        if (absoluteExpiry < now)
         {
             throw new ArgumentOutOfRangeException(nameof(absoluteExpiry), "Absolute expiry must be in the future.");
         }
 
-        var diff = absoluteExpiry - _timeProvider.GetUtcNow();
+        var diff = absoluteExpiry - now;
         Add(key, value, diff, priority, false);
     }
 
@@ -132,6 +136,10 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
         // Snapshot keys before clearing so subscribers see a KeyRemoved event for every
         // entry that was present. Concurrent adds/removes across this window are
         // best-effort — consistent with ConcurrentDictionary.Clear's own semantics.
+        // Best-effort consistency: entries added between this snapshot and `_cache.Clear()`
+        // are dropped without firing KeyRemoved. Matches ConcurrentDictionary.Clear's own
+        // no-snapshot semantics — callers needing strict cross-thread consistency should
+        // synchronise externally.
         var removedKeys = _cache.Keys.ToList();
 
         _cache.Clear();
@@ -325,12 +333,27 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
         {
             if (!details.CanExpire(out TimeSpan tryAfter))
             {
+                // Don't re-install a timer that captures 'this' if dispose already ran.
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    return;
+                }
+
                 StartObserving(key, tryAfter);
                 return;
             }
         }
 
-        Remove(key);
+        try
+        {
+            Remove(key);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The cache was disposed while a timer callback was already in flight.
+            // Swallow — the dispose path takes ownership of cleanup; this best-effort
+            // invocation is redundant.
+        }
     }
 
     private void DisposeTimer(object key)
