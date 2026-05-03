@@ -107,6 +107,54 @@ Implementations add fields such as `int Version`, `string ETag`, or `Guid RowId`
 
 ---
 
+## IVersioned
+
+`ServiceConnect.Interfaces.IVersioned` exposes the optimistic-concurrency version counter from a wrapper without requiring a concrete-type cast:
+
+```csharp
+public interface IVersioned
+{
+    int Version { get; }
+}
+```
+
+Both `MemoryData<T>` (the InMemory provider's wrapper) and `MongoDbData<T>` (the MongoDB provider's wrapper) implement `IVersioned`. Use it to read the version number in persistence-agnostic code — for example, in a shared test helper that asserts the version was incremented.
+
+---
+
+## IIdentified (v8)
+
+`ServiceConnect.Interfaces.Persistence.IIdentified` exposes a stable storage Id from a wrapper without requiring a concrete-type cast:
+
+```csharp
+public interface IIdentified
+{
+    Guid Id { get; }
+}
+```
+
+Both `MemoryData<T>` and `MongoDbData<T>` implement `IIdentified`. The Id is a storage-level surrogate key — it is distinct from `IProcessManagerData.CorrelationId` (the business correlation key). Use `IIdentified` to extract the Id from an opaque stored row in persistence-agnostic code: logging, diagnostics, or a test helper that verifies the Id is stable across updates.
+
+**`MemoryData<T>` Id stability contract.** `InsertDataAsync` stamps a fresh `Guid.NewGuid()` Id. Every subsequent `UpdateDataAsync<T>` preserves the same Id. Each `FindDataAsync<T>` returns a deep-cloned wrapper carrying that Id, so the Id you observe via `IIdentified` is identical across successive reads. This mirrors MongoDB's `_id` contract.
+
+---
+
+## InMemory saga store isolation (v8)
+
+`InMemoryProcessManagerFinder` uses a private `SagaProvider` instance, separate from the public `ICacheProvider` / `IKeyValueStore` registered for general cache use by application code. User code consuming `IKeyValueStore` cannot read, modify, or delete saga state through that interface. This isolation matches the MongoDB persistor's behaviour, where saga state lives in dedicated collections that the user-facing API does not expose.
+
+**Multi-saga limitation.** `FindMatchingItem<T>` iterates every entry in the partitioned saga provider and the keys are bare correlation-id strings (no type prefix). A caller that runs multiple saga types through a single finder instance will see `InvalidOperationException` from `FindData` as soon as the iterator visits a row whose wrapper type does not match `T`. For multi-saga topologies, run one finder instance per saga type or use the MongoDB persistor.
+
+---
+
+## Removed constructor (v8 breaking)
+
+The `InMemoryProcessManagerFinder(string connectionString, string databaseName)` constructor was removed in v8. It accepted the same connection-string / database-name pair as the MongoDB finder but was meaningless for an in-process store — the arguments were silently ignored.
+
+Production callers register through DI (via `services.AddServiceConnect(builder => builder.UseInMemoryPersistence(...))`). Test code that previously called `new InMemoryProcessManagerFinder("conn", "db")` should use the DI registration or the internal `(ProcessManagerPredicateCache, InMemoryPersistenceState)` constructor instead.
+
+---
+
 ## Implementing
 
 ### Concurrency contract
