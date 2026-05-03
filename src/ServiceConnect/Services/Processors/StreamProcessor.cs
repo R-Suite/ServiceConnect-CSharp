@@ -17,9 +17,11 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private readonly ConcurrentDictionary<string, ActiveStreamState> _activeStreams = new(StringComparer.Ordinal);
     // Tracks admitted stream count separately so admission can be gated with Interlocked
     // without relying on ConcurrentDictionary.Count (which is accurate but does not compose
-    // atomically with insertion). The counter is incremented inside the GetOrAdd factory
-    // (meaning only the thread whose factory runs counts) and decremented on every eviction
-    // or rollback path, keeping it in sync with actual dictionary membership.
+    // atomically with insertion). The counter is incremented before GetOrAdd is called; if
+    // the count exceeds the cap we reject without touching the dictionary. If two threads
+    // race for the same absent key, the GetOrAdd loser decrements its bump. The counter is
+    // also decremented on every eviction, completion, or fault path, keeping it in sync
+    // with actual dictionary membership.
     private int _streamCount;
     private int _disposed;
     private readonly ITimer _cleanupTimer;
@@ -117,39 +119,38 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             return HandledTask; // Handled to prevent infinite requeue
         }
 
-        // Atomic admission via a separate Interlocked counter that is incremented inside
-        // the GetOrAdd factory. The factory runs at most once per absent key, so the
-        // increment-and-check executes under ConcurrentDictionary's per-bucket lock,
-        // making the "reserve a slot" step atomic. If the new count overshoots the cap we
-        // decrement immediately and roll back our own insertion via TryRemove(KVP). This
-        // closes the original TOCTOU where two concurrent callers both observed Count == cap-1
-        // and both called GetOrAdd, since the Interlocked counter ensures only one of them
-        // wins the cap-th slot.
-        // The factory only runs for the thread that wins the absent-key race; the captured
-        // flag therefore reflects this thread's admission outcome and never sees torn writes
-        // from concurrent callers (their factories don't run for the same sequenceId).
-        bool rejected = false;
-        var state = _activeStreams.GetOrAdd(sequenceId, id =>
+        // Admission gate: the Interlocked counter is the source of truth. We only call
+        // GetOrAdd after a successful counter bump, eliminating the residual race where a
+        // speculative GetOrAdd → TryRemove rollback briefly admitted a rejected entry that
+        // a concurrent packet for the same sequenceId could observe as live.
+        //
+        // If two threads race for the same absent sequenceId, both increment the counter;
+        // the loser of GetOrAdd decrements its bump. No rejected state ever appears in the
+        // dictionary — the counter gate fires before any insertion is attempted.
+        ActiveStreamState state;
+        if (!_activeStreams.TryGetValue(sequenceId, out var existing))
         {
             var newCount = Interlocked.Increment(ref _streamCount);
             if (newCount > MaxActiveStreams)
             {
                 Interlocked.Decrement(ref _streamCount);
-                rejected = true;
+                _logger.LogWarning("Active stream cap {Cap} reached; rejecting new stream {SequenceId}", MaxActiveStreams, sequenceId);
+                return NotHandledTask;
             }
-            // Always return a fresh state. Rejection is rolled back below by TryRemove.
-            return new ActiveStreamState(new MessageBusReadStream(id), _timeProvider.GetUtcNow());
-        });
 
-        // Note: a concurrent caller with the same sequenceId that arrives between this
-        // thread's GetOrAdd and TryRemove will briefly observe the rejected state as
-        // live. That is bounded to broker-redelivery duplicates of the very first
-        // packet of a stream — accepted as a rare corner cost of avoiding a re-check loop.
-        if (rejected)
+            var fresh = new ActiveStreamState(new MessageBusReadStream(sequenceId), _timeProvider.GetUtcNow());
+            var actual = _activeStreams.GetOrAdd(sequenceId, fresh);
+            if (!ReferenceEquals(actual, fresh))
+            {
+                // Lost the absent-key race to another thread that admitted first;
+                // roll back our slot reservation since we didn't materialise a new entry.
+                Interlocked.Decrement(ref _streamCount);
+            }
+            state = actual;
+        }
+        else
         {
-            _activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state));
-            _logger.LogWarning("Active stream cap {Cap} reached; rejecting new stream {SequenceId}", MaxActiveStreams, sequenceId);
-            return NotHandledTask;
+            state = existing;
         }
 
         try
