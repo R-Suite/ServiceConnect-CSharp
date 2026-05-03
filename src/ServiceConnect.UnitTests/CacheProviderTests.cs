@@ -16,8 +16,7 @@ public class CacheProviderTests
         var cache = new CacheProvider();
         cache.Add("key1", "value1", DateTimeOffset.UtcNow.AddMinutes(5));
 
-        var result = cache.Get<string, string>("key1");
-
+        Assert.True(cache.TryGet<string, string>("key1", out var result));
         Assert.Equal("value1", result);
     }
 
@@ -27,8 +26,7 @@ public class CacheProviderTests
         var cache = new CacheProvider();
         cache.Add("key1", "value1", TimeSpan.FromMinutes(5));
 
-        var result = cache.Get<string, string>("key1");
-
+        Assert.True(cache.TryGet<string, string>("key1", out var result));
         Assert.Equal("value1", result);
     }
 
@@ -41,22 +39,24 @@ public class CacheProviderTests
     }
 
     [Fact]
-    public void Get_WhenKeyDoesNotExist_ReturnsDefault()
+    public void TryGet_WhenKeyDoesNotExist_ReturnsFalseAndNullDefault()
     {
         var cache = new CacheProvider();
 
-        var result = cache.Get<string, string>("nonexistent");
+        var found = cache.TryGet<string, string>("nonexistent", out var result);
 
+        Assert.False(found);
         Assert.Null(result);
     }
 
     [Fact]
-    public void Get_WhenKeyDoesNotExistForValueType_ReturnsDefault()
+    public void TryGet_WhenKeyDoesNotExistForValueType_ReturnsFalseAndZeroDefault()
     {
         var cache = new CacheProvider();
 
-        var result = cache.Get<string, int>("nonexistent");
+        var found = cache.TryGet<string, int>("nonexistent", out var result);
 
+        Assert.False(found);
         Assert.Equal(0, result);
     }
 
@@ -331,8 +331,9 @@ public class CacheProviderTests
         timeProvider.Advance(TimeSpan.FromMilliseconds(150));
         cache.Add("key1", "second", now.AddMilliseconds(500));
 
-        // Get returns the newer value, confirming the replacement semantics.
-        Assert.Equal("second", cache.Get<string, string>("key1"));
+        // TryGet returns the newer value, confirming the replacement semantics.
+        Assert.True(cache.TryGet<string, string>("key1", out var replaced));
+        Assert.Equal("second", replaced);
 
         // The first Add's +200ms timer must have been cancelled in favour of the
         // new +500ms window, so the entry survives at +300ms from t0.
@@ -352,7 +353,8 @@ public class CacheProviderTests
 
         cache.Add("key1", "second");
 
-        Assert.Equal("second", cache.Get<string, string>("key1"));
+        Assert.True(cache.TryGet<string, string>("key1", out var reAdded));
+        Assert.Equal("second", reAdded);
         Assert.True(cache.Contains("key1"));
     }
 
@@ -363,8 +365,10 @@ public class CacheProviderTests
         cache.Add("int-key", 42, DateTimeOffset.UtcNow.AddMinutes(5));
         cache.Add("bool-key", true, DateTimeOffset.UtcNow.AddMinutes(5));
 
-        Assert.Equal(42, cache.Get<string, int>("int-key"));
-        Assert.True(cache.Get<string, bool>("bool-key"));
+        Assert.True(cache.TryGet<string, int>("int-key", out var intVal));
+        Assert.Equal(42, intVal);
+        Assert.True(cache.TryGet<string, bool>("bool-key", out var boolVal));
+        Assert.True(boolVal);
     }
 
     // Timer lifecycle tests.
@@ -432,7 +436,8 @@ public class CacheProviderTests
         cache.Update("key1", "updated");
 
         // Value is replaced.
-        Assert.Equal("updated", cache.Get<string, string>("key1"));
+        Assert.True(cache.TryGet<string, string>("key1", out var updated));
+        Assert.Equal("updated", updated);
         // Item still exists (timer not cancelled).
         Assert.True(cache.Contains("key1"));
     }
@@ -461,7 +466,8 @@ public class CacheProviderTests
         cache.Update("key1", "updated");
 
         // Value should be visible immediately.
-        Assert.Equal("updated", cache.Get<string, string>("key1"));
+        Assert.True(cache.TryGet<string, string>("key1", out var updatedValue));
+        Assert.Equal("updated", updatedValue);
 
         // After the original expiry window the item should be gone.
         timeProvider.Advance(TimeSpan.FromMilliseconds(200));
@@ -516,7 +522,8 @@ public class CacheProviderTests
         cache.Add("key1", "value1", TimeSpan.FromMinutes(5));
 
         timeProvider.Advance(TimeSpan.FromMinutes(4));
-        Assert.Equal("value1", cache.Get<string, string>("key1"));
+        Assert.True(cache.TryGet<string, string>("key1", out var sliding));
+        Assert.Equal("value1", sliding);
 
         timeProvider.Advance(TimeSpan.FromMinutes(4));
         Assert.True(cache.Contains("key1"));

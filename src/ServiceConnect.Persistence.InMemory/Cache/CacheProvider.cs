@@ -77,13 +77,18 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
     }
 
     /// <summary>
-    /// Gets a value from the cache for specified key.
+    /// Tries to get a value from the cache for the specified key.
+    /// Returns <see langword="true"/> and writes the stored value (possibly <see langword="null"/>)
+    /// to <paramref name="value"/> if the key is present; returns <see langword="false"/> otherwise.
+    /// Replaces pre-v8 <c>Get</c>, which returned <c>default!</c> on miss and made "absent" and
+    /// "present with null" indistinguishable at the call site.
     /// </summary>
-    public TValue Get<TKey, TValue>(TKey key)
+    public bool TryGet<TKey, TValue>(TKey key, out TValue? value)
     {
         if (!_cache.TryGetValue(key!, out var cacheItem))
         {
-            return default!;
+            value = default;
+            return false;
         }
 
         if (cacheItem.RelativeExpiry.HasValue && _slidingTime.TryGetValue(key!, out var sliding))
@@ -91,7 +96,8 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
             sliding.Slide();
         }
 
-        return (TValue)cacheItem.Value!;
+        value = (TValue?)cacheItem.Value;
+        return true;
     }
 
     /// <summary>

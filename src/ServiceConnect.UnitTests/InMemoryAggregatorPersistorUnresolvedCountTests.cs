@@ -31,7 +31,8 @@ public class InMemoryAggregatorPersistorUnresolvedCountTests
         var providerField = typeof(InMemoryAggregatorPersistor)
             .GetField("_provider", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var provider = (CacheProvider)providerField.GetValue(persistor)!;
-        var rawList = provider.Get<string, object>("agg-a");
+        provider.TryGet<string, object>("agg-a", out var rawList);
+        Assert.NotNull(rawList);
         var list = (IList)rawList;
 
         var entryType = list[0]!.GetType();

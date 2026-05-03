@@ -98,8 +98,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     {
         foreach (var key in _state.Provider.Keys())
         {
-            var value = _state.Provider.Get<string, object>(key.ToString()!);
-            if (value is null)
+            if (!_state.Provider.TryGet<string, object>(key.ToString()!, out var value) || value is null)
             {
                 continue; // removed concurrently by an external IKeyValueStore caller
             }
@@ -240,8 +239,14 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 
             // Read version via a typed IVersioned interface so the cast is
             // compile-time-checked rather than the old dynamic dispatch.
-            var storedData = _state.Provider.Get<string, object>(key) ?? throw new ConcurrencyException(
+            // TryGet distinguishes "absent" from "present with null"; a false return here means
+            // a concurrent IKeyValueStore.Remove raced the Contains check above.
+            if (!_state.Provider.TryGet<string, object>(key, out var storedData) || storedData is null)
+            {
+                throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
+            }
+
             int currentVersion = storedData is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(
@@ -299,8 +304,14 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} does not exist and cannot be deleted.");
             }
 
-            var stored = _state.Provider.Get<string, object>(key) ?? throw new ConcurrencyException(
+            // TryGet distinguishes "absent" from "present with null"; a false return here means
+            // a concurrent IKeyValueStore.Remove raced the Contains check above.
+            if (!_state.Provider.TryGet<string, object>(key, out var stored) || stored is null)
+            {
+                throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
+            }
+
             int currentVersion = stored is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(

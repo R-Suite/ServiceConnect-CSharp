@@ -21,9 +21,15 @@ public interface ICacheProvider
     void Add<TKey, TValue>(TKey key, TValue value, DateTimeOffset absoluteExpiry, CacheItemPriority priority = CacheItemPriority.Normal);
 
     /// <summary>
-    /// Gets a value from the cache for specified key.
+    /// Tries to get a value from the cache for the specified key.
     /// </summary>
-    TValue Get<TKey, TValue>(TKey key);
+    /// <returns>
+    /// <see langword="true"/> if the key is present (the stored value, possibly <see langword="null"/>,
+    /// is written to <paramref name="value"/>); <see langword="false"/> otherwise.
+    /// Distinguishes "key absent" from "key present with null value" — pre-v8's <c>Get</c> returned
+    /// <c>default!</c> in both cases.
+    /// </returns>
+    bool TryGet<TKey, TValue>(TKey key, out TValue? value);
 
     /// <summary>
     /// Remove a value from the cache for specified key.

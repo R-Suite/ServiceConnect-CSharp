@@ -81,12 +81,10 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
-            if (!_provider.Contains(name))
+            if (!_provider.TryGet<string, object>(name, out var sourceObj) || sourceObj is not List<Entry> source)
             {
                 return Task.FromResult<IList<object>>([]);
             }
-
-            var source = (List<Entry>)_provider.Get<string, object>(name);
             var copy = new List<object>(source.Count);
             foreach (var entry in source)
             {
@@ -105,12 +103,10 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
-            if (!_provider.Contains(name))
+            if (!_provider.TryGet<string, object>(name, out var sourceObj) || sourceObj is not List<Entry> source)
             {
                 return Task.FromResult<IAggregatorSnapshot>(AggregatorSnapshot.Empty);
             }
-
-            var source = (List<Entry>)_provider.Get<string, object>(name);
             var messages = new List<object>(source.Count);
             var ids = new List<Guid>(source.Count);
             var unresolved = 0;
@@ -137,9 +133,8 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         bool removed = false;
         lock (_memoryCacheLock)
         {
-            if (_provider.Contains(name))
+            if (_provider.TryGet<string, object>(name, out var listObj) && listObj is List<Entry> list)
             {
-                var list = (List<Entry>)_provider.Get<string, object>(name);
                 for (var index = 0; index < list.Count; index++)
                 {
                     if (GetCorrelationId(list[index].Data) is { } id && id == correlationId)
@@ -194,12 +189,11 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
 
         lock (_memoryCacheLock)
         {
-            if (!_provider.Contains(name))
+            if (!_provider.TryGet<string, object>(name, out var listObj) || listObj is not List<Entry> list)
             {
                 return Task.CompletedTask;
             }
 
-            var list = (List<Entry>)_provider.Get<string, object>(name);
             var idsToRemove = new HashSet<Guid>(snapshot.ResolvedIds);
             list.RemoveAll(entry => idsToRemove.Contains(entry.Id));
 
@@ -219,9 +213,8 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
-            if (_provider.Contains(name))
+            if (_provider.TryGet<string, object>(name, out var listObj) && listObj is List<Entry> list)
             {
-                var list = (List<Entry>)_provider.Get<string, object>(name);
                 return Task.FromResult(list.Count);
             }
             return Task.FromResult(0);
@@ -244,9 +237,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
 
     private List<Entry> GetOrCreateEntries(string name)
     {
-        if (_provider.Contains(name))
+        if (_provider.TryGet<string, object>(name, out var existing) && existing is List<Entry> cached)
         {
-            return (List<Entry>)_provider.Get<string, object>(name);
+            return cached;
         }
 
         var list = new List<Entry>();

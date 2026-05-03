@@ -44,7 +44,7 @@ public class CacheProviderConcurrencyTests
 
         // The final stored value must be retrievable as a string and must be
         // one of the values written by some worker (no torn write).
-        var observed = cache.Get<string, string>("hot-key");
+        Assert.True(cache.TryGet<string, string>("hot-key", out var observed));
         Assert.NotNull(observed);
         Assert.Matches("^w\\d+-i\\d+$", observed);
     }
@@ -109,8 +109,7 @@ public class CacheProviderConcurrencyTests
             // If the upgrade landed first the key survives at high priority; if the
             // purge landed first the key is gone — but it must NEVER survive at
             // normal priority (which would mean we leaked the doomed value).
-            var still = cache.Get<string, string>("contested");
-            if (still is not null)
+            if (cache.TryGet<string, string>("contested", out var still))
             {
                 Assert.Equal("upgraded", still);
             }
@@ -165,7 +164,7 @@ public class CacheProviderConcurrencyTests
         var ex = await Record.ExceptionAsync(() => Task.WhenAll(updater, adder));
         Assert.Null(ex);
 
-        var final = cache.Get<string, string>("k");
+        Assert.True(cache.TryGet<string, string>("k", out var final));
         Assert.NotNull(final);
         Assert.Matches("^(upd|add)-\\d+$|^initial$", final);
     }
@@ -188,6 +187,7 @@ public class CacheProviderConcurrencyTests
         time.Advance(TimeSpan.FromSeconds(5));
         await Task.Delay(50); // give any leaked timer a chance to fire
 
-        Assert.Equal("second", cache.Get<string, string>("k"));
+        Assert.True(cache.TryGet<string, string>("k", out var timerReset));
+        Assert.Equal("second", timerReset);
     }
 }

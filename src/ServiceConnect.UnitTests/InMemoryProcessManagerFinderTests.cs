@@ -649,18 +649,19 @@ public class InMemoryProcessManagerFinderTests
         Assert.Empty(exceptions);
     }
 
-    // UpdateDataAsync and DeleteDataAsync have the same Contains→Get race window. A mock
-    // provider whose Contains returns true but Get returns null deterministically exercises
+    // UpdateDataAsync and DeleteDataAsync have the same Contains→TryGet race window. A mock
+    // provider whose Contains returns true but TryGet returns false deterministically exercises
     // the race without any timing dependency.
 
     [Fact]
-    public async Task UpdateDataAsync_WhenProviderReturnsNullFromGet_ThrowsConcurrencyException()
+    public async Task UpdateDataAsync_WhenProviderReturnsFalseFromTryGet_ThrowsConcurrencyException()
     {
-        // Arrange: provider whose Contains says yes but Get returns null,
-        // simulating an external IKeyValueStore.Remove between Contains and Get.
+        // Arrange: provider whose Contains says yes but TryGet returns false,
+        // simulating an external IKeyValueStore.Remove between Contains and TryGet.
         var provider = new Mock<ICacheProvider>();
         provider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
-        provider.Setup(p => p.Get<string, object>(It.IsAny<string>())).Returns((object?)null!);
+        object? nullOut = null;
+        provider.Setup(p => p.TryGet<string, object>(It.IsAny<string>(), out nullOut)).Returns(false);
 
         var state = new InMemoryPersistenceState(provider.Object);
         var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), state);
@@ -677,13 +678,14 @@ public class InMemoryProcessManagerFinderTests
     }
 
     [Fact]
-    public async Task DeleteDataAsync_WhenProviderReturnsNullFromGet_ThrowsConcurrencyException()
+    public async Task DeleteDataAsync_WhenProviderReturnsFalseFromTryGet_ThrowsConcurrencyException()
     {
-        // Arrange: provider whose Contains says yes but Get returns null,
-        // simulating an external IKeyValueStore.Remove between Contains and Get.
+        // Arrange: provider whose Contains says yes but TryGet returns false,
+        // simulating an external IKeyValueStore.Remove between Contains and TryGet.
         var provider = new Mock<ICacheProvider>();
         provider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
-        provider.Setup(p => p.Get<string, object>(It.IsAny<string>())).Returns((object?)null!);
+        object? nullOut = null;
+        provider.Setup(p => p.TryGet<string, object>(It.IsAny<string>(), out nullOut)).Returns(false);
 
         var state = new InMemoryPersistenceState(provider.Object);
         var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), state);

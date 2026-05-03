@@ -15,8 +15,8 @@ internal sealed class InMemoryPersistenceState : IDisposable
     /// <summary>
     /// Test-seam constructor: accepts an externally-supplied <see cref="ICacheProvider"/>
     /// whose <see cref="ICacheProvider.Contains{TKey}"/> and
-    /// <see cref="ICacheProvider.Get{TKey,TValue}"/> can be controlled independently,
-    /// enabling deterministic reproduction of the Contains→Get concurrency window.
+    /// <see cref="ICacheProvider.TryGet{TKey,TValue}"/> can be controlled independently,
+    /// enabling deterministic reproduction of the Contains→TryGet concurrency window.
     /// </summary>
     internal InMemoryPersistenceState(ICacheProvider provider)
     {
