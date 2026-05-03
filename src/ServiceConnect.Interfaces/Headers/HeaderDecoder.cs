@@ -57,8 +57,8 @@ public static class HeaderDecoder
         return value switch
         {
             null => "null",
-            byte[] bytes => "\"" + Encoding.UTF8.GetString(bytes).Replace("\"", "\\\"") + "\"",
-            string s => "\"" + s.Replace("\"", "\\\"") + "\"",
+            byte[] bytes => "\"" + EscapeJsonString(Encoding.UTF8.GetString(bytes)) + "\"",
+            string s => "\"" + EscapeJsonString(s) + "\"",
             IDictionary<string, object> dict => RenderDictionary(dict),
             IDictionary nonGeneric => RenderNonGenericDictionary(nonGeneric),
             IEnumerable seq => RenderEnumerable(seq),
@@ -78,7 +78,7 @@ public static class HeaderDecoder
             }
 
             first = false;
-            sb.Append('"').Append(kv.Key.Replace("\"", "\\\"")).Append("\":").Append(Render(kv.Value));
+            sb.Append('"').Append(EscapeJsonString(kv.Key)).Append("\":").Append(Render(kv.Value));
         }
         return sb.Append('}').ToString();
     }
@@ -96,7 +96,7 @@ public static class HeaderDecoder
 
             first = false;
             var keyStr = kv.Key?.ToString() ?? "null";
-            sb.Append('"').Append(keyStr.Replace("\"", "\\\"")).Append("\":").Append(Render(kv.Value!));
+            sb.Append('"').Append(EscapeJsonString(keyStr)).Append("\":").Append(Render(kv.Value!));
         }
         return sb.Append('}').ToString();
     }
@@ -116,6 +116,37 @@ public static class HeaderDecoder
             sb.Append(Render(item!));
         }
         return sb.Append(']').ToString();
+    }
+
+    private static string EscapeJsonString(string s)
+    {
+        // Full RFC 8259 escape table. Pre-fix only " was handled; raw control
+        // characters inside a JSON string literal cause parse failures downstream.
+        var sb = new StringBuilder(s.Length + 2);
+        foreach (var c in s)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '"':  sb.Append("\\\""); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20)
+                    {
+                        sb.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+                    break;
+            }
+        }
+        return sb.ToString();
     }
 
     private static string RenderScalar(object value)
