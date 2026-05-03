@@ -225,7 +225,7 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
 
     /// <summary>
     /// Replaces the value for an existing key without resetting its expiry timer or
-    /// sliding-time window. No-ops if the key is not present.
+    /// sliding-time window. Throws <see cref="KeyNotFoundException"/> if the key is absent.
     /// </summary>
     public void Update<TKey, TValue>(TKey key, TValue value)
     {
@@ -233,6 +233,15 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
         if (key is null)
         {
             return;
+        }
+
+        if (!_cache.ContainsKey(key!))
+        {
+            // Pre-Phase-10 this was a silent no-op — which let aggregator's optimistic-
+            // concurrency loop advance Version against a phantom row. Throw so the caller
+            // can react deterministically.
+            throw new KeyNotFoundException(
+                $"Cannot Update key '{key}' — key not present. Use Add to insert new keys.");
         }
 
         while (_cache.TryGetValue(key!, out var existing))

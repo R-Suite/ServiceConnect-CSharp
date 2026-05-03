@@ -443,13 +443,15 @@ public class CacheProviderTests
     }
 
     [Fact]
-    public void Update_NonExistentKey_IsNoOp()
+    public void Update_NonExistentKey_ThrowsKeyNotFoundException()
     {
+        // Previously a silent no-op; now throws so callers fail deterministically
+        // instead of silently advancing state against a phantom key.
         var cache = new CacheProvider();
 
-        var ex = Record.Exception(() => cache.Update("missing", "value"));
+        var ex = Assert.Throws<KeyNotFoundException>(() => cache.Update("missing", "value"));
 
-        Assert.Null(ex);
+        Assert.Contains("missing", ex.Message);
         Assert.False(cache.Contains("missing"));
     }
 
