@@ -1,7 +1,4 @@
 <Solution>
-  <Configurations>
-    <Platform Name="Any CPU" />
-  </Configurations>
   <Folder Name="/Clients/">
     <Project Path="ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.csproj" />
   </Folder>
@@ -11,6 +8,7 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="ServiceConnect.EndToEndTests/ServiceConnect.EndToEndTests.csproj" />
+    <Project Path="ServiceConnect.SerializationCompatTests/ServiceConnect.SerializationCompatTests.csproj" />
     <Project Path="ServiceConnect.UnitTests/ServiceConnect.UnitTests.csproj" />
   </Folder>
   <Project Path="ServiceConnect.HealthChecks/ServiceConnect.HealthChecks.csproj" />
