@@ -63,23 +63,33 @@ public sealed class ConsumeContext : IConsumeContext
 
     // Cached backing fields — HeaderDecoder.Decode + Guid.TryParse are called only once
     // per ConsumeContext instance regardless of how many times the properties are read.
+    //
+    // Memory-model contract: each cached payload field is plain; the volatile bool flag
+    // publishes it. Writers MUST write the payload before the flag; readers MUST check
+    // the flag before reading the payload. The flag's release/acquire semantics
+    // guarantee a non-torn payload read on every architecture (incl. weakly-ordered ARM).
+    // A racing reader may run the resolution twice (idempotent — string compare /
+    // Guid.TryParse on the same input), but never observes a torn write.
     private string? _messageId;
-    private bool _messageIdCached;
-    private Guid? _correlationId;
+    private volatile bool _messageIdCached;
+    private Guid _correlationIdValue;
+    private volatile bool _correlationIdCached;
 
     /// <inheritdoc />
     public string? MessageId
     {
         get
         {
-            if (!_messageIdCached)
+            if (_messageIdCached)
             {
-                _messageId = Headers.TryGetValue(HeaderKeys.MessageId, out var value)
-                    ? HeaderDecoder.Decode(value) : null;
-                _messageIdCached = true;
+                return _messageId;
             }
 
-            return _messageId;
+            var value = Headers.TryGetValue(HeaderKeys.MessageId, out var raw)
+                ? HeaderDecoder.Decode(raw) : null;
+            _messageId = value;
+            _messageIdCached = true;  // volatile write — release barrier publishes _messageId
+            return value;
         }
     }
 
@@ -88,11 +98,17 @@ public sealed class ConsumeContext : IConsumeContext
     {
         get
         {
-            _correlationId ??= Headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
-                    && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
-                    ? id : Guid.Empty;
+            if (_correlationIdCached)
+            {
+                return _correlationIdValue;
+            }
 
-            return _correlationId.Value;
+            var value = Headers.TryGetValue(HeaderKeys.CorrelationId, out var raw)
+                    && Guid.TryParse(HeaderDecoder.Decode(raw), out var id)
+                ? id : Guid.Empty;
+            _correlationIdValue = value;
+            _correlationIdCached = true;  // volatile write — release barrier publishes _correlationIdValue
+            return value;
         }
     }
 
