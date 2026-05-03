@@ -183,10 +183,14 @@ public class HandlerProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_RoutingSlipToUnknownQueue_Throws()
+    public async Task ProcessAsync_RoutingSlipToQueueNotInLocalConfig_ForwardsSuccessfully()
     {
+        // v8 removed the IsKnownQueue gate. A well-formed destination that is not
+        // registered in queueConfig is now allowed — only format validation applies.
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>(), It.IsAny<CancellationToken>()))
+               .Returns(Task.CompletedTask);
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
         services.AddSingleton(mockBus.Object);
@@ -194,12 +198,15 @@ public class HandlerProcessorTests
 
         var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
         var msg = new TestHpMsg(Guid.NewGuid());
-        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "unknown-evil-queue" };
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "unknown-cross-service-queue" };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope));
-        Assert.Contains("not a recognized queue", ex.Message);
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+        mockBus.Verify(
+            b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 1 && d[0] == "unknown-cross-service-queue"), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

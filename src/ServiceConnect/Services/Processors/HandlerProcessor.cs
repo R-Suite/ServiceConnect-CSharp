@@ -103,7 +103,7 @@ internal sealed class HandlerProcessor(
                         handlerExceptions);
                 }
 
-                await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
+                await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, cancellationToken).ConfigureAwait(false);
             }
         }
         finally
@@ -146,9 +146,30 @@ internal sealed class HandlerProcessor(
             callExpr, busParam, msgParam, destParam, ctParam).Compile();
     }
 
+    /// <summary>
+    /// Forwards the routing slip's next-step destinations after all handlers complete
+    /// successfully.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Slip drop on handler throw.</b> If any handler threw during dispatch, the
+    /// caller throws an <see cref="AggregateException"/> BEFORE this method runs; the
+    /// in-flight slip-forward is therefore skipped on partial-failure dispatches. The
+    /// slip data remains in the message envelope (the <c>RoutingSlip</c> header is
+    /// not stripped during dispatch), so DLQ-routed messages and manual retries still
+    /// carry the slip and can resume the chain after the failure is resolved.
+    /// </para>
+    /// <para>
+    /// <b>Cross-service destinations.</b> v8 removed the <c>IsKnownQueue</c> check;
+    /// destinations that are not in the local <see cref="IQueueConfiguration"/> are
+    /// allowed as long as they pass <see cref="IsValidRoutingSlipDestination"/> (format,
+    /// length, no AMQP control characters). RabbitMQ routes via the alternate-exchange /
+    /// mandatory-return path if the queue does not exist downstream.
+    /// </para>
+    /// </remarks>
     private static async Task ForwardRoutingSlipAsync(
         object message, Type messageType, IDictionary<string, object> headers,
-        IBus bus, IBusConfiguration busConfig, IQueueConfiguration queueConfig,
+        IBus bus, IBusConfiguration busConfig,
         CancellationToken cancellationToken)
     {
         if (!busConfig.EnableRoutingSlipProcessing)
@@ -176,13 +197,6 @@ internal sealed class HandlerProcessor(
             {
                 throw new InvalidOperationException(
                     $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {MaxRoutingSlipDestinationLength} characters, and must not contain AMQP wildcards or control characters.");
-            }
-
-            if (!ConsumeContext.IsKnownQueue(trimmed, queueConfig))
-            {
-                throw new InvalidOperationException(
-                    $"Routing-slip destination '{trimmed}' is not a recognized queue. " +
-                    "Configure queue mappings to allow this destination.");
             }
 
             destinations.Add(trimmed);
