@@ -54,7 +54,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Arrange
         var data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
 
         // Act
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
@@ -72,7 +72,7 @@ public class InMemoryProcessManagerFinderTests
         // Arrange
         IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
         IProcessManagerData dataWithDuplicateId = new TestData { CorrelationId = _correlationId, Name = "TestDataWithDuplicateId" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act / Assert
@@ -85,7 +85,7 @@ public class InMemoryProcessManagerFinderTests
         // Arrange
         IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
         IProcessManagerData dataUpdated = new TestData { CorrelationId = _correlationId, Name = "TestDataUpdated" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act
@@ -102,7 +102,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Arrange
         var data = new TestData { CorrelationId = _correlationId, Name = "Original" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act
@@ -122,7 +122,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Arrange
         var data = new TestData { CorrelationId = _correlationId, Name = "Original" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act
@@ -146,7 +146,7 @@ public class InMemoryProcessManagerFinderTests
             CorrelationId = _correlationId,
             ValueType = typeof(TestData)
         };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act
@@ -162,7 +162,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Arrange
         var data = new NoPublicParameterlessCtorTestData(_correlationId, "Original");
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act
@@ -178,7 +178,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Arrange
         IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
 
         // Act / Assert
         await Assert.ThrowsAsync<PersistenceException>(() => processManagerFinder.UpdateDataAsync(new MemoryData<IProcessManagerData> { Data = data }, CancellationToken.None));
@@ -189,7 +189,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Arrange
         var data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data1, CancellationToken.None);
 
         var foundData1 = (MemoryData<TestData>)(await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
@@ -211,7 +211,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Arrange
         var data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
         var loaded = await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
         Assert.NotNull(loaded);
@@ -227,7 +227,7 @@ public class InMemoryProcessManagerFinderTests
     public async Task DeleteDataAsync_WithStaleVersion_ThrowsConcurrencyException()
     {
         // Arrange
-        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await finder.InsertDataAsync(new TestData { CorrelationId = _correlationId, Name = "v1" }, CancellationToken.None);
         var stale = (MemoryData<TestData>)(await finder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
 
@@ -251,7 +251,7 @@ public class InMemoryProcessManagerFinderTests
     {
         // Matches the UpdateDataAsync contract: deleting a record that no longer exists
         // is a conflict (another consumer already completed the saga), not a silent no-op.
-        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var stub = new MemoryData<IProcessManagerData>
         {
             Data = new TestData { CorrelationId = _correlationId, Name = "ghost" },
@@ -266,7 +266,7 @@ public class InMemoryProcessManagerFinderTests
     public async Task ShouldReturnNullWhenDataNotFound()
     {
         // Arrange
-        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
 
         // Act
         var result = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
@@ -366,7 +366,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task FindDataAsync_PreCancelledToken_ThrowsOCE()
     {
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -377,7 +377,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task InsertDataAsync_PreCancelledToken_ThrowsOCE()
     {
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -388,7 +388,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task UpdateDataAsync_PreCancelledToken_ThrowsOCE()
     {
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -399,7 +399,7 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task DeleteDataAsync_PreCancelledToken_ThrowsOCE()
     {
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
@@ -488,7 +488,7 @@ public class InMemoryProcessManagerFinderTests
         // Insert must deep-clone so that post-insert mutation of a nested
         // collection on the caller's instance does not leak into the stored saga.
         var data = new SagaWithNested { CorrelationId = Guid.NewGuid(), Tags = { "original" } };
-        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await finder.InsertDataAsync(data, CancellationToken.None);
 
         data.Tags.Add("after-insert-mutation");
@@ -507,7 +507,7 @@ public class InMemoryProcessManagerFinderTests
         // Update must deep-clone so the caller's subsequent mutation of a
         // nested collection does not bleed into the stored snapshot.
         var initial = new SagaWithNested { CorrelationId = Guid.NewGuid(), Tags = { "first" } };
-        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await finder.InsertDataAsync(initial, CancellationToken.None);
 
         var updated = new SagaWithNested { CorrelationId = initial.CorrelationId, Tags = { "second" } };
@@ -715,7 +715,7 @@ public class InMemoryProcessManagerFinderTests
         // InMemory persistor must reflect the new Version back to the caller's instance
         // so consecutive updates with the same handle behave identically.
         var correlationId = Guid.NewGuid();
-        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v0" }, CancellationToken.None);
 
         var mapper = new TestProcessManagerPropertyMapper();

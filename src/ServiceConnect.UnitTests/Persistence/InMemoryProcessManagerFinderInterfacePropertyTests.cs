@@ -62,7 +62,7 @@ public class InMemoryProcessManagerFinderInterfacePropertyTests
             d => ((IFooSource)d).FooId,
             m => m.FooId);
 
-        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await finder.InsertDataAsync(data, CancellationToken.None);
 
         var result = await finder.FindDataAsync<ExplicitSagaData>(

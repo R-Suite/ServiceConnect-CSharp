@@ -26,7 +26,7 @@ public class InMemoryProcessManagerFinderCloneCountTests
     [Fact]
     public async Task FindDataAsync_ClonesOnlyMatchedItem_NotEveryCandidate()
     {
-        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        IProcessManagerFinder finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
 
         const int partitionSize = 100;
         Guid targetId = Guid.Empty;

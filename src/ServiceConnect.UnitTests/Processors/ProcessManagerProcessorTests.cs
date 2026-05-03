@@ -289,7 +289,7 @@ public class ProcessManagerProcessorTests
     [Fact]
     public async Task ProcessAsync_WhenHandlerMutatesAndThrows_DoesNotLeakMutationIntoInMemoryStore()
     {
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var existing = new PmMutableData { CorrelationId = Guid.NewGuid(), Counter = 5 };
         await finder.InsertDataAsync(existing, CancellationToken.None);
 

@@ -29,7 +29,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
     {
         const int writers = 16;
         const int perWriter = 50;
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var mapper = BuildMapper();
 
         var ids = Enumerable.Range(0, writers * perWriter).Select(idx => Guid.NewGuid()).ToArray();
@@ -58,7 +58,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
     {
         // The InMemory finder rejects duplicate ids with PersistenceException; under a
         // race only one inserter may win.
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var corrId = Guid.NewGuid();
         const int contenders = 16;
         var successes = 0;
@@ -97,7 +97,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
         // Optimistic concurrency: many workers each have version=1 in hand. Exactly one
         // wins per round; the rest must surface ConcurrencyException so the caller
         // (typically ProcessManagerProcessor) can re-read and retry.
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var mapper = BuildMapper();
         var corrId = Guid.NewGuid();
 
@@ -140,7 +140,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
     [Fact]
     public async Task ParallelDelete_OnSameRecord_OnlyOneSucceeds_RestThrowConcurrency()
     {
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var corrId = Guid.NewGuid();
         await finder.InsertDataAsync(
             new TestData { CorrelationId = corrId, Name = "doomed" },
@@ -182,7 +182,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
         const int writers = 8;
         const int perWriter = 200;
 
-        var finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
+        var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var mapper = BuildMapper();
         var ids = Enumerable.Range(0, writers * perWriter).Select(idx => Guid.NewGuid()).ToArray();
 

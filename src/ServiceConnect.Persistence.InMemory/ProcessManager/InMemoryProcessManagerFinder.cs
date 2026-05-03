@@ -15,12 +15,6 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     private readonly ProcessManagerPredicateCache _cache;
     private readonly InMemoryPersistenceState _state;
 
-    /// <summary>
-    /// Initializes a new <see cref="InMemoryProcessManagerFinder"/> instance.
-    /// </summary>
-    public InMemoryProcessManagerFinder(string connectionString, string databaseName)
-        : this(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System)) { }
-
     internal InMemoryProcessManagerFinder(ProcessManagerPredicateCache cache, TimeProvider? timeProvider = null)
         : this(cache, new InMemoryPersistenceState(timeProvider)) { }
 
