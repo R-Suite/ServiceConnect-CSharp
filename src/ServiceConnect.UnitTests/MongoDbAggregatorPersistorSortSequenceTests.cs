@@ -50,8 +50,8 @@ public class MongoDbAggregatorPersistorSortSequenceTests
 
         var (persistor, _, _) = CreateMockedPersistor(captureInsert: captured.Add);
 
-        await persistor.InsertDataAsync(new { Value = "first" }, "agg");
-        await persistor.InsertDataAsync(new { Value = "second" }, "agg");
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "first" }, "agg");
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "second" }, "agg");
 
         Assert.Equal(2, captured.Count);
         Assert.True(

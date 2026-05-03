@@ -56,7 +56,19 @@ internal sealed class AggregatorProcessor(
             return ProcessResult.NotHandled;
         }
 
-        await persistor.InsertDataAsync(message, descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
+        // IAggregatorPersistor.InsertDataAsync requires IHasCorrelationId. All aggregatable
+        // message types must implement it; Message does so automatically. Non-implementers are
+        // rejected here rather than at the persistor boundary so the error surfaces at the
+        // processor level with a clear message.
+        if (message is not IHasCorrelationId withCorrId)
+        {
+            logger.LogWarning(
+                "Message type '{MessageType}' does not implement IHasCorrelationId; cannot aggregate",
+                messageType.FullName);
+            return ProcessResult.NotHandled;
+        }
+
+        await persistor.InsertDataAsync(withCorrId, descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
 
         var count = await persistor.CountAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
         if (descriptor.BatchSize > 0 && count >= descriptor.BatchSize)

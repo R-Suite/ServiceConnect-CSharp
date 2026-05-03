@@ -20,7 +20,7 @@ public class MongoDbAggregatorPersistorIndexCacheTests
     public async Task EnsureIndexes_CalledTwice_OnlyHitsCreateManyAsyncOnce()
     {
         var (persistor, _, indexes) = BuildPersistorWithIndexCapture();
-        var data = new { Value = 1 };
+        var data = new AggregatorTestData(Guid.NewGuid());
 
         await persistor.InsertDataAsync(data, "test-name");
         await persistor.InsertDataAsync(data, "test-name");
@@ -48,7 +48,7 @@ public class MongoDbAggregatorPersistorIndexCacheTests
             .ThrowsAsync(new MongoCommandException(connectionId, "options conflict", command, result))
             .ReturnsAsync(["ok"]);  // should not be reached post-fix
 
-        var data = new { Value = 1 };
+        var data = new AggregatorTestData(Guid.NewGuid());
         await persistor.InsertDataAsync(data, "test-name");   // benign 85 → flag flips
         await persistor.InsertDataAsync(data, "test-name");   // skipped via cache
 
@@ -74,7 +74,7 @@ public class MongoDbAggregatorPersistorIndexCacheTests
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new MongoCommandException(connectionId, "unauthorized", command, result));
 
-        var data = new { Value = 1 };
+        var data = new AggregatorTestData(Guid.NewGuid());
         // Non-benign MongoCommandException is wrapped in PersistenceException.
         await Assert.ThrowsAsync<PersistenceException>(() => persistor.InsertDataAsync(data, "test-name"));
         await Assert.ThrowsAsync<PersistenceException>(() => persistor.InsertDataAsync(data, "test-name"));

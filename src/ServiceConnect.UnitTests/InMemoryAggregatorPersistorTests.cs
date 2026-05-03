@@ -32,7 +32,7 @@ public class InMemoryAggregatorPersistorTests
     public async Task ShouldInsertData()
     {
         // Arrange
-        IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor();
         var data = new AggregatorTestData(Guid.NewGuid()) { Value = "TestData" };
 
         // Act
@@ -49,7 +49,7 @@ public class InMemoryAggregatorPersistorTests
     {
         // Arrange
         var corrId = Guid.NewGuid();
-        IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor();
         var data = new AggregatorTestData(corrId);
         await aggregatorPersistor.InsertDataAsync(data, "key1", CancellationToken.None);
 
@@ -63,7 +63,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task GetData_WhenKeyDoesNotExist_ReturnsEmptyList()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
 
         var result = await persistor.GetDataAsync("nonexistent-key", CancellationToken.None);
 
@@ -73,7 +73,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task InsertData_MultipleItems_AllRetrievable()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         var data1 = new AggregatorTestData(Guid.NewGuid()) { Value = "first" };
         var data2 = new AggregatorTestData(Guid.NewGuid()) { Value = "second" };
 
@@ -87,7 +87,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task InsertData_DifferentKeys_StoredSeparately()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         var data1 = new AggregatorTestData(Guid.NewGuid()) { Value = "alpha" };
         var data2 = new AggregatorTestData(Guid.NewGuid()) { Value = "beta" };
 
@@ -103,7 +103,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task Count_WhenKeyDoesNotExist_ReturnsZero()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
 
         int count = await persistor.CountAsync("nonexistent-key", CancellationToken.None);
 
@@ -113,7 +113,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task Count_AfterInsertingOneItem_ReturnsOne()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
 
         int count = await persistor.CountAsync("mykey", CancellationToken.None);
@@ -124,7 +124,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task Count_AfterInsertingMultipleItems_ReturnsCorrectCount()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
@@ -137,7 +137,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task Count_AfterRemovingItem_DecrementsByOne()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
         await persistor.InsertDataAsync(new AggregatorTestData(corrId), "mykey", CancellationToken.None);
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
@@ -150,7 +150,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task RemoveAllAsync_ClearsAllItemsForKey()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
 
@@ -163,7 +163,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task RemoveAllAsync_WhenKeyDoesNotExist_DoesNotThrow()
     {
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
 
         var ex = await Record.ExceptionAsync(() => persistor.RemoveAllAsync("nonexistent-key", CancellationToken.None));
 
@@ -173,7 +173,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task RemoveAllAsync_PreCancelledToken_ThrowsOCE()
     {
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -187,7 +187,7 @@ public class InMemoryAggregatorPersistorTests
         // mismatched key surfaces as ConcurrencyException so callers can distinguish a
         // concurrent-removal race from a structural persistence failure. Mongo and the
         // InMemoryProcessManagerFinder already follow this rule.
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
 
         await Assert.ThrowsAsync<ConcurrencyException>(
             () => persistor.RemoveDataAsync("nonexistent-key", Guid.NewGuid(), CancellationToken.None));
@@ -198,7 +198,7 @@ public class InMemoryAggregatorPersistorTests
     {
         // The (name, correlationId) row not matching any entry — even when the name bucket exists —
         // is the exact case that was silently no-op'ing. Mirror the MongoDb contract.
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "batch-mismatch", CancellationToken.None);
 
         await Assert.ThrowsAsync<ConcurrencyException>(
@@ -208,17 +208,17 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task InsertDataAsync_PreCancelledToken_ThrowsOCE()
     {
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => persistor.InsertDataAsync(new object(), "test", cts.Token));
+            () => persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "test", cts.Token));
     }
 
     [Fact]
     public async Task GetDataAsync_PreCancelledToken_ThrowsOCE()
     {
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -228,7 +228,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task RemoveDataAsync_PreCancelledToken_ThrowsOCE()
     {
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -238,7 +238,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task CountAsync_PreCancelledToken_ThrowsOCE()
     {
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -254,7 +254,7 @@ public class InMemoryAggregatorPersistorTests
         // expiry must never drop buffered messages mid-aggregation, regardless
         // of how long the window stays open.
         var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty, timeProvider);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(timeProvider);
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "buffered" }, "slow-stream", CancellationToken.None);
 
         timeProvider.Advance(TimeSpan.FromDays(3));
@@ -283,7 +283,7 @@ public class InMemoryAggregatorPersistorTests
     {
         // Insert must deep-clone so the caller's subsequent mutation
         // (including nested collections) does not leak into the buffer.
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         var data = new AggWithNested(Guid.NewGuid());
         data.Tags.Add("original");
 
@@ -300,7 +300,7 @@ public class InMemoryAggregatorPersistorTests
     {
         // Retrieval must deep-clone so the caller mutating the returned instance
         // does not corrupt the stored copy seen by the next read.
-        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         var data = new AggWithNested(Guid.NewGuid());
         data.Tags.Add("original");
         await persistor.InsertDataAsync(data, "nested-key", CancellationToken.None);
@@ -318,7 +318,7 @@ public class InMemoryAggregatorPersistorTests
         // The persistor owns a CacheProvider that registers ITimer handles with the
         // TimeProvider. Dispose must release them exactly once so rebuilds of the
         // DI container do not leak timers, even when Dispose is called repeatedly.
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         Assert.IsAssignableFrom<IDisposable>(persistor);
 
         persistor.Dispose();
@@ -329,7 +329,7 @@ public class InMemoryAggregatorPersistorTests
     [Fact]
     public async Task RemoveDataAsync_NonMessageDtoWithCorrelationIdProperty_RemovesEntry()
     {
-        var persistor = new InMemoryAggregatorPersistor("", "", "");
+        var persistor = new InMemoryAggregatorPersistor();
         var dto = new ThirdPartyDto { CorrelationId = Guid.NewGuid(), Payload = "payload-A" };
 
         await persistor.InsertDataAsync(dto, "stream-A");
@@ -338,7 +338,7 @@ public class InMemoryAggregatorPersistorTests
         Assert.Equal(0, await persistor.CountAsync("stream-A"));
     }
 
-    private sealed class ThirdPartyDto
+    private sealed class ThirdPartyDto : IHasCorrelationId
     {
         public Guid CorrelationId { get; init; }
         public string Payload { get; init; } = string.Empty;

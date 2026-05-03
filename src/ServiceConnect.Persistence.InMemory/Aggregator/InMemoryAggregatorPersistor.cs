@@ -12,45 +12,11 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     private readonly CacheProvider _provider;
     private int _disposed;
 
-    // Cache one accessor per data type so the reflection cost is paid once. Mongo's aggregator
-    // persistor matches by serialized DataBson.CorrelationId — accepting any POCO with a
-    // Guid CorrelationId property — so InMemory matches its sibling rather than restricting
-    // callers to Message-derived types.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, Func<object, Guid?>> CorrelationIdAccessors = new();
-
-    private static Guid? GetCorrelationId(object data)
-    {
-        if (data is Message message)
-        {
-            return message.CorrelationId;
-        }
-
-        var accessor = CorrelationIdAccessors.GetOrAdd(data.GetType(), static type =>
-        {
-            var prop = type.GetProperty("CorrelationId", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-            if (prop is null || prop.PropertyType != typeof(Guid) || prop.GetMethod is null)
-            {
-                // Cache a throw-delegate rather than a null-returning one. A null result
-                // would silently prevent RemoveDataAsync from matching any entry, masking
-                // the mis-typed data with a misleading ConcurrencyException. Throwing on
-                // every invocation gives callers an actionable diagnosis, and the cache
-                // stays bounded (one entry per offending type) while a process restart
-                // resets it automatically once the type is corrected.
-                return obj => throw new InvalidOperationException(
-                    $"Aggregator data type '{obj.GetType().FullName}' does not have a public " +
-                    "'Guid CorrelationId' property. Add the property or use a Message subtype.");
-            }
-
-            return obj => (Guid?)prop.GetValue(obj);
-        });
-        return accessor(data);
-    }
-
-    // Parameters required by IAggregatorPersistor factory convention but unused in InMemory implementation
     /// <summary>
     /// Initializes a new <see cref="InMemoryAggregatorPersistor"/> instance.
     /// </summary>
-    public InMemoryAggregatorPersistor(string connectionString, string databaseName, string collectionName, TimeProvider? timeProvider = null)
+    /// <param name="timeProvider">Time source used by the underlying cache provider; defaults to <see cref="TimeProvider.System"/>.</param>
+    public InMemoryAggregatorPersistor(TimeProvider? timeProvider = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
         _provider = new CacheProvider(_timeProvider);
@@ -61,12 +27,15 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     private readonly object _memoryCacheLock = new();
 #endif
 
-    private sealed record Entry(Guid Id, object Data);
+    // Data is nullable because InMemoryAggregatorPersistorUnresolvedCountTests reflects in
+    // a null-Data Entry to exercise the GetSnapshotAsync unresolved-count branch. The public
+    // Insert path always supplies a non-null IHasCorrelationId.
+    private sealed record Entry(Guid Id, IHasCorrelationId? Data);
 
     /// <summary>
     /// Adds an aggregator message to the named in-memory stream.
     /// </summary>
-    public Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
+    public Task InsertDataAsync(IHasCorrelationId data, string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(data);
@@ -84,22 +53,28 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     /// <summary>
     /// Returns the stored messages for the named stream.
     /// </summary>
-    public Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_memoryCacheLock)
         {
             if (!_provider.TryGet<string, object>(name, out var sourceObj) || sourceObj is not List<Entry> source)
             {
-                return Task.FromResult<IList<object>>([]);
+                return Task.FromResult<IReadOnlyList<IHasCorrelationId>>([]);
             }
-            var copy = new List<object>(source.Count);
+            var copy = new List<IHasCorrelationId>(source.Count);
             foreach (var entry in source)
             {
-                copy.Add(DeepClone.Clone(entry.Data));
+                // is-pattern narrows to a non-null local — DeepClone.Clone's `where T : notnull`
+                // constraint is satisfied. Skip null-Data entries (only producible by the
+                // reflection-based unresolved-count test); the public surface never inserts null.
+                if (entry.Data is { } data)
+                {
+                    copy.Add(DeepClone.Clone(data));
+                }
             }
 
-            return Task.FromResult<IList<object>>(copy);
+            return Task.FromResult<IReadOnlyList<IHasCorrelationId>>(copy);
         }
     }
 
@@ -125,18 +100,21 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             entriesCopy = [.. source];  // shallow copy of reference array; O(n) pointer copy
         }
 
-        var messages = new List<object>(entriesCopy.Length);
+        var messages = new List<IHasCorrelationId>(entriesCopy.Length);
         var ids = new List<Guid>(entriesCopy.Length);
         var unresolved = 0;
         foreach (var entry in entriesCopy)
         {
-            if (entry.Data is null)
+            // is-pattern narrows to non-null for DeepClone's `where T : notnull` constraint.
+            if (entry.Data is { } data)
+            {
+                messages.Add(DeepClone.Clone(data));
+                ids.Add(entry.Id);
+            }
+            else
             {
                 unresolved++;
-                continue;
             }
-            messages.Add(DeepClone.Clone(entry.Data));
-            ids.Add(entry.Id);
         }
         return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, unresolved));
     }
@@ -154,7 +132,9 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             {
                 for (var index = 0; index < list.Count; index++)
                 {
-                    if (GetCorrelationId(list[index].Data) is { } id && id == correlationId)
+                    // Null-conditional handles the test-only reflection-injected null Data; production
+                    // inserts never produce null.
+                    if (list[index].Data?.CorrelationId == correlationId)
                     {
                         list.RemoveAt(index);
                         removed = true;

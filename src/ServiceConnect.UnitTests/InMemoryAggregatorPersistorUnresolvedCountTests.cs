@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -11,7 +12,7 @@ namespace ServiceConnect.UnitTests;
 
 public class InMemoryAggregatorPersistorUnresolvedCountTests
 {
-    private sealed class Payload
+    private sealed class Payload : IHasCorrelationId
     {
         public Guid CorrelationId { get; set; }
         public int X { get; set; }
@@ -20,7 +21,7 @@ public class InMemoryAggregatorPersistorUnresolvedCountTests
     [Fact]
     public async Task GetSnapshotAsync_NullDataEntries_CountedAsUnresolved()
     {
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         await persistor.InsertDataAsync(new Payload { CorrelationId = Guid.NewGuid(), X = 1 }, "agg-a", CancellationToken.None);
         await persistor.InsertDataAsync(new Payload { CorrelationId = Guid.NewGuid(), X = 2 }, "agg-a", CancellationToken.None);
 
@@ -49,7 +50,7 @@ public class InMemoryAggregatorPersistorUnresolvedCountTests
     [Fact]
     public async Task GetSnapshotAsync_AllResolved_UnresolvedCountIsZero()
     {
-        var persistor = new InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new InMemoryAggregatorPersistor();
         await persistor.InsertDataAsync(new Payload { CorrelationId = Guid.NewGuid(), X = 1 }, "agg-b", CancellationToken.None);
         await persistor.InsertDataAsync(new Payload { CorrelationId = Guid.NewGuid(), X = 2 }, "agg-b", CancellationToken.None);
 

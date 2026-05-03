@@ -13,7 +13,7 @@ namespace ServiceConnect.UnitTests.Processors;
 [Collection(SerialConcurrencyCollection.Name)]
 public class AggregatorProcessorTests
 {
-    private static AggregatorSnapshot SnapshotOf(IEnumerable<object> messages, int unresolved = 0)
+    private static AggregatorSnapshot SnapshotOf(IEnumerable<IHasCorrelationId> messages, int unresolved = 0)
     {
         var msgList = messages.ToList();
         var ids = msgList.Select(_ => Guid.NewGuid()).ToList();
@@ -67,7 +67,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -132,7 +132,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -188,7 +188,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -233,7 +233,7 @@ public class AggregatorProcessorTests
         // dispatched AND nothing is deleted — the unresolved records must
         // survive for a later attempt once the types become resolvable.
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
@@ -286,7 +286,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -333,7 +333,7 @@ public class AggregatorProcessorTests
         var flushCanProceed = new TaskCompletionSource();
 
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
@@ -408,7 +408,7 @@ public class AggregatorProcessorTests
         // RemoveSnapshotAsync runs must survive the flush: RemoveSnapshotAsync
         // only deletes the specific ids captured in the snapshot, not the
         // whole aggregator buffer.
-        var persistor = new ServiceConnect.Persistence.InMemory.InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new ServiceConnect.Persistence.InMemory.InMemoryAggregatorPersistor();
         const string name = "agg-race";
 
         var initial = new[]
@@ -463,7 +463,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -474,7 +474,7 @@ public class AggregatorProcessorTests
             {
                 // The snapshot captures only the initial 3 messages.
                 var ids = initial.Select(_ => Guid.NewGuid()).ToList();
-                return (IAggregatorSnapshot)new AggregatorSnapshot([.. initial.Cast<object>()], ids, 0);
+                return (IAggregatorSnapshot)new AggregatorSnapshot([.. initial.Cast<IHasCorrelationId>()], ids, 0);
                 // NOTE: the late message is NOT in this snapshot — it would be inserted
                 // by a concurrent producer between snapshot and remove.
             });
@@ -543,7 +543,7 @@ public class AggregatorProcessorTests
 
         var getSnapshotCalled = new TaskCompletionSource();
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -619,7 +619,7 @@ public class AggregatorProcessorTests
         var flushTcs = new TaskCompletionSource();
 
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -737,7 +737,7 @@ public class AggregatorProcessorTests
         // If the handler throws a non-cancellation exception, the snapshot must not have
         // been removed yet — the messages stay in the persistor so the broker can redeliver
         // and the batch is re-flushable on the next admission.
-        var persistor = new ServiceConnect.Persistence.InMemory.InMemoryAggregatorPersistor(string.Empty, string.Empty, string.Empty);
+        var persistor = new ServiceConnect.Persistence.InMemory.InMemoryAggregatorPersistor();
 
         var throwingAggregator = new ThrowingAggregator();
         var handlerRefs = new List<HandlerReference>
@@ -805,7 +805,7 @@ public class AggregatorProcessorTests
 
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock
-            .Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock
             .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -855,7 +855,7 @@ public class AggregatorProcessorTests
 
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock
-            .Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock
             .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -918,7 +918,7 @@ public class AggregatorProcessorTests
 
         var probeMessage = new ScopeProbeAggMessage(Guid.NewGuid());
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -976,7 +976,7 @@ public class AggregatorProcessorTests
 
         var probeMessage = new EcCaptureProbeMessage(Guid.NewGuid());
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<object>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         // Below batch size so ProcessAsync goes to the timer path, not the immediate flush.
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))

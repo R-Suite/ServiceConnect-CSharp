@@ -15,8 +15,9 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
     /// Target type used to prove deserialization: a BsonDocument whose Body field is an
     /// array (incompatible with string) triggers BsonSerializationException.
     /// </summary>
-    public sealed class CorruptTarget
+    public sealed class CorruptTarget : IHasCorrelationId
     {
+        public Guid CorrelationId { get; init; }
         public string Body { get; set; } = string.Empty;
     }
 
@@ -107,7 +108,7 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
             .ThrowsAsync(new BsonSerializationException("bson boom"));
 
         var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
-            persistor.InsertDataAsync(new { Foo = "bar" }, "test-name"));
+            persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "test-name"));
 
         Assert.IsAssignableFrom<BsonException>(ex.InnerException);
     }
@@ -206,7 +207,7 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
     // Minimal IAggregatorSnapshot implementation used by RemoveSnapshotAsync tests.
     private sealed class TestSnapshot(IReadOnlyList<Guid> ids) : IAggregatorSnapshot
     {
-        public IReadOnlyList<object> ResolvedMessages => [];
+        public IReadOnlyList<IHasCorrelationId> ResolvedMessages => [];
         public IReadOnlyList<Guid> ResolvedIds => ids;
         public int UnresolvedCount => 0;
     }

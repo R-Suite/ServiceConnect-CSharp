@@ -26,7 +26,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
         const int perWriter = 100;
         const int expected = writers * perWriter;
 
-        using var persistor = new InMemoryAggregatorPersistor("", "", "");
+        using var persistor = new InMemoryAggregatorPersistor();
 
         var tasks = Enumerable.Range(0, writers).Select(w => Task.Run(async () =>
         {
@@ -52,7 +52,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
         const int streamCount = 32;
         const int perStream = 50;
 
-        using var persistor = new InMemoryAggregatorPersistor("", "", "");
+        using var persistor = new InMemoryAggregatorPersistor();
 
         var tasks = Enumerable.Range(0, streamCount).Select(s => Task.Run(async () =>
         {
@@ -82,7 +82,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
         // never produce a torn snapshot or trip the no-op-delete contract.
         const int rounds = 200;
 
-        using var persistor = new InMemoryAggregatorPersistor("", "", "");
+        using var persistor = new InMemoryAggregatorPersistor();
 
         var inserter = Task.Run(async () =>
         {
@@ -125,7 +125,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
         // Multiple workers race to remove the same correlation id. The persistor
         // must surface a ConcurrencyException to all but one — silently no-oping
         // would be the bug we're guarding against.
-        using var persistor = new InMemoryAggregatorPersistor("", "", "");
+        using var persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
         await persistor.InsertDataAsync(new AggregatorTestData(corrId) { Value = "single" }, "key", CancellationToken.None);
 
@@ -161,7 +161,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
         // observed by readers running alongside the writer.
         const int total = 500;
 
-        using var persistor = new InMemoryAggregatorPersistor("", "", "");
+        using var persistor = new InMemoryAggregatorPersistor();
 
         var observedCounts = new ConcurrentBag<int>();
 

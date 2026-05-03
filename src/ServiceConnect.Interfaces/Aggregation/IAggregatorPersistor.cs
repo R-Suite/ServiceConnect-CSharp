@@ -8,10 +8,10 @@ public interface IAggregatorPersistor
     /// <summary>
     /// Stores an aggregated message for the named aggregator instance.
     /// </summary>
-    /// <param name="data">The message payload to persist.</param>
+    /// <param name="data">The message payload to persist; must be an implementation of <see cref="IHasCorrelationId"/>.</param>
     /// <param name="name">The logical aggregator name.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default);
+    Task InsertDataAsync(IHasCorrelationId data, string name, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads all persisted messages for the named aggregator.
@@ -19,7 +19,7 @@ public interface IAggregatorPersistor
     /// <param name="name">The logical aggregator name.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
     /// <returns>The persisted messages.</returns>
-    Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(string name, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads a snapshot that separates resolved and unresolved persisted records.

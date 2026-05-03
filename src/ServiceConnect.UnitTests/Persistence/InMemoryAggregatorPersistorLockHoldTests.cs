@@ -19,7 +19,7 @@ public class InMemoryAggregatorPersistorLockHoldTests
         // The snapshot must hand the caller deep-cloned objects. A remove issued
         // after the snapshot is taken must not alter what that snapshot captured,
         // and must be reflected in a subsequent snapshot.
-        using var persistor = new InMemoryAggregatorPersistor("", "", "");
+        using var persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
         await persistor.InsertDataAsync(new AggregatorTestData(corrId) { Value = "original" }, "s");
 
@@ -44,7 +44,7 @@ public class InMemoryAggregatorPersistorLockHoldTests
         // Even though DeepClone now runs outside the lock, the caller must still
         // receive independent copies — mutating the returned snapshot objects must
         // not alter what subsequent reads see in storage.
-        using var persistor = new InMemoryAggregatorPersistor("", "", "");
+        using var persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
         await persistor.InsertDataAsync(
             new InMemoryAggregatorPersistorTests.AggWithNested(corrId) { Tags = { "before" } }, "s");

@@ -91,7 +91,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     }
 
     /// <inheritdoc />
-    public async Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
+    public async Task InsertDataAsync(IHasCorrelationId data, string name, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(data);
 
@@ -126,10 +126,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     }
 
     /// <inheritdoc />
-    public async Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(string name, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetSnapshotAsync(name, cancellationToken).ConfigureAwait(false);
-        // Preserve legacy signature: return only the resolved messages.
         return [.. snapshot.ResolvedMessages];
     }
 
@@ -150,7 +149,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 .Ascending(x => x.Id);  // final tie-break for cross-process ties
             var docs = await _collection.Find(filter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false);
 
-            var messages = new List<object>(docs.Count);
+            var messages = new List<IHasCorrelationId>(docs.Count);
             var ids = new List<Guid>(docs.Count);
             var unresolved = 0;
 
@@ -165,7 +164,16 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 
                 try
                 {
-                    messages.Add(BsonSerializer.Deserialize(doc.DataBson, type));
+                    var deserialised = BsonSerializer.Deserialize(doc.DataBson, type);
+                    if (deserialised is not IHasCorrelationId withCorrId)
+                    {
+                        _logger.LogWarning(
+                            "Aggregator document {Id} of type '{TypeName}' does not implement IHasCorrelationId; counting as unresolved",
+                            doc.Id, doc.DataTypeName);
+                        unresolved++;
+                        continue;
+                    }
+                    messages.Add(withCorrId);
                     ids.Add(doc.Id);
                 }
                 catch (Exception ex) when (ex is BsonException or FormatException)

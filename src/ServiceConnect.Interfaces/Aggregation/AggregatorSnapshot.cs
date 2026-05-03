@@ -7,7 +7,7 @@ namespace ServiceConnect.Interfaces;
 /// and the count of records that could not be resolved (e.g. renamed CLR types).
 /// </summary>
 public sealed record AggregatorSnapshot(
-    IReadOnlyList<object> ResolvedMessages,
+    IReadOnlyList<IHasCorrelationId> ResolvedMessages,
     IReadOnlyList<Guid> ResolvedIds,
     int UnresolvedCount) : IAggregatorSnapshot
 {

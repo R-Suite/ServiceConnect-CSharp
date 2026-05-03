@@ -8,7 +8,7 @@ public interface IAggregatorSnapshot
     /// <summary>
     /// Gets the stored messages that were successfully resolved back into CLR objects.
     /// </summary>
-    IReadOnlyList<object> ResolvedMessages { get; }
+    IReadOnlyList<IHasCorrelationId> ResolvedMessages { get; }
 
     /// <summary>
     /// Gets the storage ids for the resolved messages.
