@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -19,11 +20,11 @@ namespace ServiceConnect.UnitTests
         public SendMessagePipelineTests()
         {
             _mockProducer = new Mock<IProducer>();
-            _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+            _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
-            _mockProducer.Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+            _mockProducer.Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
-            _mockProducer.Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+            _mockProducer.Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             _mockPipelineConfig = new Mock<IPipelineConfiguration>();
@@ -71,7 +72,11 @@ namespace ServiceConnect.UnitTests
 
             await pipeline.ExecutePublishMessagePipelineAsync(MakePublishContext(type, bytes, headers));
 
-            _mockProducer.Verify(p => p.PublishAsync(type, bytes, headers), Times.Once);
+            _mockProducer.Verify(p => p.PublishAsync(
+                type,
+                It.Is<ReadOnlyMemory<byte>>(b => b.ToArray().SequenceEqual(bytes)),
+                It.Is<IReadOnlyDictionary<string, string>>(h => h.Count == headers.Count),
+                It.IsAny<CancellationToken>()), Times.Once);
         }
 
         [Fact]
@@ -85,8 +90,13 @@ namespace ServiceConnect.UnitTests
 
             await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(type, bytes, headers, endPoint));
 
-            _mockProducer.Verify(p => p.SendAsync(endPoint, type, bytes, headers), Times.Once);
-            _mockProducer.Verify(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
+            _mockProducer.Verify(p => p.SendAsync(
+                endPoint,
+                type,
+                It.Is<ReadOnlyMemory<byte>>(b => b.ToArray().SequenceEqual(bytes)),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+            _mockProducer.Verify(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
@@ -98,8 +108,12 @@ namespace ServiceConnect.UnitTests
 
             await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(type, bytes));
 
-            _mockProducer.Verify(p => p.SendAsync(type, bytes, It.IsAny<IDictionary<string, string>>()), Times.Once);
-            _mockProducer.Verify(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
+            _mockProducer.Verify(p => p.SendAsync(
+                type,
+                It.Is<ReadOnlyMemory<byte>>(b => b.ToArray().SequenceEqual(bytes)),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+            _mockProducer.Verify(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
@@ -111,8 +125,12 @@ namespace ServiceConnect.UnitTests
 
             await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(type, bytes, endPoint: string.Empty));
 
-            _mockProducer.Verify(p => p.SendAsync(type, bytes, It.IsAny<IDictionary<string, string>>()), Times.Once);
-            _mockProducer.Verify(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
+            _mockProducer.Verify(p => p.SendAsync(
+                type,
+                It.Is<ReadOnlyMemory<byte>>(b => b.ToArray().SequenceEqual(bytes)),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+            _mockProducer.Verify(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
         }
 
         [Fact]
@@ -157,7 +175,7 @@ namespace ServiceConnect.UnitTests
             {
                 Message = msg,
                 MessageType = typeof(TestSendPipelineMessage),
-                MessageBytes = [1, 2, 3],
+                MessageBytes = new byte[] { 1, 2, 3 },
                 Headers = headers,
                 RoutingKey = "rk",
                 Operation = SendOperation.Publish,
@@ -195,7 +213,7 @@ namespace ServiceConnect.UnitTests
             {
                 Message = msg,
                 MessageType = typeof(TestSendPipelineMessage),
-                MessageBytes = [1, 2, 3],
+                MessageBytes = new byte[] { 1, 2, 3 },
                 Headers = headers,
                 EndPoint = "my-queue",
                 RoutingKey = null,
@@ -232,13 +250,13 @@ namespace ServiceConnect.UnitTests
             await pipeline.ExecuteSendMessagePipelineAsync(MakeSendContext(typeof(string), [1, 2, 3]));
 
             _mockProducer.Verify(
-                p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()),
+                p => p.SendAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()),
                 Times.Never);
             _mockProducer.Verify(
-                p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()),
+                p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()),
                 Times.Never);
             _mockProducer.Verify(
-                p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()),
+                p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()),
                 Times.Never);
         }
     }

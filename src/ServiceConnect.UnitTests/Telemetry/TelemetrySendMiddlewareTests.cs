@@ -42,7 +42,7 @@ public sealed class TelemetrySendMiddlewareTests : IDisposable
         {
             Message = new SampleMessage(),
             MessageType = typeof(SampleMessage),
-            MessageBytes = [1],
+            MessageBytes = new byte[] { 1 },
             Headers = new Dictionary<string, string>(StringComparer.Ordinal),
             RoutingKey = "rk",
             Operation = SendOperation.Publish,
@@ -66,7 +66,7 @@ public sealed class TelemetrySendMiddlewareTests : IDisposable
         {
             Message = new SampleMessage(),
             MessageType = typeof(SampleMessage),
-            MessageBytes = [],
+            MessageBytes = ReadOnlyMemory<byte>.Empty,
             Headers = new Dictionary<string, string>(StringComparer.Ordinal),
             EndPoint = "queue.target",
             Operation = SendOperation.Send,
@@ -90,7 +90,7 @@ public sealed class TelemetrySendMiddlewareTests : IDisposable
         {
             Message = new SampleMessage(),
             MessageType = typeof(SampleMessage),
-            MessageBytes = [],
+            MessageBytes = ReadOnlyMemory<byte>.Empty,
             Headers = new Dictionary<string, string>(StringComparer.Ordinal),
             Operation = SendOperation.Publish,
         };

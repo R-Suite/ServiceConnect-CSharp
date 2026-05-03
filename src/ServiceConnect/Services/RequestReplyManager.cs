@@ -32,7 +32,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var messageBytes = _serializer.Serialize(message);
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
 
         var messageId = Guid.NewGuid();
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -142,7 +144,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var messageBytes = _serializer.Serialize(message);
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
 
         var messageId = Guid.NewGuid();
         int? configuredEndPointCount = options.EndPoints is { Count: > 0 } ? options.EndPoints.Count : null;
@@ -286,7 +290,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var messageBytes = _serializer.Serialize(message);
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
 
         var messageId = Guid.NewGuid();
         var expectedCount = options.ExpectedReplyCount ?? -1;

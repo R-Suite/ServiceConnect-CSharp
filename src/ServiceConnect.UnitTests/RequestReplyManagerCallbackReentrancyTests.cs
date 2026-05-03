@@ -7,6 +7,7 @@ using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -31,7 +32,7 @@ public sealed class RequestReplyManagerCallbackReentrancyTests
         const int expectedReplyCount = 5;
 
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
         serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(() => new FakeMessage1(Guid.NewGuid()) { Username = "x" });
 

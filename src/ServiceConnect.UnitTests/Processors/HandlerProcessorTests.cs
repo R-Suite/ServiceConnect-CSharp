@@ -8,6 +8,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
+using ServiceConnect.UnitTests.Fakes;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Processors;
@@ -513,7 +514,7 @@ file static class TestBusFactory
     public static Bus Create(IQueueConfiguration queueConfiguration, ITimeoutStore timeoutStore, ConsumeContextAccessor accessor)
     {
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(x => x.Serialize(It.IsAny<TestHpMsg>())).Returns([1]);
+        serializer.SetupSerializeAny<TestHpMsg>([1]);
 
         var filterPipeline = new Mock<IFilterPipeline>();
         var sendPipeline = new Mock<ISendMessagePipeline>();

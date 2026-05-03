@@ -15,10 +15,10 @@ public class RequestReplyTests
     {
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+            .Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var services = new ServiceCollection();
@@ -49,13 +49,15 @@ public class RequestReplyTests
 
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Type, byte[], IDictionary<string, string>, CancellationToken>((ep, t, b, h, ct) =>
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Type, ReadOnlyMemory<byte>, IReadOnlyDictionary<string, string>?, CancellationToken>((ep, t, b, h, ct) =>
             {
-                if (h.TryGetValue("RequestMessageId", out var messageId) && replyManager != null && serializer != null)
+                if (h is not null && h.TryGetValue("RequestMessageId", out var messageId) && replyManager != null && serializer != null)
                 {
                     var response = new TestResponse(Guid.NewGuid()) { Answer = "reply data" };
-                    var responseBytes = serializer.Serialize(response);
+                    var bw = new System.Buffers.ArrayBufferWriter<byte>();
+                    serializer.Serialize(response, bw);
+                    var responseBytes = bw.WrittenMemory;
                     Task.Run(() => replyManager.ProcessReply(messageId, responseBytes, typeof(TestResponse)));
                 }
             })

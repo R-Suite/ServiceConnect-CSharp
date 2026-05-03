@@ -146,7 +146,7 @@ public class ProducerSizeLimitTests
     {
         var producer = MakeProducer();
         var ex = await Assert.ThrowsAsync<ArgumentException>(
-            () => producer.SendBytesAsync(endpoint, typeof(byte[]), [1]));
+            () => producer.SendBytesAsync(endpoint, typeof(byte[]), new byte[] { 1 }));
 
         Assert.Contains("empty endpoint", ex.Message);
     }
@@ -156,7 +156,7 @@ public class ProducerSizeLimitTests
     {
         var producer = MakeProducer();
         await Assert.ThrowsAsync<ArgumentException>(
-            () => producer.SendBytesAsync(null!, typeof(byte[]), [1]));
+            () => producer.SendBytesAsync(null!, typeof(byte[]), new byte[] { 1 }));
     }
 
     // ─── MaximumMessageSize property honours config ──────────────────────────

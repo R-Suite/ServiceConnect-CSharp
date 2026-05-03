@@ -62,30 +62,6 @@ public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
     }
 
     /// <inheritdoc />
-    public byte[] Serialize<T>(T message) where T : Message
-    {
-        if (message is null)
-        {
-            throw new SerializationException("Cannot serialize null message", typeof(T));
-        }
-
-        try
-        {
-            var writer = new ArrayBufferWriter<byte>();
-            using (var jsonWriter = new Utf8JsonWriter(writer))
-            {
-                JsonSerializer.Serialize(jsonWriter, message, message.GetType(), _options);
-            }
-
-            return writer.WrittenSpan.ToArray();
-        }
-        catch (JsonException ex)
-        {
-            throw new SerializationException($"Failed to serialize message of type {typeof(T).Name}", typeof(T), ex);
-        }
-    }
-
-    /// <inheritdoc />
     public void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -106,63 +82,20 @@ public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
     }
 
     /// <inheritdoc />
-    public T Deserialize<T>(byte[] data) where T : Message
+    public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
         => (T)Deserialize(data, typeof(T));
-
-    /// <inheritdoc />
-    public T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message
-        => (T)Deserialize(data, typeof(T));
-
-    /// <inheritdoc />
-    public object Deserialize(byte[] data, Type type)
-        => Deserialize((ReadOnlySpan<byte>)data, type);
-
-    /// <inheritdoc />
-    public object Deserialize(ReadOnlySpan<byte> data, Type type)
-    {
-        try
-        {
-            return JsonSerializer.Deserialize(data, type, _options)
-                ?? throw new SerializationException(
-                    $"Deserialization returned null for type {type.Name}", type);
-        }
-        catch (JsonException ex)
-        {
-            throw new SerializationException(
-                $"Failed to deserialize message of type {type.Name}", type, ex);
-        }
-    }
 
     /// <inheritdoc />
     public object Deserialize(ReadOnlyMemory<byte> data, Type type)
-        => Deserialize(data.Span, type);
-
-    /// <inheritdoc />
-    public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
-        => (T)Deserialize(data.Span, typeof(T));
-
-    /// <inheritdoc />
-    public object Deserialize(in ReadOnlySequence<byte> data, Type type)
     {
         try
         {
-            var reader = new Utf8JsonReader(data, isFinalBlock: true, state: default);
-            return JsonSerializer.Deserialize(ref reader, type, _options)
+            return JsonSerializer.Deserialize(data.Span, type, _options)
                 ?? throw new SerializationException(
                     $"Deserialization returned null for type {type.Name}", type);
         }
         catch (JsonException ex)
         {
-            throw new SerializationException(
-                $"Failed to deserialize message of type {type.Name}", type, ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            // JsonSerializer.Deserialize(ref Utf8JsonReader, ...) documents InvalidOperationException
-            // for malformed-state cases (e.g. reader CurrentDepth != 0 at entry, partial state).
-            // The reader here is freshly constructed so this is unreachable in practice, but wrap
-            // for consistency: every other deserialize path surfaces JSON failures as
-            // SerializationException. This catch keeps the contract uniform across overloads.
             throw new SerializationException(
                 $"Failed to deserialize message of type {type.Name}", type, ex);
         }

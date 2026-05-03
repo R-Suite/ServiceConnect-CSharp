@@ -249,7 +249,7 @@ public class StreamProcessorTests
         var msg = new SptMsg(Guid.NewGuid());
         var serializerMock = new Mock<IMessageSerializer>();
         serializerMock
-            .Setup(s => s.Deserialize(It.IsAny<System.Buffers.ReadOnlySequence<byte>>(), msgType))
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), msgType))
             .Returns(msg);
 
         var (accessor, scopeStream1, _) = BuildScopeContext(provider);
@@ -380,7 +380,7 @@ public class StreamProcessorTests
         var msg = new SptMsg(Guid.NewGuid());
         var serializerMock = new Mock<IMessageSerializer>();
         serializerMock
-            .Setup(s => s.Deserialize(It.IsAny<System.Buffers.ReadOnlySequence<byte>>(), msgType))
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), msgType))
             .Returns(msg);
 
         var (accessor, scopeStream2, _) = BuildScopeContext(provider);
@@ -560,7 +560,7 @@ public class StreamProcessorTests
         var streamRegistry = new StreamHandlerRegistry(handlerRefs, NullLogger<StreamHandlerRegistry>.Instance);
 
         var scopeAccessor = new ConsumeScopeAccessor();
-        var serializer = new NewtonsoftJsonMessageSerializer();
+        var serializer = new SystemTextJsonMessageSerializer();
 
         var processor = new StreamProcessor(
             scopeAccessor,
@@ -577,8 +577,7 @@ public class StreamProcessorTests
         using (scopeAccessor.Push(scopedProvider))
         {
             var sequenceId = Guid.NewGuid().ToString();
-            var bytes = System.Text.Encoding.UTF8.GetBytes(
-                Newtonsoft.Json.JsonConvert.SerializeObject(new ScopeProbeMessage(Guid.NewGuid())));
+            var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new ScopeProbeMessage(Guid.NewGuid()));
             var headers = new Dictionary<string, object>
             {
                 [HeaderKeys.MessageType] = HeaderKeys.ByteStream,

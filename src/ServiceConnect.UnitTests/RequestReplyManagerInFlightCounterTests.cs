@@ -6,6 +6,7 @@ using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -33,7 +34,7 @@ public sealed class RequestReplyManagerInFlightCounterTests
         // the user-supplied onReply (we count via the responses-collection size) must
         // not see the duplicates.
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         // Each Deserialize call hands back a fresh reply object so the manager's Add
         // into the responses list always sees a real value.
@@ -92,7 +93,7 @@ public sealed class RequestReplyManagerInFlightCounterTests
         // user-visible invariant: no OnReply for replies arriving after the request
         // completes.
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
         serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(() => new FakeMessage1(Guid.NewGuid()) { Username = "late" });
 

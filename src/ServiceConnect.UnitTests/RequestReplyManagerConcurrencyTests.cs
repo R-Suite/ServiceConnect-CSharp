@@ -9,6 +9,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -40,8 +41,10 @@ public class RequestReplyManagerConcurrencyTests
         // request id directly as a UTF-8 string so the mock can recover it.
         RequestReplyManager? manager = null;
 
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>()))
-            .Returns([0]);
+        // The Serialize callback writes the bytes that ProcessReply later receives;
+        // here we only need a non-empty payload — the Deserialize mock keys off the
+        // bytes ProcessReply is given (the request id encoded as UTF-8) below.
+        serializer.SetupSerializeAny<FakeMessage1>([0]);
         serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(new InvocationFunc(invocation =>
             {
@@ -95,7 +98,7 @@ public class RequestReplyManagerConcurrencyTests
         var requestId = (string?)null;
         RequestReplyManager? manager = null;
 
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1]);
+        serializer.SetupSerializeAny<FakeMessage1>([1]);
         serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(new FakeMessage1(Guid.NewGuid()) { Username = "winner" });
 
@@ -150,7 +153,7 @@ public class RequestReplyManagerConcurrencyTests
             string? requestId = null;
             RequestReplyManager? manager = null;
 
-            serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1]);
+            serializer.SetupSerializeAny<FakeMessage1>([1]);
             serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
                 .Returns(new FakeMessage1(Guid.NewGuid()) { Username = "late-reply" });
 
@@ -209,8 +212,7 @@ public class RequestReplyManagerConcurrencyTests
         var idsByCaller = new ConcurrentDictionary<int, string>();
         var nextCallerSeed = 0;
 
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>()))
-            .Returns([0]);
+        serializer.SetupSerializeAny<FakeMessage1>([0]);
         serializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(new FakeMessage1(Guid.NewGuid()) { Username = "ok" });
 

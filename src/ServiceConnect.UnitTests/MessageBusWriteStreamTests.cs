@@ -9,7 +9,7 @@ namespace ServiceConnect.UnitTests;
 public class MessageBusWriteStreamTests
 {
     private readonly Mock<IProducer> _producer = new();
-    private readonly List<(string Endpoint, Type Type, byte[] Payload, IDictionary<string, string>? Headers)> _sends = [];
+    private readonly List<(string Endpoint, Type Type, byte[] Payload, IReadOnlyDictionary<string, string>? Headers)> _sends = [];
 
     public MessageBusWriteStreamTests()
     {
@@ -17,11 +17,11 @@ public class MessageBusWriteStreamTests
             .Setup(p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
-                It.IsAny<byte[]>(),
-                It.IsAny<IDictionary<string, string>?>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<string, Type, byte[], IDictionary<string, string>?, CancellationToken>((ep, type, bytes, headers, _) =>
-                _sends.Add((ep, type, bytes, headers)))
+            .Callback<string, Type, ReadOnlyMemory<byte>, IReadOnlyDictionary<string, string>?, CancellationToken>((ep, type, bytes, headers, _) =>
+                _sends.Add((ep, type, bytes.ToArray(), headers)))
             .Returns(Task.CompletedTask);
     }
 
@@ -160,8 +160,8 @@ public class MessageBusWriteStreamTests
             .Setup(p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
-                It.IsAny<byte[]>(),
-                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("transport down"));
 
@@ -180,8 +180,8 @@ public class MessageBusWriteStreamTests
             p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
-                It.IsAny<byte[]>(),
-                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -194,8 +194,8 @@ public class MessageBusWriteStreamTests
             .Setup(p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
-                It.IsAny<byte[]>(),
-                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("transport down"));
 
@@ -213,8 +213,8 @@ public class MessageBusWriteStreamTests
             p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
-                It.IsAny<byte[]>(),
-                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -238,8 +238,8 @@ public class MessageBusWriteStreamTests
         var sendException = new InvalidOperationException("simulated post-increment throw");
         producer
             .Setup(p => p.SendBytesAsync(
-                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(),
-                It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(sendException);
 
         var stream = new MessageBusWriteStream(producer.Object, "queue", typeof(string));
@@ -264,9 +264,9 @@ public class MessageBusWriteStreamTests
         var producer = new Mock<IProducer>();
         producer
             .Setup(p => p.SendBytesAsync(
-                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(),
-                It.IsAny<IDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Returns(async (string ep, Type t, byte[] body, IDictionary<string, string> h, CancellationToken ct) =>
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string ep, Type t, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? h, CancellationToken ct) =>
             {
                 sendStarted.SetResult();
                 // WaitAsync(ct) only cancels if ct is the real token; if ct is CancellationToken.None it blocks forever.
@@ -295,8 +295,8 @@ public class MessageBusWriteStreamTests
             .Setup(p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
-                It.IsAny<byte[]>(),
-                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(tcs.Task.ContinueWith(_ => { }));
 

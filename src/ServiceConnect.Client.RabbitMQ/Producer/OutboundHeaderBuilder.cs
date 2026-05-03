@@ -46,7 +46,7 @@ internal sealed class OutboundHeaderBuilder(
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger _logger = logger;
 
-    public Dictionary<string, object> BuildHeaders(Type type, IDictionary<string, string>? headers, string queueName, string messageType)
+    public Dictionary<string, object> BuildHeaders(Type type, IReadOnlyDictionary<string, string>? headers, string queueName, string messageType)
     {
         // Build the final object-valued dictionary directly rather than populating a
         // string-valued copy and then rewriting it. Pre-sized to the maximum

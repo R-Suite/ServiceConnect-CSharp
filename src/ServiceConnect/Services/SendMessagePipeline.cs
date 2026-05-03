@@ -59,7 +59,7 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     {
         var producer = _producer;
         Task terminal(SendContext ctx, CancellationToken ct) =>
-            producer.PublishAsync(ctx.MessageType, ctx.MessageBytes, ctx.Headers, ct);
+            producer.PublishAsync(ctx.MessageType, ctx.MessageBytes, ToReadOnly(ctx.Headers), ct);
         return WrapMiddleware(terminal);
     }
 
@@ -68,9 +68,29 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
         var producer = _producer;
         Task terminal(SendContext ctx, CancellationToken ct) =>
             !string.IsNullOrEmpty(ctx.EndPoint)
-                ? producer.SendAsync(ctx.EndPoint, ctx.MessageType, ctx.MessageBytes, ctx.Headers, ct)
-                : producer.SendAsync(ctx.MessageType, ctx.MessageBytes, ctx.Headers, ct);
+                ? producer.SendAsync(ctx.EndPoint, ctx.MessageType, ctx.MessageBytes, ToReadOnly(ctx.Headers), ct)
+                : producer.SendAsync(ctx.MessageType, ctx.MessageBytes, ToReadOnly(ctx.Headers), ct);
         return WrapMiddleware(terminal);
+    }
+
+    // SendContext.Headers is IDictionary<string,string> for middleware mutability; IProducer
+    // accepts IReadOnlyDictionary<string,string> as a tighter contract. Bus.cs constructs the
+    // headers as a concrete Dictionary<string,string> which implements both, so the runtime
+    // cast succeeds without copying. Defensive fallback wraps any other IDictionary impl in a
+    // shallow copy so the read-only contract is honoured.
+    private static IReadOnlyDictionary<string, string>? ToReadOnly(IDictionary<string, string>? headers)
+    {
+        if (headers is null)
+        {
+            return null;
+        }
+
+        if (headers is IReadOnlyDictionary<string, string> ro)
+        {
+            return ro;
+        }
+
+        return new Dictionary<string, string>(headers, StringComparer.Ordinal);
     }
 
     private SendMessageDelegate WrapMiddleware(SendMessageDelegate terminal)

@@ -146,18 +146,17 @@ public sealed class Producer : IProducer
     /// Publishes a message to the exchange derived from the specified message type.
     /// </summary>
     /// <param name="type">The logical message type used to determine the publish exchange and stamped headers.</param>
-    /// <param name="message">The serialized message body.</param>
+    /// <param name="body">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the publish operation.</param>
-    public async Task PublishAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task PublishAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
-        if (message.Length > MaximumMessageSize)
+        if (body.Length > MaximumMessageSize)
         {
             throw new InvalidOperationException(
-                $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
+                $"Message size {body.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         }
 
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
@@ -186,7 +185,7 @@ public sealed class Producer : IProducer
                     string.Empty,
                     false,
                     basicProperties,
-                    (ReadOnlyMemory<byte>)message,
+                    body,
                     cancellationToken).ConfigureAwait(false);
             }, cancellationToken).ConfigureAwait(false);
         }
@@ -197,18 +196,17 @@ public sealed class Producer : IProducer
     /// Sends a message to each endpoint mapped to the specified message type.
     /// </summary>
     /// <param name="type">The logical message type used to resolve destination queues.</param>
-    /// <param name="message">The serialized message body.</param>
+    /// <param name="body">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task SendAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
-        if (message.Length > MaximumMessageSize)
+        if (body.Length > MaximumMessageSize)
         {
             throw new InvalidOperationException(
-                $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
+                $"Message size {body.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         }
 
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
@@ -244,7 +242,7 @@ public sealed class Producer : IProducer
                         endPoint,
                         false,
                         basicProperties,
-                        (ReadOnlyMemory<byte>)message,
+                        body,
                         cancellationToken).AsTask(),
                     cancellationToken).ConfigureAwait(false);
             }
@@ -257,23 +255,22 @@ public sealed class Producer : IProducer
     /// </summary>
     /// <param name="endPoint">The destination queue name.</param>
     /// <param name="type">The logical message type used when stamping headers.</param>
-    /// <param name="message">The serialized message body.</param>
+    /// <param name="body">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendAsync(string endPoint, Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
         {
             throw new ArgumentException($"Cannot send message of type {type} to empty endpoint", nameof(endPoint));
         }
 
-        if (message.Length > MaximumMessageSize)
+        if (body.Length > MaximumMessageSize)
         {
             throw new InvalidOperationException(
-                $"Message size {message.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
+                $"Message size {body.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         }
 
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
@@ -292,7 +289,7 @@ public sealed class Producer : IProducer
                     endPoint,
                     false,
                     basicProperties,
-                    (ReadOnlyMemory<byte>)message,
+                    body,
                     cancellationToken).AsTask(),
                 cancellationToken).ConfigureAwait(false);
         }
@@ -307,10 +304,9 @@ public sealed class Producer : IProducer
     /// <param name="packet">The raw payload to send.</param>
     /// <param name="headers">Optional custom headers to include with the packet.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendBytesAsync(string endPoint, Type type, byte[] packet, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task SendBytesAsync(string endPoint, Type type, ReadOnlyMemory<byte> packet, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
-        ArgumentNullException.ThrowIfNull(packet);
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(endPoint))
         {
@@ -339,7 +335,7 @@ public sealed class Producer : IProducer
                     endPoint,
                     false,
                     basicProperties,
-                    (ReadOnlyMemory<byte>)packet,
+                    packet,
                     cancellationToken).AsTask(),
                 cancellationToken).ConfigureAwait(false);
         }

@@ -20,8 +20,8 @@ public class MessageBusWriteStreamTimeProviderTests
             .Setup(p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
-                It.IsAny<byte[]>(),
-                It.IsAny<Dictionary<string, string>?>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
                 It.IsAny<CancellationToken>()))
             .Returns(tcs.Task.ContinueWith(_ => { }));
 

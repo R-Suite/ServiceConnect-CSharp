@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.Json;
 using Newtonsoft.Json.Linq;
 using ServiceConnect.Interfaces;
@@ -21,11 +22,21 @@ public class RoundTripTests
 {
     private static readonly SystemTextJsonMessageSerializer Stj = new();
 
+    // Adapter: the production IMessageSerializer interface dropped its byte[]-returning
+    // Serialize<T>(T) overload in Phase A.2. The compat tests still want byte[] for the
+    // JSON-DOM equivalence assertions, so we route through ArrayBufferWriter here.
+    private static byte[] StjSerialize(Message message)
+    {
+        var bw = new ArrayBufferWriter<byte>();
+        Stj.Serialize(message, bw);
+        return bw.WrittenSpan.ToArray();
+    }
+
     [Theory]
     [MemberData(nameof(CorpusFactory.AllCorpusItems), MemberType = typeof(CorpusFactory))]
     public void Stj_ToStj_RoundTrip_StructurallyEqual(Message message)
     {
-        var bytes = Stj.Serialize(message);
+        var bytes = StjSerialize(message);
         var deserialised = Stj.Deserialize(bytes, message.GetType());
         AssertStructurallyEqual(message, deserialised);
     }
@@ -43,7 +54,7 @@ public class RoundTripTests
     [MemberData(nameof(CorpusFactory.AllCorpusItems), MemberType = typeof(CorpusFactory))]
     public void Stj_ToNewtonsoft_DeserialiseSucceeds(Message message)
     {
-        var bytes = Stj.Serialize(message);
+        var bytes = StjSerialize(message);
         var deserialised = NewtonsoftReferenceSerializer.Deserialize(bytes, message.GetType());
         AssertStructurallyEqual(message, deserialised);
     }
@@ -52,7 +63,7 @@ public class RoundTripTests
     [MemberData(nameof(CorpusFactory.AllCorpusItems), MemberType = typeof(CorpusFactory))]
     public void Stj_And_Newtonsoft_Outputs_AreJsonEquivalent(Message message)
     {
-        var stjBytes = Stj.Serialize(message);
+        var stjBytes = StjSerialize(message);
         var newtonsoftBytes = NewtonsoftReferenceSerializer.Serialize(message);
 
         // Bytes may differ (Unicode escape choices, whitespace) but the JSON DOMs must match.

@@ -9,6 +9,7 @@ using ServiceConnect;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -44,7 +45,7 @@ public sealed class BusEnvelopeMessageTypeTests
             .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(FilterAction.Continue);
 
-        _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         _scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
         _scopeAccessor = new ConsumeScopeAccessor();

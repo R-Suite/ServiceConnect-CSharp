@@ -7,6 +7,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -64,7 +65,7 @@ public class RequestReplyManagerTests
         string? capturedMessageId = null;
 
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(reply);
 
@@ -74,7 +75,7 @@ public class RequestReplyManagerTests
         _mockSendPipeline.Setup(pipeline => pipeline.ExecuteSendMessagePipelineAsync(
                 It.Is<SendContext>(ctx =>
                     ctx.MessageType == typeof(FakeMessage1) &&
-                    ctx.MessageBytes == messageBytes &&
+                    ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                     ctx.EndPoint == null &&
                     ctx.Operation == SendOperation.Request),
                 It.IsAny<CancellationToken>()))
@@ -107,12 +108,12 @@ public class RequestReplyManagerTests
         var headers = new Dictionary<string, string>();
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         _mockSendPipeline.Setup(pipeline => pipeline.ExecuteSendMessagePipelineAsync(
                 It.Is<SendContext>(ctx =>
                     ctx.MessageType == typeof(FakeMessage1) &&
-                    ctx.MessageBytes == messageBytes &&
+                    ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                     ctx.EndPoint == null &&
                     ctx.Operation == SendOperation.Request),
                 It.IsAny<CancellationToken>()))
@@ -139,7 +140,7 @@ public class RequestReplyManagerTests
         string? capturedMessageId = null;
 
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(reply);
 
@@ -180,7 +181,7 @@ public class RequestReplyManagerTests
         var headers = new Dictionary<string, string>();
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         var options = new RequestOptions { Timeout = 5000 };
         string? capturedMessageId = null;
 
@@ -225,7 +226,7 @@ public class RequestReplyManagerTests
         var reply2 = new FakeMessage1(Guid.NewGuid()) { Username = "User2" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         var callCount = 0;
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
@@ -269,7 +270,7 @@ public class RequestReplyManagerTests
         var thirdReply = new FakeMessage1(Guid.NewGuid()) { Username = "User3" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         var deserializedReplies = new Queue<FakeMessage1>([firstReply, secondReply, thirdReply]);
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
@@ -314,7 +315,7 @@ public class RequestReplyManagerTests
         var reply = new FakeMessage1(Guid.NewGuid()) { Username = "EndpointUser" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         RequestReplyManager? manager = null;
         string? capturedEndpoint = null;
@@ -358,7 +359,7 @@ public class RequestReplyManagerTests
         var reply = new FakeMessage1(Guid.NewGuid()) { Username = "EndpointFallbackUser" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         RequestReplyManager? manager = null;
         string? capturedEndpoint = null;
@@ -409,7 +410,7 @@ public class RequestReplyManagerTests
         var headers = new Dictionary<string, string>();
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         var options = new RequestOptions { Timeout = 5000 };
         string? capturedMessageId = null;
 
@@ -442,7 +443,7 @@ public class RequestReplyManagerTests
         var reply = new FakeMessage1(Guid.NewGuid()) { Username = "PublishReply" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         RequestReplyManager? manager = null;
         string? capturedMessageId = null;
         var callbackInvoked = false;
@@ -507,7 +508,7 @@ public class RequestReplyManagerTests
         var reply = new FakeMessage1(Guid.NewGuid()) { Username = "PublishReply" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         var deserializeStarted = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseDeserialize = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         RequestReplyManager? manager = null;
@@ -569,7 +570,7 @@ public class RequestReplyManagerTests
         var deserializeException = new InvalidOperationException("deserialize failed after timeout");
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         RequestReplyManager? manager = null;
         string? capturedMessageId = null;
 
@@ -635,7 +636,7 @@ public class RequestReplyManagerTests
         var firstReply = new FakeMessage1(Guid.NewGuid()) { Username = "Reply1" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(firstReply);
 
@@ -685,7 +686,7 @@ public class RequestReplyManagerTests
         var reply = new FakeMessage1(Guid.NewGuid()) { Username = "PublishReply" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         RequestReplyManager? manager = null;
         string? capturedMessageId = null;
         var callbackException = new InvalidOperationException("callback failed");
@@ -741,7 +742,7 @@ public class RequestReplyManagerTests
         var headers = new Dictionary<string, string>();
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Throws(deserializeException);
@@ -786,7 +787,7 @@ public class RequestReplyManagerTests
         var headers = new Dictionary<string, string>();
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Throws(deserializeException);
@@ -848,7 +849,7 @@ public class RequestReplyManagerTests
         var secondReply = new FakeMessage1(Guid.NewGuid()) { Username = "Reply2" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         var deserializedReplies = new Queue<FakeMessage1>([firstReply, secondReply]);
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
@@ -921,7 +922,7 @@ public class RequestReplyManagerTests
         var thirdReply = new FakeMessage1(Guid.NewGuid()) { Username = "Reply3" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         var deserializedReplies = new Queue<FakeMessage1>([firstReply, secondReply, thirdReply]);
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
@@ -970,7 +971,7 @@ public class RequestReplyManagerTests
         var headers = new Dictionary<string, string>();
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
         var options = new RequestOptions { Timeout = 5000, ExpectedReplyCount = 1 };
         string? capturedMessageId = null;
 
@@ -1006,7 +1007,7 @@ public class RequestReplyManagerTests
         var observedCancellation = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
         var callbackCount = 0;
         var request = new FakeMessage1(Guid.NewGuid());
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         _mockSendPipeline.Setup(pipeline => pipeline.ExecutePublishMessagePipelineAsync(
                 It.Is<SendContext>(ctx => ctx.EndPoint == null),
@@ -1043,7 +1044,7 @@ public class RequestReplyManagerTests
     {
         var observedCancellation = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
         var request = new FakeMessage1(Guid.NewGuid());
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         _mockSendPipeline.Setup(pipeline => pipeline.ExecuteSendMessagePipelineAsync(
                 It.Is<SendContext>(ctx => ctx.EndPoint == null),
@@ -1133,7 +1134,7 @@ public class RequestReplyManagerTests
         var releaseSendTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         string? capturedMessageId = null;
         var request = new FakeMessage1(Guid.NewGuid());
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         using var externalCts = new CancellationTokenSource();
 
@@ -1203,7 +1204,7 @@ public class RequestReplyManagerTests
         var lateReply = new FakeMessage1(Guid.NewGuid()) { Username = "LateUser" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns(messageBytes);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
 
         _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1)))
             .Returns(lateReply);

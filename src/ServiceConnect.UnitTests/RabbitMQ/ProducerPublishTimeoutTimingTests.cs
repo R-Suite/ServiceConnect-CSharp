@@ -96,7 +96,7 @@ public sealed class ProducerPublishTimeoutTimingTests
             sw.Start();
             try
             {
-                await producer.PublishAsync(typeof(object), [1, 2, 3]);
+                await producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 });
             }
             catch (TimeoutException)
             {

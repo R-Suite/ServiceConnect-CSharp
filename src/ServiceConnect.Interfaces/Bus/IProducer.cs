@@ -8,24 +8,42 @@ public interface IProducer : IAsyncDisposable
     /// <summary>
     /// Publishes a serialized message to all subscribers of the specified type.
     /// </summary>
-    Task PublishAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+    /// <param name="type">The logical message type.</param>
+    /// <param name="body">The serialized message body.</param>
+    /// <param name="headers">Optional read-only headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the publish operation.</param>
+    Task PublishAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends a serialized message to the configured queue for the specified type.
     /// </summary>
-    Task SendAsync(Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+    /// <param name="type">The logical message type used to resolve destination queues.</param>
+    /// <param name="body">The serialized message body.</param>
+    /// <param name="headers">Optional read-only headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the send operation.</param>
+    Task SendAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends a serialized message to a specific endpoint.
     /// </summary>
-    Task SendAsync(string endPoint, Type type, byte[] message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+    /// <param name="endPoint">The destination queue name.</param>
+    /// <param name="type">The logical message type used when stamping headers.</param>
+    /// <param name="body">The serialized message body.</param>
+    /// <param name="headers">Optional read-only headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the send operation.</param>
+    Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Sends raw bytes to a specific endpoint without type-based routing. The <paramref name="type"/>
     /// is the logical message type the packet represents (for example, the element type of a stream);
     /// it is used to stamp transport-reserved type headers authoritatively.
     /// </summary>
-    Task SendBytesAsync(string endPoint, Type type, byte[] packet, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
+    /// <param name="endPoint">The destination queue name.</param>
+    /// <param name="type">The logical message type the packet represents.</param>
+    /// <param name="packet">The raw payload to send.</param>
+    /// <param name="headers">Optional read-only headers to include with the packet.</param>
+    /// <param name="cancellationToken">A token used to cancel the send operation.</param>
+    Task SendBytesAsync(string endPoint, Type type, ReadOnlyMemory<byte> packet, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the maximum message size in bytes supported by the broker.

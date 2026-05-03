@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -75,11 +76,11 @@ public class SendMiddlewarePipelineTests
     public SendMiddlewarePipelineTests()
     {
         _mockProducer = new Mock<IProducer>();
-        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        _mockProducer.Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+        _mockProducer.Setup(p => p.SendAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        _mockProducer.Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+        _mockProducer.Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
     }
 
@@ -97,7 +98,7 @@ public class SendMiddlewarePipelineTests
         mockPipelineConfig.Setup(p => p.SendMessageMiddleware)
             .Returns([typeof(RecordingSendMiddleware)]);
 
-        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()))
+        _mockProducer.Setup(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(() => { log.Add("producer"); return Task.CompletedTask; });
 
         var pipeline = new SendMessagePipeline(_mockProducer.Object, mockPipelineConfig.Object, sp);
@@ -123,7 +124,7 @@ public class SendMiddlewarePipelineTests
         await pipeline.ExecutePublishMessagePipelineAsync(MakePublishContext());
 
         // Assert
-        _mockProducer.Verify(p => p.PublishAsync(typeof(string), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Once);
+        _mockProducer.Verify(p => p.PublishAsync(typeof(string), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -144,14 +145,14 @@ public class SendMiddlewarePipelineTests
         await pipeline.ExecutePublishMessagePipelineAsync(MakePublishContext());
 
         // Assert
-        _mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<byte[]>(), It.IsAny<IDictionary<string, string>>()), Times.Never);
+        _mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static SendContext MakePublishContext() => new()
     {
         Message = new TestMiddlewareMessage(),
         MessageType = typeof(string),
-        MessageBytes = [1],
+        MessageBytes = new byte[] { 1 },
         Headers = new Dictionary<string, string>(StringComparer.Ordinal),
         Operation = SendOperation.Publish,
     };

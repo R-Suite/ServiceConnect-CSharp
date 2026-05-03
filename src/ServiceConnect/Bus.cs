@@ -92,7 +92,9 @@ public sealed class Bus : IBus
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        var messageBytes = _serializer.Serialize(message);
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
         Dictionary<string, string> headers;
 
         if (_hasOutgoingFilters)
@@ -146,7 +148,9 @@ public sealed class Bus : IBus
                 nameof(options));
         }
 
-        var messageBytes = _serializer.Serialize(message);
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
         Dictionary<string, string> headers;
 
         if (_hasOutgoingFilters)
@@ -211,7 +215,9 @@ public sealed class Bus : IBus
             // Serialize once here so outgoing filters can inspect the wire body via the envelope.
             // RequestReplyManager will serialize again on its own path; the cost is one extra
             // serialize per filter-enabled request, kept localized to this branch.
-            var messageBytes = _serializer.Serialize(message);
+            var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+            _serializer.Serialize(message, bufferWriter);
+            var messageBytes = bufferWriter.WrittenMemory;
             var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
@@ -244,7 +250,9 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             // See SendRequestAsync for why we serialize locally only on the filter branch.
-            var messageBytes = _serializer.Serialize(message);
+            var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+            _serializer.Serialize(message, bufferWriter);
+            var messageBytes = bufferWriter.WrittenMemory;
             var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
@@ -283,7 +291,9 @@ public sealed class Bus : IBus
         if (_hasOutgoingFilters)
         {
             // See SendRequestAsync for why we serialize locally only on the filter branch.
-            var messageBytes = _serializer.Serialize(message);
+            var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+            _serializer.Serialize(message, bufferWriter);
+            var messageBytes = bufferWriter.WrittenMemory;
             var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
@@ -338,7 +348,9 @@ public sealed class Bus : IBus
         }
 
         var firstDestination = snapshot[0];
-        var messageBytes = _serializer.Serialize(message);
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
         Dictionary<string, string> headers;
 
         if (_hasOutgoingFilters)
@@ -608,7 +620,7 @@ public sealed class Bus : IBus
         HeaderKeys.MessageId,
     };
 
-    private Envelope CreateEnvelope(byte[] body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
+    private Envelope CreateEnvelope(ReadOnlyMemory<byte> body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
     {
         // Snapshot once up front so a concurrent caller mutating the source
         // dictionary can't throw "Collection was modified" inside the foreach

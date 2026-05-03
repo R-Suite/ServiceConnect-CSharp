@@ -61,7 +61,7 @@ public static partial class ServiceCollectionExtensions
 
     private static void RegisterCoreServices(IServiceCollection services)
     {
-        services.TryAddSingleton<IMessageSerializer, NewtonsoftJsonMessageSerializer>();
+        services.TryAddSingleton<IMessageSerializer, SystemTextJsonMessageSerializer>();
         services.TryAddSingleton<IFilterPipeline, FilterPipeline>();
         RegisterRequestReplyManager(services);
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();

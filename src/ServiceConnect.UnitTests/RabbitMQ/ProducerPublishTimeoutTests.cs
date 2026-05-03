@@ -89,7 +89,7 @@ public class ProducerPublishTimeoutTests
 
         // Act & Assert
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.PublishAsync(typeof(object), [1, 2, 3]));
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public class ProducerPublishTimeoutTests
         producer.ReconnectForTests = _ => Task.CompletedTask;
 
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.SendAsync(typeof(object), [1, 2, 3]));
+            producer.SendAsync(typeof(object), new byte[] { 1, 2, 3 }));
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class ProducerPublishTimeoutTests
         producer.ReconnectForTests = _ => Task.CompletedTask;
 
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.SendAsync("destination-queue", typeof(object), [1, 2, 3]));
+            producer.SendAsync("destination-queue", typeof(object), new byte[] { 1, 2, 3 }));
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class ProducerPublishTimeoutTests
         producer.ReconnectForTests = _ => Task.CompletedTask;
 
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.SendBytesAsync("destination-queue", typeof(object), [1, 2, 3]));
+            producer.SendBytesAsync("destination-queue", typeof(object), new byte[] { 1, 2, 3 }));
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class ProducerPublishTimeoutTests
         SetField(producer, "_connected", true);
 
         // Act: should complete without exception
-        await producer.PublishAsync(typeof(object), [1, 2, 3]);
+        await producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 });
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class ProducerPublishTimeoutTests
 
         // Should be OperationCanceledException (or a subclass such as TaskCanceledException), not TimeoutException
         var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            producer.PublishAsync(typeof(object), [1, 2, 3], cancellationToken: cts.Token));
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cts.Token));
         Assert.IsNotType<TimeoutException>(ex);
     }
 
@@ -228,7 +228,7 @@ public class ProducerPublishTimeoutTests
 
         // Act
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.PublishAsync(typeof(object), [1, 2, 3]));
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
 
         // Assert: reconnect was NOT invoked from inside the publish catch path.
         Assert.False(reconnectCalled,
@@ -254,7 +254,7 @@ public class ProducerPublishTimeoutTests
         producer.ReconnectForTests = _ => Task.CompletedTask;
 
         var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.PublishAsync(typeof(object), [1, 2, 3]));
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
 
         // The message must contain the contextual fields added by I2.
         Assert.Contains("exchange=", ex.Message);

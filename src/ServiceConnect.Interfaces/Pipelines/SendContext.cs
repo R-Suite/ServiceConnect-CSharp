@@ -14,7 +14,7 @@ public sealed class SendContext
     public required Type MessageType { get; init; }
 
     /// <summary>The serialized message body, exactly as the producer will send it.</summary>
-    public required byte[] MessageBytes { get; init; }
+    public required ReadOnlyMemory<byte> MessageBytes { get; init; }
 
     /// <summary>
     /// Mutable transport headers for the outgoing message. Pipeline middleware (telemetry,

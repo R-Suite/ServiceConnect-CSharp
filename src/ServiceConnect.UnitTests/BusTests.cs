@@ -12,6 +12,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -49,7 +50,7 @@ public class BusTests
 
         // Default: filters pass through
         _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
-        _mockSerializer.Setup(x => x.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        _mockSerializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         _mockDispatcher = new Mock<IMessageDispatcher>();
         _handlerReferences = [];
@@ -170,11 +171,11 @@ public class BusTests
         // Arrange — no outgoing filters (fast path; filter pipeline is not called)
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSerializer.SetupSerialize(message, messageBytes);
         _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
             It.Is<SendContext>(ctx =>
                 ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.MessageBytes == messageBytes &&
+                ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                 ctx.EndPoint == null),
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -183,12 +184,12 @@ public class BusTests
         await _bus.PublishAsync(message);
 
         // Assert
-        _mockSerializer.Verify(x => x.Serialize(message), Times.Once);
+        _mockSerializer.VerifySerialize(message, Times.Once);
         _mockFilterPipeline.Verify(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()), Times.Never);
         _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
             It.Is<SendContext>(ctx =>
                 ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.MessageBytes == messageBytes &&
+                ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                 ctx.EndPoint == null),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -214,11 +215,11 @@ public class BusTests
 
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSerializer.SetupSerialize(message, messageBytes);
         _mockSendPipeline.Setup(x => x.ExecutePublishMessagePipelineAsync(
             It.Is<SendContext>(ctx =>
                 ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.MessageBytes == messageBytes &&
+                ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                 ctx.EndPoint == null),
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -231,7 +232,7 @@ public class BusTests
         _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
             It.Is<SendContext>(ctx =>
                 ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.MessageBytes == messageBytes &&
+                ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                 ctx.EndPoint == null),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -256,7 +257,7 @@ public class BusTests
             _scopeFactory,
             _scopeAccessor);
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-        _mockSerializer.Setup(x => x.Serialize(message)).Returns([1, 2, 3]);
+        _mockSerializer.SetupSerialize<FakeMessage1>(message, [1, 2, 3]);
 
         // Act
         await busWithFilters.PublishAsync(message);
@@ -542,11 +543,11 @@ public class BusTests
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
         var messageBytes = new byte[] { 1, 2, 3 };
-        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSerializer.SetupSerialize(message, messageBytes);
         _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
             It.Is<SendContext>(ctx =>
                 ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.MessageBytes == messageBytes &&
+                ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                 ctx.EndPoint == null),
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
@@ -555,11 +556,11 @@ public class BusTests
         await _bus.SendAsync(message);
 
         // Assert
-        _mockSerializer.Verify(x => x.Serialize(message), Times.Once);
+        _mockSerializer.VerifySerialize(message, Times.Once);
         _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
             It.Is<SendContext>(ctx =>
                 ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.MessageBytes == messageBytes &&
+                ctx.MessageBytes.ToArray().SequenceEqual(messageBytes) &&
                 ctx.EndPoint == null),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -655,7 +656,7 @@ public class BusTests
             _scopeFactory,
             _scopeAccessor);
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-        _mockSerializer.Setup(x => x.Serialize(message)).Returns([1, 2, 3]);
+        _mockSerializer.SetupSerialize<FakeMessage1>(message, [1, 2, 3]);
 
         // Act
         await busWithFilters.SendAsync(message);
@@ -679,7 +680,7 @@ public class BusTests
             }
         };
 
-        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSerializer.SetupSerialize(message, messageBytes);
         _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
                 message,
                 It.Is<Dictionary<string, string>>(h => h.ContainsKey("CustomHeader") && h["CustomHeader"] == "CustomValue"),
@@ -724,7 +725,7 @@ public class BusTests
         var messageBytes = new byte[] { 1, 2, 3 };
         var options = new RequestOptions { EndPoint = string.Empty };
 
-        _mockSerializer.Setup(x => x.Serialize(message)).Returns(messageBytes);
+        _mockSerializer.SetupSerialize(message, messageBytes);
         _mockRequestReplyManager.Setup(x => x.PublishRequestAsync<FakeMessage1, FakeMessage1>(
                 message,
                 It.IsAny<Dictionary<string, string>>(),

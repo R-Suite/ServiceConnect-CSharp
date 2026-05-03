@@ -104,7 +104,7 @@ public sealed class ProducerPublishTimeoutResetTests
 
         // Act: publish should time out.
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.PublishAsync(typeof(object), [1, 2, 3]));
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
 
         // Assert: reconnect probe was NOT called from inside PublishWithTimeoutAsync's catch path.
         Assert.Equal(0, reconnectCalls);
@@ -140,12 +140,12 @@ public sealed class ProducerPublishTimeoutResetTests
 
         // Act: first publish times out → flag set, no reconnect yet.
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            producer.PublishAsync(typeof(object), [1, 2, 3]));
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
         Assert.Equal(0, connectionBuilds);
         Assert.True(ResetRequiredFlag(producer));
 
         // Act: second publish drives the reset before its own publish runs.
-        await producer.PublishAsync(typeof(object), [4, 5, 6]);
+        await producer.PublishAsync(typeof(object), new byte[] { 4, 5, 6 });
 
         // Assert: exactly one fresh connection was built — driven by the deferred reset on
         // EnsureConnectedAsync's flag-consume path, NOT by the first publish's catch.
@@ -180,15 +180,15 @@ public sealed class ProducerPublishTimeoutResetTests
         // Two concurrent timeouts. PublishAsync serialises on _publishLock, but the catch-path
         // MarkResetRequired call is non-blocking and idempotent regardless of order — both timeouts
         // set the flag to 1, but the flag is consumed exactly once on the next publish.
-        var t1 = Assert.ThrowsAsync<TimeoutException>(() => producer.PublishAsync(typeof(object), [1]));
-        var t2 = Assert.ThrowsAsync<TimeoutException>(() => producer.PublishAsync(typeof(object), [2]));
+        var t1 = Assert.ThrowsAsync<TimeoutException>(() => producer.PublishAsync(typeof(object), new byte[] { 1 }));
+        var t2 = Assert.ThrowsAsync<TimeoutException>(() => producer.PublishAsync(typeof(object), new byte[] { 2 }));
         await Task.WhenAll(t1, t2);
 
         Assert.Equal(0, connectionBuilds);
         Assert.True(ResetRequiredFlag(producer));
 
         // Subsequent fast publish should drive exactly ONE reset.
-        await producer.PublishAsync(typeof(object), [3]);
+        await producer.PublishAsync(typeof(object), new byte[] { 3 });
 
         Assert.Equal(1, connectionBuilds);
         Assert.False(ResetRequiredFlag(producer));

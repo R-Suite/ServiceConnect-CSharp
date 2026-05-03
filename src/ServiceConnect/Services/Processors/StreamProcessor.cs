@@ -258,7 +258,12 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             }
 
             var assembledSequence = state.Stream.ReadSequence();
-            var originalMessage = _serializer.Deserialize(in assembledSequence, resolvedType);
+            // ReadOnlySequence may be multi-segment; flatten to a contiguous buffer so the
+            // ROM<byte>-based deserialize path can read it without reconstructing the segments.
+            var contiguous = assembledSequence.IsSingleSegment
+                ? assembledSequence.First
+                : System.Buffers.BuffersExtensions.ToArray(assembledSequence);
+            var originalMessage = _serializer.Deserialize(contiguous, resolvedType);
 
             return InvokeHandlerAsync(descriptor, handler, originalMessage!, state.Stream, sequenceId, cancellationToken);
         }

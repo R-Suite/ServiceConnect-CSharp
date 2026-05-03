@@ -9,6 +9,7 @@ using ServiceConnect;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using Xunit;
 
 namespace ServiceConnect.UnitTests;
@@ -49,9 +50,7 @@ public sealed class BusRouteValidationTests
     private static Bus BuildBus()
     {
         var serializer = new Mock<IMessageSerializer>();
-        serializer
-            .Setup(s => s.Serialize(It.IsAny<TestMessage>()))
-            .Returns([]);
+        serializer.SetupSerializeAny<TestMessage>([]);
 
         var filterPipeline = new Mock<IFilterPipeline>();
 

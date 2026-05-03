@@ -194,7 +194,7 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
         headers[HeaderKeys.PacketNumber] = packetNumString;
         headers[HeaderKeys.LastPacketNumber] = packetNumString;
 
-        await _producer.SendBytesAsync(_endpoint, _messageType, [], headers, cancellationToken).ConfigureAwait(false);
+        await _producer.SendBytesAsync(_endpoint, _messageType, ReadOnlyMemory<byte>.Empty, headers, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

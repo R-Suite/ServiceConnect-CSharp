@@ -76,7 +76,7 @@ public sealed class ProducerMultiEndpointSendTests
             [HeaderKeys.CorrelationId] = correlationId,
         };
 
-        await producer.SendAsync(typeof(FakeMsg), [1, 2, 3], headers);
+        await producer.SendAsync(typeof(FakeMsg), new byte[] { 1, 2, 3 }, headers);
 
         Assert.Equal(3, captured.Count);
 

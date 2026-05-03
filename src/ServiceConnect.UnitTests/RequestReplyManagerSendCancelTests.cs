@@ -8,6 +8,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
+using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
@@ -31,7 +32,7 @@ public sealed class RequestReplyManagerSendCancelTests
     public async Task SendRequestAsync_SendPipelineCancelled_NotByCallerToken_ThrowsRequestSendCancelled()
     {
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         var pipeline = new Mock<ISendMessagePipeline>();
         pipeline
@@ -68,7 +69,7 @@ public sealed class RequestReplyManagerSendCancelTests
     public async Task SendRequestAsync_CallerTokenCancelled_StillThrowsOperationCanceled_NotRequestSendCancelled()
     {
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         var pipeline = new Mock<ISendMessagePipeline>();
         pipeline
@@ -103,7 +104,7 @@ public sealed class RequestReplyManagerSendCancelTests
     public async Task SendRequestAsync_TimeoutFires_AndSendCompletedFirst_ThrowsRequestTimeout()
     {
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         var pipeline = new Mock<ISendMessagePipeline>();
         pipeline
@@ -124,7 +125,7 @@ public sealed class RequestReplyManagerSendCancelTests
     public async Task SendRequestMultiAsync_SendPipelineCancelled_NotByCallerToken_ThrowsRequestSendCancelled()
     {
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         var pipeline = new Mock<ISendMessagePipeline>();
         pipeline
@@ -161,7 +162,7 @@ public sealed class RequestReplyManagerSendCancelTests
     public async Task PublishRequestAsync_SendPipelineCancelled_NotByCallerToken_ThrowsRequestSendCancelled()
     {
         var serializer = new Mock<IMessageSerializer>();
-        serializer.Setup(s => s.Serialize(It.IsAny<FakeMessage1>())).Returns([1, 2, 3]);
+        serializer.SetupSerializeAny<FakeMessage1>([1, 2, 3]);
 
         var pipeline = new Mock<ISendMessagePipeline>();
         pipeline

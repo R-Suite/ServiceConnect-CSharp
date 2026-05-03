@@ -7,9 +7,10 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies that all public publish/send entry points reject null type or message
-/// arguments with <see cref="ArgumentNullException"/> before touching the message
-/// body — preventing NullReferenceException from leaking through to callers.
+/// Verifies that all public publish/send entry points reject null type arguments
+/// with <see cref="ArgumentNullException"/> before touching the message body.
+/// Body parameters are <see cref="ReadOnlyMemory{T}"/> (a value type), so null is
+/// not representable; null-body tests are no longer applicable post-Phase-A.2.
 /// </summary>
 public sealed class ProducerNullArgumentTests
 {
@@ -32,17 +33,8 @@ public sealed class ProducerNullArgumentTests
     {
         var producer = CreateProducer();
         var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.PublishAsync(null!, [1, 2, 3]));
+            producer.PublishAsync(null!, new byte[] { 1, 2, 3 }));
         Assert.Equal("type", ex.ParamName);
-    }
-
-    [Fact]
-    public async Task PublishAsync_NullMessage_Throws()
-    {
-        var producer = CreateProducer();
-        var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.PublishAsync(typeof(string), null!));
-        Assert.Equal("message", ex.ParamName);
     }
 
     [Fact]
@@ -50,17 +42,8 @@ public sealed class ProducerNullArgumentTests
     {
         var producer = CreateProducer();
         var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.SendAsync(null!, [1, 2, 3]));
+            producer.SendAsync(null!, new byte[] { 1, 2, 3 }));
         Assert.Equal("type", ex.ParamName);
-    }
-
-    [Fact]
-    public async Task SendAsyncByType_NullMessage_Throws()
-    {
-        var producer = CreateProducer();
-        var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.SendAsync(typeof(string), null!));
-        Assert.Equal("message", ex.ParamName);
     }
 
     [Fact]
@@ -68,17 +51,8 @@ public sealed class ProducerNullArgumentTests
     {
         var producer = CreateProducer();
         var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.SendAsync("ep", null!, [1, 2, 3]));
+            producer.SendAsync("ep", null!, new byte[] { 1, 2, 3 }));
         Assert.Equal("type", ex.ParamName);
-    }
-
-    [Fact]
-    public async Task SendAsyncToEndpoint_NullMessage_Throws()
-    {
-        var producer = CreateProducer();
-        var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.SendAsync("ep", typeof(string), null!));
-        Assert.Equal("message", ex.ParamName);
     }
 
     [Fact]
@@ -86,16 +60,7 @@ public sealed class ProducerNullArgumentTests
     {
         var producer = CreateProducer();
         var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.SendBytesAsync("ep", null!, [1, 2, 3]));
+            producer.SendBytesAsync("ep", null!, new byte[] { 1, 2, 3 }));
         Assert.Equal("type", ex.ParamName);
-    }
-
-    [Fact]
-    public async Task SendBytesAsync_NullPacket_Throws()
-    {
-        var producer = CreateProducer();
-        var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            producer.SendBytesAsync("ep", typeof(string), null!));
-        Assert.Equal("packet", ex.ParamName);
     }
 }
