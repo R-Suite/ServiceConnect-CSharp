@@ -27,10 +27,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     private readonly object _memoryCacheLock = new();
 #endif
 
-    // Data is nullable because InMemoryAggregatorPersistorUnresolvedCountTests reflects in
-    // a null-Data Entry to exercise the GetSnapshotAsync unresolved-count branch. The public
-    // Insert path always supplies a non-null IHasCorrelationId.
-    private sealed record Entry(Guid Id, IHasCorrelationId? Data);
+    private sealed record Entry(Guid Id, IHasCorrelationId Data);
 
     /// <summary>
     /// Adds an aggregator message to the named in-memory stream.
@@ -65,13 +62,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             var copy = new List<IHasCorrelationId>(source.Count);
             foreach (var entry in source)
             {
-                // is-pattern narrows to a non-null local — DeepClone.Clone's `where T : notnull`
-                // constraint is satisfied. Skip null-Data entries (only producible by the
-                // reflection-based unresolved-count test); the public surface never inserts null.
-                if (entry.Data is { } data)
-                {
-                    copy.Add(DeepClone.Clone(data));
-                }
+                copy.Add(DeepClone.Clone(entry.Data));
             }
 
             return Task.FromResult<IReadOnlyList<IHasCorrelationId>>(copy);
@@ -100,23 +91,19 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             entriesCopy = [.. source];  // shallow copy of reference array; O(n) pointer copy
         }
 
+        // The InMemory persistor cannot produce an unresolved entry: InsertDataAsync rejects null,
+        // every entry carries a typed IHasCorrelationId, and there is no deserialise step that
+        // could fail. UnresolvedCount is therefore always 0 here. The Mongo persistor reaches the
+        // unresolved branch when a stored document's CLR type is no longer registered or doesn't
+        // implement the interface; that branch is exercised by MongoDbAggregatorPersistor's tests.
         var messages = new List<IHasCorrelationId>(entriesCopy.Length);
         var ids = new List<Guid>(entriesCopy.Length);
-        var unresolved = 0;
         foreach (var entry in entriesCopy)
         {
-            // is-pattern narrows to non-null for DeepClone's `where T : notnull` constraint.
-            if (entry.Data is { } data)
-            {
-                messages.Add(DeepClone.Clone(data));
-                ids.Add(entry.Id);
-            }
-            else
-            {
-                unresolved++;
-            }
+            messages.Add(DeepClone.Clone(entry.Data));
+            ids.Add(entry.Id);
         }
-        return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, unresolved));
+        return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, UnresolvedCount: 0));
     }
 
     /// <summary>
@@ -132,9 +119,7 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             {
                 for (var index = 0; index < list.Count; index++)
                 {
-                    // Null-conditional handles the test-only reflection-injected null Data; production
-                    // inserts never produce null.
-                    if (list[index].Data?.CorrelationId == correlationId)
+                    if (list[index].Data.CorrelationId == correlationId)
                     {
                         list.RemoveAt(index);
                         removed = true;
