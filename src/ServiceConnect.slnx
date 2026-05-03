@@ -15,4 +15,7 @@
   <Project Path="ServiceConnect.Interfaces/ServiceConnect.Interfaces.csproj" />
   <Project Path="ServiceConnect.Telemetry/ServiceConnect.Telemetry.csproj" />
   <Project Path="ServiceConnect/ServiceConnect.csproj" />
+  <Configurations>
+    <Platform Name="Any CPU" />
+  </Configurations>
 </Solution>
