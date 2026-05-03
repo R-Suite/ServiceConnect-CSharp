@@ -101,27 +101,36 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     public Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Capture entry references under the lock. The spread into an array is an O(n)
+        // pointer copy that lets concurrent InsertDataAsync / RemoveDataAsync proceed
+        // while DeepClone (a JSON round-trip per entry) runs outside the lock below.
+        // Entry is a sealed record (immutable); the array holds shared references to
+        // the same Entry instances that were in the list at lock-release time.
+        Entry[] entriesCopy;
         lock (_memoryCacheLock)
         {
             if (!_provider.TryGet<string, object>(name, out var sourceObj) || sourceObj is not List<Entry> source)
             {
                 return Task.FromResult<IAggregatorSnapshot>(AggregatorSnapshot.Empty);
             }
-            var messages = new List<object>(source.Count);
-            var ids = new List<Guid>(source.Count);
-            var unresolved = 0;
-            foreach (var entry in source)
-            {
-                if (entry.Data is null)
-                {
-                    unresolved++;
-                    continue;
-                }
-                messages.Add(DeepClone.Clone(entry.Data));
-                ids.Add(entry.Id);
-            }
-            return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, unresolved));
+            entriesCopy = [.. source];  // shallow copy of reference array; O(n) pointer copy
         }
+
+        var messages = new List<object>(entriesCopy.Length);
+        var ids = new List<Guid>(entriesCopy.Length);
+        var unresolved = 0;
+        foreach (var entry in entriesCopy)
+        {
+            if (entry.Data is null)
+            {
+                unresolved++;
+                continue;
+            }
+            messages.Add(DeepClone.Clone(entry.Data));
+            ids.Add(entry.Id);
+        }
+        return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, unresolved));
     }
 
     /// <summary>
