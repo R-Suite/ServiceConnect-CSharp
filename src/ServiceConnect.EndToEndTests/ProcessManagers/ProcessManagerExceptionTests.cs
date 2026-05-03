@@ -116,9 +116,7 @@ public class ProcessManagerExceptionTests(MessagingFixture fixture)
 
 file class ThrowingProcessHandler : IProcessHandler<TestProcessData, TestMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, TestProcessData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, TestProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         throw new InvalidOperationException("PM handler exploded");
     }

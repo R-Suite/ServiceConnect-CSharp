@@ -104,9 +104,7 @@ file class SlowHandler(SlowHandlerState state) : IMessageHandler<TestMessage>
 {
     private readonly SlowHandlerState _state = state;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(TestMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         var concurrency = Interlocked.Increment(ref _state.CurrentConcurrency);
         _state.ConcurrencyLog.Add(concurrency);

@@ -162,11 +162,9 @@ file class PartialScatterReplyHandler(string prefix) : IMessageHandler<TestReque
 {
     private readonly string _prefix = prefix;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(TestRequest message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(TestRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        await Context!.ReplyAsync(new TestResponse(Guid.NewGuid())
+        await context.ReplyAsync(new TestResponse(Guid.NewGuid())
         {
             Answer = $"{_prefix}: {message.Question}"
         });

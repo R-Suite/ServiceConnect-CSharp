@@ -184,21 +184,19 @@ file class TimeoutHeaderPmHandler(
 {
     private readonly TaskCompletionSource<IReadOnlyDictionary<string, object>> _headersCaptured = headersCaptured;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(TestMessage message, TimeoutHeaderData data, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(TestMessage message, TimeoutHeaderData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.CorrelationId = message.CorrelationId;
         data.TimeoutScheduled = true;
         // Schedule a short timeout; CaptureForStorage picks up the current consume-context
         // headers (which include our custom X-Guid, X-DateTime, etc. from the initial send)
-        await Context!.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromMilliseconds(500));
+        await context.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromMilliseconds(500));
     }
 
-    public Task HandleAsync(TimeoutMessage message, TimeoutHeaderData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TimeoutMessage message, TimeoutHeaderData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         // Capture the headers re-emitted by BuildOutgoingHeaders for assertion
-        _headersCaptured.TrySetResult(Context!.Headers);
+        _headersCaptured.TrySetResult(context.Headers);
         return Task.CompletedTask;
     }
 }

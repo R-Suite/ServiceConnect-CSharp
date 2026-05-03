@@ -160,9 +160,7 @@ file sealed class RestartCheckHandler(
     private readonly TaskCompletionSource<TestMessage> _second = second;
     private readonly PhaseHolder _phase = phase;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (_phase.Current == 0)
         {

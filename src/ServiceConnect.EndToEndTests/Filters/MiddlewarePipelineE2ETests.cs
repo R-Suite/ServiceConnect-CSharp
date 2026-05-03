@@ -117,7 +117,5 @@ public class MiddlewarePipelineE2ETests(MessagingFixture fixture)
 
 file sealed class NoOpMessageHandler : IMessageHandler<TestMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task HandleAsync(TestMessage message, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

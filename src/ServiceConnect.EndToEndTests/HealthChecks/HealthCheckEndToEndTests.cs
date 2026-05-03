@@ -100,9 +100,7 @@ public class HealthCheckEndToEndTests(MessagingFixture fixture)
     // Minimal handler — we only need it to exist so the consumer connection opens.
     private sealed class NoOpHandler : IMessageHandler<HealthCheckProbe>
     {
-        public IConsumeContext Context { get; set; } = null!;
-
-        public Task HandleAsync(HealthCheckProbe message, CancellationToken cancellationToken = default)
+        public Task HandleAsync(HealthCheckProbe message, IConsumeContext context, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
 }

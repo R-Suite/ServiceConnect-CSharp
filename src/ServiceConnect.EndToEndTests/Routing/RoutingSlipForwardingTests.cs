@@ -136,9 +136,8 @@ public class RoutingSlipForwardingTests(MessagingFixture fixture)
 file class Step1Handler(Action onHandled) : IMessageHandler<StepMessage>
 {
     private readonly Action _onHandled = onHandled;
-    public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(StepMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(StepMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         message.CurrentStep = "Step1";
         _onHandled();
@@ -149,9 +148,8 @@ file class Step1Handler(Action onHandled) : IMessageHandler<StepMessage>
 file class Step2Handler(Action<string> onHandled) : IMessageHandler<StepMessage>
 {
     private readonly Action<string> _onHandled = onHandled;
-    public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(StepMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(StepMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         _onHandled(message.CurrentStep);
         return Task.CompletedTask;

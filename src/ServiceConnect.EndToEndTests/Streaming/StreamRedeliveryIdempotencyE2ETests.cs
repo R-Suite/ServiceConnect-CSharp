@@ -138,12 +138,10 @@ file sealed class IdempotencyCheckHandler(IdempotencyCounter counter, TaskComple
     private readonly IdempotencyCounter _counter = counter;
     private readonly TaskCompletionSource<byte[]> _firstResult = firstResult;
 
-    public IMessageBusReadStream Stream { get; set; } = null!;
-
-    public Task ExecuteAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public Task ExecuteAsync(TestMessage message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
     {
         _counter.Increment();
-        var data = Stream.Read();
+        var data = stream.Read();
         _firstResult.TrySetResult(data);
         return Task.CompletedTask;
     }

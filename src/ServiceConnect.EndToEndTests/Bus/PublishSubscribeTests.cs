@@ -11,9 +11,7 @@ public class CallbackHandler<T>(Action<T> callback) : IMessageHandler<T> where T
 {
     private readonly Action<T> _callback = callback;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(T message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(T message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         _callback(message);
         return Task.CompletedTask;

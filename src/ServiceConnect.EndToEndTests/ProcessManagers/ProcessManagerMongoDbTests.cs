@@ -108,9 +108,7 @@ file class MongoCounterProcessHandler(TaskCompletionSource<bool> secondHandled) 
 {
     private readonly TaskCompletionSource<bool> _secondHandled = secondHandled;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, TestProcessData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, TestProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.Counter++;
         data.LastContent = message.Content;

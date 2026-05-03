@@ -128,12 +128,10 @@ public class ConsumeContextReplyTests(MessagingFixture fixture)
 
 file class ContextReplyHandler : IMessageHandler<TestRequest>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(TestRequest message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(TestRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        // Uses Context.ReplyAsync — the key feature under test
-        await Context!.ReplyAsync(new TestResponse(Guid.NewGuid())
+        // Uses context.ReplyAsync — the key feature under test
+        await context.ReplyAsync(new TestResponse(Guid.NewGuid())
         {
             Answer = "Context reply works!"
         });

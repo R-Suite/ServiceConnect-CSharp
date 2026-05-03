@@ -115,16 +115,14 @@ file class TimeoutProcessHandler(TaskCompletionSource<bool> timeoutHandled) :
 {
     private readonly TaskCompletionSource<bool> _timeoutHandled = timeoutHandled;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(TestMessage message, TimeoutProcessData data, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(TestMessage message, TimeoutProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.CorrelationId = message.CorrelationId;
         data.TimeoutRequested = true;
-        await Context!.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromMilliseconds(500));
+        await context.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromMilliseconds(500));
     }
 
-    public Task HandleAsync(TimeoutMessage message, TimeoutProcessData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TimeoutMessage message, TimeoutProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.TimeoutHandled = true;
         _timeoutHandled.TrySetResult(true);

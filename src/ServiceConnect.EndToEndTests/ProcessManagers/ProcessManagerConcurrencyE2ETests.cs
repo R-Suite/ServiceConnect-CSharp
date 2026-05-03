@@ -128,9 +128,7 @@ file class ConcurrentIncrementHandler(
     private readonly ManualResetEventSlim _gate = gate;
     private static int _invokeCount;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, ConcurrentCounterData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, ConcurrentCounterData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.CorrelationId = message.CorrelationId;
         data.Counter++;

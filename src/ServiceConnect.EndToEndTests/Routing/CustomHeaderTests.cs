@@ -195,24 +195,20 @@ file class HeaderCaptureHandler(Action<IReadOnlyDictionary<string, object>> call
 {
     private readonly Action<IReadOnlyDictionary<string, object>> _callback = callback;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        _callback(Context!.Headers);
+        _callback(context.Headers);
         return Task.CompletedTask;
     }
 }
 
 file class HeaderEchoReplyHandler : IMessageHandler<TestRequest>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(TestRequest message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(TestRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        var traceId = Context!.Headers.TryGetValue("X-Trace-Id", out var value)
+        var traceId = context.Headers.TryGetValue("X-Trace-Id", out var value)
             ? (value is byte[] bytes ? System.Text.Encoding.UTF8.GetString(bytes) : value?.ToString() ?? string.Empty)
             : string.Empty;
-        await Context!.ReplyAsync(new TestResponse(Guid.NewGuid()) { Answer = traceId });
+        await context.ReplyAsync(new TestResponse(Guid.NewGuid()) { Answer = traceId });
     }
 }

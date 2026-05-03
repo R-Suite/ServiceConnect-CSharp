@@ -118,9 +118,7 @@ public sealed class UnroutableRetryPublishE2ETests(MessagingFixture fixture)
     {
         private readonly HandlerCallState _state = state;
 
-        public IConsumeContext Context { get; set; } = null!;
-
-        public Task HandleAsync(UnroutableRetryProbe message, CancellationToken cancellationToken = default)
+        public Task HandleAsync(UnroutableRetryProbe message, IConsumeContext context, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _state.AttemptCount);
             _state.CalledTcs.TrySetResult();

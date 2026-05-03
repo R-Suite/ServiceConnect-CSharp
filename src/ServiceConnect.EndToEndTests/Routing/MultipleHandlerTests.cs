@@ -96,9 +96,7 @@ file class TaggedHandlerA(ConcurrentBag<string> bag, TaskCompletionSource<bool> 
     private readonly ConcurrentBag<string> _bag = bag;
     private readonly TaskCompletionSource<bool> _tcs = tcs;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         _bag.Add("HandlerA");
         if (_bag.Count >= 2)
@@ -115,9 +113,7 @@ file class TaggedHandlerB(ConcurrentBag<string> bag, TaskCompletionSource<bool> 
     private readonly ConcurrentBag<string> _bag = bag;
     private readonly TaskCompletionSource<bool> _tcs = tcs;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         _bag.Add("HandlerB");
         if (_bag.Count >= 2)

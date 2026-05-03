@@ -133,11 +133,9 @@ file class StreamCaptureHandler(TaskCompletionSource<byte[]> tcs) : IStreamHandl
 {
     private readonly TaskCompletionSource<byte[]> _tcs = tcs;
 
-    public IMessageBusReadStream Stream { get; set; } = null!;
-
-    public Task ExecuteAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public Task ExecuteAsync(TestMessage message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
     {
-        _tcs.TrySetResult(Stream.Read());
+        _tcs.TrySetResult(stream.Read());
         return Task.CompletedTask;
     }
 }

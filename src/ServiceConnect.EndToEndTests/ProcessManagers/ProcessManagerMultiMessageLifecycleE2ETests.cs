@@ -138,23 +138,21 @@ file class LifecycleProcessHandler(TaskCompletionSource<bool> finished) :
 {
     private readonly TaskCompletionSource<bool> _finished = finished;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(ProcessStartedMessage message, LifecycleProcessData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(ProcessStartedMessage message, LifecycleProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.HandledCount++;
         data.StartStep = message.StepName;
         return Task.CompletedTask;
     }
 
-    public Task HandleAsync(ProcessResumedMessage message, LifecycleProcessData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(ProcessResumedMessage message, LifecycleProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.HandledCount++;
         data.ResumeStep = message.StepName;
         return Task.CompletedTask;
     }
 
-    public Task HandleAsync(ProcessFinishedMessage message, LifecycleProcessData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(ProcessFinishedMessage message, LifecycleProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.HandledCount++;
         data.FinishStep = message.StepName;

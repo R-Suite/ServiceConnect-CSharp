@@ -102,9 +102,7 @@ file class ConsumerCountHandler(ConsumerCountHandlerState state) : IMessageHandl
 {
     private readonly ConsumerCountHandlerState _state = state;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         _state.ThreadIds.Add(Thread.CurrentThread.ManagedThreadId);
         _state.Countdown.Signal();

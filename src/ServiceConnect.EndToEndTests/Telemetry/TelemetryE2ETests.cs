@@ -19,9 +19,7 @@ file sealed class TraceTestHandler(TaskCompletionSource consumed) : IMessageHand
 {
     private readonly TaskCompletionSource _consumed = consumed;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TraceTestMessage message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TraceTestMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         _consumed.TrySetResult();
         return Task.CompletedTask;
