@@ -1,3 +1,4 @@
+using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -24,9 +25,11 @@ public static class HealthChecksBuilderExtensions
         TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        BusConsumingHealthCheck? cached = null;
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => ActivatorUtilities.CreateInstance<BusConsumingHealthCheck>(sp),
+            sp => LazyInitializer.EnsureInitialized(ref cached,
+                () => ActivatorUtilities.CreateInstance<BusConsumingHealthCheck>(sp)),
             failureStatus,
             tags,
             timeout));
@@ -44,9 +47,11 @@ public static class HealthChecksBuilderExtensions
         TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ConsumerConnectionHealthCheck? cached = null;
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => ActivatorUtilities.CreateInstance<ConsumerConnectionHealthCheck>(sp),
+            sp => LazyInitializer.EnsureInitialized(ref cached,
+                () => ActivatorUtilities.CreateInstance<ConsumerConnectionHealthCheck>(sp)),
             failureStatus,
             tags,
             timeout));
@@ -69,9 +74,11 @@ public static class HealthChecksBuilderExtensions
         TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ProducerConnectionHealthCheck? cached = null;
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => ActivatorUtilities.CreateInstance<ProducerConnectionHealthCheck>(sp),
+            sp => LazyInitializer.EnsureInitialized(ref cached,
+                () => ActivatorUtilities.CreateInstance<ProducerConnectionHealthCheck>(sp)),
             failureStatus,
             tags,
             timeout));
