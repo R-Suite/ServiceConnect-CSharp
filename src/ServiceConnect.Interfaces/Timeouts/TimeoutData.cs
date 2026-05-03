@@ -11,9 +11,10 @@ public sealed class TimeoutData
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The address of the client who requested the timeout.
+    /// The address of the client who requested the timeout, or <see langword="null"/>
+    /// when no destination is associated with the timeout.
     /// </summary>
-    public string Destination { get; set; } = string.Empty;
+    public string? Destination { get; set; }
 
     /// <summary>
     /// The saga ID.
