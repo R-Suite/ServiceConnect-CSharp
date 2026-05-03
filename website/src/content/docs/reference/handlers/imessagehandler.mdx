@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IMessageHandler<TMessage>` is the contract you implement to consume a single message type. Implementations are discovered by the handler registry and resolved from DI per message; the dispatch pipeline populates the ambient `Context`, then invokes `HandleAsync`. Multiple handlers may be registered for the same message type — all of them run.
+`IMessageHandler<TMessage>` is the contract you implement to consume a single message type. Implementations are discovered by the handler registry and resolved from DI per message; the dispatch pipeline invokes `HandleAsync`, passing the per-message context directly as a parameter. Multiple handlers may be registered for the same message type — all of them run.
 
 See [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) for the conceptual tour.
 
@@ -19,31 +19,47 @@ The interface is declared with a contravariant type parameter constrained to `Me
 public interface IMessageHandler<in TMessage> where TMessage : Message
 ```
 
-### `Context`
-
-```csharp
-IConsumeContext Context { get; set; }
-```
-
-Gets or sets the per-message consume context (bus handle, correlation id, reply helper). The dispatch pipeline assigns this property before `HandleAsync` runs, so your handler can read it without additional plumbing.
-
-**Remarks.** The property is nullable on the interface for testability — inside an invoked `HandleAsync` it is always populated.
-
----
-
 ### `HandleAsync`
 
 ```csharp
-Task HandleAsync(TMessage message, CancellationToken cancellationToken = default);
+Task HandleAsync(TMessage message, IConsumeContext context, CancellationToken cancellationToken = default);
 ```
 
-Invoked once per delivered message. Returning a faulted `Task` (or throwing synchronously) signals failure to the pipeline, which applies the configured retry and error-handling policy.
+Invoked once per delivered message. The dispatch pipeline passes the per-message `IConsumeContext` directly so handlers are safe to register as singletons or across concurrent dispatches without races on shared state. Returning a faulted `Task` (or throwing synchronously) signals failure to the pipeline, which applies the configured retry and error-handling policy.
 
 **Parameters**
 - `message` — the deserialised message; guaranteed non-null when `HandleAsync` is invoked by the dispatcher.
+- `context` — the per-message consume context (bus handle, correlation id, reply helper); guaranteed non-null when invoked by the dispatcher.
 - `cancellationToken` — sourced from the transport consume context; signals cooperative shutdown. Pass it through to downstream awaits so long-running handlers unwind cleanly when the bus stops consuming.
 
 **Remarks.** The generic parameter is constrained to `Message`, matching the constraint on `IBus.PublishAsync` and `IBus.SendAsync`. Keep the handler's work inside the awaited task — the pipeline acknowledges the broker only once this task completes successfully.
+
+<Aside type="note" title="v8 migration — Context property removed">
+  In v7 the pipeline set an ambient `Context { get; set; }` property on the handler before calling `HandleAsync`. v8 passes the context as a parameter instead, removing the property.
+
+  ```csharp
+  // before (v7)
+  public class OrderHandler : IMessageHandler<OrderPlaced>
+  {
+      public IConsumeContext Context { get; set; } = null!;
+      public Task HandleAsync(OrderPlaced msg, CancellationToken ct = default)
+      {
+          var bus = Context.Bus;
+          // ...
+      }
+  }
+
+  // after (v8)
+  public class OrderHandler : IMessageHandler<OrderPlaced>
+  {
+      public Task HandleAsync(OrderPlaced msg, IConsumeContext context, CancellationToken ct = default)
+      {
+          var bus = context.Bus;
+          // ...
+      }
+  }
+  ```
+</Aside>
 
 ## Usage
 
@@ -56,13 +72,11 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 
     public OrderPlacedHandler(IOrderRepository orders) => _orders = orders;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         // Use the message id as a deduplication key so retries and duplicate
         // deliveries never write the same row twice.
-        var dedupKey = Context?.MessageId ?? message.CorrelationId.ToString();
+        var dedupKey = context.MessageId ?? message.CorrelationId.ToString();
 
         if (await _orders.ExistsAsync(dedupKey))
         {
@@ -87,24 +101,17 @@ A handler is the natural place to enforce idempotency. Writing through a dedupli
 ```csharp
 public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 {
-    private readonly IBus _bus;
     private readonly IPaymentGateway _payments;
 
-    public OrderPlacedHandler(IBus bus, IPaymentGateway payments)
-    {
-        _bus = bus;
-        _payments = payments;
-    }
+    public OrderPlacedHandler(IPaymentGateway payments) => _payments = payments;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         var authorization = await _payments.AuthorizeAsync(
             message.CustomerId,
             message.Total);
 
-        await _bus.PublishAsync(new OrderConfirmed(message.CorrelationId)
+        await context.Bus.PublishAsync(new OrderConfirmed(message.CorrelationId)
         {
             OrderId = message.OrderId,
             AuthorizationCode = authorization.Code,
@@ -113,7 +120,7 @@ public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 }
 ```
 
-Handlers routinely trigger the next step of a workflow. Resolve `IBus` from constructor injection and `PublishAsync` the follow-up event once the handler's side-effects are durable. The broker acknowledgement for `OrderPlaced` is only sent after `HandleAsync` returns, so the follow-up publish and the ack form a conceptual unit.
+Handlers routinely trigger the next step of a workflow. Reach `IBus` through the supplied `context.Bus` and `PublishAsync` the follow-up event once the handler's side-effects are durable. The broker acknowledgement for `OrderPlaced` is only sent after `HandleAsync` returns, so the follow-up publish and the ack form a conceptual unit.
 
 ## See also
 

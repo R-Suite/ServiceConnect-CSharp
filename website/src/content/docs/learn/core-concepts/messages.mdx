@@ -12,11 +12,11 @@ Keep contracts boring on purpose. They are the most-shared part of a distributed
 ```csharp
 public class Message(Guid correlationId)
 {
-    public Guid CorrelationId { get; private set; } = correlationId;
+    public Guid CorrelationId { get; init; } = correlationId;
 }
 ```
 
-That's the entire base. One property — `CorrelationId` — wired through a primary constructor.
+That's the entire base. One property — `CorrelationId` — wired through a primary constructor. The `init` accessor allows deserialisers and object-initializer expressions to populate it, but ordinary post-construction code cannot mutate it.
 
 ServiceConnect uses the correlation id to **relate related messages across a conversation**: a request and its reply, a command and the events it triggers, every message produced by a process manager instance. If you reply to a request, the reply carries the same correlation id as the request. If you publish an event in response to a command, standard practice is to pass the incoming correlation id through to the outgoing event.
 
@@ -98,16 +98,14 @@ await bus.SendAsync(
 When you produce a message **in response to** another, pass the incoming correlation id through:
 
 ```csharp
-public sealed class PlaceOrderHandler(IBus bus) : IMessageHandler<PlaceOrder>
+public sealed class PlaceOrderHandler : IMessageHandler<PlaceOrder>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(PlaceOrder message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(PlaceOrder message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         // Carry the correlation id forward so downstream logs and
         // process managers can tie every subsequent message back to
         // this conversation.
-        await bus.PublishAsync(new OrderPlaced(message.CorrelationId)
+        await context.Bus.PublishAsync(new OrderPlaced(message.CorrelationId)
         {
             OrderId = Guid.NewGuid().ToString(),
             Total = message.Cart.Total,

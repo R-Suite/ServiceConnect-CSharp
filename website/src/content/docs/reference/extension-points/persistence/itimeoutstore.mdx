@@ -25,7 +25,7 @@ public interface ITimeoutStore
 }
 ```
 
-`TimeoutData` carries the timeout identifier, target destination, scheduled fire time, and an arbitrary headers dictionary. `TimeoutsBatch` wraps a list of due `TimeoutData` records together with a `NextQueryTime` that tells the manager when to poll again.
+`TimeoutData` carries the timeout identifier, target destination, scheduled fire time, and an `IReadOnlyDictionary<string, object>` headers bag. Implementations that construct `TimeoutData` pass any headers via the init accessor; post-construction mutation is not supported. `TimeoutsBatch` wraps a list of due `TimeoutData` records together with a `NextQueryTime` that tells the manager when to poll again.
 
 ---
 

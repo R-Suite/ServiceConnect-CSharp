@@ -65,9 +65,7 @@ using ServiceConnect.Interfaces;
 
 public sealed class DomainEventHandler : IMessageHandler<DomainEvent>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(DomainEvent message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(DomainEvent message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         var concreteTypeName = message.GetType().Name;
         var orderId = message switch
@@ -93,9 +91,7 @@ The shipping subscriber is a plain single-type handler — exactly what you'd wr
 // ShippingSubscriber/OrderShippedHandler.cs
 public sealed class OrderShippedHandler : IMessageHandler<OrderShipped>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(OrderShipped message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(OrderShipped message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Shipping: {message.OrderId} via {message.Carrier}");
         return Task.CompletedTask;

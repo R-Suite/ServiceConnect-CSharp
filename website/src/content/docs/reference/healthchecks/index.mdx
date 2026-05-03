@@ -9,7 +9,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 `ServiceConnect.HealthChecks` is the optional package that ships health-check classes for `Microsoft.Extensions.Diagnostics.HealthChecks`. It contains three sealed `IHealthCheck` implementations and three matching extension methods on `IHealthChecksBuilder`. The package is transport-agnostic — it depends only on `ServiceConnect.Interfaces`. A future transport that implements `IBus`, `IConsumer`, and `IProducer` works with these checks unchanged.
 
-Each check is O(1), allocation-light, and side-effect-free: it inspects last-known in-process state through a public interface property (`IBus.IsConsuming`, `IConsumer.IsConnected`, `IProducer.IsHealthy`). No broker channels are opened per probe, no AMQP round-trips are issued.
+Each check is O(1), allocation-light, and side-effect-free: it inspects last-known in-process state through a public interface property (`IBus.IsConsuming`, `IConsumer.IsConnected`, `IProducer.IsHealthy`). No broker channels are opened per probe, no AMQP round-trips are issued. Each check honours the supplied `CancellationToken` — probes cancelled by the health-check framework surface as `OperationCanceledException` rather than returning a stale result.
 
 See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/) for the conceptual walk-through, K8s liveness/readiness wiring, and the producer-lazy-connect caveat.
 
@@ -28,17 +28,36 @@ Static class containing the three registration extension methods. Each registers
 ### `AddServiceConnectBus`
 
 ```csharp
+// Default — resolves IBus via ActivatorUtilities from DI
 public static IHealthChecksBuilder AddServiceConnectBus(
     this IHealthChecksBuilder builder,
     string name = "serviceconnect-bus",
     HealthStatus failureStatus = HealthStatus.Unhealthy,
     IEnumerable<string>? tags = null,
     TimeSpan? timeout = null);
+
+// Factory overload — useful for multi-bus hosts
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IBus> busFactory,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Keyed-services convenience overload
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name,
+    object serviceKey,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
 ```
 
-Registers `BusConsumingHealthCheck`. The factory uses `ActivatorUtilities.CreateInstance<BusConsumingHealthCheck>` so `IBus` is resolved from the DI container at probe time.
+Registers `BusConsumingHealthCheck`. The default overload uses `ActivatorUtilities.CreateInstance<BusConsumingHealthCheck>` so `IBus` is resolved from the DI container at probe time. Use the factory or keyed-services overload when multiple named bus instances are registered in the same DI container.
 
-**Parameters**
+**Parameters (default overload)**
 - `builder` — the `IHealthChecksBuilder` returned by `services.AddHealthChecks()`.
 - `name` — registration name. Defaults to `"serviceconnect-bus"`.
 - `failureStatus` — status to return when the bus is not consuming. Defaults to `Unhealthy`.
@@ -48,9 +67,28 @@ Registers `BusConsumingHealthCheck`. The factory uses `ActivatorUtilities.Create
 ### `AddServiceConnectConsumer`
 
 ```csharp
+// Default — resolves IConsumer via ActivatorUtilities from DI
 public static IHealthChecksBuilder AddServiceConnectConsumer(
     this IHealthChecksBuilder builder,
     string name = "serviceconnect-consumer",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Factory overload
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IConsumer> consumerFactory,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Keyed-services convenience overload
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name,
+    object serviceKey,
     HealthStatus failureStatus = HealthStatus.Unhealthy,
     IEnumerable<string>? tags = null,
     TimeSpan? timeout = null);
@@ -61,9 +99,28 @@ Registers `ConsumerConnectionHealthCheck`. Same factory pattern as `AddServiceCo
 ### `AddServiceConnectProducer`
 
 ```csharp
+// Default — resolves IProducer via ActivatorUtilities from DI
 public static IHealthChecksBuilder AddServiceConnectProducer(
     this IHealthChecksBuilder builder,
     string name = "serviceconnect-producer",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Factory overload
+public static IHealthChecksBuilder AddServiceConnectProducer(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IProducer> producerFactory,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Keyed-services convenience overload
+public static IHealthChecksBuilder AddServiceConnectProducer(
+    this IHealthChecksBuilder builder,
+    string name,
+    object serviceKey,
     HealthStatus failureStatus = HealthStatus.Unhealthy,
     IEnumerable<string>? tags = null,
     TimeSpan? timeout = null);
@@ -71,8 +128,13 @@ public static IHealthChecksBuilder AddServiceConnectProducer(
 
 Registers `ProducerConnectionHealthCheck`. The default name is `"serviceconnect-producer"`. Skip this on consume-only hosts.
 
-<Aside type="caution" title="Producer connects lazily">
-  `IProducer.IsHealthy` is `false` until the host has published or sent its first message — the producer's broker connection is established on demand, not at startup. Hosts that publish only in response to inbound traffic should not register this check on a `ready` tag, because readiness would block until the first inbound message arrives. For that topology, use `AddServiceConnectConsumer` only.
+<Aside type="caution" title="Producer connects lazily — readiness implications">
+  The producer's broker connection is established on demand (first publish or send), not at startup. `ProducerConnectionHealthCheck` distinguishes two states using `IProducer.HasAttemptedConnection`:
+
+  - **Before any publish/send** (`HasAttemptedConnection` is `false`): the check returns `Healthy`. A probe firing before the host has published anything reflects lazy-not-yet-tried, not failure — treating it as `Unhealthy` would crash-loop pods unnecessarily.
+  - **After the first attempt** (`HasAttemptedConnection` is `true`): the check reflects `IProducer.IsHealthy` — `Healthy` if connected, `Unhealthy` if the connection dropped or failed.
+
+  Hosts that publish only in response to inbound traffic should not put this check on a `ready` tag, because readiness would not fail-fast on a producer connection drop until the next outbound message is attempted. For those topologies use `AddServiceConnectConsumer` only on `ready`.
 </Aside>
 
 ## Health-check classes
@@ -129,13 +191,17 @@ public sealed class ProducerConnectionHealthCheck : IHealthCheck
 }
 ```
 
-Returns `HealthCheckResult.Healthy("Producer connection is open.")` when `IProducer.IsHealthy` is `true`, otherwise `new HealthCheckResult(failureStatus, "Producer connection is closed.")`.
+Uses `IProducer.HasAttemptedConnection` to distinguish the lazy-not-yet-tried state from a genuine failure:
 
-`IProducer.IsHealthy` is `false` before the first publish/send (the producer connects lazily) and after a connection drop until the next reconnect. See the caveat under `AddServiceConnectProducer` above.
+- `HasAttemptedConnection` is `false` → returns `Healthy("Producer has not yet attempted a connection.")`. This is the state before any publish or send has been issued; treating it as unhealthy would crash-loop pods unnecessarily.
+- `HasAttemptedConnection` is `true` and `IProducer.IsHealthy` is `true` → returns `Healthy("Producer connection is open.")`.
+- `HasAttemptedConnection` is `true` and `IProducer.IsHealthy` is `false` → returns the failure result with status `failureStatus` and `"Producer connection is closed."`.
+
+The check also calls `cancellationToken.ThrowIfCancellationRequested()` at entry, so probes cancelled by the health-check framework surface as `OperationCanceledException`.
 
 ## Usage
 
-### Registration
+### Single-bus registration
 
 ```csharp
 using ServiceConnect.HealthChecks;
@@ -152,6 +218,27 @@ services.AddHealthChecks()
 
 app.MapHealthChecks("/health/live",  new HealthCheckOptions { Predicate = c => c.Tags.Contains("live") });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
+```
+
+### Multi-bus registration
+
+When multiple named bus instances are registered in the same DI container, use the factory or keyed-services overloads to bind each check to its specific instance:
+
+```csharp
+// Keyed-services approach — register two named buses
+services.AddKeyedSingleton<IBus>("orders", ordersFactory);
+services.AddKeyedSingleton<IBus>("notifications", notificationsFactory);
+
+services.AddHealthChecks()
+    .AddServiceConnectBus(name: "bus-orders",        serviceKey: "orders",        tags: ["live"])
+    .AddServiceConnectBus(name: "bus-notifications", serviceKey: "notifications", tags: ["live"]);
+
+// Factory approach — resolve manually when keyed services aren't available
+services.AddHealthChecks()
+    .AddServiceConnectProducer(
+        name: "producer-orders",
+        producerFactory: sp => sp.GetRequiredKeyedService<IProducer>("orders"),
+        tags: ["ready"]);
 ```
 
 ### Topology choices

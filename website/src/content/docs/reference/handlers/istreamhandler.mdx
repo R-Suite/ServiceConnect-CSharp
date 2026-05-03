@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IStreamHandler<TMessage>` is the contract for consuming a streaming message sent by a producer via [`IBus.CreateStream<T>()`](../../bus/ibus/#createstreamt). The dispatch pipeline reassembles the in-order byte packets into a single `IMessageBusReadStream`, populates the `Stream` property, then calls `ExecuteAsync` exactly once the complete payload has arrived. Reach for this interface when the payload is too large or too streamy to carry in the body of a normal `Message`.
+`IStreamHandler<TMessage>` is the contract for consuming a streaming message sent by a producer via [`IBus.CreateStream<T>()`](../../bus/ibus/#createstreamt). The dispatch pipeline reassembles the in-order byte packets into a single `IMessageBusReadStream` and calls `ExecuteAsync` exactly once the complete payload has arrived, passing the stream directly as a parameter. Reach for this interface when the payload is too large or too streamy to carry in the body of a normal `Message`.
 
 See [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/) for the pattern tour.
 
@@ -19,31 +19,45 @@ The interface is declared with a single type parameter constrained to `Message`:
 public interface IStreamHandler<TMessage> where TMessage : Message
 ```
 
-### `Stream`
-
-```csharp
-IMessageBusReadStream Stream { get; set; }
-```
-
-Gets or sets the read stream over the reassembled payload bytes. The dispatch pipeline sets this property before `ExecuteAsync` is invoked, so handlers read it directly without initialising anything themselves.
-
-**Remarks.** The stream is positioned at the start of the payload. Disposing the stream (or reading it to completion) is the handler's responsibility; the pipeline does not automatically release it for you.
-
----
-
 ### `ExecuteAsync`
 
 ```csharp
-Task ExecuteAsync(TMessage stream, CancellationToken cancellationToken = default);
+Task ExecuteAsync(TMessage message, IMessageBusReadStream stream, CancellationToken cancellationToken = default);
 ```
 
-Invoked once the full stream has arrived and been reassembled. Inside this call, `Stream` is populated and readable.
+Invoked once the full stream has arrived and been reassembled. The reassembled stream is passed directly as `stream`, positioned at the start of the payload and ready to read.
 
 **Parameters**
-- `stream` — the control message carrying metadata about the streamed payload (file name, content type, anything else the producer attached).
+- `message` — the control message carrying metadata about the streamed payload (file name, content type, anything else the producer attached).
+- `stream` — the read stream over the reassembled payload bytes. Guaranteed non-null when invoked by the dispatcher.
 - `cancellationToken` — token to observe for cancellation; flows through from the dispatcher.
 
-**Remarks.** `ExecuteAsync` is async-first on this interface — await downstream I/O directly and pass the supplied `CancellationToken` through so long-running work can be cancelled. The handler still occupies a consumer slot while it runs, so offload heavy work appropriately if the consumer concurrency budget is tight.
+**Remarks.** `ExecuteAsync` is async-first on this interface — await downstream I/O directly and pass the supplied `CancellationToken` through so long-running work can be cancelled. Disposing the stream (or reading it to completion) is the handler's responsibility; the pipeline does not automatically release it for you. The handler still occupies a consumer slot while it runs, so offload heavy work appropriately if the consumer concurrency budget is tight.
+
+<Aside type="note" title="v8 migration — Stream property removed">
+  In v7 the pipeline set an ambient `Stream { get; set; }` property on the handler before calling `ExecuteAsync`. v8 passes the stream as a parameter instead.
+
+  ```csharp
+  // before (v7)
+  public class FileUploadStreamHandler : IStreamHandler<FileUpload>
+  {
+      public IMessageBusReadStream Stream { get; set; } = null!;
+      public async Task ExecuteAsync(FileUpload message, CancellationToken ct = default)
+      {
+          // read from Stream
+      }
+  }
+
+  // after (v8)
+  public class FileUploadStreamHandler : IStreamHandler<FileUpload>
+  {
+      public async Task ExecuteAsync(FileUpload message, IMessageBusReadStream stream, CancellationToken ct = default)
+      {
+          // read from stream
+      }
+  }
+  ```
+</Aside>
 
 ## Usage
 
@@ -56,16 +70,14 @@ public sealed class FileUploadStreamHandler : IStreamHandler<FileUpload>
 
     public FileUploadStreamHandler(IFileStorage storage) => _storage = storage;
 
-    public IMessageBusReadStream Stream { get; set; } = null!;
-
-    public async Task ExecuteAsync(FileUpload message, CancellationToken cancellationToken = default)
+    public async Task ExecuteAsync(FileUpload message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
     {
         var destination = _storage.OpenWrite(message.FileName);
         try
         {
             var buffer = new byte[64 * 1024];
             int read;
-            while ((read = Stream.Read(buffer, 0, buffer.Length)) > 0)
+            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
             {
                 await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
             }
@@ -73,13 +85,13 @@ public sealed class FileUploadStreamHandler : IStreamHandler<FileUpload>
         finally
         {
             destination.Dispose();
-            Stream.Dispose();
+            stream.Dispose();
         }
     }
 }
 ```
 
-Streaming handlers are ideal for large uploads — the file never materialises in memory as a single `byte[]`. Read from `Stream` in chunk-sized buffers and write through to durable storage, then dispose the stream so the broker resources can be released.
+Streaming handlers are ideal for large uploads — the file never materialises in memory as a single `byte[]`. Read from `stream` in chunk-sized buffers and write through to durable storage, then dispose the stream so the broker resources can be released.
 
 ## See also
 

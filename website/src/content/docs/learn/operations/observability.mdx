@@ -180,11 +180,11 @@ Operator action: investigate the broker-side cause, fix it (re-create the queue 
 
 ### Steady-state semantics
 
-Each check inspects the *last known* state from the transport client's event stream. There is no active probing — that would compete with real traffic and amplify failure modes (a probe interval of 5 seconds × N replicas would mean steady channel churn against the broker for what is, in practice, a one-bit signal).
+Each check inspects the *last known* state from the transport client's event stream. There is no active probing — that would compete with real traffic and amplify failure modes (a probe interval of 5 seconds × N replicas would mean steady channel churn against the broker for what is, in practice, a one-bit signal). Each check also honours the framework-supplied `CancellationToken` — probes cancelled by the health-check framework (timeout or shutdown) surface as `OperationCanceledException` rather than returning a stale result.
 
-Two timing footnotes worth knowing:
+Three timing / state footnotes worth knowing:
 
-- **The producer connects lazily.** `IProducer.IsHealthy` is `false` before the host has published or sent its first message. For hosts that publish anything at startup (request/reply, heartbeats, subscribe-confirm), this resolves within milliseconds; for hosts that publish only in response to inbound traffic, the producer check is Unhealthy until the first outbound message. If your host falls in the second category, **do not put the producer check on the `ready` tag** — it would block readiness until the first inbound message arrives. Use `AddServiceConnectConsumer` only for that topology.
+- **The producer connects lazily — and the check knows it.** `ProducerConnectionHealthCheck` distinguishes lazy-not-yet-tried from failure via `IProducer.HasAttemptedConnection`. Before any publish or send has been issued (`HasAttemptedConnection` is `false`), the check returns `Healthy` so pods don't crash-loop at startup. Once the first publish attempt completes (success or failure), `HasAttemptedConnection` becomes `true` and the check then reflects the real `IProducer.IsHealthy` state. Hosts that publish only in response to inbound traffic should still **not put the producer check on the `ready` tag** — the check can't detect a connection failure until an outbound attempt is made. Use `AddServiceConnectConsumer` only on `ready` for that topology.
 - **The window between connection drop and event observation.** When the broker connection drops, there is a small (millisecond-scale) gap before the client raises its shutdown event and `IsConnected` / `IsHealthy` flip to `false`. A probe firing inside that gap can still see Healthy. This is shorter than any K8s probe interval and is the same gap any in-process check has, regardless of implementation.
 
 ### Custom checks

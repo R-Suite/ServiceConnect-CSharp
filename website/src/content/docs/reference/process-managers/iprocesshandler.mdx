@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IProcessHandler<TData, TMessage>` is the contract you implement for each message type that drives a process manager (saga). The dispatch pipeline loads the correlated `TData` from the configured `IProcessManagerFinder`, populates the ambient `Context`, invokes `HandleAsync`, and persists any mutations to `data` when the method returns. Implement the interface once per `(TData, TMessage)` pair in your workflow — a single class commonly implements the interface several times, one per message it reacts to.
+`IProcessHandler<TData, TMessage>` is the contract you implement for each message type that drives a process manager (saga). The dispatch pipeline loads the correlated `TData` from the configured `IProcessManagerFinder`, invokes `HandleAsync` (passing the per-message context directly as a parameter), and persists any mutations to `data` when the method returns. Implement the interface once per `(TData, TMessage)` pair in your workflow — a single class commonly implements the interface several times, one per message it reacts to.
 
 See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the conceptual tour.
 
@@ -23,30 +23,46 @@ public interface IProcessHandler<TData, TMessage>
 
 The `new()` constraint lets the framework construct a fresh state object the first time a correlation id is seen.
 
-### `Context`
-
-```csharp
-IConsumeContext Context { get; set; }
-```
-
-Gets or sets the per-message consume context (bus handle, correlation id, reply helper). The dispatch pipeline assigns this property before `HandleAsync` runs, so the handler can read it without additional plumbing.
-
-**Remarks.** Nullable on the interface for testability; inside an invoked `HandleAsync` it is always populated.
-
----
-
 ### `HandleAsync`
 
 ```csharp
-Task HandleAsync(TMessage message, TData data, CancellationToken cancellationToken = default);
+Task HandleAsync(TMessage message, TData data, IConsumeContext context, CancellationToken cancellationToken = default);
 ```
 
-Invoked once the framework has correlated `message` to the `data` record. Mutations to `data` are persisted when the returned task completes successfully; returning a faulted task (or throwing) prevents persistence and propagates to the pipeline's retry and error-handling policy.
+Invoked once the framework has correlated `message` to the `data` record. The per-message context is passed directly so the handler is safe across concurrent dispatches. Mutations to `data` are persisted when the returned task completes successfully; returning a faulted task (or throwing) prevents persistence and propagates to the pipeline's retry and error-handling policy.
 
 **Parameters**
 - `message` — the deserialised message; guaranteed non-null when invoked by the dispatcher.
 - `data` — the persisted state record for this correlation id. The first message in a workflow receives a freshly-constructed, default-valued instance; subsequent messages receive the record as last written.
+- `context` — the per-message consume context (bus handle, correlation id, reply helper); guaranteed non-null when invoked by the dispatcher.
 - `cancellationToken` — sourced from the transport consume context; signals cooperative shutdown. Pass it through to downstream awaits so long-running steps unwind cleanly when the bus stops consuming.
+
+<Aside type="note" title="v8 migration — Context property removed">
+  In v7 the pipeline set an ambient `Context { get; set; }` property on the handler before calling `HandleAsync`. v8 passes the context as a parameter instead.
+
+  ```csharp
+  // before (v7)
+  public class ShippingSaga : IProcessHandler<ShippingSagaData, OrderPlaced>
+  {
+      public IConsumeContext Context { get; set; } = null!;
+      public Task HandleAsync(OrderPlaced message, ShippingSagaData data, CancellationToken ct = default)
+      {
+          var bus = Context.Bus;
+          // ...
+      }
+  }
+
+  // after (v8)
+  public class ShippingSaga : IProcessHandler<ShippingSagaData, OrderPlaced>
+  {
+      public Task HandleAsync(OrderPlaced message, ShippingSagaData data, IConsumeContext context, CancellationToken ct = default)
+      {
+          var bus = context.Bus;
+          // ...
+      }
+  }
+  ```
+</Aside>
 
 ---
 
@@ -76,13 +92,7 @@ Configures the correlation between `TMessage` and `TData`. The default implement
 public sealed class ShippingSaga :
     IProcessHandler<ShippingSagaData, OrderPlaced>
 {
-    private readonly IBus _bus;
-
-    public ShippingSaga(IBus bus) => _bus = bus;
-
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(OrderPlaced message, ShippingSagaData data, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(OrderPlaced message, ShippingSagaData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.Status != OrderStatus.Pending)
         {
@@ -94,7 +104,7 @@ public sealed class ShippingSaga :
         data.OrderId = message.OrderId;
         data.Status = OrderStatus.Acknowledged;
 
-        await _bus.PublishAsync(new ShipmentRequested(message.CorrelationId)
+        await context.Bus.PublishAsync(new ShipmentRequested(message.CorrelationId)
         {
             OrderId = message.OrderId,
         });
@@ -102,7 +112,7 @@ public sealed class ShippingSaga :
 }
 ```
 
-The handler mutates `data` in place — the framework writes the record back when `HandleAsync` returns — and publishes `ShipmentRequested` as the next step of the workflow. The state-flag check at the top of the method is the idempotency gate for at-least-once redelivery.
+The handler mutates `data` in place — the framework writes the record back when `HandleAsync` returns — and publishes `ShipmentRequested` as the next step of the workflow. The state-flag check at the top of the method is the idempotency gate for at-least-once redelivery. `IBus` is reached through `context.Bus`; no constructor injection of `IBus` is needed.
 
 ## See also
 

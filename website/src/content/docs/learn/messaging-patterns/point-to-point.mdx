@@ -99,9 +99,7 @@ using ServiceConnect.Interfaces;
 
 public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(WorkSubmitted message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Processed {message.WorkId}");
         return Task.CompletedTask;

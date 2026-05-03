@@ -12,21 +12,18 @@ Handlers are the simplest unit of work in a ServiceConnect application — and t
 ```csharp
 public interface IMessageHandler<in TMessage> where TMessage : Message
 {
-    IConsumeContext Context { get; set; }
-    Task HandleAsync(TMessage message, CancellationToken cancellationToken = default);
+    Task HandleAsync(TMessage message, IConsumeContext context, CancellationToken cancellationToken = default);
 }
 ```
 
-Two members. One property the pipeline sets for you, and one method you implement.
+One method you implement. The pipeline passes the per-message context directly as a parameter.
 
 ```csharp
 using ServiceConnect.Interfaces;
 
 public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(WorkSubmitted message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Processing {message.WorkId}");
         await Task.CompletedTask;
@@ -38,7 +35,7 @@ The contravariant `in` on the generic parameter means a handler written for a ba
 
 ## The consume context
 
-`Context` is set by the dispatch pipeline **before** `HandleAsync` is called. It exposes the things a handler needs to do something useful beyond just reading the incoming message:
+`IConsumeContext` is passed directly to `HandleAsync` by the dispatch pipeline. It exposes the things a handler needs to do something useful beyond just reading the incoming message:
 
 ```csharp
 public interface IConsumeContext
@@ -58,7 +55,7 @@ public interface IConsumeContext
 
 A few things worth knowing:
 
-- **`Bus`** is the same `IBus` you inject elsewhere. Prefer using `Context.Bus` inside a handler — it makes the data-flow explicit: "this message produced that message."
+- **`Bus`** is the same `IBus` you inject elsewhere. Prefer using `context.Bus` inside a handler — it makes the data-flow explicit: "this message produced that message."
 - **`CorrelationId`** is the incoming message's correlation id. Pass it through to any outgoing messages you produce in this handler so logs and process managers can tie them back to the same conversation.
 - **`CancellationToken`** is tied to the consumer's lifetime. When the bus stops consuming, the token fires. Long-running handlers should pass it to downstream awaits so they unwind cleanly on shutdown.
 - **`ReplyAsync<TReply>`** is the correct way to reply to a request sent by `SendRequestAsync`. It sets the `ResponseMessageId` header that ServiceConnect uses to correlate the reply. A plain `Bus.SendAsync` back to the caller **will not** resolve the pending request — always use `ReplyAsync` when replying to a request.
@@ -68,20 +65,16 @@ A typical request/reply handler:
 ```csharp
 public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(QuoteRequest message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(QuoteRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         var price = Quote(message.ProductCode);
-        await Context!.ReplyAsync(new QuoteResponse(message.CorrelationId)
+        await context.ReplyAsync(new QuoteResponse(message.CorrelationId)
         {
             Price = price,
         });
     }
 }
 ```
-
-The `Context!` null-forgiving is safe in handler code — the dispatch pipeline always populates `Context` before calling `HandleAsync`. The property is nullable only because it is a settable property rather than a constructor parameter.
 
 ## Registering handlers
 
@@ -136,7 +129,7 @@ You can combine approaches — enable scanning and also add a `HandlerReference`
 
 **Handlers are always transient.** Each message dispatch resolves a fresh handler instance from the container.
 
-This is not negotiable. The `Context` property is mutable per-message state; a singleton handler would race across concurrent dispatches. ServiceConnect enforces the rule at registration time:
+The context is passed as a parameter, so handlers are technically safe as singletons from a concurrency standpoint. However, ServiceConnect still resolves handlers as transient by default to keep their dependency lifetimes predictable and to avoid holding constructor-injected scoped services alive longer than a single message. ServiceConnect enforces the rule at registration time:
 
 ```csharp
 // This will throw at host startup:
@@ -144,19 +137,13 @@ services.AddSingleton<WorkSubmittedHandler>();
 services.AddServiceConnect(builder => { /* … */ });
 ```
 
-The error says exactly what's wrong:
-
-> Message handler 'WorkSubmittedHandler' must not be registered as a singleton. Handler instances hold per-message `IConsumeContext` state and must be transient or scoped. Remove the singleton registration and let `AddServiceConnect` register the handler as transient.
-
 If you need shared state across handlers — a cache, a database connection pool, a metrics client — inject it. The handler stays transient; the dependency is a singleton that the handler resolves from the container.
 
 ```csharp
 public sealed class WorkSubmittedHandler(IWorkItemStore store, ILogger<WorkSubmittedHandler> log)
     : IMessageHandler<WorkSubmitted>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(WorkSubmitted message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         log.LogInformation("Received {WorkId}", message.WorkId);
         await store.SaveAsync(message);

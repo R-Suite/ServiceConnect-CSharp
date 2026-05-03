@@ -27,7 +27,7 @@ public virtual TimeSpan Timeout()
 
 Gets the maximum amount of time to wait before dispatching the current batch. Override to enable a time-based flush; leave the default to disable it.
 
-**Returns.** The maximum aggregation window. Returning `default` (`TimeSpan.Zero`) disables the timeout-based flush.
+**Returns.** The maximum aggregation window. The default returns `Timeout.InfiniteTimeSpan`, which disables the timeout-based flush (the dispatcher gates scheduling on a value strictly greater than `TimeSpan.Zero`). Returning any positive `TimeSpan` enables time-based flushing.
 
 ---
 
@@ -42,7 +42,7 @@ Gets the maximum number of messages to buffer before dispatching the batch. Over
 **Returns.** The batch size limit. Returning `0` means no size-based flush is enforced.
 
 <Aside type="caution" title="Always set at least one flush trigger">
-  If both `Timeout()` and `BatchSize()` return their defaults, the aggregator accumulates indefinitely and never flushes. Override at least one.
+  If both `Timeout()` and `BatchSize()` return their defaults (`Timeout.InfiniteTimeSpan` and `0` respectively), the aggregator accumulates indefinitely and never flushes. Override at least one.
 </Aside>
 
 ---

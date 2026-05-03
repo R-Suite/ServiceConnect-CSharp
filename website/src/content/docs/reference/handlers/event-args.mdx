@@ -40,12 +40,12 @@ Gets the message type name taken from the transport headers. Useful when an obse
 ### `Headers`
 
 ```csharp
-public IDictionary<string, object> Headers { get; init; }
+public IReadOnlyDictionary<string, object> Headers { get; init; }
 ```
 
 Gets the transport headers associated with the consumed message. The getter lazily allocates an empty dictionary when none was supplied.
 
-**Remarks.** Header values are typed as `object` because transports expose strings, byte arrays, and numeric values through the same channel. Decode defensively when reading.
+**Remarks.** Header values are typed as `object` because transports expose strings, byte arrays, and numeric values through the same channel. Decode defensively when reading. The dictionary is read-only; middleware that needs to produce a modified header bag must construct a new `ConsumeEventArgs` with a fresh dictionary.
 
 ---
 
@@ -182,6 +182,8 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
         // Shape the consume-event args for downstream collectors before we
         // start the span — the same bag of data a telemetry exporter would
         // emit on the bus's ConsumeEvent callback.
+        // Headers is IReadOnlyDictionary; pass a copy via AsReadOnly or
+        // construct a new ReadOnlyDictionary wrapper.
         var consumeArgs = new ConsumeEventArgs
         {
             Message = envelope.Body.ToArray(),
@@ -190,6 +192,8 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
                 : string.Empty,
             Headers = new Dictionary<string, object>(envelope.Headers),
         };
+        // The initializer above works because Dictionary<K,V> implements
+        // IReadOnlyDictionary<K,V>.
 
         using var activity = Source.StartActivity(
             $"consume {consumeArgs.Type}",

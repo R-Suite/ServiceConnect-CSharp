@@ -92,12 +92,10 @@ using ServiceConnect.Interfaces;
 
 public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(QuoteRequest message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(QuoteRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         var price = PriceFor(message.ProductCode);
-        await Context!.ReplyAsync(new QuoteResponse(message.CorrelationId)
+        await context.ReplyAsync(new QuoteResponse(message.CorrelationId)
         {
             Price = price,
         });

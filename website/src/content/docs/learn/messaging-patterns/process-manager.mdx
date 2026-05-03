@@ -59,32 +59,30 @@ public sealed class FulfillmentProcessHandler :
     IProcessHandler<FulfillmentState, InventoryReserved>,
     IProcessHandler<FulfillmentState, PaymentCaptured>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.IsSubmitted) return;           // idempotent — saw this already
 
         data.OrderNumber = message.OrderNumber;
         data.IsSubmitted = true;
 
-        await Context!.Bus.SendAsync(
+        await context.Bus.SendAsync(
             new ReserveInventory(message.CorrelationId) { OrderNumber = message.OrderNumber },
             new SendOptions { EndPoint = "inventory-worker" });
     }
 
-    public async Task HandleAsync(InventoryReserved message, FulfillmentState data, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(InventoryReserved message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.InventoryReserved) return;
 
         data.InventoryReserved = true;
 
-        await Context!.Bus.SendAsync(
+        await context.Bus.SendAsync(
             new CapturePayment(message.CorrelationId),
             new SendOptions { EndPoint = "payment-worker" });
     }
 
-    public Task HandleAsync(PaymentCaptured message, FulfillmentState data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(PaymentCaptured message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.PaymentCaptured) return Task.CompletedTask;
 
@@ -168,17 +166,17 @@ The `HandlerReference` list tells the dispatch pipeline which message types rout
 Some workflows need to react to *nothing happening*. "If we haven't received `PaymentCaptured` within 24 hours, cancel the order." The pattern for that is `RequestTimeoutAsync`:
 
 ```csharp
-public async Task HandleAsync(InventoryReserved message, FulfillmentState data, CancellationToken cancellationToken = default)
+public async Task HandleAsync(InventoryReserved message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
 {
     data.InventoryReserved = true;
 
-    await Context!.Bus.RequestTimeoutAsync(
+    await context.Bus.RequestTimeoutAsync(
         message.CorrelationId,
         TimeSpan.FromHours(24),
-        Context.CancellationToken);
+        context.CancellationToken);
 }
 
-public Task HandleAsync(TimeoutMessage message, FulfillmentState data, CancellationToken cancellationToken = default)
+public Task HandleAsync(TimeoutMessage message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
 {
     if (data.IsCompleted) return Task.CompletedTask;   // payment already arrived — ignore
 

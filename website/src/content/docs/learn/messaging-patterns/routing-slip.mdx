@@ -63,9 +63,7 @@ Each stage is a normal consumer with a handler for the message type. **The handl
 // InventoryStep/RoutingSlipOrderHandler.cs
 public sealed class RoutingSlipOrderHandler : IMessageHandler<RoutingSlipOrder>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(RoutingSlipOrder message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(RoutingSlipOrder message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         message.CurrentStep = "InventoryStep";
         await ReserveStockAsync(message.OrderId);

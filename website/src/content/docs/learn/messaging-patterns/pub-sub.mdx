@@ -73,9 +73,7 @@ using ServiceConnect.Interfaces;
 
 public sealed class OrderPlacedAnalyticsHandler : IMessageHandler<OrderPlaced>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Analytics: recording {message.OrderId}");
         return Task.CompletedTask;

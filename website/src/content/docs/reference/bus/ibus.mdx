@@ -252,7 +252,7 @@ Schedules a `TimeoutMessage` to be delivered back to the current bus's queue aft
 - `cancellationToken` — cancels the scheduling call, not the timeout itself.
 
 <Aside type="note" title="Not every implementation supports this">
-  The default interface implementation throws `NotSupportedException`. A concrete bus must be paired with a registered `ITimeoutStore` (for example via `UseMongoDbPersistence`) and have `IBusConfiguration.EnableProcessManagerTimeouts` set to true for this call to succeed.
+  The default interface-method implementation returns `Task.FromException(new NotSupportedException(...))` — the exception is deferred into the returned task rather than thrown synchronously. A concrete bus must be paired with a registered `ITimeoutStore` (for example via `UseMongoDbPersistence`) and have `IBusConfiguration.EnableProcessManagerTimeouts` set to true for this call to succeed.
 </Aside>
 
 ## Usage
@@ -289,18 +289,13 @@ public sealed class OrderService
 ```csharp
 public sealed class ShippingSaga : IProcessHandler<ShippingState, OrderPlaced>
 {
-    private readonly IBus _bus;
-
-    public ShippingSaga(IBus bus) => _bus = bus;
-
-    public IConsumeContext Context { get; set; } = null!;
-
     public async Task HandleAsync(
         OrderPlaced @event,
         ShippingState data,
+        IConsumeContext context,
         CancellationToken cancellationToken = default)
     {
-        var quote = await _bus.SendRequestAsync<QuoteShipping, ShippingQuote>(
+        var quote = await context.Bus.SendRequestAsync<QuoteShipping, ShippingQuote>(
             new QuoteShipping(@event.CorrelationId)
             {
                 OrderId = @event.OrderId,

@@ -40,9 +40,7 @@ Two subscribers, one per type. A priority consumer:
 ```csharp
 public sealed class PremiumOrderHandler : IMessageHandler<PremiumOrderPlaced>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(PremiumOrderPlaced message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(PremiumOrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Priority lane: processing {message.OrderId}");
         return Task.CompletedTask;
@@ -67,18 +65,16 @@ Sometimes splitting the type is wrong. Maybe the categorisation is a consumer co
 In that case, keep one message type and branch inside the handler:
 
 ```csharp
-public sealed class OrderRoutingHandler(IWorkQueues queues) : IMessageHandler<OrderPlaced>
+public sealed class OrderRoutingHandler : IMessageHandler<OrderPlaced>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (message.TotalValue > 500m)
-            await Context!.Bus.SendAsync(
+            await context.Bus.SendAsync(
                 new PriorityWork(message.CorrelationId) { OrderId = message.OrderId },
                 new SendOptions { EndPoint = "priority-workers" });
         else
-            await Context!.Bus.SendAsync(
+            await context.Bus.SendAsync(
                 new StandardWork(message.CorrelationId) { OrderId = message.OrderId },
                 new SendOptions { EndPoint = "standard-workers" });
     }
