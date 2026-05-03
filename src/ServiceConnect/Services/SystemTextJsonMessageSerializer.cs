@@ -20,14 +20,21 @@ public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
     /// <summary>
     /// Creates a serializer using optionally-customised STJ options.
     /// </summary>
-    /// <param name="options">Optional source options to clone and apply. The cloned
-    /// instance has ServiceConnect's wire-compat defaults applied unless the source
-    /// already supplied a value.</param>
+    /// <param name="options">Optional base options to clone. All non-wire-compat settings
+    /// (custom converters, type-info resolvers, WriteIndented, etc.) are preserved from
+    /// the source. The wire-compat settings listed below are <em>always</em> overwritten
+    /// by ServiceConnect's defaults so the cross-version corpus assertions hold even when
+    /// callers pass a customised options instance.</param>
     public SystemTextJsonMessageSerializer(JsonSerializerOptions? options = null)
     {
         _options = new JsonSerializerOptions(options ?? new JsonSerializerOptions())
         {
-            // Match HeaderDecoder.MaxDepth = 32 cap on inbound nesting.
+            // Match HeaderDecoder.MaxDepth = 32 cap on inbound nesting. STJ has no direct
+            // equivalent of Newtonsoft's ReferenceLoopHandling.Error: a reference cycle in
+            // STJ surfaces as a JsonException once nesting exceeds MaxDepth (depth-cap
+            // detection rather than identity-tracking). The observable behaviour at the
+            // call site is the same — both wrap as SerializationException — but the
+            // semantic shift is documented here for future maintainers.
             MaxDepth = 32,
 
             // Newtonsoft's default emits literal non-ASCII characters; STJ default
@@ -47,6 +54,10 @@ public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
 
             // Equivalent of NullValueHandling.Include — emit null fields on the wire.
             DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+
+            // Newtonsoft used DateTimeZoneHandling.RoundtripKind to preserve DateTimeKind
+            // across serialise/deserialise. STJ already preserves DateTimeKind for ISO 8601
+            // round-trips by default — no equivalent setting needed, behaviour matches.
         };
     }
 
@@ -142,6 +153,16 @@ public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
         }
         catch (JsonException ex)
         {
+            throw new SerializationException(
+                $"Failed to deserialize message of type {type.Name}", type, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // JsonSerializer.Deserialize(ref Utf8JsonReader, ...) documents InvalidOperationException
+            // for malformed-state cases (e.g. reader CurrentDepth != 0 at entry, partial state).
+            // The reader here is freshly constructed so this is unreachable in practice, but wrap
+            // for consistency: every other deserialize path surfaces JSON failures as
+            // SerializationException. This catch keeps the contract uniform across overloads.
             throw new SerializationException(
                 $"Failed to deserialize message of type {type.Name}", type, ex);
         }
