@@ -251,24 +251,26 @@ public interface IHasCorrelationId
 `Message` declares it (no behaviour change for any user already deriving from `Message`):
 
 ```csharp
-public abstract class Message : IHasCorrelationId
+public class Message(Guid correlationId) : IHasCorrelationId
 {
-    public Guid CorrelationId { get; init; }
-    // ... rest unchanged
+    public Guid CorrelationId { get; init; } = correlationId;
 }
 ```
 
-`IAggregatorPersistor` parameter types tighten:
+`IAggregatorPersistor` parameter types tighten on the data-carrying paths only.
+`RemoveDataAsync(string name, Guid correlationId, ...)` already takes the correlation
+id directly and is unchanged. `RemoveSnapshotAsync` continues to take the snapshot it
+should remove. The full v8 surface:
 
 ```csharp
 public interface IAggregatorPersistor
 {
     Task InsertDataAsync(IHasCorrelationId data, string name, CancellationToken ct = default);
     Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(string name, CancellationToken ct = default);
-    Task<IAggregatorSnapshot?> GetSnapshotAsync(string name, CancellationToken ct = default);
-    Task RemoveDataAsync(IHasCorrelationId data, string name, CancellationToken ct = default);
+    Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken ct = default);
+    Task RemoveDataAsync(string name, Guid correlationId, CancellationToken ct = default);
     Task RemoveAllAsync(string name, CancellationToken ct = default);
-    Task RemoveSnapshotAsync(string name, CancellationToken ct = default);
+    Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken ct = default);
     Task<int> CountAsync(string name, CancellationToken ct = default);
 }
 ```
