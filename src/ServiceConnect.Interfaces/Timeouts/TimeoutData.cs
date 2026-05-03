@@ -14,6 +14,11 @@ public sealed class TimeoutData
     /// The address of the client who requested the timeout, or <see langword="null"/>
     /// when no destination is associated with the timeout.
     /// </summary>
+    /// <remarks>
+    /// In production the bus sets this to the local queue name when inserting
+    /// the timeout; the timeout-dispatch service treats <see langword="null"/>
+    /// or empty as "no recipient" and skips the dispatch.
+    /// </remarks>
     public string? Destination { get; set; }
 
     /// <summary>
