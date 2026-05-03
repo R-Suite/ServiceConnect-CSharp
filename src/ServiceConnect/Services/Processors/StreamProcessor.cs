@@ -21,6 +21,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     // (meaning only the thread whose factory runs counts) and decremented on every eviction
     // or rollback path, keeping it in sync with actual dictionary membership.
     private int _streamCount;
+    private int _disposed;
     private readonly ITimer _cleanupTimer;
     /// <summary>
     /// Maximum time a partial stream may sit without new packets before it is evicted.
@@ -72,6 +73,13 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        // Reject incoming packets after disposal; avoids unbounded dictionary growth
+        // from late-arriving messages that race the DisposeAsync caller.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return NotHandledTask;
+        }
+
         if (!headers.TryGetValue(HeaderKeys.MessageType, out var msgTypeRaw))
         {
             return NotHandledTask;
@@ -301,9 +309,19 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         return ProcessResult.Handled;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        return _cleanupTimer.DisposeAsync();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        await _cleanupTimer.DisposeAsync().ConfigureAwait(false);
+
+        // Drain in-flight stream entries; MessageBusReadStream does not implement
+        // IDisposable, so clearing the dictionary is sufficient for GC reclamation.
+        _activeStreams.Clear();
+        Interlocked.Exchange(ref _streamCount, 0);
     }
 
     // Immutable so updates require a new instance via ConcurrentDictionary.TryUpdate;
