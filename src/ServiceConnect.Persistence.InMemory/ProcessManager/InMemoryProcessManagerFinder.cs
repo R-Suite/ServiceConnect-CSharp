@@ -31,8 +31,6 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     }
 
     private const int InitialVersion = 1;
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (Func<object, object?> Data, Func<object, object?> Version)>
-        ReflectionAccessors = new();
 
     /// <summary>
     /// Finds persisted process manager data that matches the supplied message mapping.
@@ -112,27 +110,15 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             }
             else
             {
-                // Support case where data was stored with a different generic parameter
-                // (e.g., concrete vs interface T).
-                var valueType = value.GetType();
-                var accessors = ReflectionAccessors.GetOrAdd(valueType, static type =>
-                {
-                    var dataProp = type.GetProperty("Data");
-                    var versionProp = type.GetProperty("Version");
-
-                    return (
-                        dataProp == null ? _ => null : dataProp.GetValue,
-                        versionProp == null ? _ => null : versionProp.GetValue);
-                });
-
-                if (accessors.Data(value) is T typedData && accessors.Version(value) is int version)
-                {
-                    var original = new MemoryData<T> { Data = typedData, Version = version };
-                    if (predicate(original, msgPropValue))
-                    {
-                        return new MemoryData<T> { Data = DeepClone.Clone(typedData), Version = version };
-                    }
-                }
+                // The stored wrapper type does not match the requested T.  Silently
+                // coercing a MemoryData<A> to MemoryData<B> would mask the caller
+                // passing the wrong saga data type — a programmer error that should
+                // surface immediately rather than produce subtly wrong behaviour.
+                throw new InvalidOperationException(
+                    $"Saga store contains data of type '{value.GetType().FullName}' but " +
+                    $"caller asked for '{typeof(MemoryData<T>).FullName}'. " +
+                    "The saga store does not support polymorphic data type substitution; " +
+                    "store and retrieve using the same generic parameter.");
             }
         }
         return null;

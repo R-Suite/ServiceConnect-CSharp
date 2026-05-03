@@ -53,17 +53,17 @@ public class InMemoryProcessManagerFinderTests
     public async Task ShouldInsertData()
     {
         // Arrange
-        IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
+        var data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
         IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
 
         // Act
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Assert
-        // InsertDataAsync wraps as MemoryData<IProcessManagerData>, so FindDataAsync must use IProcessManagerData
-        var found = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        // InsertDataAsync wraps using the runtime type, so FindDataAsync must use the same concrete T.
+        var found = await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
         Assert.NotNull(found);
-        Assert.Equal("TestData", ((TestData)found.Data).Name);
+        Assert.Equal("TestData", found.Data.Name);
     }
 
     [Fact]
@@ -101,20 +101,20 @@ public class InMemoryProcessManagerFinderTests
     public async Task FindDataAsync_ReturnsDetachedCopy_AndDoesNotLeakMutationsWithoutUpdate()
     {
         // Arrange
-        IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "Original" };
+        var data = new TestData { CorrelationId = _correlationId, Name = "Original" };
         IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act
-        var loaded = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        var loaded = await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
         Assert.NotNull(loaded);
-        ((TestData)loaded.Data).Name = "Mutated";
+        loaded.Data.Name = "Mutated";
 
-        var reloaded = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        var reloaded = await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
 
         // Assert
         Assert.NotNull(reloaded);
-        Assert.Equal("Original", ((TestData)reloaded.Data).Name);
+        Assert.Equal("Original", reloaded.Data.Name);
     }
 
     [Fact]
@@ -188,15 +188,15 @@ public class InMemoryProcessManagerFinderTests
     public async Task ShouldThrowConcurrencyExceptionWhenUpdatingStaleVersion()
     {
         // Arrange
-        IProcessManagerData data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
+        var data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
         IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
         await processManagerFinder.InsertDataAsync(data1, CancellationToken.None);
 
-        var foundData1 = (MemoryData<IProcessManagerData>)(await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
-        var foundData2 = (MemoryData<IProcessManagerData>)(await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
+        var foundData1 = (MemoryData<TestData>)(await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
+        var foundData2 = (MemoryData<TestData>)(await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
 
-        var foundData1Temp = new MemoryData<IProcessManagerData> { Data = foundData1.Data, Version = foundData1.Version };
-        var foundData2Temp = new MemoryData<IProcessManagerData> { Data = foundData2.Data, Version = foundData2.Version };
+        var foundData1Temp = new MemoryData<TestData> { Data = foundData1.Data, Version = foundData1.Version };
+        var foundData2Temp = new MemoryData<TestData> { Data = foundData2.Data, Version = foundData2.Version };
 
         await processManagerFinder.UpdateDataAsync(foundData1Temp, CancellationToken.None); // first update should be fine
 
@@ -210,17 +210,17 @@ public class InMemoryProcessManagerFinderTests
     public async Task ShouldDeleteData()
     {
         // Arrange
-        IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
+        var data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
         IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
-        var loaded = await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        var loaded = await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
         Assert.NotNull(loaded);
 
         // Act
         await processManagerFinder.DeleteDataAsync(loaded, CancellationToken.None);
 
         // Assert
-        Assert.Null(await processManagerFinder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None));
+        Assert.Null(await processManagerFinder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None));
     }
 
     [Fact]
@@ -229,10 +229,10 @@ public class InMemoryProcessManagerFinderTests
         // Arrange
         IProcessManagerFinder finder = new InMemoryProcessManagerFinder(string.Empty, string.Empty);
         await finder.InsertDataAsync(new TestData { CorrelationId = _correlationId, Name = "v1" }, CancellationToken.None);
-        var stale = (MemoryData<IProcessManagerData>)(await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
+        var stale = (MemoryData<TestData>)(await finder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
 
         // Bump the stored version via a successful update so `stale` is behind.
-        await finder.UpdateDataAsync(new MemoryData<IProcessManagerData>
+        await finder.UpdateDataAsync(new MemoryData<TestData>
         {
             Data = new TestData { CorrelationId = _correlationId, Name = "v2" },
             Version = stale.Version
@@ -243,7 +243,7 @@ public class InMemoryProcessManagerFinderTests
             () => finder.DeleteDataAsync(stale, CancellationToken.None));
 
         // The record must still be present.
-        Assert.NotNull(await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None));
+        Assert.NotNull(await finder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None));
     }
 
     [Fact]
@@ -558,9 +558,9 @@ public class InMemoryProcessManagerFinderTests
 
         timeProvider.Advance(TimeSpan.FromDays(3));
 
-        var found = await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        var found = await finder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
         Assert.NotNull(found);
-        Assert.Equal("LongLivedSaga", ((TestData)found.Data).Name);
+        Assert.Equal("LongLivedSaga", found.Data.Name);
     }
 
     [Fact]
@@ -572,8 +572,8 @@ public class InMemoryProcessManagerFinderTests
 
         timeProvider.Advance(TimeSpan.FromDays(1));
 
-        var loaded = (MemoryData<IProcessManagerData>)(await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
-        await finder.UpdateDataAsync(new MemoryData<IProcessManagerData>
+        var loaded = (MemoryData<TestData>)(await finder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None))!;
+        await finder.UpdateDataAsync(new MemoryData<TestData>
         {
             Data = new TestData { CorrelationId = _correlationId, Name = "v2" },
             Version = loaded.Version
@@ -581,9 +581,9 @@ public class InMemoryProcessManagerFinderTests
 
         timeProvider.Advance(TimeSpan.FromDays(2));
 
-        var found = await finder.FindDataAsync<IProcessManagerData>(_mapper, new Message(_correlationId), CancellationToken.None);
+        var found = await finder.FindDataAsync<TestData>(_mapper, new Message(_correlationId), CancellationToken.None);
         Assert.NotNull(found);
-        Assert.Equal("v2", ((TestData)found.Data).Name);
+        Assert.Equal("v2", found.Data.Name);
     }
 
     // Keys() snapshot + a concurrent DeleteDataAsync on the saga store between
@@ -609,7 +609,7 @@ public class InMemoryProcessManagerFinderTests
         }
 
         var mapper = new TestProcessManagerPropertyMapper();
-        mapper.ConfigureMapping<IProcessManagerData, Message>(pm => pm.CorrelationId, m => m.CorrelationId);
+        mapper.ConfigureMapping<TestData, Message>(pm => pm.CorrelationId, m => m.CorrelationId);
 
         // Act: run many concurrent scans and concurrent removals directly against SagaProvider,
         // which is NOT protected by the finder's ReaderWriterLockSlim.
@@ -622,7 +622,7 @@ public class InMemoryProcessManagerFinderTests
             {
                 // Pick a random id; result may be null if removed — that is fine.
                 var id = ids[Random.Shared.Next(ids.Length)];
-                await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(id), CancellationToken.None);
+                await finder.FindDataAsync<TestData>(mapper, new Message(id), CancellationToken.None);
             }
             catch (Exception ex)
             {
@@ -719,29 +719,29 @@ public class InMemoryProcessManagerFinderTests
         await finder.InsertDataAsync(new TestData { CorrelationId = correlationId, Name = "v0" }, CancellationToken.None);
 
         var mapper = new TestProcessManagerPropertyMapper();
-        mapper.ConfigureMapping<IProcessManagerData, Message>(d => d.CorrelationId, m => m.CorrelationId);
+        mapper.ConfigureMapping<TestData, Message>(d => d.CorrelationId, m => m.CorrelationId);
 
-        var found = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(correlationId), CancellationToken.None);
+        var found = await finder.FindDataAsync<TestData>(mapper, new Message(correlationId), CancellationToken.None);
         Assert.NotNull(found);
 
         // Initial version after Insert is 1; the caller's handle reflects that on Find.
-        Assert.Equal(1, ((MemoryData<IProcessManagerData>)found!).Version);
+        Assert.Equal(1, ((MemoryData<TestData>)found!).Version);
 
         // First update — store goes 1 → 2; caller's handle must move in lockstep.
-        ((TestData)found.Data).Name = "v1";
+        found.Data.Name = "v1";
         await finder.UpdateDataAsync(found, CancellationToken.None);
-        Assert.Equal(2, ((MemoryData<IProcessManagerData>)found).Version);
+        Assert.Equal(2, ((MemoryData<TestData>)found).Version);
 
         // Second update on the same handle — must not throw because the caller's
         // Version was incremented to match what the store now holds.
-        ((TestData)found.Data).Name = "v2";
+        found.Data.Name = "v2";
         await finder.UpdateDataAsync(found, CancellationToken.None);
-        Assert.Equal(3, ((MemoryData<IProcessManagerData>)found).Version);
+        Assert.Equal(3, ((MemoryData<TestData>)found).Version);
 
         // Confirm the second write was persisted.
-        var reloaded = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(correlationId), CancellationToken.None);
+        var reloaded = await finder.FindDataAsync<TestData>(mapper, new Message(correlationId), CancellationToken.None);
         Assert.NotNull(reloaded);
-        Assert.Equal("v2", ((TestData)reloaded!.Data).Name);
+        Assert.Equal("v2", reloaded!.Data.Name);
     }
 }
 

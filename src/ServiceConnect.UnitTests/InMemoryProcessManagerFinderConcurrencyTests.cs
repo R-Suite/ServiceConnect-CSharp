@@ -20,7 +20,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
     private static IProcessManagerPropertyMapper BuildMapper()
     {
         var mapper = new TestProcessManagerPropertyMapper();
-        mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
+        mapper.ConfigureMapping<TestData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
         return mapper;
     }
 
@@ -48,7 +48,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
         // Every id must be findable.
         foreach (var id in ids)
         {
-            var found = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(id), CancellationToken.None);
+            var found = await finder.FindDataAsync<TestData>(mapper, new Message(id), CancellationToken.None);
             Assert.NotNull(found);
         }
     }
@@ -113,7 +113,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
         {
             try
             {
-                await finder.UpdateDataAsync(new MemoryData<IProcessManagerData>
+                await finder.UpdateDataAsync(new MemoryData<TestData>
                 {
                     Data = new TestData { CorrelationId = corrId, Name = $"upd-{i}" },
                     Version = 1,
@@ -132,9 +132,9 @@ public class InMemoryProcessManagerFinderConcurrencyTests
         Assert.Equal(contenders - 1, conflicts);
 
         // After exactly one successful update the stored version is 2.
-        var found = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(corrId), CancellationToken.None);
+        var found = await finder.FindDataAsync<TestData>(mapper, new Message(corrId), CancellationToken.None);
         Assert.NotNull(found);
-        Assert.Equal(2, ((MemoryData<IProcessManagerData>)found).Version);
+        Assert.Equal(2, ((MemoryData<TestData>)found).Version);
     }
 
     [Fact]
@@ -203,7 +203,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
             while (!readerStop.Token.IsCancellationRequested)
             {
                 var probe = ids[rng.Next(ids.Length)];
-                var probed = await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(probe), CancellationToken.None);
+                var probed = await finder.FindDataAsync<TestData>(mapper, new Message(probe), CancellationToken.None);
                 _ = (probed, readerIdx);
             }
         })).ToArray();
@@ -216,7 +216,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
         // After writers complete, every id is findable.
         foreach (var id in ids)
         {
-            Assert.NotNull(await finder.FindDataAsync<IProcessManagerData>(mapper, new Message(id), CancellationToken.None));
+            Assert.NotNull(await finder.FindDataAsync<TestData>(mapper, new Message(id), CancellationToken.None));
         }
     }
 }

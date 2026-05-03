@@ -44,17 +44,17 @@ public class InMemoryProcessManagerFinderCloneCountTests
         }
 
         var mapper = new TestProcessManagerPropertyMapper();
-        mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
+        mapper.ConfigureMapping<CountingProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
 
         // Inserts deep-clone on store (one getter visit per insert via JSON serialization).
         // Reset so we measure only the work performed by FindDataAsync.
         Interlocked.Exchange(ref CountingProcessManagerData.GetterCount, 0);
 
-        var found = await finder.FindDataAsync<IProcessManagerData>(
+        var found = await finder.FindDataAsync<CountingProcessManagerData>(
             mapper, new Message(targetId), CancellationToken.None);
 
         Assert.NotNull(found);
-        Assert.Equal(targetId, ((CountingProcessManagerData)found!.Data).CorrelationId);
+        Assert.Equal(targetId, found!.Data.CorrelationId);
 
         // DeepClone.Clone runs exactly once on the matched item; Newtonsoft visits the Name getter
         // once during serialization. The tight bound (≤ 2) makes a partial regression to
