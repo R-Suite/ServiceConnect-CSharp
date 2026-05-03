@@ -1,6 +1,6 @@
+using System.Text;
 using Newtonsoft.Json;
 using ServiceConnect.Interfaces;
-using System.Text;
 
 namespace ServiceConnect.SerializationCompatTests.Fixtures;
 
@@ -23,6 +23,10 @@ internal static class NewtonsoftReferenceSerializer
         TypeNameHandling = TypeNameHandling.None,
     };
 
+    // Shared static instance is safe with these defaults: no custom converters and no
+    // custom contract resolver, so the only mutable state lives in DefaultContractResolver's
+    // ConcurrentDictionary cache. If a future test adds custom converters or a stateful
+    // resolver, switch this to per-call construction (negligible cost in a test fixture).
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(Settings);
 
     public static byte[] Serialize<T>(T message) where T : Message
