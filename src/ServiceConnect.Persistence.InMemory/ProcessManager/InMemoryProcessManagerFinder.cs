@@ -119,7 +119,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             {
                 if (predicate(typed, msgPropValue))
                 {
-                    return new MemoryData<T> { Data = DeepClone.Clone(typed.Data), Version = typed.Version };
+                    // Carry Id forward so callers see the same stable Guid that was
+                    // stamped at insert — matches Mongo's persisted _id contract.
+                    return new MemoryData<T> { Id = typed.Id, Data = DeepClone.Clone(typed.Data), Version = typed.Version };
                 }
             }
             else
@@ -260,8 +262,19 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} and Version {currentVersion} could not be updated.");
             }
 
+            // Extract the stored Id via IIdentified (analogous to IVersioned above) so
+            // the pattern-match is safe even when the stored MemoryData<ConcreteT> does
+            // not share a generic parameter with the caller's T (e.g. UpdateDataAsync
+            // called with T=IProcessManagerData for a row stored as MemoryData<TestData>).
+            Guid existingId = storedData is IIdentified identified
+                ? identified.Id
+                : Guid.Empty; // unreachable: all stored rows go through BuildMemoryDataFactory which produces MemoryData<T> : IIdentified
+
             _state.SagaProvider.Update(key, new MemoryData<T>
             {
+                // Preserve the stable Id that was stamped at insert — mirrors Mongo's
+                // persisted _id which survives every subsequent update to the document.
+                Id = existingId,
                 // Deep-clone on update so the caller's subsequent mutations do not
                 // leak into the stored snapshot. Matches Insert semantics.
                 Data = DeepClone.Clone(data.Data),
