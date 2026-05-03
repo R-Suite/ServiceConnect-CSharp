@@ -52,4 +52,15 @@ public class InterfaceCleanupTests
         Assert.DoesNotContain(typeof(IServiceProvider), parameterTypes);
         Assert.Contains(typeof(Lazy<IBus>), parameterTypes);
     }
+
+    [Fact]
+    public void Message_ImplementsIHasCorrelationId_AndExposesCorrelationIdViaInterface()
+    {
+        var corrId = Guid.NewGuid();
+        var message = new Message(corrId);
+
+        IHasCorrelationId asInterface = message;
+
+        Assert.Equal(corrId, asInterface.CorrelationId);
+    }
 }

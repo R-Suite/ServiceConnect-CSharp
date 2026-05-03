@@ -8,7 +8,7 @@ namespace ServiceConnect.Interfaces;
 /// flow a correlation identifier consistently across send, publish, request/reply,
 /// and process-manager operations.
 /// </remarks>
-public class Message(Guid correlationId)
+public class Message(Guid correlationId) : IHasCorrelationId
 {
     /// <summary>
     /// Gets the correlation id used to relate this message to a broader conversation.
