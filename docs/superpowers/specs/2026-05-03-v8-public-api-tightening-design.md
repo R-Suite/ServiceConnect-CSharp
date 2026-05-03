@@ -240,7 +240,7 @@ public sealed class TimeoutData
 ### 10. `IHasCorrelationId` + `IAggregatorPersistor`
 
 ```csharp
-namespace ServiceConnect.Interfaces.Aggregation;
+namespace ServiceConnect.Interfaces;
 
 public interface IHasCorrelationId
 {
