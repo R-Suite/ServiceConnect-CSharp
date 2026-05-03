@@ -10,7 +10,10 @@ namespace ServiceConnect.Services;
 /// </summary>
 public sealed class ConsumeScopeAccessor
 {
-    private static readonly AsyncLocal<IServiceProvider?> _current = new();
+    // Instance-scoped AsyncLocal so multiple ConsumeScopeAccessor instances in the same
+    // AppDomain (e.g. two Bus instances) maintain independent scopes. Pre-Phase-11 this
+    // was a static field, leaking scopes across bus boundaries.
+    private readonly AsyncLocal<IServiceProvider?> _current = new();
 
     /// <summary>
     /// Pushes <paramref name="serviceProvider"/> as the current scope. The returned
@@ -21,7 +24,7 @@ public sealed class ConsumeScopeAccessor
         ArgumentNullException.ThrowIfNull(serviceProvider);
         var previous = _current.Value;
         _current.Value = serviceProvider;
-        return new Popper(previous);
+        return new Popper(this, previous);
     }
 
     /// <summary>
@@ -32,7 +35,7 @@ public sealed class ConsumeScopeAccessor
         _current.Value ?? throw new InvalidOperationException(
             "No consume scope is currently active. The dispatcher and outbound filter path must push a scope before resolving scoped services.");
 
-    private sealed class Popper(IServiceProvider? previous) : IDisposable
+    private sealed class Popper(ConsumeScopeAccessor outer, IServiceProvider? previous) : IDisposable
     {
         private int _disposed;
 
@@ -43,7 +46,7 @@ public sealed class ConsumeScopeAccessor
                 return;
             }
 
-            _current.Value = previous;
+            outer._current.Value = previous;
         }
     }
 }
