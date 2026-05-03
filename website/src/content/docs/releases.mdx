@@ -241,6 +241,36 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 
 - `IProcessManagerTypeRegistry` (in `ServiceConnect.Interfaces`) — enumerates registered saga data types. Implemented by `ProcessManagerHandlerRegistry`. Used by Mongo's index initializer; downstream persistence providers can consume the same enumeration.
 
+### InMemory persistence
+
+**Bug fixes**
+
+- **Saga state isolated from public `IKeyValueStore`.** `InMemoryProcessManagerFinder` now uses a private `SagaProvider` distinct from the public `Provider` exposed via `IKeyValueStore` / `ICacheProvider`. User code reading or writing through `IKeyValueStore` cannot accidentally observe or corrupt saga state.
+- **`Update` throws on missing key.** `CacheProvider.Update<TKey,TValue>` throws `KeyNotFoundException` when the key is absent. Pre-fix it was a silent no-op while the caller advanced version state — sagas could wedge on the next real conflict.
+- **Saga store rejects polymorphic-T mismatches.** `InMemoryProcessManagerFinder.FindData<T>` throws `InvalidOperationException` when the stored row's data type doesn't match `T`. Pre-fix the fallback path silently rewrote the type via reflection-cached accessors, masking caller errors.
+- **`MemoryData<T>.Id` stable across reads and updates.** Insert stamps a fresh `Guid.NewGuid()`; updates preserve it; reads detach a copy carrying the original Id. Pre-fix it was `Guid.Empty` after every update. Mirrors Mongo's `_id` contract.
+- **Aggregator missing-`CorrelationId` errors are loud.** Inserting an aggregator data type without a public `Guid CorrelationId` property no longer cached a silent-null accessor. `RemoveDataAsync` now throws `InvalidOperationException` naming the offending type on every call; pre-fix the negative result was cached and `RemoveDataAsync` silently returned no-match.
+- **Aggregator `GetSnapshotAsync` no longer holds the lock during clone.** Snapshot copies entry references under `_memoryCacheLock`; `DeepClone.Clone` runs outside, so concurrent inserts/removes proceed during long snapshot operations.
+- **Saga predicate handles explicit-interface impls.** Both InMemory and Mongo finders resolve the `PropertyInfo` via the type and its implemented interfaces, then emit via `Expression.MakeMemberAccess` — fixes silent no-match when a saga maps an explicit-interface property.
+- **CacheProvider mechanical hardening.** `Add` reads the clock once (was twice — non-monotonic test `TimeProvider`s could produce a negative diff); `TryPurgeItem` swallows `ObjectDisposedException` during dispose race; the timer callback no longer re-installs after dispose; `Update`'s missing-key check moved inside the CAS retry loop to close a TOCTOU window where a concurrent removal between the guard and the loop would silently no-op; `Clear`'s race semantics are documented.
+- **`MongoDbData<T>` implements `IIdentified`.** Mirrors the new InMemory contract — Mongo rows already had a stable `Id`, only the interface declaration was missing.
+
+**Breaking API changes**
+
+- **`Get<TKey,TValue>` replaced with `TryGet<TKey,TValue>(key, out value)`.** Both `ICacheProvider` and `IKeyValueStore` switch to the `TryGet` shape so callers can distinguish "key absent" from "key present with null value." External consumers using `Get<>` must migrate.
+- **`InMemoryProcessManagerFinder(string, string)` ctor removed.** Production callers must use DI registration; tests use the internal `(ProcessManagerPredicateCache, InMemoryPersistenceState)` ctor. Mirrors Phase 8's `InMemoryTimeoutStore` ctor cleanup.
+- **`InMemoryPersistenceState.Provider` no longer holds saga state.** External code reaching into `Provider` looking for saga keys finds nothing; saga keys live in the private `SagaProvider`.
+
+**New surface**
+
+- `IIdentified` (in `ServiceConnect.Interfaces.Persistence`) — getter-only `Guid Id { get; }`. `MemoryData<T>` and `MongoDbData<T>` now implement it; callers can extract Id without a concrete-type cast.
+- `InMemoryPersistenceState.SagaProvider` — dedicated saga store separate from the public `Provider`. Internal-only access (the type is `internal sealed`).
+- `ICacheProvider.TryGet<TKey,TValue>(key, out value)` and `IKeyValueStore.TryGet<TKey,TValue>(key, out value)` — replace `Get<TKey,TValue>`.
+
+**Documentation**
+
+- `DeepClone` now documents its security boundary (`TypeNameHandling.Auto` is in-process-trusted-data-only; do not extend to external JSON) and Newtonsoft's explicit-interface auto-property gap (saga types using such properties must back them with a public property).
+
 ## Source and tags
 
 Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.
