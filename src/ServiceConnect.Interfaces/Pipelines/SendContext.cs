@@ -17,8 +17,10 @@ public sealed class SendContext
     public required byte[] MessageBytes { get; init; }
 
     /// <summary>
-    /// The outgoing transport headers. Mutable so middleware can stamp
-    /// trace-context, idempotency keys, etc., before the producer sees them.
+    /// Mutable transport headers for the outgoing message. Pipeline middleware (telemetry,
+    /// signing, compression, dedup) writes to this dictionary before the message is published.
+    /// Distinct from <see cref="ConsumeEventArgs.Headers"/> (read-only — incoming side) and
+    /// from <see cref="OutgoingEventArgs.Headers"/> (also mutable, observed by telemetry).
     /// </summary>
     public required IDictionary<string, string> Headers { get; init; }
 
