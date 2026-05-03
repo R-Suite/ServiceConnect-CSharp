@@ -340,6 +340,8 @@ public class OrderHandler : IMessageHandler<OrderPlaced>
 
 - **`TimeoutData.Headers`** and **`ConsumeEventArgs.Headers`** are now `IReadOnlyDictionary<string, object>`. Producers construct via init; consumers read only. Middleware that mutates these headers post-receive must construct a new instance with the modified dictionary.
 
+- **`TimeoutsBatch.DueTimeouts`** is now `IReadOnlyList<TimeoutData>` with an `init` accessor (was mutable `IList<TimeoutData>` with a public setter). Producers (timeout-store implementations) construct via init; consumers read only. Closes the asymmetry with the Phase 12 `Headers` tightenings — every list/dictionary-shaped DTO that flows from the framework to user code is now read-only.
+
 **v8 contract clarifications (non-breaking)**
 
 - **`Aggregator<T>.Timeout()`** default returns `Timeout.InfiniteTimeSpan` (was `default(TimeSpan)` = `TimeSpan.Zero`). The dispatcher gates scheduling on `> TimeSpan.Zero`, so `InfiniteTimeSpan` cleanly disables the timeout-based flush. Subclasses that overrode `Timeout()` to return positive durations are unaffected.
