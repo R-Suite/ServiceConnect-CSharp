@@ -15,7 +15,8 @@ public static class CorpusFactory
     {
         yield return [Primitive()];
         yield return [Collection()];
-        yield return [Nullable()];
+        yield return [NullableAllNull()];
+        yield return [NullablePopulated()];
         yield return [Nested()];
         yield return [Dates()];
         yield return [Enum()];
@@ -42,11 +43,18 @@ public static class CorpusFactory
         StringArray = ["a", "b", "c"],
     };
 
-    public static NullableMessage Nullable() => new(TestCorrelationId)
+    public static NullableMessage NullableAllNull() => new(TestCorrelationId)
     {
         NullableInt = null,
         NullableString = null,
         NullableDateTime = null,
+    };
+
+    public static NullableMessage NullablePopulated() => new(TestCorrelationId)
+    {
+        NullableInt = 7,
+        NullableString = "present",
+        NullableDateTime = new DateTime(2026, 5, 3, 12, 0, 0, DateTimeKind.Utc),
     };
 
     public static NestedMessage Nested() => new(TestCorrelationId)

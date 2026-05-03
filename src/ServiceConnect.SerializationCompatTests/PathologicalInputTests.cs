@@ -60,6 +60,34 @@ public class PathologicalInputTests
         Assert.Equal(42, result.Value);
     }
 
+    [Fact]
+    public void TrailingComma_Rejected()
+    {
+        // Newtonsoft accepts trailing commas by default; STJ rejects unless
+        // AllowTrailingCommas is enabled. ServiceConnect's options leave it disabled,
+        // so a v7 producer emitting trailing commas (rare but possible from lax
+        // generators) will fail to deserialise on a v8 consumer. Documented.
+        var json = "{\"CorrelationId\":\"00000000-0000-0000-0000-000000000000\",\"Value\":42,}";
+        var bytes = Encoding.UTF8.GetBytes(json);
+
+        Assert.ThrowsAny<Interfaces.Exceptions.SerializationException>(() =>
+            Stj.Deserialize(bytes, typeof(Int32Message)));
+    }
+
+    [Fact]
+    public void JavaScriptComment_Rejected()
+    {
+        // Newtonsoft skips JavaScript-style comments by default; STJ rejects unless
+        // ReadCommentHandling = Skip is enabled. ServiceConnect's options leave it
+        // disabled. A v7 consumer that depended on comments in payloads will fail
+        // to deserialise on v8. Documented.
+        var json = "{\"CorrelationId\":\"00000000-0000-0000-0000-000000000000\",/* note */\"Value\":42}";
+        var bytes = Encoding.UTF8.GetBytes(json);
+
+        Assert.ThrowsAny<Interfaces.Exceptions.SerializationException>(() =>
+            Stj.Deserialize(bytes, typeof(Int32Message)));
+    }
+
     private sealed class NestedArrayMessage : Message
     {
         public NestedArrayMessage() : base(Guid.Empty) { }

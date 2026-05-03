@@ -139,9 +139,13 @@ public class RoundTripTests
             case JsonValueKind.True:
             case JsonValueKind.False:
             case JsonValueKind.Null:
-            case JsonValueKind.Undefined:
+                // Both elements share the kind (top-of-method ValueKind equality check).
+                // True/False/Null are valueless; equal kind = equal element.
                 return true;
 
+            // Undefined falls through to GetRawText comparison: it indicates a default-
+            // constructed or invalid element that JsonDocument.Parse will not produce in
+            // practice, but the raw-text comparison is the safer fallback.
             default:
                 return a.GetRawText() == b.GetRawText();
         }

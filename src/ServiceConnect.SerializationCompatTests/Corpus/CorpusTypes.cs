@@ -99,8 +99,17 @@ public sealed class ByteArrayMessage : Message
     public byte[] Payload { get; init; } = [];
 }
 
-// ---- Polymorphism via base + derived (no $type metadata) ----
-
+// ---- Concrete derived type as its own static type (no $type metadata) ----
+//
+// Pet is declared as Dog, the concrete derived type. Both serialisers therefore
+// see Dog's full property set on serialise and reconstruct Dog on deserialise.
+// This is NOT a test of "abstract base + runtime-polymorphic derived" — that
+// case (declared type Animal, runtime type Dog) is intentionally omitted because
+// neither STJ default nor Newtonsoft with TypeNameHandling.None would carry
+// Dog's `Breed` property across the wire (no $type discriminator), and STJ
+// further refuses to instantiate the abstract Animal on deserialise. If
+// abstract-base polymorphism becomes a supported scenario in v8, add a separate
+// corpus item that asserts the chosen $type-discrimination strategy.
 public abstract class Animal
 {
     public string Name { get; init; } = "";
