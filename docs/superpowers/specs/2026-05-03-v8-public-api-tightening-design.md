@@ -93,26 +93,26 @@ Implementation notes:
 ### 3. Body-type cascade (internal)
 
 ```csharp
-// SendContext (settable so middleware can replace; not in-place mutable)
+// SendContext (init-only — bytes set once at construction; middleware mutates Headers, never bytes)
 public sealed class SendContext
 {
-    public required ReadOnlyMemory<byte> MessageBytes { get; set; }   // was: byte[]
-    public required IDictionary<string, string> Headers { get; init; } // unchanged: middleware-mutable
+    public required ReadOnlyMemory<byte> MessageBytes { get; init; }   // was: byte[]
+    public required IDictionary<string, string> Headers { get; init; } // unchanged: middleware-mutable collection
     // ... other fields unchanged
 }
 
-// Envelope (Body is settable so outgoing filters can replace it; not in-place mutable)
+// Envelope — already ReadOnlyMemory<byte> in the codebase; no Phase A.2 change needed.
 public sealed class Envelope
 {
-    public ReadOnlyMemory<byte> Body { get; set; }   // was: byte[]; settable to support filter replacement
+    public ReadOnlyMemory<byte> Body { get; init; } = ReadOnlyMemory<byte>.Empty;
     public IDictionary<string, object> Headers { get; init; } = new Dictionary<string, object>(StringComparer.Ordinal);
     // ... other fields unchanged
 }
 ```
 
 Filter / middleware semantics:
-- **Replace yes, in-place mutate no.** Both `SendContext.MessageBytes` and `Envelope.Body` stay settable, so the established `context.MessageBytes = Compress(context.MessageBytes)` pattern works (the helper now returns `ROM<byte>` from a fresh buffer).
-- The class of in-place mutation through a shared buffer (`bytes[0] = ...`) is removed by the type — a footgun in a system that can re-read the same buffer from retry/audit/trace paths.
+- **Headers are mutable; bytes are immutable.** Middleware in the current pipeline mutates the `Headers` dictionary (telemetry stamps, etc.) but does not replace the body bytes. Keeping `MessageBytes` and `Body` init-only matches the de-facto contract — middleware that needs a different payload constructs a new context. YAGNI: enabling `set` for an unused capability would expand the public surface for no gain.
+- The class of in-place mutation through a shared buffer (`bytes[0] = ...`) was already removed by the time this design was written: `Envelope.Body` was already `ReadOnlyMemory<byte>`, and `SendContext.MessageBytes` will follow in this phase. A shared buffer cannot be written through the local handle.
 
 ### 4. `IProducer` — final shape
 
