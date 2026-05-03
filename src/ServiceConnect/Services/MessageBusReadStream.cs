@@ -35,6 +35,18 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
             throw new ArgumentOutOfRangeException(nameof(lastPacketNumber));
         }
 
+        // Pre-CAS validation: any already-received packet that exceeds the proposed
+        // LastPacketNumber means the stream is inconsistent regardless of the CAS outcome.
+        foreach (var key in _packets.Keys)
+        {
+            if (key > lastPacketNumber)
+            {
+                throw new InvalidOperationException(
+                    $"Packet number {key} already received for stream {SequenceId} but exceeds " +
+                    $"the requested LastPacketNumber {lastPacketNumber}. The stream is inconsistent.");
+            }
+        }
+
         var previous = Interlocked.CompareExchange(ref _lastPacketNumber, lastPacketNumber, -1);
         if (previous != -1 && previous != lastPacketNumber)
         {
@@ -42,18 +54,18 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
                 $"LastPacketNumber already set to {previous}; refusing to overwrite with {lastPacketNumber} for stream {SequenceId}.");
         }
 
-        // Defense-in-depth: if any already-received packet carries a number greater than
-        // the newly-established last-packet-number, the stream is in an inconsistent state
-        // (e.g. a packet arrived before the close-packet and claimed a higher slot than the
-        // sender's declared total).  Surface this immediately rather than silently producing
-        // a truncated or corrupt Read() result.
+        // Post-CAS re-validation: a concurrent Write that read _lastPacketNumber == -1
+        // before our CAS landed may have committed an out-of-range packet between the
+        // pre-CAS check and the CAS. Now that _lastPacketNumber is published every
+        // future Write rejects, but an in-flight Write that already TryAdd'd is still
+        // a violation we surface here. The stream is permanently poisoned at this point;
+        // the throw is the right surface (better than producing a silently truncated read).
         foreach (var key in _packets.Keys)
         {
             if (key > lastPacketNumber)
             {
                 throw new InvalidOperationException(
-                    $"Packet number {key} already received for stream {SequenceId} but exceeds " +
-                    $"the newly-set LastPacketNumber {lastPacketNumber}. The stream is inconsistent.");
+                    $"Packet number {key} arrived concurrently and exceeds LastPacketNumber {lastPacketNumber} for stream {SequenceId}. The stream is inconsistent.");
             }
         }
     }
