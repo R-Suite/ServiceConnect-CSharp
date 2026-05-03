@@ -5,10 +5,12 @@ using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
+using ServiceConnect.UnitTests;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Processors;
 
+[Collection(SerialConcurrencyCollection.Name)]
 public class AggregatorProcessorTests
 {
     private static AggregatorSnapshot SnapshotOf(IEnumerable<object> messages, int unresolved = 0)

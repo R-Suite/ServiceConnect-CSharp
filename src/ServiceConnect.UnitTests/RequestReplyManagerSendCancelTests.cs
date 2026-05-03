@@ -19,6 +19,7 @@ namespace ServiceConnect.UnitTests;
 /// surface the typed <see cref="RequestSendCancelledException"/> immediately rather than
 /// stalling on the pending-reply TCS until the timeout deadline.
 /// </summary>
+[Collection(SerialConcurrencyCollection.Name)]
 public sealed class RequestReplyManagerSendCancelTests
 {
     // Generous fail-fast bound: the typed exception path observes cancellation directly,

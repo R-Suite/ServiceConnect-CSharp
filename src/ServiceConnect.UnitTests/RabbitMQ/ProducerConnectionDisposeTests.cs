@@ -4,10 +4,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.UnitTests;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
+[Collection(SerialConcurrencyCollection.Name)]
 public sealed class ProducerConnectionDisposeTests
 {
     private static ProducerConnection CreateProducerConnection()
