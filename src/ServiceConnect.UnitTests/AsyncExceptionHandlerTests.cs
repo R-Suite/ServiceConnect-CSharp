@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests.Configuration;
+namespace ServiceConnect.UnitTests;
 
 public class AsyncExceptionHandlerTests
 {
@@ -28,15 +28,20 @@ public class AsyncExceptionHandlerTests
     }
 
     [Fact]
-    public async Task ExceptionHandler_SyncShim_Compiles()
+    public async Task ExceptionHandler_SyncShim_RunsAndReturnsCompletedValueTask()
     {
-        // Compile-time regression guard: the v7-style sync shim must remain valid for v8.
-        var cfg = new BusConfiguration
+        // Compile-time and runtime regression guard for the v7→v8 sync-shim
+        // migration pattern documented on IBusConfiguration.ExceptionHandler.
+        var cfg = new BusConfiguration();
+        var ran = false;
+        cfg.ExceptionHandler = (ex, _) =>
         {
-            // Simulates how callers migrating from Action<Exception> would wrap sync code.
-            ExceptionHandler = (ex, _) => { /* Log.Error(ex); */ return ValueTask.CompletedTask; }
+            ran = true;
+            return ValueTask.CompletedTask;
         };
 
         await cfg.ExceptionHandler!.Invoke(new Exception(), CancellationToken.None);
+
+        Assert.True(ran, "Sync shim must execute the wrapped action.");
     }
 }
