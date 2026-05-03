@@ -10,11 +10,15 @@ public abstract class Aggregator<T> where T : Message
     /// Gets the maximum amount of time to wait before dispatching the current batch.
     /// </summary>
     /// <returns>
-    /// The maximum aggregation window. Returning <see langword="default"/> disables the timeout-based flush.
+    /// The maximum aggregation window. Returning <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>
+    /// (the default) disables the timeout-based flush.
     /// </returns>
     public virtual TimeSpan Timeout()
     {
-        return default;
+        // Timeout.InfiniteTimeSpan (-1ms) is the BCL convention for "no timeout".
+        // Pre-v8 this returned default (= TimeSpan.Zero), which the dispatcher could
+        // mistake for "fire immediately and once" rather than "disabled".
+        return System.Threading.Timeout.InfiniteTimeSpan;
     }
 
     /// <summary>
