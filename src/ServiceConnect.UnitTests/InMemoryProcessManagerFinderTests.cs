@@ -586,11 +586,11 @@ public class InMemoryProcessManagerFinderTests
         Assert.Equal("v2", ((TestData)found.Data).Name);
     }
 
-    // Keys() snapshot + concurrent external IKeyValueStore.Remove(key) between
-    // snapshot and per-key Get(key) can return null; value.GetType() on null would NRE.
-    // The scan path must tolerate the race rather than crash.
+    // Keys() snapshot + a concurrent DeleteDataAsync on the saga store between
+    // snapshot and per-key TryGet(key) can return false; the per-element scan
+    // must tolerate the race rather than crash.
     [Fact]
-    public async Task FindDataAsync_ConcurrentKeyValueStoreRemoval_DoesNotNre()
+    public async Task FindDataAsync_ConcurrentSagaRemovalDuringScan_DoesNotNre()
     {
         // Arrange: use InMemoryPersistenceState directly so we hold the SagaProvider ref.
         // The finder stores and scans via SagaProvider; direct removals via IKeyValueStore
@@ -634,7 +634,8 @@ public class InMemoryProcessManagerFinderTests
         {
             try
             {
-                // Remove random keys via the unguarded IKeyValueStore interface.
+                // Remove random keys via the IKeyValueStore facet of SagaProvider, bypassing
+                // the finder's ReaderWriterLockSlim to simulate the race.
                 foreach (var k in kvStore.Keys().Take(3).ToList())
                 {
                     kvStore.Remove(k);

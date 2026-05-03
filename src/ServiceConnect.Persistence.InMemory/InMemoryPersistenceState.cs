@@ -35,9 +35,9 @@ internal sealed class InMemoryPersistenceState : IDisposable
     public ICacheProvider Provider { get; }
 
     /// <summary>
-    /// Private store used exclusively by <see cref="InMemoryProcessManagerFinder"/>.
-    /// Keeping saga state separate from <see cref="Provider"/> ensures that user code
-    /// consuming the public IKeyValueStore cannot read or corrupt live sagas.
+    /// Saga-specific store used exclusively by <see cref="InMemoryProcessManagerFinder"/>.
+    /// Not registered in DI and not reachable through the public <see cref="IKeyValueStore"/>
+    /// or <see cref="ICacheProvider"/> surface, so user code cannot observe or corrupt saga state.
     /// </summary>
     public ICacheProvider SagaProvider { get; }
 

@@ -100,7 +100,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         {
             if (!_state.SagaProvider.TryGet<string, object>(key.ToString()!, out var value) || value is null)
             {
-                continue; // removed concurrently by an external IKeyValueStore caller
+                continue; // removed concurrently by another DeleteDataAsync on the partitioned saga store
             }
 
             if (value is MemoryData<T> typed)
@@ -240,11 +240,11 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             // Read version via a typed IVersioned interface so the cast is
             // compile-time-checked rather than the old dynamic dispatch.
             // TryGet distinguishes "absent" from "present with null"; a false return here means
-            // a concurrent IKeyValueStore.Remove raced the Contains check above.
+            // a concurrent DeleteDataAsync raced the Contains check above.
             if (!_state.SagaProvider.TryGet<string, object>(key, out var storedData) || storedData is null)
             {
                 throw new ConcurrencyException(
-                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed by another saga delete.");
             }
 
             int currentVersion = storedData is IVersioned versioned
@@ -305,11 +305,11 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             }
 
             // TryGet distinguishes "absent" from "present with null"; a false return here means
-            // a concurrent IKeyValueStore.Remove raced the Contains check above.
+            // a concurrent DeleteDataAsync raced the Contains check above.
             if (!_state.SagaProvider.TryGet<string, object>(key, out var stored) || stored is null)
             {
                 throw new ConcurrencyException(
-                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
+                    $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed by another saga delete.");
             }
 
             int currentVersion = stored is IVersioned versioned
