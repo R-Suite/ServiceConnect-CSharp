@@ -91,6 +91,16 @@ The workers do not persist workflow state and do not decide the next step. They 
 
 ## v8 Contracts
 
+**v8 handler signature.** `IProcessHandler<TData, TMessage>.HandleAsync` now takes the per-message `IConsumeContext` as a parameter. Pre-v8 the framework set a `Context` property before each call, which was unsafe for singleton-registered handlers. Migration is mechanical: append `IConsumeContext context` to the method signature; replace `this.Context` reads with `context`.
+
+```csharp
+// v8
+public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
+{
+    await context.Bus.SendAsync(new OrderSubmitted(message.CorrelationId) { ... }, options, context.CancellationToken);
+}
+```
+
 **Saga retry — fresh-copy contract.** When a handler throws, the framework skips persistence and retries by re-fetching state via `IProcessManagerFinder.FindDataAsync<T>`. Each call MUST return a fresh `Data` reference so mutations from the failed attempt do not leak into the retry. Both built-in persistors (MongoDB and InMemory) comply with this contract.
 
 **Timeout dispatch is at-most-once while the lease holds.** `ProcessManagerTimeoutService` checks the lease deadline before and after `SendAsync`; if the lease has expired post-send, the `Remove` is skipped and the lease-expiry sweep reclaims the row. The worst case is one duplicate send, which is consistent with the at-least-once timeout delivery guarantee.

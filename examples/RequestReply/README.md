@@ -2,7 +2,7 @@
 
 ## Overview
 
-Send a request message to a responder and wait for a reply. The requester uses `SendRequestAsync` with a timeout, and the responder uses `Context.ReplyAsync` to send the reply back.
+Send a request message to a responder and wait for a reply. The requester uses `SendRequestAsync` with a timeout, and the responder uses `context.ReplyAsync` to send the reply back.
 
 ## Participants
 
@@ -45,4 +45,16 @@ Run the responder first, then the requester.
 
 ## What To Notice
 
-The requester sends a `QuoteRequest` and waits up to 30 seconds for a `QuoteResponse`. The responder receives the request and uses `Context.ReplyAsync` to send the reply back, which the request/reply manager correlates to the original request.
+The requester sends a `QuoteRequest` and waits up to 30 seconds for a `QuoteResponse`. The responder receives the request and uses `context.ReplyAsync` to send the reply back, which the request/reply manager correlates to the original request.
+
+## v8 Contracts
+
+**v8 handler signature.** Handlers now take the per-message `IConsumeContext` as a parameter to `HandleAsync`. Pre-v8 the framework set a `Context` property before each call, which was unsafe for singleton-registered handlers. Migration is mechanical: append `IConsumeContext context` to the method signature; replace `this.Context` reads with `context`.
+
+```csharp
+// v8
+public async Task HandleAsync(QuoteRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
+{
+    await context.ReplyAsync(new QuoteResponse(message.CorrelationId) { Price = 42.50m });
+}
+```

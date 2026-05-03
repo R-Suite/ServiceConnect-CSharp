@@ -70,3 +70,5 @@ The consumer never handles a single slice immediately. Instead, the aggregator g
 ## v8 Contracts
 
 **Timer and snapshot safety.** The timeout timer is single-tracked under a per-aggregator lock (Phase 9), preventing double-fire when a flush and a timer expiry race. `GetSnapshotAsync` releases the lock during the clone step (Phase 10), so concurrent inserts can proceed during long snapshot operations without blocking on the aggregator mutex.
+
+**v8 timeout sentinel.** `Aggregator<T>.Timeout()` default now returns `Timeout.InfiniteTimeSpan` (was `TimeSpan.Zero`). Override the method to return a positive `TimeSpan` to enable timeout-based flush. The default disables it. This example overrides `Timeout()` to return `TimeSpan.FromSeconds(10)` so a partial batch is flushed after 10 seconds if `BatchSize` is not yet met.

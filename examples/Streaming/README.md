@@ -57,4 +57,15 @@ The receiver handler gets the fully reassembled payload after the final close pa
 
 ## v8 Stream Lifecycle
 
+**v8 handler signature.** `IStreamHandler<T>.ExecuteAsync` now takes the `IMessageBusReadStream` as a parameter rather than exposing it as a `Stream` property. Pre-v8 the framework set a `Stream` property before each call, which was unsafe for singleton-registered handlers. Migration is mechanical: append `IMessageBusReadStream stream` to the method signature; replace `this.Stream` reads with `stream`.
+
+```csharp
+// v8
+public Task ExecuteAsync(DocumentUploaded message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
+{
+    var bytes = stream.Read();
+    // ...
+}
+```
+
 **Admission cap.** Admission is gated on an atomic counter (no speculative dictionary insert); the cap is `MaxActiveStreams = 1000`. Attempts to open a stream beyond the cap return `ProcessResult.NotHandled` immediately rather than queuing. **Dispose contract.** The dispatcher rejects late-arriving packets after `DisposeAsync` has been called and drains any in-flight stream state before completing disposal.
