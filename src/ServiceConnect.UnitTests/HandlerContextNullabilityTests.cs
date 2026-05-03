@@ -47,6 +47,17 @@ public class HandlerContextNullabilityTests
         Assert.Contains(typeof(IMessageBusReadStream), paramTypes);
     }
 
+    [Fact]
+    public void IProcessHandler_HandleAsync_HasIConsumeContextParameter()
+    {
+        // v8 contract guard: HandleAsync must accept (TMessage, TData, IConsumeContext, CancellationToken).
+        // Open generic so the assertion is structural rather than tied to a specific concrete TData/TMessage.
+        var method = typeof(IProcessHandler<,>).GetMethod(nameof(IProcessHandler<DummyData, Message>.HandleAsync));
+        Assert.NotNull(method);
+        var paramTypes = method!.GetParameters().Select(p => p.ParameterType.Name).ToArray();
+        Assert.Contains(nameof(IConsumeContext), paramTypes);
+    }
+
     private sealed class DummyData : IProcessManagerData
     {
         public Guid CorrelationId { get; set; }

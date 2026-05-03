@@ -2,7 +2,7 @@ namespace ServiceConnect.Interfaces;
 
 /// <summary>
 /// Handler for byte-stream messages: large payloads are delivered as a sequence of
-/// packets reassembled into <see cref="Stream"/>, and <see cref="ExecuteAsync"/> is called
+/// packets reassembled into <see cref="IMessageBusReadStream"/>, and <see cref="ExecuteAsync"/> is called
 /// once the complete stream has arrived.
 /// </summary>
 /// <typeparam name="TMessage">Message contract associated with the stream.</typeparam>

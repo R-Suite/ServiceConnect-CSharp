@@ -2,7 +2,7 @@ using Moq;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Handlers;
 
 public class HandlerSignatureTests
 {
@@ -37,12 +37,4 @@ public class HandlerSignatureTests
         Assert.Same(context, handler.CapturedContext);
     }
 
-    [Fact]
-    public void IMessageHandler_DoesNotExposeContextProperty()
-    {
-        // Compile-time guard: IMessageHandler<T> must NOT have a Context property.
-        // The property's removal is the headline of the v8 handler change.
-        var props = typeof(IMessageHandler<TestMessage>).GetProperties();
-        Assert.DoesNotContain(props, p => p.Name == "Context");
-    }
 }

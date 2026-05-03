@@ -19,7 +19,13 @@ public interface IProcessHandler<TData, TMessage>
     /// when the method returns. The <paramref name="cancellationToken"/> is sourced
     /// from the transport consume context and signals cooperative shutdown.
     /// </summary>
-    /// <remarks>v8: same migration as <see cref="IMessageHandler{TMessage}.HandleAsync"/>.</remarks>
+    /// <remarks>
+    /// v8: <c>Context</c> moved from a property to a parameter (same rationale as
+    /// <see cref="IMessageHandler{TMessage}.HandleAsync"/>). Migration: add
+    /// <c>IConsumeContext context</c> between <paramref name="data"/> and
+    /// <paramref name="cancellationToken"/>, and replace <c>this.Context</c> reads
+    /// with <c>context</c>.
+    /// </remarks>
     Task HandleAsync(TMessage message, TData data, IConsumeContext context, CancellationToken cancellationToken = default);
 
     /// <summary>
