@@ -26,7 +26,9 @@ public class ProducerConnectionHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_ProducerNotHealthy_ReturnsUnhealthy()
     {
+        // HasAttemptedConnection = true: producer tried and failed, not just lazy.
         _producer.SetupGet(p => p.IsHealthy).Returns(false);
+        _producer.SetupGet(p => p.HasAttemptedConnection).Returns(true);
 
         var ctx = new HealthCheckContext
         {
@@ -41,7 +43,9 @@ public class ProducerConnectionHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_ProducerNotHealthy_HonoursDegradedFailureStatus()
     {
+        // HasAttemptedConnection = true: producer tried and failed, not just lazy.
         _producer.SetupGet(p => p.IsHealthy).Returns(false);
+        _producer.SetupGet(p => p.HasAttemptedConnection).Returns(true);
 
         var ctx = new HealthCheckContext
         {
@@ -55,7 +59,9 @@ public class ProducerConnectionHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_ProducerNotHealthy_NoRegistration_DefaultsToUnhealthy()
     {
+        // HasAttemptedConnection = true: producer tried and failed, not just lazy.
         _producer.SetupGet(p => p.IsHealthy).Returns(false);
+        _producer.SetupGet(p => p.HasAttemptedConnection).Returns(true);
 
         // HealthCheckContext with null Registration — exercises the
         // `context.Registration?.FailureStatus ?? HealthStatus.Unhealthy` fallback path.

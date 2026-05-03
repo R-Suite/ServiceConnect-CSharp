@@ -43,6 +43,18 @@ public interface IProducer : IAsyncDisposable
     bool IsHealthy { get; }
 
     /// <summary>
+    /// Gets whether the producer has attempted at least one connection to the broker.
+    /// </summary>
+    /// <remarks>
+    /// Returns <see langword="false"/> for a freshly-constructed producer that has not
+    /// yet been asked to publish or send. Once a publish/send call begins (whether or
+    /// not it succeeds), this becomes <see langword="true"/> and stays <see langword="true"/>
+    /// for the producer's lifetime. The producer health check uses this to distinguish
+    /// "lazy, not yet tried" (Healthy) from "tried and currently disconnected" (Unhealthy).
+    /// </remarks>
+    bool HasAttemptedConnection { get; }
+
+    /// <summary>
     /// Disconnects the producer from the broker.
     /// </summary>
     Task DisconnectAsync(CancellationToken cancellationToken = default);

@@ -426,6 +426,9 @@ public sealed class Producer : IProducer
     /// <inheritdoc />
     public bool IsHealthy => _producerConnection.IsHealthy();
 
+    /// <inheritdoc />
+    public bool HasAttemptedConnection => _producerConnection.HasAttemptedConnection;
+
     /// <summary>
     /// Wraps <c>IChannel.BasicPublishAsync</c> with a configurable timeout.
     /// If the broker ack does not arrive within <see cref="_publishTimeout"/>, the waiting task

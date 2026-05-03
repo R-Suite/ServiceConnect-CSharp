@@ -4,13 +4,15 @@ using ServiceConnect.Interfaces;
 namespace ServiceConnect.HealthChecks;
 
 /// <summary>
-/// Reports Healthy when <see cref="IProducer.IsHealthy"/> is <see langword="true"/>.
+/// Reports Healthy when <see cref="IProducer.IsHealthy"/> is <see langword="true"/>,
+/// OR when the producer has not yet attempted any connection (lazy-connect state).
 /// O(1), allocation-light, side-effect-free — does not perform broker I/O.
 /// </summary>
 /// <remarks>
-/// The producer connects lazily on the first publish/send call, so this check
-/// reports Unhealthy until the host has published at least once. Hosts that do
-/// not publish at startup should not register this check on a readiness tag.
+/// The producer connects lazily on the first publish/send call. Pre-v8 this check
+/// returned Unhealthy in that pre-publish window, which crash-looped readiness probes.
+/// v8: NotYetAttempted is treated as Healthy; once a publish is attempted and fails,
+/// transitions to <see cref="HealthStatus.Unhealthy"/>.
 /// </remarks>
 public sealed class ProducerConnectionHealthCheck : IHealthCheck
 {
@@ -35,6 +37,15 @@ public sealed class ProducerConnectionHealthCheck : IHealthCheck
         if (_producer.IsHealthy)
         {
             return Task.FromResult(HealthCheckResult.Healthy("Producer connection is open."));
+        }
+
+        if (!_producer.HasAttemptedConnection)
+        {
+            // Producer connects lazily on the first publish/send. Until that happens,
+            // "no connection" is the expected state, not a fault — readiness probes
+            // shouldn't crash-loop pods that haven't published yet.
+            return Task.FromResult(HealthCheckResult.Healthy(
+                "Producer has not yet attempted connection (lazy)."));
         }
 
         var failureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy;

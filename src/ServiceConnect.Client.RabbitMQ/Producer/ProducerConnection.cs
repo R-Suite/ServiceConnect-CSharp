@@ -44,6 +44,12 @@ internal sealed class ProducerConnection
     // the publish lock so concurrent publishers are not blocked behind a worst-case retry budget.
     private int _resetRequired;
 
+    // Flipped to 1 on the first EnsureConnectedAsync call. Stays true for the producer's lifetime
+    // so the health check can distinguish "lazy, not yet tried" from "tried and currently failed".
+    private int _hasAttemptedConnection;
+
+    public bool HasAttemptedConnection => Volatile.Read(ref _hasAttemptedConnection) != 0;
+
     // Test hooks consumed by Producer's pass-through properties. Setting these on
     // Producer routes through to here so existing test code (`producer.ReconnectForTests = ...`)
     // is unchanged.
@@ -94,6 +100,12 @@ internal sealed class ProducerConnection
 
     public async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
+        // Mark that a connection attempt has begun regardless of outcome. This allows the health
+        // check to distinguish "lazy, not yet tried" (pre-publish, still Healthy) from
+        // "tried and currently disconnected" (Unhealthy). Set before IsHealthy check so even
+        // a reconnect path (reset-required) correctly flips the flag.
+        Interlocked.Exchange(ref _hasAttemptedConnection, 1);
+
         // Atomically consume the reset-required flag set by a prior publish timeout. The
         // ReconnectAsync below holds _connectionSemaphore (NOT the producer's _publishLock),
         // so concurrent publishers waiting on the publish lock are not blocked here. Only one
