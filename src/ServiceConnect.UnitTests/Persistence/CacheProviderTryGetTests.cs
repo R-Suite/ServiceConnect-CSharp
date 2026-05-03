@@ -49,4 +49,14 @@ public class CacheProviderTryGetTests
         clock.Advance(TimeSpan.FromSeconds(8));
         Assert.True(cache.TryGet<string, string>("k", out _));
     }
+
+    [Fact]
+    public void TryGet_AfterAbsoluteExpiry_ReturnsFalse()
+    {
+        var clock = new FakeTimeProvider();
+        var cache = new CacheProvider(clock);
+        cache.Add("k", "v", TimeSpan.FromSeconds(5), CacheItemPriority.Normal);
+        clock.Advance(TimeSpan.FromSeconds(6));
+        Assert.False(cache.TryGet<string, string>("k", out _));
+    }
 }

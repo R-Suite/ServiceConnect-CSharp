@@ -14,11 +14,18 @@ public interface IKeyValueStore
     /// Tries to get a value from the store for the specified key.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> if the key is present (the stored value, possibly <see langword="null"/>,
-    /// is written to <paramref name="value"/>); <see langword="false"/> otherwise.
-    /// Distinguishes "key absent" from "key present with null value" — pre-v8's <c>Get</c> returned
+    /// <see langword="true"/> if the key is present (the stored value is written to
+    /// <paramref name="value"/>); <see langword="false"/> otherwise. Distinguishes
+    /// "key absent" from "key present with null value" — pre-v8's <c>Get</c> returned
     /// <c>default!</c> in both cases.
     /// </returns>
+    /// <remarks>
+    /// For reference-type <typeparamref name="TValue"/>, <paramref name="value"/> may
+    /// be <see langword="null"/> when present (a null was explicitly stored). For
+    /// value-type <typeparamref name="TValue"/>, the runtime out-parameter is the
+    /// underlying value type — never <see langword="null"/> — and on miss receives
+    /// <c>default(TValue)</c> (e.g. <c>0</c> for <see cref="int"/>).
+    /// </remarks>
     bool TryGet<TKey, TValue>(TKey key, out TValue? value);
 
     /// <summary>
