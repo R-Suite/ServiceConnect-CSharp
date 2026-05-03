@@ -158,8 +158,11 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                 // so explicit-interface impls (where the property isn't reachable by string
                 // name on the runtime type) are matched via their declaring-type PropertyInfo.
                 var propInfo = left.Type.GetProperty(prop.Key,
-                        BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy)
+                        BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
                     ?? left.Type.GetInterfaces()
+                        // Property names in PropertiesHierarchy are expected to be unambiguous across
+                        // a saga type's implemented interfaces. If two interfaces declare the same
+                        // property name, FirstOrDefault here picks whichever the runtime returns first.
                         .Select(i => i.GetProperty(prop.Key, BindingFlags.Public | BindingFlags.Instance))
                         .FirstOrDefault(p => p is not null)
                     ?? throw new InvalidOperationException(

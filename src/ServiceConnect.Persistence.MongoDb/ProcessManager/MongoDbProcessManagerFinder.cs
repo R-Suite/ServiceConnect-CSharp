@@ -118,7 +118,20 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
             Expression left = Expression.Property(pe, typeof(MongoDbData<T>).GetTypeInfo().GetProperty("Data")!);
             foreach (var prop in mapping.PropertiesHierarchy.Reverse())
             {
-                left = Expression.Property(left, left.Type, prop.Key);
+                // Resolve the property by walking the type AND its implemented interfaces,
+                // so explicit-interface impls (where the property isn't reachable by string
+                // name on the runtime type) are matched via their declaring-type PropertyInfo.
+                var propInfo = left.Type.GetProperty(prop.Key,
+                        BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
+                    ?? left.Type.GetInterfaces()
+                        // Property names in PropertiesHierarchy are expected to be unambiguous across
+                        // a saga type's implemented interfaces. If two interfaces declare the same
+                        // property name, FirstOrDefault here picks whichever the runtime returns first.
+                        .Select(i => i.GetProperty(prop.Key, BindingFlags.Public | BindingFlags.Instance))
+                        .FirstOrDefault(p => p is not null)
+                    ?? throw new InvalidOperationException(
+                        $"Property '{prop.Key}' not found on type '{left.Type.FullName}' or its interfaces.");
+                left = Expression.MakeMemberAccess(left, propInfo);
             }
 
             // Coerce the runtime value's type to the declared property type. msgPropValue's
