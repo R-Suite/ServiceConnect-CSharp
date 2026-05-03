@@ -592,11 +592,13 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task FindDataAsync_ConcurrentKeyValueStoreRemoval_DoesNotNre()
     {
-        // Arrange: use InMemoryPersistenceState directly so we hold the IKeyValueStore ref.
+        // Arrange: use InMemoryPersistenceState directly so we hold the SagaProvider ref.
+        // The finder stores and scans via SagaProvider; direct removals via IKeyValueStore
+        // on that same store simulate a concurrent deletion racing the scan loop.
         var cache = new ProcessManagerPredicateCache();
         var sharedState = new InMemoryPersistenceState(TimeProvider.System);
         var finder = new InMemoryProcessManagerFinder(cache, sharedState);
-        var kvStore = (IKeyValueStore)sharedState.Provider;
+        var kvStore = (IKeyValueStore)sharedState.SagaProvider;
 
         // Seed a batch of items so the scan loop has multiple keys to traverse.
         const int itemCount = 50;
@@ -609,8 +611,8 @@ public class InMemoryProcessManagerFinderTests
         var mapper = new TestProcessManagerPropertyMapper();
         mapper.ConfigureMapping<IProcessManagerData, Message>(pm => pm.CorrelationId, m => m.CorrelationId);
 
-        // Act: run many concurrent scans and concurrent removals via the IKeyValueStore
-        // facet, which is NOT protected by the finder's ReaderWriterLockSlim.
+        // Act: run many concurrent scans and concurrent removals directly against SagaProvider,
+        // which is NOT protected by the finder's ReaderWriterLockSlim.
         var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
         var iterations = 200;
 
@@ -656,14 +658,15 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task UpdateDataAsync_WhenProviderReturnsFalseFromTryGet_ThrowsConcurrencyException()
     {
-        // Arrange: provider whose Contains says yes but TryGet returns false,
-        // simulating an external IKeyValueStore.Remove between Contains and TryGet.
-        var provider = new Mock<ICacheProvider>();
-        provider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
+        // Arrange: saga provider whose Contains says yes but TryGet returns false,
+        // simulating a concurrent removal between Contains and TryGet inside the saga finder.
+        // The finder uses SagaProvider exclusively; publicProvider is a real instance.
+        var sagaProvider = new Mock<ICacheProvider>();
+        sagaProvider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
         object? nullOut = null;
-        provider.Setup(p => p.TryGet<string, object>(It.IsAny<string>(), out nullOut)).Returns(false);
+        sagaProvider.Setup(p => p.TryGet<string, object>(It.IsAny<string>(), out nullOut)).Returns(false);
 
-        var state = new InMemoryPersistenceState(provider.Object);
+        var state = new InMemoryPersistenceState(new CacheProvider(), sagaProvider.Object);
         var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), state);
 
         var pm = new MemoryData<TestData>
@@ -680,14 +683,15 @@ public class InMemoryProcessManagerFinderTests
     [Fact]
     public async Task DeleteDataAsync_WhenProviderReturnsFalseFromTryGet_ThrowsConcurrencyException()
     {
-        // Arrange: provider whose Contains says yes but TryGet returns false,
-        // simulating an external IKeyValueStore.Remove between Contains and TryGet.
-        var provider = new Mock<ICacheProvider>();
-        provider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
+        // Arrange: saga provider whose Contains says yes but TryGet returns false,
+        // simulating a concurrent removal between Contains and TryGet inside the saga finder.
+        // The finder uses SagaProvider exclusively; publicProvider is a real instance.
+        var sagaProvider = new Mock<ICacheProvider>();
+        sagaProvider.Setup(p => p.Contains(It.IsAny<string>())).Returns(true);
         object? nullOut = null;
-        provider.Setup(p => p.TryGet<string, object>(It.IsAny<string>(), out nullOut)).Returns(false);
+        sagaProvider.Setup(p => p.TryGet<string, object>(It.IsAny<string>(), out nullOut)).Returns(false);
 
-        var state = new InMemoryPersistenceState(provider.Object);
+        var state = new InMemoryPersistenceState(new CacheProvider(), sagaProvider.Object);
         var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), state);
 
         var pm = new MemoryData<TestData>

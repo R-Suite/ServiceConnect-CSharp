@@ -96,9 +96,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     private MemoryData<T>? FindMatchingItem<T>(object msgPropValue, Func<MemoryData<T>, object, bool> predicate)
         where T : class, IProcessManagerData
     {
-        foreach (var key in _state.Provider.Keys())
+        foreach (var key in _state.SagaProvider.Keys())
         {
-            if (!_state.Provider.TryGet<string, object>(key.ToString()!, out var value) || value is null)
+            if (!_state.SagaProvider.TryGet<string, object>(key.ToString()!, out var value) || value is null)
             {
                 continue; // removed concurrently by an external IKeyValueStore caller
             }
@@ -180,14 +180,14 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         try
         {
             string key = data.CorrelationId.ToString();
-            if (_state.Provider.Contains(key))
+            if (_state.SagaProvider.Contains(key))
             {
                 throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
             }
 
             // Saga state has no TTL: lifetime is managed explicitly via Delete.
             // Background expiry must never silently drop a live saga.
-            _state.Provider.Add(key, memoryData);
+            _state.SagaProvider.Add(key, memoryData);
         }
         finally
         {
@@ -231,7 +231,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             var newData = (MemoryData<T>)data;
             string key = data.Data.CorrelationId.ToString();
 
-            if (!_state.Provider.Contains(key))
+            if (!_state.SagaProvider.Contains(key))
             {
                 throw new PersistenceException(
                     $"ProcessManagerData with CorrelationId {key} does not exist in memory.");
@@ -241,7 +241,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             // compile-time-checked rather than the old dynamic dispatch.
             // TryGet distinguishes "absent" from "present with null"; a false return here means
             // a concurrent IKeyValueStore.Remove raced the Contains check above.
-            if (!_state.Provider.TryGet<string, object>(key, out var storedData) || storedData is null)
+            if (!_state.SagaProvider.TryGet<string, object>(key, out var storedData) || storedData is null)
             {
                 throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
@@ -259,7 +259,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} and Version {currentVersion} could not be updated.");
             }
 
-            _state.Provider.Update(key, new MemoryData<T>
+            _state.SagaProvider.Update(key, new MemoryData<T>
             {
                 // Deep-clone on update so the caller's subsequent mutations do not
                 // leak into the stored snapshot. Matches Insert semantics.
@@ -298,7 +298,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         try
         {
             string key = data.Data.CorrelationId.ToString();
-            if (!_state.Provider.Contains(key))
+            if (!_state.SagaProvider.Contains(key))
             {
                 throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} does not exist and cannot be deleted.");
@@ -306,7 +306,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 
             // TryGet distinguishes "absent" from "present with null"; a false return here means
             // a concurrent IKeyValueStore.Remove raced the Contains check above.
-            if (!_state.Provider.TryGet<string, object>(key, out var stored) || stored is null)
+            if (!_state.SagaProvider.TryGet<string, object>(key, out var stored) || stored is null)
             {
                 throw new ConcurrencyException(
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed via IKeyValueStore.");
@@ -323,7 +323,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} and Version {currentVersion} could not be deleted.");
             }
 
-            _state.Provider.Remove(key);
+            _state.SagaProvider.Remove(key);
         }
         finally
         {
