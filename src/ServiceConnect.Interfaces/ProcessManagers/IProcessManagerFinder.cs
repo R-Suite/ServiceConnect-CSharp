@@ -17,7 +17,7 @@ public interface IProcessManagerFinder
     /// <para>
     /// <b>Fresh-copy contract.</b> The returned <see cref="IPersistenceData{T}.Data"/> reference
     /// MUST be a fresh copy per call, independent of any cached storage. Callers (notably
-    /// <c>ProcessManagerProcessor.UpdateData</c>) freely mutate <c>Data</c> in handler scope;
+    /// <c>ProcessManagerProcessor</c>'s dispatch loop) freely mutate <c>Data</c> in handler scope;
     /// the persistence layer must guarantee that a subsequent <see cref="FindDataAsync"/>
     /// invocation observes the previously-stored state, not the in-flight mutation. Implementors
     /// that cache rows internally MUST clone (or otherwise materialise a fresh graph) before returning.
