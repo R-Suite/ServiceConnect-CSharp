@@ -88,3 +88,9 @@ dotnet run --project src/ServiceConnect.Examples.ProcessManager.Starter/ServiceC
 ## What To Notice
 
 The workers do not persist workflow state and do not decide the next step. They only report completion events back to the orchestrator queue. The orchestrator is the single place that correlates messages, mutates `FulfillmentState`, and makes the next routing decision.
+
+## v8 Contracts
+
+**Saga retry — fresh-copy contract.** When a handler throws, the framework skips persistence and retries by re-fetching state via `IProcessManagerFinder.FindDataAsync<T>`. Each call MUST return a fresh `Data` reference so mutations from the failed attempt do not leak into the retry. Both built-in persistors (MongoDB and InMemory) comply with this contract.
+
+**Timeout dispatch is at-most-once while the lease holds.** `ProcessManagerTimeoutService` checks the lease deadline before and after `SendAsync`; if the lease has expired post-send, the `Remove` is skipped and the lease-expiry sweep reclaims the row. The worst case is one duplicate send, which is consistent with the at-least-once timeout delivery guarantee.

@@ -65,4 +65,10 @@ The three `SUCCESS` lines from the processing steps arrive asynchronously, but t
 
 ## What To Notice
 
-The starter only names the ordered queue list once in `RouteAsync`. Each handler updates `CurrentStep`, then ServiceConnect reads the remaining routing-slip destinations from the message headers and forwards the message automatically to the next known queue.
+The starter only names the ordered queue list once in `RouteAsync`. Each handler updates `CurrentStep`, then ServiceConnect reads the remaining routing-slip destinations from the message headers and forwards the message automatically to the next queue.
+
+## v8 Contracts
+
+**Cross-service routing.** Slip destinations no longer need to be registered in the local `IQueueConfiguration`. Format validation (non-empty, length-bounded, no AMQP control characters) is all that is required. RabbitMQ's alternate-exchange or mandatory-return is the appropriate surface for catching genuinely unknown destinations.
+
+**Slip behavior on handler throw.** When a handler throws, the in-flight slip-forward is skipped; the slip data remains in the message envelope's `RoutingSlip` header. Messages that land on the DLQ — or are replayed manually — can still resume the chain from the current step without losing the remaining destination list.

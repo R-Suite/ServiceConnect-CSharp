@@ -54,3 +54,7 @@ dotnet run --project src/ServiceConnect.Examples.Streaming.Uploader/ServiceConne
 ## What To Notice
 
 The receiver handler gets the fully reassembled payload after the final close packet arrives. Even though the uploader writes three chunks, the handler runs once with the original `DocumentUploaded` message restored from the streamed bytes. The reported byte count is the serialized message payload size for that streamed contract.
+
+## v8 Stream Lifecycle
+
+**Admission cap.** Admission is gated on an atomic counter (no speculative dictionary insert); the cap is `MaxActiveStreams = 1000`. Attempts to open a stream beyond the cap return `ProcessResult.NotHandled` immediately rather than queuing. **Dispose contract.** The dispatcher rejects late-arriving packets after `DisposeAsync` has been called and drains any in-flight stream state before completing disposal.

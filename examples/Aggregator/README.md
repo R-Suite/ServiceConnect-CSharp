@@ -66,3 +66,7 @@ dotnet run --project src/ServiceConnect.Examples.Aggregator.ProducerB/ServiceCon
 ## What To Notice
 
 The consumer never handles a single slice immediately. Instead, the aggregator groups slices by `CorrelationId`, persists them in MongoDB, and flushes when the batch reaches 2 messages or the 10 second timeout elapses.
+
+## v8 Contracts
+
+**Timer and snapshot safety.** The timeout timer is single-tracked under a per-aggregator lock (Phase 9), preventing double-fire when a flush and a timer expiry race. `GetSnapshotAsync` releases the lock during the clone step (Phase 10), so concurrent inserts can proceed during long snapshot operations without blocking on the aggregator mutex.
