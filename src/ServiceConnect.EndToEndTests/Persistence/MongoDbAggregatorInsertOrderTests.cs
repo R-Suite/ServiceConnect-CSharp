@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.MongoDb;
 using ServiceConnect.Services;
 using Xunit;
@@ -13,9 +14,11 @@ public class MongoDbAggregatorInsertOrderTests(PersistenceFixture fixture)
     private readonly PersistenceFixture _fixture = fixture;
 
     // Concrete message type so MessageTypeRegistry.Register can map the type name
-    // to the CLR type at deserialization time.
-    public sealed class OrderTestMessage
+    // to the CLR type at deserialization time. Implements IHasCorrelationId so the
+    // aggregator persistor can locate entries by correlation id without reflection.
+    public sealed class OrderTestMessage : IHasCorrelationId
     {
+        public Guid CorrelationId { get; set; }
         public int Sequence { get; set; }
     }
 
@@ -48,8 +51,8 @@ public class MongoDbAggregatorInsertOrderTests(PersistenceFixture fixture)
         registry.Register(typeof(OrderTestMessage));
         var persistor = BuildPersistor(dbName, clock, registry);
 
-        await persistor.InsertDataAsync(new OrderTestMessage { Sequence = 1 }, "test-name");
-        await persistor.InsertDataAsync(new OrderTestMessage { Sequence = 2 }, "test-name");
+        await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "test-name");
+        await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 2 }, "test-name");
 
         var snapshot = await persistor.GetSnapshotAsync("test-name");
         var sequences = snapshot.ResolvedMessages.Cast<OrderTestMessage>().Select(m => m.Sequence).ToArray();
@@ -71,7 +74,7 @@ public class MongoDbAggregatorInsertOrderTests(PersistenceFixture fixture)
 
         for (var i = 1; i <= 100; i++)
         {
-            await persistor.InsertDataAsync(new OrderTestMessage { Sequence = i }, "test-name");
+            await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = i }, "test-name");
         }
 
         var snapshot = await persistor.GetSnapshotAsync("test-name");

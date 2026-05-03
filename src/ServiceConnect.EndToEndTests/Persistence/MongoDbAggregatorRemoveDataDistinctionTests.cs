@@ -19,6 +19,14 @@ public class MongoDbAggregatorRemoveDataDistinctionTests(PersistenceFixture fixt
 {
     private readonly PersistenceFixture _fixture = fixture;
 
+    // Named type implementing IHasCorrelationId — required since anonymous types cannot
+    // implement interfaces and InsertDataAsync now enforces the contract.
+    private sealed class SharedItem : IHasCorrelationId
+    {
+        public Guid CorrelationId { get; set; }
+        public string Value { get; set; } = "";
+    }
+
     private MongoDbAggregatorPersistor BuildPersistor(string dbName, MessageTypeRegistry? registry = null)
     {
         var options = new MongoDbPersistenceOptions
@@ -57,8 +65,8 @@ public class MongoDbAggregatorRemoveDataDistinctionTests(PersistenceFixture fixt
         // and must surface as ConcurrencyException with the row count in the message.
         var dbName = _fixture.GetUniqueDatabaseName("removedist2");
         var registry = new MessageTypeRegistry();
-        var item = new { CorrelationId = Guid.NewGuid(), Value = "shared" };
-        registry.Register(item.GetType());
+        registry.Register(typeof(SharedItem));
+        var item = new SharedItem { CorrelationId = Guid.NewGuid(), Value = "shared" };
         var persistor = BuildPersistor(dbName, registry);
 
         await persistor.InsertDataAsync(item, "shared-name");

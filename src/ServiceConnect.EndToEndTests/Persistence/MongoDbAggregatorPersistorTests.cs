@@ -3,6 +3,7 @@ using Microsoft.Extensions.Time.Testing;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Persistence.MongoDb;
 using ServiceConnect.Services;
@@ -14,6 +15,20 @@ namespace ServiceConnect.EndToEndTests;
 public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
 {
     private readonly PersistenceFixture _fixture = fixture;
+
+    // Named types implementing IHasCorrelationId — required since anonymous types
+    // cannot implement interfaces and InsertDataAsync now enforces the contract.
+    private sealed class AggregatorTestItem : IHasCorrelationId
+    {
+        public Guid CorrelationId { get; set; }
+        public string Value { get; set; } = "";
+    }
+
+    private sealed class AggregatorLabelItem : IHasCorrelationId
+    {
+        public Guid CorrelationId { get; set; }
+        public string Label { get; set; } = "";
+    }
 
     private MongoDbAggregatorPersistor CreatePersistor(string collectionName = "TestAggregator", MessageTypeRegistry? registry = null)
     {
@@ -33,11 +48,11 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
     {
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
-        var item1 = new { Value = "item1", CorrelationId = correlationId1 };
-        var item2 = new { Value = "item2", CorrelationId = correlationId2 };
+        var item1 = new AggregatorTestItem { Value = "item1", CorrelationId = correlationId1 };
+        var item2 = new AggregatorTestItem { Value = "item2", CorrelationId = correlationId2 };
 
         var registry = new MessageTypeRegistry();
-        registry.Register(item1.GetType());
+        registry.Register(typeof(AggregatorTestItem));
 
         var persistor = CreatePersistor(registry: registry);
 
@@ -57,8 +72,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
 
-        await persistor.InsertDataAsync(new { Value = "item1", CorrelationId = correlationId1 }, "batch2");
-        await persistor.InsertDataAsync(new { Value = "item2", CorrelationId = correlationId2 }, "batch2");
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item1", CorrelationId = correlationId1 }, "batch2");
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item2", CorrelationId = correlationId2 }, "batch2");
 
         var count = await persistor.CountAsync("batch2");
 
@@ -73,8 +88,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
 
-        await persistor.InsertDataAsync(new { Value = "item1", CorrelationId = correlationId1 }, "batch3");
-        await persistor.InsertDataAsync(new { Value = "item2", CorrelationId = correlationId2 }, "batch3");
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item1", CorrelationId = correlationId1 }, "batch3");
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item2", CorrelationId = correlationId2 }, "batch3");
 
         await persistor.RemoveDataAsync("batch3", correlationId1);
 
@@ -114,18 +129,18 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
             client, options, "OrderedAggregator",
             NullLogger<MongoDbAggregatorPersistor>.Instance, registry, time);
 
+        registry.Register(typeof(AggregatorLabelItem));
         var names = new[] { "first", "second", "third", "fourth", "fifth" };
         foreach (var name in names)
         {
-            var item = new { CorrelationId = Guid.NewGuid(), Label = name };
-            registry.Register(item.GetType());
+            var item = new AggregatorLabelItem { CorrelationId = Guid.NewGuid(), Label = name };
             await persistor.InsertDataAsync(item, "ordered");
             time.Advance(TimeSpan.FromMilliseconds(25));
         }
 
         var result = await persistor.GetDataAsync("ordered");
 
-        var labels = result.Select(o => (string)o.GetType().GetProperty("Label")!.GetValue(o)!).ToArray();
+        var labels = result.Cast<AggregatorLabelItem>().Select(o => o.Label).ToArray();
         Assert.Equal(names, labels);
     }
 
@@ -141,8 +156,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         cts.Cancel();
 
         var registry = new MessageTypeRegistry();
-        var item = new { CorrelationId = Guid.NewGuid(), Value = "test" };
-        registry.Register(item.GetType());
+        registry.Register(typeof(AggregatorTestItem));
+        var item = new AggregatorTestItem { CorrelationId = Guid.NewGuid(), Value = "test" };
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => persistor.InsertDataAsync(item, "l9-batch", cts.Token));
@@ -173,8 +188,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
             new CreateIndexOptions { Name = "conflicting_name_correlation" }));
 
         var registry = new MessageTypeRegistry();
-        var item = new { CorrelationId = Guid.NewGuid(), Value = "test" };
-        registry.Register(item.GetType());
+        registry.Register(typeof(AggregatorTestItem));
+        var item = new AggregatorTestItem { CorrelationId = Guid.NewGuid(), Value = "test" };
         var persistor = new MongoDbAggregatorPersistor(
             client, options, "TestAggregatorConflict",
             NullLogger<MongoDbAggregatorPersistor>.Instance, registry);
@@ -206,8 +221,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         // but no row carries the supplied correlationId. Silent no-op here would mask the same class
         // of data-integrity error the RowNotFound test guards against.
         var registry = new MessageTypeRegistry();
-        var existing = new { CorrelationId = Guid.NewGuid(), Value = "existing" };
-        registry.Register(existing.GetType());
+        registry.Register(typeof(AggregatorTestItem));
+        var existing = new AggregatorTestItem { CorrelationId = Guid.NewGuid(), Value = "existing" };
         var persistor = CreatePersistor(registry: registry);
 
         await persistor.InsertDataAsync(existing, "batch-mismatch");

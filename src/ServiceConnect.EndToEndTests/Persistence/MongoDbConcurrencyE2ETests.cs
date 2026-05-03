@@ -386,7 +386,9 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
         Assert.Equal(ids.OrderBy(g => g), seen.OrderBy(g => g));
     }
 
-    private sealed class AggregatorItem
+    // Implements IHasCorrelationId so the aggregator persistor can locate entries
+    // by correlation id without reflection (required since the interface migration).
+    private sealed class AggregatorItem : IHasCorrelationId
     {
         public Guid CorrelationId { get; set; }
         public string Value { get; set; } = "";

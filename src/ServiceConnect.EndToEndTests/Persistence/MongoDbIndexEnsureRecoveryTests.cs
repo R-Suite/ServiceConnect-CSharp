@@ -15,6 +15,14 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
 {
     private readonly PersistenceFixture _fixture = fixture;
 
+    // Named type implementing IHasCorrelationId — required since anonymous types cannot
+    // implement interfaces and InsertDataAsync now enforces the contract.
+    private sealed class IndexRecoveryItem : IHasCorrelationId
+    {
+        public Guid CorrelationId { get; set; }
+        public string Value { get; set; } = "";
+    }
+
     [Fact]
     [Trait("Category", "Docker")]
     public async Task TimeoutStore_AfterDbDrop_RecreatesIndexesOnNextInsert()
@@ -78,8 +86,8 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         var persistor = new MongoDbAggregatorPersistor(
             client, options, collectionName, NullLogger<MongoDbAggregatorPersistor>.Instance, registry);
 
-        var item = new { Value = "first", CorrelationId = Guid.NewGuid() };
-        registry.Register(item.GetType());
+        registry.Register(typeof(IndexRecoveryItem));
+        var item = new IndexRecoveryItem { Value = "first", CorrelationId = Guid.NewGuid() };
 
         // First write: causes EnsureIndexesAsync to create the indexes and flip _indexed=1.
         await persistor.InsertDataAsync(item, "batch1");
@@ -92,7 +100,7 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
 
         // Second write on the same persistor instance: the cache flag short-circuits
         // the ensure path, so the indexes are NOT recreated. The test pins this contract.
-        var item2 = new { Value = "second", CorrelationId = Guid.NewGuid() };
+        var item2 = new IndexRecoveryItem { Value = "second", CorrelationId = Guid.NewGuid() };
         await persistor.InsertDataAsync(item2, "batch1");
 
         var secondIndexes = await ListIndexNamesAsync(client, dbName, collectionName);
