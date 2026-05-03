@@ -30,6 +30,8 @@ public sealed class ProducerConnectionHealthCheck : IHealthCheck
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (_producer.IsHealthy)
         {
             return Task.FromResult(HealthCheckResult.Healthy("Producer connection is open."));

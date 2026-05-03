@@ -25,6 +25,8 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (_bus.IsConsuming)
         {
             return Task.FromResult(HealthCheckResult.Healthy("Bus is consuming."));

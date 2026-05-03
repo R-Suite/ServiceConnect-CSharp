@@ -25,6 +25,8 @@ public sealed class ConsumerConnectionHealthCheck : IHealthCheck
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (_consumer.IsConnected)
         {
             return Task.FromResult(HealthCheckResult.Healthy("Consumer connection is open."));
