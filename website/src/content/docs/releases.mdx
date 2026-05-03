@@ -271,6 +271,42 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 
 - `DeepClone` now documents its security boundary (`TypeNameHandling.Auto` is in-process-trusted-data-only; do not extend to external JSON) and Newtonsoft's explicit-interface auto-property gap (saga types using such properties must back them with a public property).
 
+### Processor cleanups (Aggregator, Stream, Handler, ProcessManagerTimeout)
+
+**Bug fixes**
+
+- **Saga timeout dispatch is at-most-once when the lease holds.** `ProcessManagerTimeoutService` now re-checks the lease deadline after `SendAsync` returns; if the lease expired during the send, the row is left for the lease-expiry sweep to reclaim instead of `Remove`-ing under a peer poller. Net effect: at worst one duplicate send (already documented at-least-once timeout semantics), no double-`Remove` racing a peer's reclaim.
+- **`ConsumeScopeAccessor` scopes are per-instance.** Pre-fix the `AsyncLocal` was a static field shared across every accessor in the AppDomain; two `Bus` instances dispatching concurrently saw each other's scopes. The class is registered as a DI singleton, so the field's lifetime is unchanged.
+- **`StreamProcessor` admission cap closed under concurrency.** The pre-existing speculative `GetOrAdd` + `TryRemove`-rollback path briefly admitted a rejected stream into `_activeStreams`; concurrent packets for the same `sequenceId` could observe the rejected entry. Reorder: the `Interlocked` counter is the gate; the dictionary insert happens only on a successful counter bump.
+- **`StreamProcessor.DisposeAsync` rejects late packets.** Pre-fix only the cleanup timer was disposed; late-arriving packets still populated `_activeStreams` indefinitely. Add a `_disposed` flag, guard `ProcessAsync`, and drain the dictionary on dispose.
+- **`MessageBusReadStream.SetLastPacketNumber` validates before AND after the CAS.** A concurrent `Write` that read the pre-CAS sentinel could `TryAdd` an out-of-range packet; the post-CAS validation pass now catches it.
+- **`MessageBusReadStream.Write` null-guards `data`.** `ArgumentNullException` instead of `NullReferenceException`.
+- **`MessageBusReadStream.Read` and `ReadSequence` capture `LastPacketNumber` once.** Defense-in-depth: a future regression introducing a false-positive `IsComplete` would surface immediately rather than producing a silently truncated read.
+- **`ConsumeContext` cached fields use the volatile-publication pattern.** `_messageIdCached` / `_correlationIdCached` are `volatile bool`; payload fields are written before the flag (release barrier) and read after (acquire barrier). Guarantees non-torn reads on weakly-ordered architectures.
+- **`HandlerProcessor` allows cross-service routing slips.** The `IsKnownQueue` check that rejected destinations not in the local queue config is removed; format validation (`IsValidRoutingSlipDestination`) remains. RabbitMQ's alternate-exchange / mandatory-return is the right error surface for unknown destinations.
+
+**Breaking API changes**
+
+- **`IBusConfiguration.ExceptionHandler` is async.** Signature changes from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?`. Migration shim:
+
+```csharp
+// before (v7)
+cfg.ExceptionHandler = ex => Log.Error(ex);
+// after (v8)
+cfg.ExceptionHandler = (ex, _) => { Log.Error(ex); return ValueTask.CompletedTask; };
+```
+
+The dispatcher `await`s the handler and passes the shutdown cancellation token. Slow user code no longer blocks the consumer thread or throttles RabbitMQ prefetch. Handler-thrown exceptions are logged at warning level and not propagated.
+
+**Deployment-visible changes**
+
+- **`MessageTypeExchangeName` hash drops `AssemblyQualifiedName`.** The eight-hex-character suffix is now derived from `type.FullName + ", " + assembly.GetName().Name` — version-stable across assembly bumps. Pre-v8 the hash included version + culture + PublicKeyToken; producers and consumers built against different assembly versions of the same logical type derived different exchange names. **Migration:** existing exchanges named under the v7 hash will need to be re-declared (or re-bound) on first v8 deployment. Apps using a single exchange-naming source (one repo, one assembly version per environment) will see no observable change; apps with version skew will see new exchange names appear.
+
+**Contract clarifications (non-breaking)**
+
+- **`IProcessManagerFinder.FindDataAsync<T>` MUST return a fresh `Data` reference per call.** Both built-in persistors comply (InMemory clones via `DeepClone`; Mongo via BSON deserialize). Third-party persistors that cache rows internally MUST clone before returning. The `ProcessManagerProcessor` dispatch loop's retry path depends on this so handler-mutated `Data` doesn't leak across retries.
+- **`HandlerProcessor` drops the routing slip from in-flight forward on any handler throw.** The slip data is preserved in the message envelope (the `RoutingSlip` header is not stripped); DLQ-routed messages and manual retries can still resume the chain.
+
 ## Source and tags
 
 Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.
