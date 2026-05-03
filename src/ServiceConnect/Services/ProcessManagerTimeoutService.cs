@@ -126,6 +126,22 @@ public sealed class ProcessManagerTimeoutService(
                         }, cancellationToken).ConfigureAwait(false);
                     }
 
+                    // Post-send lease check. SendAsync may have taken longer than the remaining
+                    // lease; if so a peer poller may have already re-acquired and re-dispatched
+                    // this row. Skip Remove and let the lease-expiry sweep reclaim the row on
+                    // the next poll. The trade-off is a possible duplicate send (at-least-once
+                    // timeout semantics, already documented), not a duplicate Remove racing a
+                    // peer's lease reclaim.
+                    if (timeout.LockExpiresAt.HasValue &&
+                        timeout.LockExpiresAt.Value <= _timeProvider.GetUtcNow())
+                    {
+                        logger.LogWarning(
+                            "Lease for timeout {TimeoutId} expired during SendAsync (expires at {Expires}); skipping Remove. " +
+                            "Next poll will reclaim the row.",
+                            timeout.Id, timeout.LockExpiresAt.Value);
+                        continue;
+                    }
+
                     // Pass the captured lease owner only when one is set — the store treats null
                     // as the unconditional id-only path and a non-null Guid as lease-checked.
                     Guid? lockOwner = timeout.LockedBy != Guid.Empty ? timeout.LockedBy : null;
