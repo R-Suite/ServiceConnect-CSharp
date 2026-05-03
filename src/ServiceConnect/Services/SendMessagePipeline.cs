@@ -22,7 +22,7 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     private readonly IServiceProvider _serviceProvider;
     private readonly Lazy<SendMessageDelegate> _publishChain;
     private readonly Lazy<SendMessageDelegate> _sendChain;
-    private volatile bool _disposed;
+    private int _disposed;
 
     /// <summary>
     /// Creates a send pipeline backed by a producer and optional outbound middleware.
@@ -42,7 +42,7 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     /// <inheritdoc />
     public Task ExecutePublishMessagePipelineAsync(SendContext context, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(context);
         return _publishChain.Value(context, cancellationToken);
     }
@@ -50,7 +50,7 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     /// <inheritdoc />
     public Task ExecuteSendMessagePipelineAsync(SendContext context, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(context);
         return _sendChain.Value(context, cancellationToken);
     }
@@ -94,12 +94,11 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return ValueTask.CompletedTask;
         }
 
-        _disposed = true;
         // Producer lifetime is managed by the DI container — do not dispose it here
         return ValueTask.CompletedTask;
     }

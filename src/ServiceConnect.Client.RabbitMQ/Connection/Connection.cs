@@ -14,7 +14,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
 {
     private IConnection? _connection;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
-    private volatile bool _disposed;
+    private int _disposed;
     private readonly TimeSpan _disposeLockTimeout = TimeSpan.FromSeconds(30);
 
     // Test seam: when set, replaces the call to ConnectionFactory.CreateConnectionAsync
@@ -33,7 +33,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         await _connectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             if (Volatile.Read(ref _connection) == null)
             {
                 await CreateConnectionCoreAsync(cancellationToken).ConfigureAwait(false);
@@ -85,7 +85,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// <returns>A newly created channel.</returns>
     public async Task<IChannel> CreateChannelAsync(CreateChannelOptions? options, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
         var conn = Volatile.Read(ref _connection);
         if (conn == null)
@@ -103,7 +103,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
         }
@@ -112,18 +112,12 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         var acquired = await _connectionLock.WaitAsync(_disposeLockTimeout).ConfigureAwait(false);
         try
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             if (!acquired)
             {
                 logger.LogWarning(
                     "Connection.DisposeAsync timed out waiting for the connection lock after {Timeout}; forcing disposal.",
                     _disposeLockTimeout);
             }
-            _disposed = true;
             conn = _connection;
             _connection = null;
         }
