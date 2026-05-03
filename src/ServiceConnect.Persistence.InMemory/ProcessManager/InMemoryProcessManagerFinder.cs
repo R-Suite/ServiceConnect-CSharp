@@ -154,7 +154,17 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             Expression left = Expression.Property(dataParam, dataParam.Type.GetProperty(nameof(MemoryData<IProcessManagerData>.Data))!);
             foreach (var prop in key.PropertiesHierarchy.Reverse())
             {
-                left = Expression.Property(left, left.Type, prop.Key);
+                // Resolve the property by walking the type AND its implemented interfaces,
+                // so explicit-interface impls (where the property isn't reachable by string
+                // name on the runtime type) are matched via their declaring-type PropertyInfo.
+                var propInfo = left.Type.GetProperty(prop.Key,
+                        BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy)
+                    ?? left.Type.GetInterfaces()
+                        .Select(i => i.GetProperty(prop.Key, BindingFlags.Public | BindingFlags.Instance))
+                        .FirstOrDefault(p => p is not null)
+                    ?? throw new InvalidOperationException(
+                        $"Property '{prop.Key}' not found on type '{left.Type.FullName}' or its interfaces.");
+                left = Expression.MakeMemberAccess(left, propInfo);
             }
 
             Expression right = Expression.Convert(valueParam, key.PropertyType);
