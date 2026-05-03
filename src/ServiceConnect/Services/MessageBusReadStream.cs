@@ -79,18 +79,14 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
             throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
                 "Packet number must be non-negative.");
         }
-        // Validate against LastPacketNumber when it is already set.  This is done
-        // with Volatile.Read so we observe the latest CAS-committed value without
-        // acquiring a separate lock — the worst case is that a concurrent
-        // SetLastPacketNumber races and we miss the check, but that race is
-        // benign: a packet that genuinely belongs to the stream will have
-        // packetNumber <= lastPacketNumber by protocol, and a rogue out-of-range
-        // packet must always fail.
-        var last = Volatile.Read(ref _lastPacketNumber);
-        if (last >= 0 && packetNumber > last)
+
+        // Pre-commit upper-bound check: if LastPacketNumber is already set, reject
+        // packets above it before we reserve any state.
+        var preLast = Volatile.Read(ref _lastPacketNumber);
+        if (preLast >= 0 && packetNumber > preLast)
         {
             throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
-                $"Packet number {packetNumber} exceeds LastPacketNumber {last} for stream {SequenceId}.");
+                $"Packet number {packetNumber} exceeds LastPacketNumber {preLast} for stream {SequenceId}.");
         }
 
         // Atomically reserve capacity: if the reservation pushes us past the cap,
@@ -102,6 +98,7 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
             Interlocked.Add(ref _totalBytesWritten, -data.Length);
             throw new InvalidOperationException($"Stream exceeds maximum size of {MaxTotalStreamSize / (1024 * 1024)} MB.");
         }
+
         if (!_packets.TryAdd(packetNumber, data))
         {
             // Broker redelivery: the same packet has arrived twice. Roll back the size
@@ -111,7 +108,25 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
             Interlocked.Add(ref _totalBytesWritten, -data.Length);
             return;
         }
-        // Increment after a successful add so IsComplete() can compare counts.
+
+        // Post-commit re-check: between the pre-commit Volatile.Read above and the
+        // TryAdd, a concurrent SetLastPacketNumber may have published a value that
+        // makes our packet out-of-range. Catch that here so the silent-truncation
+        // window is closed — symmetric to SetLastPacketNumber's pre+post-CAS validation.
+        // TryRemove is safe under concurrent reads: ConcurrentDictionary guarantees
+        // atomicity of each individual operation, so a reader either sees this entry
+        // or doesn't; there is no torn read.
+        var postLast = Volatile.Read(ref _lastPacketNumber);
+        if (postLast >= 0 && packetNumber > postLast)
+        {
+            _packets.TryRemove(packetNumber, out _);
+            Interlocked.Add(ref _totalBytesWritten, -data.Length);
+            throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
+                $"Packet number {packetNumber} exceeds LastPacketNumber {postLast} (set concurrently) for stream {SequenceId}.");
+        }
+
+        // Increment only after the post-commit check so a rolled-back Write does
+        // not inflate the count used by IsComplete().
         Interlocked.Increment(ref _receivedCount);
     }
 
