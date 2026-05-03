@@ -80,5 +80,7 @@ public class InMemoryProcessManagerFinderPolymorphicTests
 
         Assert.NotNull(result);
         Assert.Equal("world", result.Data.ValueA);
+        // Version is surfaced via IVersioned; IPersistenceData<T> does not expose it directly.
+        Assert.Equal(1, ((IVersioned)result).Version);
     }
 }

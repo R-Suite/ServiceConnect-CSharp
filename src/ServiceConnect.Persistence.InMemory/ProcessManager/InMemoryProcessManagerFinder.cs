@@ -91,6 +91,20 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         }
     }
 
+    /// <summary>
+    /// Iterates the saga store looking for a row whose <typeparamref name="T"/>-typed
+    /// payload satisfies <paramref name="predicate"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Multi-saga limitation:</b> this implementation iterates every entry in the
+    /// partitioned saga provider, and the keys are bare correlation-id strings (no
+    /// type prefix). A caller that runs multiple saga types through a single finder
+    /// instance will see <see cref="InvalidOperationException"/> from this method as
+    /// soon as the iterator visits a row whose wrapper type does not match
+    /// <typeparamref name="T"/>. For multi-saga topologies, run one finder instance
+    /// per saga type or use the Mongo persistor (which keys by collection-name and
+    /// avoids cross-type scans).
+    /// </remarks>
     private MemoryData<T>? FindMatchingItem<T>(object msgPropValue, Func<MemoryData<T>, object, bool> predicate)
         where T : class, IProcessManagerData
     {
@@ -117,8 +131,9 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                 throw new InvalidOperationException(
                     $"Saga store contains data of type '{value.GetType().FullName}' but " +
                     $"caller asked for '{typeof(MemoryData<T>).FullName}'. " +
-                    "The saga store does not support polymorphic data type substitution; " +
-                    "store and retrieve using the same generic parameter.");
+                    "The InMemory saga store does not support polymorphic data type substitution: " +
+                    "the T in FindDataAsync<T> / UpdateDataAsync<T> / DeleteDataAsync<T> must match " +
+                    "the runtime type of the data passed to InsertDataAsync.");
             }
         }
         return null;
