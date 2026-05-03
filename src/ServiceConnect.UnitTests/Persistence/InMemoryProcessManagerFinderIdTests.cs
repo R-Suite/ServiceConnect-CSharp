@@ -41,8 +41,8 @@ public class InMemoryProcessManagerFinderIdTests
         var first = await finder.FindDataAsync<IdTestData>(mapper, new Message(correlationId), CancellationToken.None);
         Assert.NotNull(first);
 
-        // Id is on MemoryData<T> directly; IPersistenceData<T> does not expose it.
-        var id = ((MemoryData<IdTestData>)first).Id;
+        // IIdentified surfaces the Id without requiring a cast to the concrete wrapper type.
+        var id = ((IIdentified)first).Id;
 
         // Assert — insert must stamp a non-empty Id
         Assert.NotEqual(Guid.Empty, id);
@@ -50,7 +50,7 @@ public class InMemoryProcessManagerFinderIdTests
         // Act — second retrieval (same stored row, no mutation)
         var second = await finder.FindDataAsync<IdTestData>(mapper, new Message(correlationId), CancellationToken.None);
         Assert.NotNull(second);
-        var id2 = ((MemoryData<IdTestData>)second).Id;
+        var id2 = ((IIdentified)second).Id;
 
         // Assert — Id must be stable across independent reads
         Assert.Equal(id, id2);
@@ -66,7 +66,7 @@ public class InMemoryProcessManagerFinderIdTests
 
         var inserted = await finder.FindDataAsync<IdTestData>(mapper, new Message(correlationId), CancellationToken.None);
         Assert.NotNull(inserted);
-        var originalId = ((MemoryData<IdTestData>)inserted).Id;
+        var originalId = ((IIdentified)inserted).Id;
         Assert.NotEqual(Guid.Empty, originalId);
 
         // Act — update the saga
@@ -76,10 +76,43 @@ public class InMemoryProcessManagerFinderIdTests
         // Re-retrieve after update
         var afterUpdate = await finder.FindDataAsync<IdTestData>(mapper, new Message(correlationId), CancellationToken.None);
         Assert.NotNull(afterUpdate);
-        var updatedId = ((MemoryData<IdTestData>)afterUpdate).Id;
+        var updatedId = ((IIdentified)afterUpdate).Id;
 
         // Assert — Id must survive the update; pre-fix this would be Guid.Empty
         Assert.Equal(originalId, updatedId);
         Assert.Equal("updated", afterUpdate.Data.Value);
+    }
+
+    [Fact]
+    public async Task Id_StableAcrossMultipleUpdates()
+    {
+        // Mirrors the Mongo persistor's contract that _id is stamped once and never
+        // overwritten: a second UpdateDataAsync must leave Id unchanged, not re-stamp it.
+        var correlationId = Guid.NewGuid();
+        var (finder, mapper) = Build();
+        await finder.InsertDataAsync(new IdTestData { CorrelationId = correlationId, Value = "v0" }, CancellationToken.None);
+
+        // Capture the Id assigned at insert.
+        var afterInsert = await finder.FindDataAsync<IdTestData>(mapper, new Message(correlationId), CancellationToken.None);
+        Assert.NotNull(afterInsert);
+        var originalId = ((IIdentified)afterInsert).Id;
+        Assert.NotEqual(Guid.Empty, originalId);
+
+        // First update (Version goes 1 → 2 inside UpdateDataAsync).
+        afterInsert.Data.Value = "v1";
+        await finder.UpdateDataAsync(afterInsert, CancellationToken.None);
+
+        var afterFirst = await finder.FindDataAsync<IdTestData>(mapper, new Message(correlationId), CancellationToken.None);
+        Assert.NotNull(afterFirst);
+        Assert.Equal(originalId, ((IIdentified)afterFirst).Id);
+
+        // Second update (Version goes 2 → 3 inside UpdateDataAsync).
+        afterFirst.Data.Value = "v2";
+        await finder.UpdateDataAsync(afterFirst, CancellationToken.None);
+
+        var afterSecond = await finder.FindDataAsync<IdTestData>(mapper, new Message(correlationId), CancellationToken.None);
+        Assert.NotNull(afterSecond);
+        Assert.Equal(originalId, ((IIdentified)afterSecond).Id);
+        Assert.Equal("v2", afterSecond.Data.Value);
     }
 }
