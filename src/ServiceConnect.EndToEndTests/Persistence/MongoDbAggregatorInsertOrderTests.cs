@@ -16,7 +16,7 @@ public class MongoDbAggregatorInsertOrderTests(PersistenceFixture fixture)
     // Concrete message type so MessageTypeRegistry.Register can map the type name
     // to the CLR type at deserialization time. Implements IHasCorrelationId so the
     // aggregator persistor can locate entries by correlation id without reflection.
-    public sealed class OrderTestMessage : IHasCorrelationId
+    private sealed class OrderTestMessage : IHasCorrelationId
     {
         public Guid CorrelationId { get; set; }
         public int Sequence { get; set; }

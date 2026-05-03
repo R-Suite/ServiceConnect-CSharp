@@ -225,8 +225,7 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
     public async Task AggregatorPersistor_ParallelInsert_AllItemsPersistedAndCounted()
     {
         var registry = new MessageTypeRegistry();
-        var sample = new AggregatorItem { CorrelationId = Guid.NewGuid(), Value = "shape" };
-        registry.Register(sample.GetType());
+        registry.Register(typeof(AggregatorItem));
 
         var persistor = CreateAggregator(registry, out _);
 
@@ -256,10 +255,10 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
     public async Task AggregatorPersistor_ParallelRemoveSameCorrelationId_OneSucceedsRestThrowConcurrency()
     {
         var registry = new MessageTypeRegistry();
-        var item = new AggregatorItem { CorrelationId = Guid.NewGuid(), Value = "single" };
-        registry.Register(item.GetType());
+        registry.Register(typeof(AggregatorItem));
 
         var persistor = CreateAggregator(registry, out _);
+        var item = new AggregatorItem { CorrelationId = Guid.NewGuid(), Value = "single" };
         await persistor.InsertDataAsync(item, "race-batch");
 
         const int contenders = 12;
