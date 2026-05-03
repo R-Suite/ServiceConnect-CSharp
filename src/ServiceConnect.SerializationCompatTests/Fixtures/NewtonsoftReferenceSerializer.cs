@@ -29,6 +29,11 @@ internal static class NewtonsoftReferenceSerializer
     // resolver, switch this to per-call construction (negligible cost in a test fixture).
     private static readonly JsonSerializer Serializer = JsonSerializer.Create(Settings);
 
+    // StreamWriter(stream, Encoding.UTF8) emits a UTF-8 BOM (EF BB BF) on .NET 10+.
+    // STJ and Newtonsoft's JToken.Parse both reject a BOM prefix. Use an explicit
+    // no-BOM encoding so the wire bytes are plain UTF-8, matching what STJ produces.
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
     public static byte[] Serialize<T>(T message) where T : Message
     {
         if (message is null)
@@ -37,7 +42,7 @@ internal static class NewtonsoftReferenceSerializer
         }
 
         using var ms = new MemoryStream();
-        using (var sw = new StreamWriter(ms, Encoding.UTF8, bufferSize: 1024, leaveOpen: true))
+        using (var sw = new StreamWriter(ms, Utf8NoBom, bufferSize: 1024, leaveOpen: true))
         using (var jw = new JsonTextWriter(sw))
         {
             Serializer.Serialize(jw, message);
