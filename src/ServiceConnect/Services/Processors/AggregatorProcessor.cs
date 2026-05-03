@@ -250,9 +250,11 @@ internal sealed class AggregatorProcessor(
                 return;
             }
 
-            // BuildTypedList expects IList<object>; wrap the read-only snapshot as a list copy.
-            // The snapshot itself stays immutable; the copy is the handler-facing payload.
-            var resolvedList = snapshot.ResolvedMessages as IList<object> ?? [.. snapshot.ResolvedMessages];
+            // BuildTypedList expects IList<object>; copy the read-only snapshot into a fresh
+            // mutable list. The snapshot itself stays immutable; this is the handler-facing
+            // payload. IReadOnlyList<IHasCorrelationId> is not co-variant to IList<object>,
+            // so an as-cast cannot avoid this allocation.
+            List<object> resolvedList = [.. snapshot.ResolvedMessages];
             var typedList = descriptor.BuildTypedList(resolvedList);
 
             // The batch path passes its dispatcher-pushed scope through ambientScope. The timer
