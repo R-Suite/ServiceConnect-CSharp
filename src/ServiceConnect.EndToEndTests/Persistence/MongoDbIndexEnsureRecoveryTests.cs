@@ -58,8 +58,14 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task AggregatorPersistor_AfterDbDrop_RecreatesIndexesOnNextInsert()
+    public async Task AggregatorPersistor_AfterDbDrop_DoesNotRecreateIndexes_ByDesign()
     {
+        // M38 (Phase 9): EnsureIndexesAsync caches a per-instance _indexed flag after
+        // first success. If an admin drops the database while the process is still
+        // running, the cached persistor will not re-create the indexes on the next
+        // insert — operators must recycle the persistor (process restart) to recover.
+        // The trade-off vs the per-message round-trip pre-Phase-9 is documented; this
+        // test pins the new contract so a future regression is caught.
         var dbName = _fixture.GetUniqueDatabaseName("idxrecovery_agg");
         var options = new MongoDbPersistenceOptions
         {
@@ -75,7 +81,7 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         var item = new { Value = "first", CorrelationId = Guid.NewGuid() };
         registry.Register(item.GetType());
 
-        // First write: causes EnsureIndexesAsync to create the indexes.
+        // First write: causes EnsureIndexesAsync to create the indexes and flip _indexed=1.
         await persistor.InsertDataAsync(item, "batch1");
 
         var firstIndexes = await ListIndexNamesAsync(client, dbName, collectionName);
@@ -84,14 +90,13 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         // Simulate an admin dropping the database while the process is still running.
         await client.DropDatabaseAsync(dbName);
 
-        // Second write on the same persistor instance: without a cache flag the ensure
-        // path runs again, hitting Mongo unconditionally and recreating the indexes.
+        // Second write on the same persistor instance: the cache flag short-circuits
+        // the ensure path, so the indexes are NOT recreated. The test pins this contract.
         var item2 = new { Value = "second", CorrelationId = Guid.NewGuid() };
         await persistor.InsertDataAsync(item2, "batch1");
 
         var secondIndexes = await ListIndexNamesAsync(client, dbName, collectionName);
-        Assert.Contains("Name_1", secondIndexes);
-        Assert.Contains("Name_1_DataBson.CorrelationId_1", secondIndexes);
+        Assert.DoesNotContain("Name_1", secondIndexes);
     }
 
     private static async Task<List<string>> ListIndexNamesAsync(IMongoClient client, string db, string coll)
