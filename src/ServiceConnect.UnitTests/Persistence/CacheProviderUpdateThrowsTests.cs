@@ -25,4 +25,17 @@ public class CacheProviderUpdateThrowsTests
         Assert.True(cache.TryGet<string, string>("k", out var value));
         Assert.Equal("v2", value);
     }
+
+    [Fact]
+    public void Update_KeyRemovedConcurrently_ThrowsInsteadOfSilentReturn()
+    {
+        // White-box: simulate a concurrent removal by adding then removing the key
+        // before Update runs. With the pre-fix early-guard structure this could
+        // race; the new in-loop check makes the throw deterministic.
+        var cache = new CacheProvider(new FakeTimeProvider());
+        cache.Add("k", "v", CacheItemPriority.Normal);
+        cache.Remove("k");
+
+        Assert.Throws<KeyNotFoundException>(() => cache.Update("k", "newvalue"));
+    }
 }

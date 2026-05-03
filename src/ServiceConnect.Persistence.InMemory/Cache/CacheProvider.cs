@@ -235,21 +235,23 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
             return;
         }
 
-        if (!_cache.ContainsKey(key!))
+        while (true)
         {
-            // Pre-Phase-10 this was a silent no-op — which let aggregator's optimistic-
-            // concurrency loop advance Version against a phantom row. Throw so the caller
-            // can react deterministically.
-            throw new KeyNotFoundException(
-                $"Cannot Update key '{key}' — key not present. Use Add to insert new keys.");
-        }
+            if (!_cache.TryGetValue(key!, out var existing))
+            {
+                // Either the key was never present, or another thread removed it during
+                // the CAS retry. Either way the caller's optimistic-update contract is
+                // violated — throw so the caller can react deterministically.
+                // Pre-Phase-10 this was a silent no-op — which let aggregator's optimistic-
+                // concurrency loop advance Version against a phantom row.
+                throw new KeyNotFoundException(
+                    $"Cannot Update key '{key}' — key not present. Use Add to insert new keys.");
+            }
 
-        while (_cache.TryGetValue(key!, out var existing))
-        {
             var replacement = new CacheItem(value!, existing.Priority, existing.RelativeExpiry);
             if (_cache.TryUpdate(key!, replacement, existing))
             {
-                break;
+                return;
             }
         }
     }

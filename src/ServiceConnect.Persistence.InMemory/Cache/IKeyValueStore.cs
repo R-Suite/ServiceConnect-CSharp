@@ -46,5 +46,9 @@ public interface IKeyValueStore
     /// <summary>
     /// Replaces the value stored for an existing key.
     /// </summary>
+    /// <exception cref="KeyNotFoundException">
+    /// Thrown when <paramref name="key"/> is not present. Pre-v8 this was a silent
+    /// no-op; v8 throws so callers fail deterministically. Use <see cref="Add{TKey,TValue}(TKey, TValue, DateTimeOffset, CacheItemPriority)"/> to insert new keys.
+    /// </exception>
     void Update<TKey, TValue>(TKey key, TValue value);
 }

@@ -75,8 +75,13 @@ public interface ICacheProvider
 
     /// <summary>
     /// Replaces the value for an existing key without resetting its expiry timer or
-    /// sliding-time window. No-ops if the key is not present.
+    /// sliding-time window.
     /// </summary>
+    /// <exception cref="KeyNotFoundException">
+    /// Thrown when <paramref name="key"/> is not present. Pre-v8 this was a silent
+    /// no-op; v8 throws so callers fail deterministically. Use
+    /// <see cref="Add{TKey,TValue}(TKey, TValue, CacheItemPriority)"/> to insert new keys.
+    /// </exception>
     void Update<TKey, TValue>(TKey key, TValue value);
 
     /// <summary>
