@@ -85,9 +85,9 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var retval = new TimeoutsBatch { DueTimeouts = [] };
         DateTimeOffset utcNow = _timeProvider.GetUtcNow();
         var sessionId = Guid.NewGuid();
+        var due = new List<TimeoutData>();
 
         _state.SyncRoot.EnterWriteLock();
         try
@@ -103,13 +103,13 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
                 {
                     // In-place mutation under the write lock: _state.TimeoutsById and _state.TimeoutIndex
                     // hold the same TimeoutEntry reference, so the index is the single source of truth.
-                    // The clone in retval.DueTimeouts.Add isolates the caller from subsequent mutations.
+                    // The clone in due.Add isolates the caller from subsequent mutations.
                     entry.Data.Locked = true;
                     entry.Data.LockedBy = sessionId;
                     entry.Data.LockExpiresAt = utcNow + _lockLeaseDuration;
-                    retval.DueTimeouts.Add(Clone(entry.Data));
+                    due.Add(Clone(entry.Data));
 
-                    if (batchSize is { } cap && retval.DueTimeouts.Count >= cap)
+                    if (batchSize is { } cap && due.Count >= cap)
                     {
                         break;
                     }
@@ -124,7 +124,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
             _state.SyncRoot.ExitWriteLock();
         }
 
-        return Task.FromResult(retval);
+        return Task.FromResult(new TimeoutsBatch { DueTimeouts = due });
     }
 
     private static TimeoutData Clone(TimeoutData timeoutData)

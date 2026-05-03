@@ -110,7 +110,6 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         MongoClientSessionHandle? session = null;
         try
         {
-            var retval = new TimeoutsBatch { DueTimeouts = [] };
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
             var utcNow = _timeProvider.GetUtcNow();
@@ -154,7 +153,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
             if (candidateIds.Count == 0)
             {
-                return retval;
+                return new TimeoutsBatch();
             }
 
             var batchFilter = dueUnlockedFilter &
@@ -164,6 +163,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             // whether there is anything to release. Initialised false: if UpdateMany
             // throws (or is cancelled before it starts), there is nothing to clean up.
             var leaseClaimed = false;
+            var due = new List<TimeoutData>();
             try
             {
                 if (session is not null)
@@ -186,7 +186,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 using var cursor = session is not null
                     ? await collection.FindAsync(session, ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false)
                     : await collection.FindAsync(ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false);
-                await cursor.ForEachAsync(retval.DueTimeouts.Add, cancellationToken).ConfigureAwait(false);
+                await cursor.ForEachAsync(due.Add, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -216,7 +216,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 throw;
             }
 
-            return retval;
+            return new TimeoutsBatch { DueTimeouts = due };
         }
         catch (MongoException ex)
         {

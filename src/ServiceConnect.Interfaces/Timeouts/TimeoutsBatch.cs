@@ -6,7 +6,8 @@ namespace ServiceConnect.Interfaces;
 public sealed class TimeoutsBatch
 {
     /// <summary>
-    /// Gets or sets the timeouts that are ready to be triggered.
+    /// Gets the timeouts that are ready to be triggered.
+    /// Producers assign once at construction via init; consumers read only.
     /// </summary>
-    public IList<TimeoutData> DueTimeouts { get; set; } = [];
+    public IReadOnlyList<TimeoutData> DueTimeouts { get; init; } = [];
 }
