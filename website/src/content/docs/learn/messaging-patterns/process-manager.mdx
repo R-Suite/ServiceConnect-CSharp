@@ -140,6 +140,10 @@ The first handler invocation for a given `CorrelationId` inserts the document; s
 
 Without a persistence provider, the process manager has nowhere to put state and the bus will fail fast at startup. This is the correct behaviour — silently forgetting state between messages would be worse.
 
+### Fresh-copy contract for custom persistence
+
+Every call to `FindDataAsync<T>` must return a **fresh** `IPersistenceData<T>.Data` reference. Two successive loads for the same correlation id must produce independent objects — mutations to one must not affect the other. Both built-in providers comply: the InMemory provider deep-clones on every read; MongoDB deserialises a new object from the wire. Custom implementations (Postgres, SQL Server, Redis, …) must do the same. See [`IProcessManagerFinder`](/ServiceConnect-CSharp/reference/extension-points/persistence/iprocessmanagerfinder/#findDataAsync) for details.
+
 ## Handler registration
 
 Each message type needs its own DI registration, because the bus resolves per message:
@@ -196,6 +200,10 @@ builder.ConfigureBus(bus =>
 ```
 
 If the workflow completes before the timeout fires, the state flag check in the timeout handler is what stops you from compensating a workflow that already succeeded.
+
+### Timeout dispatch is at-most-once while the lease holds
+
+The timeout polling service operates under a lease that prevents two competing instances from dispatching the same `TimeoutMessage` simultaneously. Within a single lease period, dispatch is at-most-once: after sending the timeout message the polling service performs a second check to confirm the lease still holds before advancing the record. If the lease was concurrently acquired by another instance between the send and the re-check, the duplicate send is detected and the record is not advanced, so the second instance does not resend. This does not guarantee exactly-once across process restarts — a crash between send and re-check can cause redelivery, which is why the idempotency flag check in the timeout handler (`if (data.IsCompleted) return`) is always necessary.
 
 ## Reference
 

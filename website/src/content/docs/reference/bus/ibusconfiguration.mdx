@@ -74,12 +74,30 @@ Sets the number of consumer loops that run in parallel against the configured qu
 ### `ExceptionHandler`
 
 ```csharp
-Action<Exception>? ExceptionHandler { get; set; }
+Func<Exception, CancellationToken, ValueTask>? ExceptionHandler { get; set; }
 ```
 
-Sets a callback invoked when handler processing throws. Use for push-based telemetry or alerting that sits outside the normal logging pipeline.
+Sets an async callback invoked when handler processing throws. Use for push-based telemetry or alerting that sits outside the normal logging pipeline.
 
-**Remarks.** The callback must not throw — any exception raised from `ExceptionHandler` is swallowed by the caller. For structured observability, prefer the pipeline's middleware and filters.
+**Remarks.** The callback must not throw — any exception raised from `ExceptionHandler` is swallowed by the caller. For structured observability, prefer the pipeline's middleware and filters. The `CancellationToken` parameter is the consumer-loop token; observe it if the callback performs async I/O.
+
+#### v8 async migration
+
+The signature changed from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?` in v8 (breaking change M27). Update call sites as follows:
+
+```csharp
+// Before (v7)
+cfg.ExceptionHandler = ex => Log.Error(ex);
+
+// After (v8)
+cfg.ExceptionHandler = (ex, _) => { Log.Error(ex); return ValueTask.CompletedTask; };
+```
+
+If the callback performs async work, await it and propagate the token:
+
+```csharp
+cfg.ExceptionHandler = async (ex, ct) => await _alerting.PushAsync(ex, ct);
+```
 
 ---
 
@@ -119,7 +137,7 @@ bool EnableRoutingSlipProcessing { get; set; }
 
 When true, the handler processor forwards messages along the destinations listed in the `RoutingSlip` header after each hop's handler completes. When false, routing-slip headers are silently ignored.
 
-**Remarks.** Defaults to true. Destinations are validated against known queue names when enabled.
+**Remarks.** Defaults to true. In v8, destinations are validated by format only (non-null, non-empty, no embedded commas) — the `IsKnownQueue` check against locally-configured queue names was removed. Cross-service destinations are therefore permitted without any local queue registration.
 
 ---
 

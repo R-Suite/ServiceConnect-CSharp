@@ -36,6 +36,12 @@ Locates the persisted state record that correlates with `message` according to t
 
 **Remarks.** The returned `IPersistenceData<T>` wrapper is passed back verbatim to `UpdateDataAsync<T>` or `DeleteDataAsync<T>`. Implementations can carry concurrency metadata (a `version` column value, an ETag, a row lock handle) on the concrete type that implements `IPersistenceData<T>` — the interface only exposes `Data`, so any extra fields are invisible to the framework but available to the implementation when the wrapper comes back.
 
+#### Fresh-copy contract (v8)
+
+Every call to `FindDataAsync<T>` **must** return a fresh `IPersistenceData<T>.Data` object. Two successive calls for the same correlation id must produce two independent references — mutations made to the `Data` of the first call's return value must not propagate to the second call's return value. Both built-in providers (InMemory and MongoDB) comply: `InMemoryProcessManagerFinder` performs a deep clone on every read; `MongoDbProcessManagerFinder` deserialises a new object from the wire.
+
+Custom implementations that cache and return the same mutable `Data` reference across calls violate this contract. The violation is silent during development (the first call's mutations appear to persist "for free") but causes state corruption when the same saga record is accessed by more than one concurrent message in the same process.
+
 ---
 
 ### `InsertDataAsync`

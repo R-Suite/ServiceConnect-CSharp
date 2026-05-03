@@ -3,6 +3,8 @@ title: Error Handling
 description: What happens when a handler throws — retries, the error queue, headers that tell you what went wrong, and when to replay.
 ---
 
+import { Aside } from '@astrojs/starlight/components';
+
 A handler throws. What happens next is the most important operational contract a messaging library offers. ServiceConnect's answer is the same shape RabbitMQ's users will expect: a bounded retry loop, then a dead-letter queue, with enough metadata on the rejected message to diagnose and replay.
 
 ## The failure path
@@ -95,16 +97,26 @@ Pre-v7.x ServiceConnect returned `Success=false` from the dispatcher, causing th
 
 ## Observing failures in code
 
-`IBusConfiguration.ExceptionHandler` is a callback invoked on every dispatch-level exception. It runs alongside the retry machinery — not instead of it:
+`IBusConfiguration.ExceptionHandler` is an async callback invoked on every dispatch-level exception. It runs alongside the retry machinery — not instead of it:
 
 ```csharp
 builder.ConfigureBus(bus =>
 {
-    bus.ExceptionHandler = ex =>
+    bus.ExceptionHandler = (ex, ct) =>
     {
         _metrics.RecordHandlerFailure(ex.GetType().Name);
         _alerting.NotifyIfBudgetExceeded();
+        return ValueTask.CompletedTask;
     };
+});
+```
+
+If the callback performs async work, await it directly:
+
+```csharp
+builder.ConfigureBus(bus =>
+{
+    bus.ExceptionHandler = async (ex, ct) => await _sentry.CaptureAsync(ex, ct);
 });
 ```
 
@@ -114,6 +126,10 @@ Two things to notice:
 - **It is a callback, not an interceptor.** Use it for metrics, alerting, a Sentry push. If you need to wrap the whole handler call with a `try`/`finally` — opening a span, starting a timer — reach for message-processing middleware instead.
 
 If the callback itself throws, the exception is caught and logged as a warning, so a bug in your error handler doesn't cascade.
+
+<Aside type="note" title="v8 signature change">
+  `ExceptionHandler` changed from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?` in v8. See [`IBusConfiguration.ExceptionHandler`](/ServiceConnect-CSharp/reference/bus/ibusconfiguration/#exceptionhandler) for the migration shim.
+</Aside>
 
 ## Idempotency is part of error handling
 
