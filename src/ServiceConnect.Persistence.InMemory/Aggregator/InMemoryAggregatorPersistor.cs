@@ -30,7 +30,15 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
             var prop = type.GetProperty("CorrelationId", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
             if (prop is null || prop.PropertyType != typeof(Guid) || prop.GetMethod is null)
             {
-                return static _ => null;
+                // Cache a throw-delegate rather than a null-returning one. A null result
+                // would silently prevent RemoveDataAsync from matching any entry, masking
+                // the mis-typed data with a misleading ConcurrencyException. Throwing on
+                // every invocation gives callers an actionable diagnosis, and the cache
+                // stays bounded (one entry per offending type) while a process restart
+                // resets it automatically once the type is corrected.
+                return obj => throw new InvalidOperationException(
+                    $"Aggregator data type '{obj.GetType().FullName}' does not have a public " +
+                    "'Guid CorrelationId' property. Add the property or use a Message subtype.");
             }
 
             return obj => (Guid?)prop.GetValue(obj);
