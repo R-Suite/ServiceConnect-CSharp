@@ -63,7 +63,7 @@ public class ExceptionHandlerTests
         // Arrange
         var thrownException = new InvalidOperationException("Handler failure");
         Exception? capturedEx = null;
-        _mockConfig.SetupProperty(c => c.ExceptionHandler, ex => capturedEx = ex);
+        _mockConfig.SetupProperty(c => c.ExceptionHandler, (ex, _) => { capturedEx = ex; return ValueTask.CompletedTask; });
 
         var mockProcessor = new Mock<IMessageProcessor>();
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
@@ -127,7 +127,7 @@ public class ExceptionHandlerTests
     public async Task Dispatch_ExceptionHandlerThrows_DoesNotBreakProcessing()
     {
         // Arrange — ExceptionHandler itself throws
-        _mockConfig.SetupProperty(c => c.ExceptionHandler, _ => throw new Exception("handler itself exploded"));
+        _mockConfig.SetupProperty(c => c.ExceptionHandler, (Func<Exception, CancellationToken, ValueTask>)((_, _) => throw new Exception("handler itself exploded")));
 
         var mockProcessor = new Mock<IMessageProcessor>();
         mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);

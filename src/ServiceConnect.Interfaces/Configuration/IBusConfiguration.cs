@@ -36,9 +36,18 @@ public interface IBusConfiguration
     int ConsumerCount { get; set; }
 
     /// <summary>
-    /// Gets or sets an exception callback invoked for handler-processing failures.
+    /// Optional async hook invoked when message dispatch throws. Awaited by the dispatcher
+    /// before returning the failure result, so slow handlers no longer block the consumer
+    /// thread (v7 used <c>Action&lt;Exception&gt;</c> and was synchronous).
     /// </summary>
-    Action<Exception>? ExceptionHandler { get; set; }
+    /// <remarks>
+    /// The cancellation token is the dispatcher's shutdown CTS; honour it to avoid
+    /// stretching shutdown deadlines. If the handler itself throws, the dispatcher logs
+    /// at warning level and continues (a handler-thrown exception is not propagated).
+    /// Migration from v7: wrap your <c>Action&lt;Exception&gt;</c> as
+    /// <c>(ex, _) =&gt; { Sync(ex); return ValueTask.CompletedTask; }</c>.
+    /// </remarks>
+    Func<Exception, CancellationToken, ValueTask>? ExceptionHandler { get; set; }
     /// <summary>
     /// When <c>true</c> (default <c>false</c>), <see cref="Environment.MachineName"/> is
     /// stamped into outgoing <c>SourceMachine</c> and incoming <c>DestinationMachine</c>

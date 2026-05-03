@@ -654,7 +654,7 @@ public class MessageDispatcherTests
 
         var exceptionHandlerInvocations = 0;
         var mockConfig = new Mock<IBusConfiguration>();
-        mockConfig.Setup(c => c.ExceptionHandler).Returns((Action<Exception>)(ex => exceptionHandlerInvocations++));
+        mockConfig.Setup(c => c.ExceptionHandler).Returns((Func<Exception, CancellationToken, ValueTask>)((ex, _) => { exceptionHandlerInvocations++; return ValueTask.CompletedTask; }));
 
         var scopeAccessor = new ConsumeScopeAccessor();
         var handlerRegistry = BuildHandlerRegistry(

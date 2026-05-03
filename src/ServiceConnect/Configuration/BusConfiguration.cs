@@ -18,7 +18,7 @@ public sealed class BusConfiguration : IBusConfiguration
     /// <inheritdoc />
     public int ConsumerCount { get; set; } = 1;
     /// <inheritdoc />
-    public Action<Exception>? ExceptionHandler { get; set; }
+    public Func<Exception, CancellationToken, ValueTask>? ExceptionHandler { get; set; }
     /// <inheritdoc />
     public bool IncludeMachineNameInHeaders { get; set; }
     /// <inheritdoc />

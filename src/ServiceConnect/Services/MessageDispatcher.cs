@@ -183,13 +183,16 @@ public sealed class MessageDispatcher(
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error dispatching message of type {MessageType}", messageType);
-            try
+            if (_config.ExceptionHandler is { } handler)
             {
-                _config.ExceptionHandler?.Invoke(ex);
-            }
-            catch (Exception handlerEx)
-            {
-                _logger.LogWarning(handlerEx, "ExceptionHandler threw while handling dispatch error");
+                try
+                {
+                    await handler(ex, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception handlerEx)
+                {
+                    _logger.LogWarning(handlerEx, "ExceptionHandler threw while handling dispatch error");
+                }
             }
             return new ConsumeEventResult { Success = false, Exception = ex };
         }

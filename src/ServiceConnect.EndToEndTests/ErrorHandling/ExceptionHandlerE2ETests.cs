@@ -58,7 +58,7 @@ public class ExceptionHandlerE2ETests(MessagingFixture fixture)
             builder.ConfigureBus(b =>
             {
                 b.ScanForMessageHandlers = false;
-                b.ExceptionHandler = ex => capturedExceptions.Add(ex);
+                b.ExceptionHandler = (ex, _) => { capturedExceptions.Add(ex); return ValueTask.CompletedTask; };
             });
         });
 
