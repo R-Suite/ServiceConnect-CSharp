@@ -18,18 +18,16 @@ namespace ServiceConnect.UnitTests;
 
 file class TestDispatchHandler(
     Action<FakeMessage1>? onHandle = null,
-    Action<IConsumeContext?>? onContextSet = null,
+    Action<IConsumeContext?>? onContextReceived = null,
     Exception? throwOnHandle = null) : IMessageHandler<FakeMessage1>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
     private readonly Action<FakeMessage1>? _onHandle = onHandle;
-    private readonly Action<IConsumeContext?>? _onContextSet = onContextSet;
+    private readonly Action<IConsumeContext?>? _onContextReceived = onContextReceived;
     private readonly Exception? _throwOnHandle = throwOnHandle;
 
-    public Task HandleAsync(FakeMessage1 message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(FakeMessage1 message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        _onContextSet?.Invoke(Context);
+        _onContextReceived?.Invoke(context);
         if (_throwOnHandle != null)
         {
             throw _throwOnHandle;
@@ -306,7 +304,7 @@ public class MessageDispatcherTests
     }
 
     [Fact]
-    public async Task Dispatch_SetsConsumeContextOnHandler()
+    public async Task Dispatch_PassesConsumeContextToHandler()
     {
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "ContextUser" };
@@ -314,11 +312,11 @@ public class MessageDispatcherTests
 
         // Capture properties during handler invocation — IConsumeContext becomes invalid
         // after the handler returns (pool token check). We can't dereference it post-dispatch.
-        bool contextWasSet = false;
+        bool contextWasReceived = false;
         IReadOnlyDictionary<string, object>? capturedHeaders = null;
-        var handler = new TestDispatchHandler(onContextSet: ctx =>
+        var handler = new TestDispatchHandler(onContextReceived: ctx =>
         {
-            contextWasSet = ctx != null;
+            contextWasReceived = ctx != null;
             capturedHeaders = ctx?.Headers == null ? null : new Dictionary<string, object>(ctx.Headers);
         });
 
@@ -336,7 +334,7 @@ public class MessageDispatcherTests
 
         // Assert
         Assert.True(result.Success);
-        Assert.True(contextWasSet);
+        Assert.True(contextWasReceived);
         Assert.NotNull(capturedHeaders);
         Assert.Equal(headers, capturedHeaders);
     }
@@ -1002,8 +1000,7 @@ file class PolyDerivedMessage(Guid correlationId) : PolyBaseMessage(correlationI
 file class PolyBaseHandler : IMessageHandler<PolyBaseMessage>
 {
     public bool Invoked { get; private set; }
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(PolyBaseMessage message, CancellationToken cancellationToken = default) { Invoked = true; return Task.CompletedTask; }
+    public Task HandleAsync(PolyBaseMessage message, IConsumeContext context, CancellationToken cancellationToken = default) { Invoked = true; return Task.CompletedTask; }
 }
 
 file sealed class UnregisteredReplyMessage(Guid correlationId) : Message(correlationId)

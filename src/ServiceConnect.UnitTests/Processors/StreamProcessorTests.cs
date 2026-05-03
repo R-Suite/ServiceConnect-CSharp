@@ -594,8 +594,7 @@ file sealed class ScopeProbeStreamHandler(string label) : IStreamHandler<ScopePr
     private int _count;
 
     public string Label { get; } = label; public int InvocationCount => Volatile.Read(ref _count);
-    public IMessageBusReadStream Stream { get; set; } = null!;
-    public Task ExecuteAsync(ScopeProbeMessage message, CancellationToken cancellationToken = default)
+    public Task ExecuteAsync(ScopeProbeMessage message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _count);
         return Task.CompletedTask;
@@ -608,8 +607,7 @@ file class SptMsg(Guid c) : Message(c) {
 file class SptThrowingHandler : IStreamHandler<SptMsg>
 {
     public const string ErrorMessage = "handler-boom";
-    public IMessageBusReadStream Stream { get; set; } = null!;
-    public Task ExecuteAsync(SptMsg stream, CancellationToken cancellationToken = default)
+    public Task ExecuteAsync(SptMsg message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException(ErrorMessage);
 }
 
@@ -639,8 +637,7 @@ file sealed class SptCountingHandler(SptCounter counter) : IStreamHandler<SptMsg
 {
     private readonly SptCounter _counter = counter;
 
-    public IMessageBusReadStream Stream { get; set; } = null!;
-    public Task ExecuteAsync(SptMsg stream, CancellationToken cancellationToken = default)
+    public Task ExecuteAsync(SptMsg message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
     {
         _counter.Increment();
         return Task.CompletedTask;

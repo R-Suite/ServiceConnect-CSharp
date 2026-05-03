@@ -96,25 +96,15 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
         return new MessageHandlerDescriptor(
             MessageType: messageType,
             HandlerInterfaceType: handlerInterfaceType,
-            SetContext: CompileSetContext(handlerInterfaceType),
             InvokeHandleAsync: CompileInvokeHandleAsync(handlerInterfaceType, messageType));
     }
 
-    private static Action<object, IConsumeContext> CompileSetContext(Type handlerInterface)
-    {
-        var handlerParam = Expression.Parameter(typeof(object), "handler");
-        var ctxParam = Expression.Parameter(typeof(IConsumeContext), "ctx");
-        var cast = Expression.Convert(handlerParam, handlerInterface);
-        var prop = handlerInterface.GetProperty("Context")!;
-        var assign = Expression.Assign(Expression.Property(cast, prop), ctxParam);
-        return Expression.Lambda<Action<object, IConsumeContext>>(assign, handlerParam, ctxParam).Compile();
-    }
-
-    private static Func<object, object, CancellationToken, Task> CompileInvokeHandleAsync(
+    private static Func<object, object, IConsumeContext, CancellationToken, Task> CompileInvokeHandleAsync(
         Type handlerInterface, Type messageType)
     {
         var handlerParam = Expression.Parameter(typeof(object), "handler");
         var messageParam = Expression.Parameter(typeof(object), "message");
+        var ctxParam = Expression.Parameter(typeof(IConsumeContext), "context");
         var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
 
         var handlerCast = Expression.Convert(handlerParam, handlerInterface);
@@ -122,10 +112,10 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
 
         var method = handlerInterface.GetMethod(
             "HandleAsync",
-            [messageType, typeof(CancellationToken)])!;
-        var call = Expression.Call(handlerCast, method, messageCast, ctParam);
+            [messageType, typeof(IConsumeContext), typeof(CancellationToken)])!;
+        var call = Expression.Call(handlerCast, method, messageCast, ctxParam, ctParam);
 
-        return Expression.Lambda<Func<object, object, CancellationToken, Task>>(
-            call, handlerParam, messageParam, ctParam).Compile();
+        return Expression.Lambda<Func<object, object, IConsumeContext, CancellationToken, Task>>(
+            call, handlerParam, messageParam, ctxParam, ctParam).Compile();
     }
 }

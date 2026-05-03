@@ -9,16 +9,14 @@ public sealed record WorkflowQueue(string Name);
 
 public sealed class InventoryReservedHandler(WorkflowQueue workflowQueue) : IMessageHandler<InventoryReserved>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(InventoryReserved message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(InventoryReserved message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("payment-worker", $"captured payment for {message.CorrelationId}");
         await Console.Out.FlushAsync();
 
-        await Context!.Bus.SendAsync(
+        await context.Bus.SendAsync(
             new PaymentCaptured(message.CorrelationId) { OrderNumber = message.OrderNumber },
             new SendOptions { EndPoint = workflowQueue.Name },
-            Context.CancellationToken);
+            context.CancellationToken);
     }
 }

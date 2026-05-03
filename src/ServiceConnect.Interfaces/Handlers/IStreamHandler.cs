@@ -9,11 +9,10 @@ namespace ServiceConnect.Interfaces;
 public interface IStreamHandler<TMessage> where TMessage : Message
 {
     /// <summary>
-    /// The read stream from which to retrieve the assembled payload bytes.
-    /// Populated by the dispatch pipeline before <see cref="ExecuteAsync"/> is called.
+    /// Invoked once the full stream has been received and reassembled. Reads the
+    /// assembled payload bytes from <paramref name="stream"/>.
     /// </summary>
-    IMessageBusReadStream Stream { get; set; }
-
-    /// <summary>Invoked once the full stream has been received and reassembled.</summary>
-    Task ExecuteAsync(TMessage stream, CancellationToken cancellationToken = default);
+    /// <remarks>v8: <c>Stream</c> moved from a property to this parameter (analogous to
+    /// the <c>Context</c> change on <see cref="IMessageHandler{TMessage}"/>).</remarks>
+    Task ExecuteAsync(TMessage message, IMessageBusReadStream stream, CancellationToken cancellationToken = default);
 }

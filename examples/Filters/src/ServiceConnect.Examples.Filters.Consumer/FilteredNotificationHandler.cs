@@ -6,11 +6,9 @@ namespace ServiceConnect.Examples.Filters.Consumer;
 
 public sealed class FilteredNotificationHandler : IMessageHandler<FilteredNotification>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(FilteredNotification message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(FilteredNotification message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        var traceId = Context is not null && Context.Headers.TryGetValue("X-Trace-Id", out var rawTraceId)
+        var traceId = context.Headers.TryGetValue("X-Trace-Id", out var rawTraceId)
             ? HeaderDecoder.Decode(rawTraceId) ?? "missing"
             : "missing";
 

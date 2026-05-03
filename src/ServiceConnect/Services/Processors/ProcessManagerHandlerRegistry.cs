@@ -82,7 +82,6 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
             ProcessHandlerInterfaceType: processHandlerInterfaceType,
             CreateData: CompileCreateData(dataType),
             SetCorrelationId: CompileSetCorrelationId(),
-            SetHandlerContext: CompileSetHandlerContext(processHandlerInterfaceType),
             ConfigureMapper: CompileConfigureMapper(processHandlerInterfaceType),
             FindData: CompileFindData(dataType),
             ExtractData: CompileExtractData(persistenceInterfaceType),
@@ -104,16 +103,6 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
         var prop = typeof(IProcessManagerData).GetProperty(nameof(IProcessManagerData.CorrelationId))!;
         var assign = Expression.Assign(Expression.Property(dataParam, prop), guidParam);
         return Expression.Lambda<Action<IProcessManagerData, Guid>>(assign, dataParam, guidParam).Compile();
-    }
-
-    private static Action<object, IConsumeContext> CompileSetHandlerContext(Type handlerInterface)
-    {
-        var handlerParam = Expression.Parameter(typeof(object), "handler");
-        var ctxParam = Expression.Parameter(typeof(IConsumeContext), "ctx");
-        var cast = Expression.Convert(handlerParam, handlerInterface);
-        var prop = handlerInterface.GetProperty("Context")!;
-        var assign = Expression.Assign(Expression.Property(cast, prop), ctxParam);
-        return Expression.Lambda<Action<object, IConsumeContext>>(assign, handlerParam, ctxParam).Compile();
     }
 
     private static Action<object, IProcessManagerPropertyMapper> CompileConfigureMapper(Type handlerInterface)
@@ -182,12 +171,13 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
             call, finderParam, persistenceParam, ctParam).Compile();
     }
 
-    private static Func<object, Message, object, CancellationToken, Task> CompileInvokeHandleAsync(
+    private static Func<object, Message, object, IConsumeContext, CancellationToken, Task> CompileInvokeHandleAsync(
         Type handlerInterface, Type messageType, Type dataType)
     {
         var handlerParam = Expression.Parameter(typeof(object), "handler");
         var messageParam = Expression.Parameter(typeof(Message), "message");
         var dataParam = Expression.Parameter(typeof(object), "data");
+        var ctxParam = Expression.Parameter(typeof(IConsumeContext), "context");
         var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
 
         var handlerCast = Expression.Convert(handlerParam, handlerInterface);
@@ -196,10 +186,10 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
 
         var method = handlerInterface.GetMethod(
             "HandleAsync",
-            [messageType, dataType, typeof(CancellationToken)])!;
-        var call = Expression.Call(handlerCast, method, messageCast, dataCast, ctParam);
+            [messageType, dataType, typeof(IConsumeContext), typeof(CancellationToken)])!;
+        var call = Expression.Call(handlerCast, method, messageCast, dataCast, ctxParam, ctParam);
 
-        return Expression.Lambda<Func<object, Message, object, CancellationToken, Task>>(
-            call, handlerParam, messageParam, dataParam, ctParam).Compile();
+        return Expression.Lambda<Func<object, Message, object, IConsumeContext, CancellationToken, Task>>(
+            call, handlerParam, messageParam, dataParam, ctxParam, ctParam).Compile();
     }
 }

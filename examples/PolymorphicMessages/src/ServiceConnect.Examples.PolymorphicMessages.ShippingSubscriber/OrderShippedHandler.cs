@@ -6,9 +6,7 @@ namespace ServiceConnect.Examples.PolymorphicMessages.ShippingSubscriber;
 
 public sealed class OrderShippedHandler : IMessageHandler<OrderShipped>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(OrderShipped message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(OrderShipped message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("shipping-subscriber", $"processed order-shipped {message.OrderId}");
         return Task.CompletedTask;

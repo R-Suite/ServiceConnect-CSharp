@@ -8,9 +8,7 @@ public sealed class OrderPlacedHandler(ILogger<OrderPlacedHandler> logger) : IMe
 {
     private static int _attemptsForCrashOrder;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         // Demonstrate scenario 2 (handler-crash → broker redelivery → dedup filter does NOT block).
         // The first time we see "crash-once", throw — the broker redelivers and the second attempt succeeds.

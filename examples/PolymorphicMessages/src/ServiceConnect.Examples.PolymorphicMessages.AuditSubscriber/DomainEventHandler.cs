@@ -11,9 +11,7 @@ namespace ServiceConnect.Examples.PolymorphicMessages.AuditSubscriber;
 // derived type's exchange — subscription setup does not walk the hierarchy.
 public sealed class DomainEventHandler : IMessageHandler<DomainEvent>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(DomainEvent message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(DomainEvent message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         var concreteTypeName = message.GetType().Name;
         var orderId = message switch

@@ -263,16 +263,12 @@ file class SlipTestMsg(Guid correlationId) : Message(correlationId);
 
 file sealed class SlipTestHandler : IMessageHandler<SlipTestMsg>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(SlipTestMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SlipTestMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
 
 file sealed class ThrowingSlipHandler(string errorMessage) : IMessageHandler<SlipTestMsg>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(SlipTestMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(SlipTestMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException(errorMessage);
 }

@@ -14,9 +14,7 @@ public sealed class FulfillmentProcessHandler(WorkflowQueues queues) :
 {
     private readonly WorkflowQueues _queues = queues;
 
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.IsSubmitted)
         {
@@ -29,13 +27,13 @@ public sealed class FulfillmentProcessHandler(WorkflowQueues queues) :
         ConsoleStatus.Success("process-manager-orchestrator", $"started workflow {message.CorrelationId}");
         await Console.Out.FlushAsync();
 
-        await Context!.Bus.SendAsync(
+        await context.Bus.SendAsync(
             new OrderSubmitted(message.CorrelationId) { OrderNumber = message.OrderNumber },
             new SendOptions { EndPoint = _queues.InventoryQueueName },
-            Context.CancellationToken);
+            context.CancellationToken);
     }
 
-    public async Task HandleAsync(InventoryReserved message, FulfillmentState data, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(InventoryReserved message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.InventoryReserved)
         {
@@ -47,13 +45,13 @@ public sealed class FulfillmentProcessHandler(WorkflowQueues queues) :
         ConsoleStatus.Success("process-manager-orchestrator", $"inventory reserved for {message.CorrelationId}");
         await Console.Out.FlushAsync();
 
-        await Context!.Bus.SendAsync(
+        await context.Bus.SendAsync(
             new InventoryReserved(message.CorrelationId) { OrderNumber = message.OrderNumber },
             new SendOptions { EndPoint = _queues.PaymentQueueName },
-            Context.CancellationToken);
+            context.CancellationToken);
     }
 
-    public Task HandleAsync(PaymentCaptured message, FulfillmentState data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(PaymentCaptured message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.PaymentCaptured)
         {

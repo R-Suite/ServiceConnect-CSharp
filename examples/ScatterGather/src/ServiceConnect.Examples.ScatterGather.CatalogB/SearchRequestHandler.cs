@@ -6,11 +6,9 @@ namespace ServiceConnect.Examples.ScatterGather.CatalogB;
 
 public sealed class SearchRequestHandler : IMessageHandler<SearchRequest>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(SearchRequest message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(SearchRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        await Context!.ReplyAsync(new SearchResponse(message.CorrelationId)
+        await context.ReplyAsync(new SearchResponse(message.CorrelationId)
         {
             CatalogName = "CatalogB",
             ResultId = "catalog-b-result-777"

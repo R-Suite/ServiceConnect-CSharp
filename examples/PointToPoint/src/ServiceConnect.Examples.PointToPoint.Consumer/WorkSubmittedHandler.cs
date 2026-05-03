@@ -6,9 +6,7 @@ namespace ServiceConnect.Examples.PointToPoint.Consumer;
 
 public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(WorkSubmitted message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(WorkSubmitted message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("point-to-point-consumer", $"processed {message.WorkId}");
         return Task.CompletedTask;

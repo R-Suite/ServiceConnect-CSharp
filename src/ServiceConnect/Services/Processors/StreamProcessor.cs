@@ -257,12 +257,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                 return HandledTask;
             }
 
-            descriptor.SetStream(handler, state.Stream);
-
             var assembledSequence = state.Stream.ReadSequence();
             var originalMessage = _serializer.Deserialize(in assembledSequence, resolvedType);
 
-            return InvokeHandlerAsync(descriptor, handler, originalMessage!, sequenceId, cancellationToken);
+            return InvokeHandlerAsync(descriptor, handler, originalMessage!, state.Stream, sequenceId, cancellationToken);
         }
 
         return HandledTask;
@@ -288,13 +286,14 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         StreamHandlerDescriptor descriptor,
         object handler,
         object originalMessage,
+        IMessageBusReadStream stream,
         string sequenceId,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            await descriptor.InvokeExecuteAsync(handler, originalMessage, cancellationToken).ConfigureAwait(false);
+            await descriptor.InvokeExecuteAsync(handler, originalMessage, stream, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

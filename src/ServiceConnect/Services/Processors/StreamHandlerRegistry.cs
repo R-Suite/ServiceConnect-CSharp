@@ -76,32 +76,26 @@ internal sealed class StreamHandlerRegistry : IHandlerRegistry
         return new StreamHandlerDescriptor(
             MessageType: messageType,
             HandlerInterfaceType: handlerInterfaceType,
-            SetStream: CompileSetStream(handlerInterfaceType),
             InvokeExecuteAsync: CompileInvokeExecuteAsync(handlerInterfaceType, messageType));
     }
 
-    private static Action<object, IMessageBusReadStream> CompileSetStream(Type handlerInterface)
-    {
-        var handlerParam = Expression.Parameter(typeof(object), "handler");
-        var streamParam = Expression.Parameter(typeof(IMessageBusReadStream), "stream");
-        var cast = Expression.Convert(handlerParam, handlerInterface);
-        var prop = handlerInterface.GetProperty("Stream")!;
-        var assign = Expression.Assign(Expression.Property(cast, prop), streamParam);
-        return Expression.Lambda<Action<object, IMessageBusReadStream>>(assign, handlerParam, streamParam).Compile();
-    }
-
-    private static Func<object, object, CancellationToken, Task> CompileInvokeExecuteAsync(Type handlerInterface, Type messageType)
+    private static Func<object, object, IMessageBusReadStream, CancellationToken, Task> CompileInvokeExecuteAsync(
+        Type handlerInterface, Type messageType)
     {
         var handlerParam = Expression.Parameter(typeof(object), "handler");
         var messageParam = Expression.Parameter(typeof(object), "message");
+        var streamParam = Expression.Parameter(typeof(IMessageBusReadStream), "stream");
         var ctParam = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
 
         var handlerCast = Expression.Convert(handlerParam, handlerInterface);
         var messageCast = Expression.Convert(messageParam, messageType);
 
-        var method = handlerInterface.GetMethod("ExecuteAsync")!;
-        var call = Expression.Call(handlerCast, method, messageCast, ctParam);
+        var method = handlerInterface.GetMethod(
+            "ExecuteAsync",
+            [messageType, typeof(IMessageBusReadStream), typeof(CancellationToken)])!;
+        var call = Expression.Call(handlerCast, method, messageCast, streamParam, ctParam);
 
-        return Expression.Lambda<Func<object, object, CancellationToken, Task>>(call, handlerParam, messageParam, ctParam).Compile();
+        return Expression.Lambda<Func<object, object, IMessageBusReadStream, CancellationToken, Task>>(
+            call, handlerParam, messageParam, streamParam, ctParam).Compile();
     }
 }

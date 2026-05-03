@@ -11,16 +11,16 @@ namespace ServiceConnect.Interfaces;
 public interface IMessageHandler<in TMessage> where TMessage : Message
 {
     /// <summary>
-    /// The per-message consume context (bus handle, correlation id, reply helper).
-    /// Populated by the dispatch pipeline before <see cref="HandleAsync"/> is called,
-    /// so implementations may treat it as non-null. Initialise with
-    /// <c>= null!;</c> to satisfy the nullable-reference-type analyser.
-    /// </summary>
-    IConsumeContext Context { get; set; }
-
-    /// <summary>
-    /// Invoked with the deserialized message. The <paramref name="cancellationToken"/>
+    /// Invoked with the deserialized message and the per-message consume context
+    /// (bus handle, correlation id, reply helper). The <paramref name="cancellationToken"/>
     /// is sourced from the transport consume context and signals cooperative shutdown.
     /// </summary>
-    Task HandleAsync(TMessage message, CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// v8: <c>Context</c> moved from a property to this parameter. Pre-v8 the framework
+    /// assigned <c>handler.Context</c> before calling <c>HandleAsync(message, ct)</c>; that
+    /// shape was unsafe for singleton-registered handlers (concurrent dispatches both
+    /// wrote the property). Migration: append <c>IConsumeContext context</c> to the method
+    /// signature and replace <c>this.Context</c> reads with <c>context</c>.
+    /// </remarks>
+    Task HandleAsync(TMessage message, IConsumeContext context, CancellationToken cancellationToken = default);
 }

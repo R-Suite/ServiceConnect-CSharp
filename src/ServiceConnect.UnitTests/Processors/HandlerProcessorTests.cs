@@ -86,7 +86,7 @@ public class HandlerProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_SetsConsumeContext()
+    public async Task ProcessAsync_PassesConsumeContextToHandler()
     {
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
@@ -102,7 +102,7 @@ public class HandlerProcessorTests
 
         await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
 
-        Assert.True(handler.ContextWasSet);
+        Assert.True(handler.ContextWasReceived);
         Assert.Same(mockBus.Object, handler.ObservedBus);
         // Dictionary<string,object> implements IReadOnlyDictionary, so compare contents not reference.
         Assert.Equal(headers, handler.ObservedHeaders);
@@ -419,9 +419,8 @@ file class TestHpMsg(Guid correlationId) : Message(correlationId)
 file sealed class ThrowingHpHandler(string errorMessage) : IMessageHandler<TestHpMsg>
 {
     public bool Invoked { get; private set; }
-    public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Invoked = true;
         throw new InvalidOperationException(errorMessage);
@@ -432,9 +431,8 @@ file sealed class ThrowingHpHandler(string errorMessage) : IMessageHandler<TestH
 file sealed class RecordingHpHandler : IMessageHandler<TestHpMsg>
 {
     public bool Invoked { get; private set; }
-    public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Invoked = true;
         return Task.CompletedTask;
@@ -445,9 +443,8 @@ file sealed class RecordingHpHandler : IMessageHandler<TestHpMsg>
 file sealed class CancellingHpHandler(CancellationToken token) : IMessageHandler<TestHpMsg>
 {
     public bool Invoked { get; private set; }
-    public IConsumeContext Context { get; set; } = null!;
 
-    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Invoked = true;
         token.ThrowIfCancellationRequested();
@@ -458,21 +455,20 @@ file sealed class CancellingHpHandler(CancellationToken token) : IMessageHandler
 file class TestHpHandler : IMessageHandler<TestHpMsg>
 {
     public bool Invoked { get; private set; }
-    public IConsumeContext Context { get; set; } = null!;
-    // Capture context state during handler execution — Context is released afterwards
-    // and raw property access would throw the escape-guard InvalidOperationException.
+    // Capture context state during handler execution — the context parameter is only
+    // valid for the duration of HandleAsync; capturing the reference itself is sufficient here.
     public IBus? ObservedBus { get; private set; }
     public IReadOnlyDictionary<string, object>? ObservedHeaders { get; private set; }
-    public bool ContextWasSet { get; private set; }
+    public bool ContextWasReceived { get; private set; }
 
-    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Invoked = true;
-        if (Context != null)
+        if (context != null)
         {
-            ContextWasSet = true;
-            ObservedBus = Context.Bus;
-            ObservedHeaders = new Dictionary<string, object>(Context.Headers);
+            ContextWasReceived = true;
+            ObservedBus = context.Bus;
+            ObservedHeaders = new Dictionary<string, object>(context.Headers);
         }
         return Task.CompletedTask;
     }
@@ -480,9 +476,7 @@ file class TestHpHandler : IMessageHandler<TestHpMsg>
 
 file sealed class TimeoutRequestingHandler(IBus bus) : IMessageHandler<TestHpMsg>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(TestHpMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
         => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));
 }
 
@@ -551,9 +545,7 @@ file static class TestBusFactory
 file sealed class CtRecordingHandler(TaskCompletionSource<CancellationToken> tcs)
     : IMessageHandler<CtMsg>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(CtMsg message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(CtMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         tcs.TrySetResult(cancellationToken);
         return Task.CompletedTask;

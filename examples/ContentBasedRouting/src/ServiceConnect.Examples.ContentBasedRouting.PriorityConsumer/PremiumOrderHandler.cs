@@ -6,9 +6,7 @@ namespace ServiceConnect.Examples.ContentBasedRouting.PriorityConsumer;
 
 public sealed class PremiumOrderHandler : IMessageHandler<PremiumOrderPlaced>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(PremiumOrderPlaced message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(PremiumOrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("priority-consumer", $"processed {message.OrderId}");
         await Console.Out.FlushAsync();

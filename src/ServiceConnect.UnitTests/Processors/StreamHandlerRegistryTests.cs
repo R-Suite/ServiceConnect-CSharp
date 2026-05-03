@@ -75,31 +75,19 @@ public class StreamHandlerRegistryTests
     }
 
     [Fact]
-    public void Descriptor_SetStream_WritesStreamProperty()
-    {
-        var registry = BuildRegistry();
-        Assert.True(registry.TryGet(typeof(ShrFoo), out var descriptor));
-
-        var handler = new ShrFooStreamHandler();
-        var stream = new MessageBusReadStream("seq");
-
-        descriptor!.SetStream(handler, stream);
-
-        Assert.Same(stream, handler.Stream);
-    }
-
-    [Fact]
-    public async Task Descriptor_InvokeExecuteAsync_CallsExecuteAsyncOnHandler()
+    public async Task Descriptor_InvokeExecuteAsync_PassesMessageAndStream()
     {
         var registry = BuildRegistry();
         Assert.True(registry.TryGet(typeof(ShrFoo), out var descriptor));
 
         var handler = new ShrFooStreamHandler();
         var msg = new ShrFoo(Guid.NewGuid());
+        var stream = new MessageBusReadStream("seq");
 
-        await descriptor!.InvokeExecuteAsync(handler, msg, CancellationToken.None);
+        await descriptor!.InvokeExecuteAsync(handler, msg, stream, CancellationToken.None);
 
         Assert.Same(msg, handler.Executed);
+        Assert.Same(stream, handler.ReceivedStream);
     }
 
     private static StreamHandlerRegistry BuildRegistry()
@@ -117,23 +105,22 @@ file class ShrFoo(Guid c) : Message(c) {
 
 file class ShrFooStreamHandler : IStreamHandler<ShrFoo>
 {
-    public IMessageBusReadStream Stream { get; set; } = null!;
     public ShrFoo? Executed { get; private set; }
-    public Task ExecuteAsync(ShrFoo stream, CancellationToken cancellationToken = default)
+    public IMessageBusReadStream? ReceivedStream { get; private set; }
+    public Task ExecuteAsync(ShrFoo message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
     {
-        Executed = stream;
+        Executed = message;
+        ReceivedStream = stream;
         return Task.CompletedTask;
     }
 }
 
 file class ShrSecondFooStreamHandler : IStreamHandler<ShrFoo>
 {
-    public IMessageBusReadStream Stream { get; set; } = null!;
-    public Task ExecuteAsync(ShrFoo stream, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ExecuteAsync(ShrFoo message, IMessageBusReadStream stream, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class ShrFooMessageHandler : IMessageHandler<ShrFoo>
 {
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(ShrFoo message, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task HandleAsync(ShrFoo message, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

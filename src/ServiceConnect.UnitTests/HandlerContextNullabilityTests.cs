@@ -6,30 +6,45 @@ namespace ServiceConnect.UnitTests;
 
 public class HandlerContextNullabilityTests
 {
-    // Context is a public part of the handler contract and the dispatch pipeline
-    // always assigns it before HandleAsync runs. These tests pin the non-nullable
-    // annotation via the runtime NullabilityInfoContext so handlers can rely on
-    // Context without defensive `!` or null checks, and any change that flips
-    // the annotation back to nullable will fail here.
+    // v8: Context moved from property to parameter on HandleAsync / ExecuteAsync.
+    // These tests pin that the interfaces no longer expose a Context property (which
+    // would silently reintroduce the thread-safety issue on singleton handlers).
 
     [Fact]
-    public void IMessageHandler_Context_IsNonNullable()
+    public void IMessageHandler_DoesNotExposeContextProperty()
     {
-        PropertyInfo property = typeof(IMessageHandler<>).GetProperty(nameof(IMessageHandler<Message>.Context))!;
-        NullabilityInfo info = new NullabilityInfoContext().Create(property);
-
-        Assert.Equal(NullabilityState.NotNull, info.ReadState);
-        Assert.Equal(NullabilityState.NotNull, info.WriteState);
+        var props = typeof(IMessageHandler<>).GetProperties();
+        Assert.DoesNotContain(props, p => p.Name == "Context");
     }
 
     [Fact]
-    public void IProcessHandler_Context_IsNonNullable()
+    public void IProcessHandler_DoesNotExposeContextProperty()
     {
-        PropertyInfo property = typeof(IProcessHandler<,>).GetProperty(nameof(IProcessHandler<DummyData, Message>.Context))!;
-        NullabilityInfo info = new NullabilityInfoContext().Create(property);
+        var props = typeof(IProcessHandler<,>).GetProperties();
+        Assert.DoesNotContain(props, p => p.Name == "Context");
+    }
 
-        Assert.Equal(NullabilityState.NotNull, info.ReadState);
-        Assert.Equal(NullabilityState.NotNull, info.WriteState);
+    [Fact]
+    public void IStreamHandler_DoesNotExposeStreamProperty()
+    {
+        var props = typeof(IStreamHandler<>).GetProperties();
+        Assert.DoesNotContain(props, p => p.Name == "Stream");
+    }
+
+    [Fact]
+    public void IMessageHandler_HandleAsync_HasIConsumeContextParameter()
+    {
+        var method = typeof(IMessageHandler<Message>).GetMethod("HandleAsync")!;
+        var paramTypes = method.GetParameters().Select(p => p.ParameterType).ToArray();
+        Assert.Contains(typeof(IConsumeContext), paramTypes);
+    }
+
+    [Fact]
+    public void IStreamHandler_ExecuteAsync_HasIMessageBusReadStreamParameter()
+    {
+        var method = typeof(IStreamHandler<Message>).GetMethod("ExecuteAsync")!;
+        var paramTypes = method.GetParameters().Select(p => p.ParameterType).ToArray();
+        Assert.Contains(typeof(IMessageBusReadStream), paramTypes);
     }
 
     private sealed class DummyData : IProcessManagerData

@@ -83,30 +83,19 @@ public class MessageHandlerRegistryTests
     }
 
     [Fact]
-    public void Descriptor_SetContext_WritesContextProperty()
-    {
-        var registry = BuildRegistry();
-        Assert.True(registry.TryGetOrBuild(typeof(MhrFooMsg), out var descriptor));
-
-        var handler = new MhrFooHandler();
-        var ctx = new MhrFakeConsumeContext();
-        descriptor!.SetContext(handler, ctx);
-
-        Assert.Same(ctx, handler.Context);
-    }
-
-    [Fact]
-    public async Task Descriptor_InvokeHandleAsync_CallsHandleAsyncOnHandler()
+    public async Task Descriptor_InvokeHandleAsync_PassesMessageAndContext()
     {
         var registry = BuildRegistry();
         Assert.True(registry.TryGetOrBuild(typeof(MhrFooMsg), out var descriptor));
 
         var handler = new MhrFooHandler();
         var msg = new MhrFooMsg(Guid.NewGuid());
+        var ctx = new MhrFakeConsumeContext();
 
-        await descriptor!.InvokeHandleAsync(handler, msg, CancellationToken.None);
+        await descriptor!.InvokeHandleAsync(handler, msg, ctx, CancellationToken.None);
 
         Assert.Same(msg, handler.Received);
+        Assert.Same(ctx, handler.ReceivedContext);
     }
 
     [Fact]
@@ -137,27 +126,29 @@ file class MhrBarData : IProcessManagerData { public Guid CorrelationId { get; s
 
 file class MhrFooHandler : IMessageHandler<MhrFooMsg>
 {
-    public IConsumeContext Context { get; set; } = null!;
     public MhrFooMsg? Received { get; private set; }
-    public Task HandleAsync(MhrFooMsg message, CancellationToken cancellationToken = default) { Received = message; return Task.CompletedTask; }
+    public IConsumeContext? ReceivedContext { get; private set; }
+    public Task HandleAsync(MhrFooMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Received = message;
+        ReceivedContext = context;
+        return Task.CompletedTask;
+    }
 }
 
 file class MhrSecondFooHandler : IMessageHandler<MhrFooMsg>
 {
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(MhrFooMsg message, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task HandleAsync(MhrFooMsg message, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class MhrProcessHandler : IProcessHandler<MhrBarData, MhrFooMsg>
 {
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(MhrFooMsg message, MhrBarData data, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task HandleAsync(MhrFooMsg message, MhrBarData data, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class MhrStreamHandler : IStreamHandler<MhrFooMsg>
 {
-    public IMessageBusReadStream Stream { get; set; } = null!;
-    public Task ExecuteAsync(MhrFooMsg stream, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task ExecuteAsync(MhrFooMsg message, IMessageBusReadStream stream, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class MhrFakeConsumeContext : IConsumeContext

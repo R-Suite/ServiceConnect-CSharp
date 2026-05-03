@@ -90,19 +90,6 @@ public class ProcessManagerHandlerRegistryTests
     }
 
     [Fact]
-    public void Descriptor_SetHandlerContext_WritesHandlerContext()
-    {
-        var registry = BuildFooRegistry();
-        Assert.True(registry.TryGet(typeof(FooMessage), out var descriptor));
-
-        var handler = new FooHandler();
-        var ctx = new FakeConsumeContext();
-        descriptor!.SetHandlerContext(handler, ctx);
-
-        Assert.Same(ctx, handler.Context);
-    }
-
-    [Fact]
     public void Descriptor_ConfigureMapper_InvokesHandlerConfigureMapper()
     {
         var registry = BuildFooRegistry();
@@ -117,7 +104,7 @@ public class ProcessManagerHandlerRegistryTests
     }
 
     [Fact]
-    public async Task Descriptor_InvokeHandleAsync_PassesMessageAndData()
+    public async Task Descriptor_InvokeHandleAsync_PassesMessageDataAndContext()
     {
         var registry = BuildFooRegistry();
         Assert.True(registry.TryGet(typeof(FooMessage), out var descriptor));
@@ -125,11 +112,13 @@ public class ProcessManagerHandlerRegistryTests
         var handler = new FooHandler();
         var msg = new FooMessage(Guid.NewGuid());
         var data = new FooData { CorrelationId = Guid.NewGuid() };
+        var ctx = new FakeConsumeContext();
 
-        await descriptor!.InvokeHandleAsync(handler, msg, data, CancellationToken.None);
+        await descriptor!.InvokeHandleAsync(handler, msg, data, ctx, CancellationToken.None);
 
         Assert.Same(msg, handler.ReceivedMessage);
         Assert.Same(data, handler.ReceivedData);
+        Assert.Same(ctx, handler.ReceivedContext);
     }
 
     [Fact]
@@ -235,28 +224,27 @@ file class FooPersistenceData : IPersistenceData<FooData>
 
 file class FooHandler : IProcessHandler<FooData, FooMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
     public FooMessage? ReceivedMessage { get; private set; }
     public FooData? ReceivedData { get; private set; }
+    public IConsumeContext? ReceivedContext { get; private set; }
 
-    public Task HandleAsync(FooMessage message, FooData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(FooMessage message, FooData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         ReceivedMessage = message;
         ReceivedData = data;
+        ReceivedContext = context;
         return Task.CompletedTask;
     }
 }
 
 file class SecondFooHandler : IProcessHandler<FooData, FooMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(FooMessage message, FooData data, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task HandleAsync(FooMessage message, FooData data, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class PlainFooHandler : IMessageHandler<FooMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(FooMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task HandleAsync(FooMessage message, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class FakeConsumeContext : IConsumeContext

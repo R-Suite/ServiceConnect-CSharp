@@ -505,11 +505,10 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
 {
     public bool Invoked { get; private set; }
     public int InvokeCount { get; private set; }
-    public IConsumeContext Context { get; set; } = null!;
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
-    public Task HandleAsync(PmTestMessage message, PmTestData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(PmTestMessage message, PmTestData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.Counter++;
         Invoked = true;
@@ -520,11 +519,9 @@ file class PmTestHandler : IProcessHandler<PmTestData, PmTestMessage>
 
 file class PmThrowingHandler : IProcessHandler<PmTestData, PmTestMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
-    public Task HandleAsync(PmTestMessage message, PmTestData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(PmTestMessage message, PmTestData data, IConsumeContext context, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("handler failure");
 }
 
@@ -540,12 +537,10 @@ file class PmMutableData : IProcessManagerData
 
 file class PmMutatingThrowingHandler : IProcessHandler<PmMutableData, PmMutableMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
         => mapper.ConfigureMapping<PmMutableData, PmMutableMessage>(d => d.CorrelationId, m => m.CorrelationId);
 
-    public Task HandleAsync(PmMutableMessage message, PmMutableData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(PmMutableMessage message, PmMutableData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         data.Counter++;
         throw new InvalidOperationException("handler failure");
@@ -554,11 +549,9 @@ file class PmMutatingThrowingHandler : IProcessHandler<PmMutableData, PmMutableM
 
 file sealed class PmTimeoutRequestingHandler(IBus bus) : IProcessHandler<PmTestData, PmTestMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper) { }
 
-    public Task HandleAsync(PmTestMessage message, PmTestData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(PmTestMessage message, PmTestData data, IConsumeContext context, CancellationToken cancellationToken = default)
         => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));
 }
 
@@ -640,15 +633,13 @@ file class DummyPmHandler : IProcessHandler<DummyPmData, DummyPmMessage>
 
     public static void ResetCounter() => Interlocked.Exchange(ref _configureCount, 0);
 
-    public IConsumeContext Context { get; set; } = null!;
-
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
     {
         Interlocked.Increment(ref _configureCount);
         mapper.ConfigureMapping<DummyPmData, DummyPmMessage>(d => d.CorrelationId, m => m.CorrelationId);
     }
 
-    public Task HandleAsync(DummyPmMessage message, DummyPmData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(DummyPmMessage message, DummyPmData data, IConsumeContext context, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
 
@@ -664,7 +655,6 @@ file sealed class ScopeProbePmHandler(Action? onConfigureMapper = null)
 {
     private int _invocations;
     public int Invocations => Volatile.Read(ref _invocations);
-    public IConsumeContext Context { get; set; } = null!;
 
     public void ConfigureMapper(IProcessManagerPropertyMapper mapper)
     {
@@ -672,7 +662,7 @@ file sealed class ScopeProbePmHandler(Action? onConfigureMapper = null)
         mapper.ConfigureMapping<ScopeProbePmData, ScopeProbePmMessage>(d => d.CorrelationId, m => m.CorrelationId);
     }
 
-    public Task HandleAsync(ScopeProbePmMessage message, ScopeProbePmData data, CancellationToken cancellationToken = default)
+    public Task HandleAsync(ScopeProbePmMessage message, ScopeProbePmData data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _invocations);
         return Task.CompletedTask;

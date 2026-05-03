@@ -6,9 +6,7 @@ namespace ServiceConnect.Examples.CompetingConsumers.WorkerA;
 
 public sealed class JobQueuedHandler : IMessageHandler<JobQueued>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public async Task HandleAsync(JobQueued message, CancellationToken cancellationToken = default)
+    public async Task HandleAsync(JobQueued message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         ConsoleStatus.Success("worker-a", $"processed {message.JobId}");
         await Console.Out.FlushAsync();

@@ -6,11 +6,9 @@ namespace ServiceConnect.Examples.Streaming.Receiver;
 
 public sealed class DocumentUploadedHandler : IStreamHandler<DocumentUploaded>
 {
-    public IMessageBusReadStream Stream { get; set; } = null!;
-
-    public Task ExecuteAsync(DocumentUploaded message, CancellationToken cancellationToken = default)
+    public Task ExecuteAsync(DocumentUploaded message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
     {
-        var bytes = Stream.Read();
+        var bytes = stream.Read();
         ConsoleStatus.Success("streaming-receiver", $"received {message.FileName} with {bytes.Length} bytes");
         return Task.CompletedTask;
     }

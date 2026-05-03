@@ -18,14 +18,12 @@ public class TestScannerMessage(Guid correlationId) : Message(correlationId)
 
 public class TestScannerHandler : IMessageHandler<TestScannerMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(TestScannerMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task HandleAsync(TestScannerMessage message, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 public abstract class AbstractTestHandler : IMessageHandler<TestScannerMessage>
 {
-    public IConsumeContext Context { get; set; } = null!;
-    public abstract Task HandleAsync(TestScannerMessage message, CancellationToken cancellationToken = default);
+    public abstract Task HandleAsync(TestScannerMessage message, IConsumeContext context, CancellationToken cancellationToken = default);
 }
 
 public class HandlerScannerTests

@@ -14,20 +14,13 @@ public interface IProcessHandler<TData, TMessage>
     where TMessage : Message
 {
     /// <summary>
-    /// The per-message consume context (bus handle, correlation id, reply helper).
-    /// Populated by the dispatch pipeline before <see cref="HandleAsync"/> is called,
-    /// so implementations may treat it as non-null. Initialise with
-    /// <c>= null!;</c> to satisfy the nullable-reference-type analyser.
+    /// Invoked with the deserialized message, the correlated persisted state, and the
+    /// per-message consume context. Mutations to <paramref name="data"/> are persisted
+    /// when the method returns. The <paramref name="cancellationToken"/> is sourced
+    /// from the transport consume context and signals cooperative shutdown.
     /// </summary>
-    IConsumeContext Context { get; set; }
-
-    /// <summary>
-    /// Invoked with the deserialized message and the correlated persisted state.
-    /// Mutations to <paramref name="data"/> are persisted when the method returns.
-    /// The <paramref name="cancellationToken"/> is sourced from the transport consume
-    /// context and signals cooperative shutdown.
-    /// </summary>
-    Task HandleAsync(TMessage message, TData data, CancellationToken cancellationToken = default);
+    /// <remarks>v8: same migration as <see cref="IMessageHandler{TMessage}.HandleAsync"/>.</remarks>
+    Task HandleAsync(TMessage message, TData data, IConsumeContext context, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Configures the correlation mapping between <typeparamref name="TMessage"/> and
