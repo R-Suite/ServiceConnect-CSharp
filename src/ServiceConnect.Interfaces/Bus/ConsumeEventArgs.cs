@@ -18,5 +18,5 @@ public sealed class ConsumeEventArgs
     /// <summary>
     /// Gets the transport headers associated with the consumed message.
     /// </summary>
-    public IDictionary<string, object> Headers { get; init; } = new Dictionary<string, object>(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, object> Headers { get; init; } = new Dictionary<string, object>(StringComparer.Ordinal);
 }

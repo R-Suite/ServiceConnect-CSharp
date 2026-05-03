@@ -35,7 +35,10 @@ internal sealed class TelemetryProcessingMiddleware(
             {
                 Message = envelope.Body.ToArray(),
                 Type = messageType.FullName ?? string.Empty,
-                Headers = headers,
+                // IMessageProcessingMiddleware passes headers as IDictionary; cast to
+                // IReadOnlyDictionary since ConsumeEventArgs enforces read-only at the
+                // consumer boundary. The underlying object is always a Dictionary<string,object>.
+                Headers = (IReadOnlyDictionary<string, object>)headers,
             };
             activity = ServiceConnectActivitySource.Consume(args, _options, _attributes);
         }

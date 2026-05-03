@@ -57,7 +57,7 @@ internal static class TimeoutHeaderPersistence
         return persistedHeaders;
     }
 
-    public static Dictionary<string, string> BuildOutgoingHeaders(IDictionary<string, object> storedHeaders, ILogger? logger = null)
+    public static Dictionary<string, string> BuildOutgoingHeaders(IReadOnlyDictionary<string, object> storedHeaders, ILogger? logger = null)
     {
         var outgoingHeaders = new Dictionary<string, string>(StringComparer.Ordinal);
 
