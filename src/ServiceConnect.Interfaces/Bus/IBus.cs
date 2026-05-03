@@ -90,5 +90,5 @@ public interface IBus : IAsyncDisposable
     /// Manager correlation.
     /// </summary>
     Task RequestTimeoutAsync(Guid correlationId, TimeSpan delay, CancellationToken cancellationToken = default)
-        => throw new NotSupportedException("This IBus implementation does not support scheduling timeouts.");
+        => Task.FromException(new NotSupportedException("This IBus implementation does not support scheduling timeouts."));
 }
