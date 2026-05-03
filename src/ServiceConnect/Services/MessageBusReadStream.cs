@@ -73,6 +73,7 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
     /// <inheritdoc />
     public void Write(byte[] data, long packetNumber)
     {
+        ArgumentNullException.ThrowIfNull(data);
         if (packetNumber < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
@@ -122,10 +123,20 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
             throw new InvalidOperationException("Stream is not yet complete.");
         }
 
+        // Capture LastPacketNumber into a local — defense-in-depth against any future
+        // regression that introduces a false-positive IsComplete() return. If the
+        // captured snapshot is invalid (e.g. became unset), surface immediately rather
+        // than producing a silently truncated read.
+        var lastSnapshot = LastPacketNumber;
+        if (lastSnapshot < 0)
+        {
+            throw new InvalidOperationException("Stream LastPacketNumber became unset between IsComplete and Read.");
+        }
+
         // Pre-size MemoryStream to avoid internal buffer doubling.
         var totalBytes = Interlocked.Read(ref _totalBytesWritten);
         using var ms = new MemoryStream(totalBytes > 0 ? (int)totalBytes : 0);
-        for (long i = 0; i <= LastPacketNumber; i++)
+        for (long i = 0; i <= lastSnapshot; i++)
         {
             if (_packets.TryGetValue(i, out var packet))
             {
@@ -143,10 +154,17 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
             throw new InvalidOperationException("Stream is not yet complete.");
         }
 
-        // Walk packets 0..LastPacketNumber in order, linking them into a ReadOnlySequenceSegment chain.
+        // Capture LastPacketNumber into a local — same defense-in-depth as Read.
+        var lastSnapshot = LastPacketNumber;
+        if (lastSnapshot < 0)
+        {
+            throw new InvalidOperationException("Stream LastPacketNumber became unset between IsComplete and ReadSequence.");
+        }
+
+        // Walk packets 0..lastSnapshot in order, linking them into a ReadOnlySequenceSegment chain.
         PacketSegment? first = null;
         PacketSegment? last = null;
-        for (long i = 0; i <= LastPacketNumber; i++)
+        for (long i = 0; i <= lastSnapshot; i++)
         {
             if (!_packets.TryGetValue(i, out var packet))
             {
