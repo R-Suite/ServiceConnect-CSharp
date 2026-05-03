@@ -295,6 +295,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
             var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
             var count = await _collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken).ConfigureAwait(false);
+            // Clamp at int.MaxValue to match IAggregatorPersistor's int return contract. Aggregators
+            // are keyed by (Name, CorrelationId) and rarely exceed a few hundred rows in normal usage;
+            // the clamp guards against pathological cases without changing the contract.
             return count > int.MaxValue ? int.MaxValue : (int)count;
         }
         catch (BsonException ex)

@@ -77,7 +77,7 @@ public static class MongoClientFactory
             // Fall back to the server-supplied certificate when the driver passes a null or
             // empty collection (edge case in some driver versions) to avoid NRE / IndexOutOfRange.
             ssl.ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) =>
-                certificates is { Count: > 0 } ? certificates[0] : certificate;
+                (certificates is { Count: > 0 } ? certificates[0] : certificate)!;
         }
 
         settings.SslSettings = ssl;

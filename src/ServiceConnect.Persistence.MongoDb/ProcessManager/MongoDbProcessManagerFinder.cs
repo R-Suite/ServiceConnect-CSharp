@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
@@ -12,7 +13,7 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// Supports both standard and SSL connections via MongoDbPersistenceOptions.
 /// Uses locking mechanism for timeout batch retrieval to prevent duplicate dispatch.
 /// </summary>
-public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
+public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
 {
     private readonly IMongoDatabase _mongoDatabase;
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
@@ -242,7 +243,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             //       return finder.EnsureCorrelationIdIndexAsync<T>(collection, collectionName, ct);
             //   }
             // Collection name is computed at delegate-build time (deterministic per
-            // type T) using the same FullName-or-Name convention as GetCollectionName<T>().
+            // type T) using the same SanitizeCollectionName(FullName ?? Name) logic as GetCollectionName<T>().
             var dataMongoType = typeof(MongoDbData<>).MakeGenericType(t);
 
             var collectionMethod = typeof(IMongoDatabase)
@@ -259,7 +260,7 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
             var finderParam = Expression.Parameter(typeof(MongoDbProcessManagerFinder), "finder");
             var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
 
-            var collectionName = t.FullName ?? t.Name;
+            var collectionName = SanitizeCollectionName(t.FullName ?? t.Name);
 
             var dbField = Expression.Field(finderParam, nameof(_mongoDatabase));
             var getCollectionCall = Expression.Call(
@@ -418,15 +419,29 @@ public sealed class MongoDbProcessManagerFinder : IProcessManagerFinder
         }
     }
 
+    // Mongo collection names containing +`[], from generic type names break tooling
+    // (mongosh autocomplete, mongo-express, etc.). Replace those characters with '_'
+    // so the collection name is portable. Existing v7 deployments with non-generic
+    // saga types are unaffected; v8 deployments with generic saga types must rename
+    // their existing collection (see release notes).
+    // MA0009: regex is a pure character class — O(n), no backtracking, no ReDoS risk.
+#pragma warning disable MA0009
+    [GeneratedRegex(@"[+`\[\],]", RegexOptions.None)]
+    private static partial Regex CollectionNameSanitizerRegex();
+#pragma warning restore MA0009
+
+    internal static string SanitizeCollectionName(string raw)
+        => CollectionNameSanitizerRegex().Replace(raw, "_");
+
     // FullName avoids short-name collisions between two saga data types that share a
     // class name across different namespaces. Name is a last-resort fallback for the
     // rare types where FullName is null (e.g., open generics in reflection contexts).
     private static string GetCollectionName<T>() where T : class, IProcessManagerData
-        => typeof(T).FullName ?? typeof(T).Name;
+        => SanitizeCollectionName(typeof(T).FullName ?? typeof(T).Name);
 
     private static string GetCollectionName(IProcessManagerData data)
     {
         var t = data.GetType();
-        return t.FullName ?? t.Name;
+        return SanitizeCollectionName(t.FullName ?? t.Name);
     }
 }

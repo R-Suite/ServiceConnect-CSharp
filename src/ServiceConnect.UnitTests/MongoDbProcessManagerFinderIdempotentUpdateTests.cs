@@ -25,10 +25,10 @@ public class MongoDbProcessManagerFinderIdempotentUpdateTests
         var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
             .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(finder)!;
-        indexedCollections.TryAdd(typeof(TestProcessManagerData).FullName!, true);
+        indexedCollections.TryAdd(MongoDbProcessManagerFinder.SanitizeCollectionName(typeof(TestProcessManagerData).FullName!), true);
 
         database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
-                typeof(TestProcessManagerData).FullName,
+                MongoDbProcessManagerFinder.SanitizeCollectionName(typeof(TestProcessManagerData).FullName!),
                 It.IsAny<MongoCollectionSettings>()))
             .Returns(collection.Object);
 
@@ -67,10 +67,10 @@ public class MongoDbProcessManagerFinderIdempotentUpdateTests
         var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
             .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(finder)!;
-        indexedCollections.TryAdd(typeof(TestProcessManagerData).FullName!, true);
+        indexedCollections.TryAdd(MongoDbProcessManagerFinder.SanitizeCollectionName(typeof(TestProcessManagerData).FullName!), true);
 
         database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
-                typeof(TestProcessManagerData).FullName,
+                MongoDbProcessManagerFinder.SanitizeCollectionName(typeof(TestProcessManagerData).FullName!),
                 It.IsAny<MongoCollectionSettings>()))
             .Returns(collection.Object);
 
