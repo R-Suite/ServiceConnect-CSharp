@@ -383,13 +383,23 @@ public class StreamProcessorTests
 
         var (accessor, scopeStream2, _) = BuildScopeContext(provider);
         using var _scopeStream2 = scopeStream2;
+        // FakeTimeProvider with AutoAdvanceAmount = 1 tick ensures every GetUtcNow()
+        // call returns a strictly increasing value. Under TimeProvider.System the high
+        // concurrency made multiple ActiveStreamState records structurally equal (identical
+        // LastSeenUtc ticks), allowing more than one TryRemove(KVP) to succeed in the
+        // completion-dispatch path and causing the handler to fire more than once.
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(
+            new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero))
+        {
+            AutoAdvanceAmount = TimeSpan.FromTicks(1),
+        };
         var processor = new StreamProcessor(
             accessor,
             NullLogger<StreamProcessor>.Instance,
             typeRegistry,
             streamHandlerRegistry,
             serializerMock.Object,
-            TimeProvider.System);
+            clock);
 
         var payload = new byte[] { 0x01 };
 
