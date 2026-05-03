@@ -22,16 +22,17 @@ public class CacheProviderMechanicalFixesTests
     {
         // Schedule a key with a short timeout, dispose the cache, advance the clock —
         // the timer callback path must NOT escape an ObjectDisposedException.
-        // FakeTimeProvider.Advance triggers ITimer callbacks synchronously because
-        // CacheProvider uses _timeProvider.CreateTimer (not raw System.Threading.Timer).
+        // FakeTimeProvider.Advance fires timer callbacks synchronously on the calling thread
+        // before returning. This is verified by CacheProviderTryGetTests.TryGet_AfterAbsoluteExpiry_ReturnsFalse,
+        // which asserts key removal is complete immediately after Advance with no async wait.
+        // If that guarantee were ever broken by a library update, this test would become a false positive.
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         var cache = new CacheProvider(clock);
 
         cache.Add("k", "v", TimeSpan.FromSeconds(1), CacheItemPriority.Normal);
         cache.Dispose();
 
-        // Advance triggers the timer callback synchronously. With the dispose-race
-        // catch in place the callback's Remove call is swallowed.
+        // With the dispose-race catch in place the callback's Remove call is swallowed.
         clock.Advance(TimeSpan.FromSeconds(2));
 
         // No assertion needed; the test passes if no exception escapes.

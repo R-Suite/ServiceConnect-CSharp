@@ -134,12 +134,9 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         // Snapshot keys before clearing so subscribers see a KeyRemoved event for every
-        // entry that was present. Concurrent adds/removes across this window are
-        // best-effort — consistent with ConcurrentDictionary.Clear's own semantics.
-        // Best-effort consistency: entries added between this snapshot and `_cache.Clear()`
-        // are dropped without firing KeyRemoved. Matches ConcurrentDictionary.Clear's own
-        // no-snapshot semantics — callers needing strict cross-thread consistency should
-        // synchronise externally.
+        // entry that was present at this point. Entries added between this snapshot and
+        // the _cache.Clear() call below are silently dropped without a KeyRemoved event —
+        // callers needing strict cross-thread consistency must synchronise externally.
         var removedKeys = _cache.Keys.ToList();
 
         _cache.Clear();
