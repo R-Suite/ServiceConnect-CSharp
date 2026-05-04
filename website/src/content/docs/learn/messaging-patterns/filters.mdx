@@ -116,8 +116,8 @@ ServiceConnect also has two middleware hooks — `AddSendMessageMiddleware<T>` a
 | Wrap the inner pipeline with `try`/`finally` (open a tracing scope, close it) | Middleware | Filters can't observe completion of `next` |
 | Time the whole consume operation | Middleware | Need a `Stopwatch` that brackets `next()` |
 | Catch exceptions thrown by the inner pipeline | Middleware | Filters return `FilterAction`; they don't see exceptions from `next` |
-| Mutate the message body | Middleware | Filters expose body as read-only `ReadOnlyMemory<byte>` |
-| Open a unit-of-work, commit on success, rollback on exception | Middleware | Same `try`/`finally` reasoning |
+| Mutate the message body | Middleware | Middleware can hand substitute bytes to `next()`; filters have no continuation to redirect |
+| Open a unit-of-work, commit on success, rollback on exception | Middleware | Needs to observe success-vs-exception from `next()` to choose commit or rollback |
 
 Rule of thumb: **filter when "inspect or stamp, maybe stop" is the whole job; middleware when you need to wrap the operation.**
 
