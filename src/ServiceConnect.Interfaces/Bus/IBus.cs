@@ -5,6 +5,26 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// The core message bus interface for publishing, sending, and consuming messages.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Delivery is at-least-once.</b> A handler may run more than once for the same logical
+/// message — either because the broker redelivered it, or because the consumer did. Idempotency
+/// is the consumer's responsibility.
+/// </para>
+/// <para>
+/// <b>Persist-vs-ack gap.</b> When a handler returns successfully, the consumer dispatches an
+/// acknowledgement to the broker. If the process crashes (or the broker fails over) between
+/// handler success and the ack reaching durable broker state, the message redelivers on next
+/// startup. Persistence writes (process-manager state, aggregator data, scheduled timeouts) are
+/// completed before the ack — so a redelivered message hits a handler whose persisted state may
+/// already reflect the prior run.
+/// </para>
+/// <para>
+/// <b>Implication.</b> Either design handlers to be naturally idempotent (look up by a stable
+/// business key, reconcile rather than overwrite), or use a deduplication mechanism — the
+/// framework ships <c>MessageDeduplication</c> as a filter for this purpose.
+/// </para>
+/// </remarks>
 public interface IBus : IAsyncDisposable
 {
     /// <summary>
