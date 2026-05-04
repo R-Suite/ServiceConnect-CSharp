@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
 using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Client.RabbitMQ;
@@ -17,6 +16,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private int _disposed;
     private readonly TimeSpan _disposeLockTimeout = TimeSpan.FromSeconds(30);
+    private readonly ConnectionLifecycleHooks _lifecycle = new(logger);
 
     // Test seam: when set, replaces the call to ConnectionFactory.CreateConnectionAsync
     // with the supplied factory. Mirrors ProducerConnection.CreateConnectionForTests.
@@ -53,80 +53,17 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         var connector = CreateConnectionForTests ?? ((f, h, n, ct) => f.CreateConnectionAsync(h, n, ct));
         _connection = await connector(connectionFactory, _hosts, queueName, cancellationToken).ConfigureAwait(false);
 
-        AttachLifecycleHandlers(_connection);
+        _lifecycle.Attach(_connection);
         // VirtualHost is set on the ConnectionFactory (and thus the connection) but is not
         // surfaced on AmqpTcpEndpoint. Read it from the transport config — the value the
         // factory was built with is exactly what the broker will route against.
-        // Endpoint and ClientProvidedName are typed as non-nullable on IConnection, but a
-        // mid-shutdown IConnection can transiently surface a null Endpoint (RabbitMQ.Client
-        // tears the field down before the IConnection itself is observably disposed); guard
-        // against it so a lifecycle log never NREs and tears the connect path down with it.
-        var (host, port) = ResolveEndpoint(_connection);
+        var (host, port) = ConnectionLifecycleHooks.ResolveEndpoint(_connection);
         RabbitMqClientLog.ConnectionOpened(
             logger,
             host,
             port,
             string.IsNullOrEmpty(transportSettings.VirtualHost) ? "/" : transportSettings.VirtualHost,
             _connection.ClientProvidedName ?? string.Empty);
-    }
-
-    // Subscribe/unsubscribe must be paired against the SAME IConnection reference. Calling
-    // `connection.RecoverySucceededAsync -= …` on a different IConnection (e.g. one returned
-    // by a later call to BuildConnectionFactory) would silently be a no-op and leak the
-    // handler on the original IConnection until GC.
-    private void AttachLifecycleHandlers(IConnection connection)
-    {
-        connection.RecoverySucceededAsync += OnRecoverySucceededAsync;
-        connection.ConnectionShutdownAsync += OnConnectionShutdownAsync;
-    }
-
-    private void DetachLifecycleHandlers(IConnection connection)
-    {
-        connection.RecoverySucceededAsync -= OnRecoverySucceededAsync;
-        connection.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
-    }
-
-    private Task OnRecoverySucceededAsync(object? sender, AsyncEventArgs e)
-    {
-        if (sender is IConnection connection)
-        {
-            var (host, port) = ResolveEndpoint(connection);
-            RabbitMqClientLog.ConnectionRecovered(
-                logger,
-                host,
-                port,
-                connection.ClientProvidedName ?? string.Empty);
-        }
-        return Task.CompletedTask;
-    }
-
-    private Task OnConnectionShutdownAsync(object? sender, ShutdownEventArgs e)
-    {
-        if (sender is IConnection connection)
-        {
-            var (host, port) = ResolveEndpoint(connection);
-            RabbitMqClientLog.ConnectionLost(
-                logger,
-                host,
-                port,
-                connection.ClientProvidedName ?? string.Empty,
-                e.Initiator.ToString(),
-                string.IsNullOrEmpty(e.ReplyText) ? "<no reason>" : e.ReplyText);
-        }
-        return Task.CompletedTask;
-    }
-
-    // IConnection.Endpoint is typed non-nullable, but RabbitMQ.Client v7 can transiently
-    // expose a null Endpoint mid-shutdown (the field is torn down before the IConnection
-    // itself surfaces as disposed) and Mock<IConnection>.Endpoint is null on Loose mocks.
-    // Returning placeholder values keeps the lifecycle log emitting rather than NREing
-    // through the connection-establishment hot path.
-    private static (string host, int port) ResolveEndpoint(IConnection connection)
-    {
-        var endpoint = connection.Endpoint;
-        return endpoint is null
-            ? (string.Empty, 0)
-            : (endpoint.HostName, endpoint.Port);
     }
 
     private ConnectionFactory BuildConnectionFactory() =>
@@ -213,7 +150,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
                 // inside CloseAsync is not re-emitted as a ConnectionLost log entry. The handler
                 // detach is paired with the matching attach in CreateConnectionCoreAsync against
                 // this same IConnection reference.
-                DetachLifecycleHandlers(conn);
+                _lifecycle.Detach(conn);
 
                 if (conn.IsOpen)
                 {
