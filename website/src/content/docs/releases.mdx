@@ -83,7 +83,7 @@ Down from nine. The `byte[] Serialize<T>(T)` overload, the `byte[]`/`ReadOnlySpa
 |---|---|
 | `byte[] bytes = serializer.Serialize(msg);` | `var bw = new ArrayBufferWriter<byte>(); serializer.Serialize(msg, bw); var bytes = bw.WrittenMemory.ToArray();` |
 | `T msg = serializer.Deserialize<T>(byteArray);` | `T msg = serializer.Deserialize<T>(byteArray.AsMemory());` |
-| `T msg = serializer.Deserialize<T>(span);` | (collect into ROM<byte> first, or use the `Type`-taking overload) |
+| `T msg = serializer.Deserialize<T>(span);` | (collect into `ROM<byte>` first, or use the `Type`-taking overload) |
 
 ### Breaking — System.Text.Json replaces Newtonsoft.Json in shipped packages
 
@@ -181,7 +181,7 @@ The previous runtime guard preventing both `EndPoint` and `EndPoints` from being
 
 ### Breaking — Streaming body-type cascade
 
-`IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` align with the v8 ROM<byte>-typed surface:
+`IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` align with the v8 `ROM<byte>`-typed surface:
 
 ```csharp
 // IMessageBusReadStream.Write:
