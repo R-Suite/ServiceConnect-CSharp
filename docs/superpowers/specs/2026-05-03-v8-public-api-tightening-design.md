@@ -293,6 +293,29 @@ public InMemoryAggregatorPersistor(TimeProvider? timeProvider = null) { ... }
 
 The reflection path in `InMemoryAggregatorPersistor` (the `CorrelationIdAccessors` cache and the throwing-delegate workaround) is deleted; `data.CorrelationId` is direct property access through the interface.
 
+### 11. Streaming body-type cascade (`IMessageBusReadStream`, `IMessageBusWriteStream`)
+
+```csharp
+public interface IMessageBusReadStream
+{
+    void Write(ReadOnlyMemory<byte> data, long packetNumber);   // was: byte[] data
+    // ... rest unchanged
+}
+
+public interface IMessageBusWriteStream : IAsyncDisposable
+{
+    Task WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default);  // was: byte[], int offset, int count
+    Task CloseAsync(CancellationToken ct = default);
+}
+```
+
+Reasoning:
+- **Inbound (`IMessageBusReadStream.Write`)**: API consistency with the rest of the v8 surface. The internal storage stays `ConcurrentDictionary<long, byte[]>` because RabbitMQ.Client v7 does not extend the buffer lifetime past the consumer callback — `data.ToArray()` is required to retain the data. This is an *API consistency* change, not a perf change.
+- **Outbound (`IMessageBusWriteStream.WriteAsync`)**: drops the `int offset, int count` parameters; callers slice via `buffer.AsMemory(offset, count)`. The impl threads `ROM<byte>` directly to `IProducer.SendBytesAsync(ReadOnlyMemory<byte>)` (already ROM-typed after Phase A.2), genuinely eliminating a buffer copy on the outbound stream path.
+- `IMessageBusReadStream.Read()` returning `byte[]` and `ReadSequence()` returning `ReadOnlySequence<byte>` are unchanged — they're the read-out APIs whose consumers are out of scope for v8 surface tightening.
+
+BREAKING CHANGE: callers of `IMessageBusWriteStream.WriteAsync(byte[], int, int, CT)` migrate to `WriteAsync(buffer.AsMemory(offset, count), ct)` — one-line change at every call site.
+
 ---
 
 ## Internal cascade
