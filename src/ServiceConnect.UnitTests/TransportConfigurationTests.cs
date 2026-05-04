@@ -140,7 +140,7 @@ public class TransportConfigurationTests
             RetryDelay = 5000,
             MaxRetries = 10,
             PrefetchCount = 5,
-            SslEnabled = true,
+            SslEnabled = false,
             ServerName = "myserver"
         };
 
@@ -151,7 +151,7 @@ public class TransportConfigurationTests
         Assert.Equal(5000, config.RetryDelay);
         Assert.Equal(10, config.MaxRetries);
         Assert.Equal((ushort)5, config.PrefetchCount);
-        Assert.True(config.SslEnabled);
+        Assert.False(config.SslEnabled);
         Assert.Equal("myserver", config.ServerName);
     }
 
