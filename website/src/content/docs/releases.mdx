@@ -23,7 +23,115 @@ Match the major versions of the packages you reference. `ServiceConnect` 7.x exp
 
 For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
 
-## v7 highlights
+## v8 highlights
+
+Version 8 is a public-API tightening pass: shrinks the surface, removes legacy abstractions, and replaces Newtonsoft.Json with System.Text.Json across the shipped packages. Upgrading from v7 requires code changes; the breaking-change list below is exhaustive for what has landed so far in the v7→v8 integration branch (Group A Phases A.1 + A.2). Phase A.3 — the `IBus` / `IConsumer` / `IMessageDispatcher` / `IConsumeContext` tightening and `ReplyOptions` — is queued and will extend this list.
+
+### Breaking — `IHasCorrelationId` interface
+
+A new interface in `ServiceConnect.Interfaces`:
+
+```csharp
+public interface IHasCorrelationId
+{
+    Guid CorrelationId { get; }
+}
+```
+
+`Message` implements it — anything deriving from `Message` picks up the contract automatically with no code change. **Custom non-`Message` aggregator data types must implement `IHasCorrelationId` explicitly.** The previous reflection-based discovery of a `public Guid CorrelationId` property is gone; missing the interface now produces a compile error.
+
+### Breaking — `TimeoutData.Destination` is nullable
+
+```csharp
+// Before:
+public string Destination { get; set; } = string.Empty;
+
+// After:
+public string? Destination { get; set; }
+```
+
+Callers reading `Destination` must handle null. The empty-string sentinel is replaced by an honest null. `ProcessManagerTimeoutService` already treats null-or-empty as "no recipient" (skips dispatch) — same semantics, type now expresses them.
+
+### Breaking — `IAggregatorPersistor` parameter and return types tightened
+
+```csharp
+Task InsertDataAsync(IHasCorrelationId data, ...);                       // was: object data
+Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(...);                // was: Task<IList<object>>
+```
+
+`RemoveDataAsync(string name, Guid correlationId, ...)` is unchanged. `IAggregatorSnapshot.ResolvedMessages` and the `AggregatorSnapshot` record's first parameter are tightened to `IReadOnlyList<IHasCorrelationId>` to match.
+
+`InMemoryAggregatorPersistor` ctor drops three unused string parameters: `(string connectionString, string databaseName, string collectionName, TimeProvider?)` becomes `(TimeProvider?)`. Callers using DI via `UseInMemoryPersistence()` need no change.
+
+### Breaking — `IMessageSerializer` reduced to four methods
+
+```csharp
+public interface IMessageSerializer
+{
+    void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message;
+    T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message;
+    object Deserialize(ReadOnlyMemory<byte> data, Type type);
+
+    // Default impl flattens; SystemTextJsonMessageSerializer overrides for zero-copy.
+    object Deserialize(in ReadOnlySequence<byte> data, Type type) => ...;
+}
+```
+
+Down from nine. The `byte[] Serialize<T>(T)` overload, the `byte[]`/`ReadOnlySpan<byte>` deserialize overloads — gone. Migration:
+
+| Was | Now |
+|---|---|
+| `byte[] bytes = serializer.Serialize(msg);` | `var bw = new ArrayBufferWriter<byte>(); serializer.Serialize(msg, bw); var bytes = bw.WrittenMemory.ToArray();` |
+| `T msg = serializer.Deserialize<T>(byteArray);` | `T msg = serializer.Deserialize<T>(byteArray.AsMemory());` |
+| `T msg = serializer.Deserialize<T>(span);` | (collect into ROM<byte> first, or use the `Type`-taking overload) |
+
+### Breaking — System.Text.Json replaces Newtonsoft.Json in shipped packages
+
+The production `ServiceConnect` package no longer pulls `Newtonsoft.Json`. Consumers that relied on the transitive flow must add their own `<PackageReference Include="Newtonsoft.Json" />`.
+
+Wire format is JSON-equivalent to the v7 Newtonsoft default for typical messages. Cross-version round-trip is enforced on every PR by `ServiceConnect.SerializationCompatTests` (10 representative `Message` types × 4 round-trip channels + pathological-input tests). The corpus is the safety net for v7↔v8 mixed deployments.
+
+**Documented behaviour changes** versus v7 Newtonsoft (released-as-rejected v8 inputs):
+
+- **`NaN` / `Infinity` doubles in JSON** — STJ rejects; Newtonsoft tolerated. Producers emitting these must serialise as `null` or use a custom converter.
+- **JSON nesting deeper than 32 levels** — STJ rejects via `MaxDepth = 32` (matches `HeaderDecoder` cap). Newtonsoft tolerated.
+- **Trailing commas** — STJ rejects. Newtonsoft tolerated. Lax JSON producers must clean their output.
+- **JavaScript-style `/* comments */`** — STJ rejects. Newtonsoft tolerated.
+
+**Behaviour preserved** by explicit `JsonSerializerOptions` settings:
+
+- `MaxDepth = 32` (HeaderDecoder cap parity)
+- `Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping` (literal Unicode like Newtonsoft)
+- `NumberHandling.AllowReadingFromString` (`"42" → int` like Newtonsoft)
+- `DefaultIgnoreCondition = Never` (emit nulls like `NullValueHandling.Include`)
+- ISO 8601 round-trip dates with `DateTimeKind` preservation
+
+`Newtonsoft.Json` remains a dependency of `ServiceConnect.Persistence.InMemory` (DeepClone helper) and `ServiceConnect.Client.RabbitMQ` (one MessageRetryHandler exception-stamp call site) — both for unrelated, scoped reasons.
+
+### Breaking — `IProducer` body parameters are `ReadOnlyMemory<byte>`; headers are `IReadOnlyDictionary<string,string>?`
+
+```csharp
+public interface IProducer : IAsyncDisposable
+{
+    Task PublishAsync(Type type, ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
+    Task SendAsync(Type type, ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
+    Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
+    Task SendBytesAsync(string endPoint, Type type, ReadOnlyMemory<byte> packet,
+        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
+    // ... rest unchanged
+}
+```
+
+Callers passing `byte[]` get the implicit conversion to `ReadOnlyMemory<byte>` for free; callers using `null` for the body are no longer expressible because `ReadOnlyMemory<byte>` is a value type. A `default(ReadOnlyMemory<byte>)` (or `ReadOnlyMemory<byte>.Empty`) is now a valid empty body — the `MessageBusWriteStream.CloseAsync` close-packet path relies on this.
+
+### Internal — `SendContext.MessageBytes` is `ReadOnlyMemory<byte>`
+
+`SendContext.MessageBytes` is `init`-only `ReadOnlyMemory<byte>`. Custom `ISendMessageMiddleware` implementations that previously read `byte[] context.MessageBytes` get the same wire bytes; middleware that needs to *replace* the body must construct a new `SendContext` (the property is init-only by design — middleware mutates `Headers`, never bytes).
+
+
 
 Version 7 is a reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. If you are upgrading from v6, read the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
 
