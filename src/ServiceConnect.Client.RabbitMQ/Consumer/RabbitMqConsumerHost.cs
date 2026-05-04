@@ -533,16 +533,21 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // is reported separately on messaging.serviceconnect.retry.drops in a later commit.
     private void EmitProcessMetrics(long startTimestamp, bool processed, Exception? processFailure)
     {
+        // Cache the mapped error type once — used on both the duration histogram and the
+        // consumed-messages counter when the handler threw. ExceptionTypeMapper.Map performs
+        // a virtual call + switch, so caching avoids a redundant lookup per emit pair.
         var elapsed = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
+        var errorType = processFailure is null ? null : ExceptionTypeMapper.Map(processFailure);
+
         var processTags = new TagList
         {
             { "messaging.system", "rabbitmq" },
             { "messaging.operation", "process" },
             { "messaging.destination.name", _queueConfiguration.QueueName },
         };
-        if (processFailure != null)
+        if (errorType is not null)
         {
-            processTags.Add("error.type", ExceptionTypeMapper.Map(processFailure));
+            processTags.Add("error.type", errorType);
         }
         ServiceConnectMeter.RecordProcessDuration(elapsed, processTags);
 
@@ -567,9 +572,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             { "messaging.destination.name", _queueConfiguration.QueueName },
             { "messaging.outcome", outcome },
         };
-        if (processFailure != null)
+        if (errorType is not null)
         {
-            consumedTags.Add("error.type", ExceptionTypeMapper.Map(processFailure));
+            consumedTags.Add("error.type", errorType);
         }
         ServiceConnectMeter.AddConsumedMessage(consumedTags);
     }

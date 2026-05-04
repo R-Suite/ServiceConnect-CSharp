@@ -162,8 +162,8 @@ public sealed class Producer : IProducer
         }
 
         // Capture timestamp before EnsureConnectedAsync — connect latency is part of the
-        // user-visible publish duration. exchangeName resolves later (after lock + disposed
-        // re-check) so default to "<unresolved>" until then.
+        // user-visible publish duration. exchangeName is resolved mid-method (after the lock
+        // and disposed re-check); see EmitPublishMetrics for the empty-destination fallback.
         var startTimestamp = Stopwatch.GetTimestamp();
         string exchangeName = string.Empty;
         bool succeeded = false;
