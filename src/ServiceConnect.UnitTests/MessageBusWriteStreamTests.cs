@@ -30,7 +30,7 @@ public class MessageBusWriteStreamTests
     {
         await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
 
-        await stream.WriteAsync([1, 2, 3, 4], 0, 4);
+        await stream.WriteAsync(new byte[] { 1, 2, 3, 4 });
 
         var send = _sends.Single();
         Assert.Equal(typeof(FakeStreamMsg), send.Type);
@@ -42,12 +42,14 @@ public class MessageBusWriteStreamTests
     }
 
     [Fact]
-    public async Task WriteAsync_CopiesSubArray_UsingOffsetAndCount()
+    public async Task WriteAsync_SliceViaAsMemory_SendsCorrectBytes()
     {
+        // Callers that previously used WriteAsync(buffer, offset, count) now slice
+        // via buffer.AsMemory(offset, count) before calling WriteAsync.
         await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
         var buffer = new byte[] { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 };
 
-        await stream.WriteAsync(buffer, offset: 2, count: 4);
+        await stream.WriteAsync(buffer.AsMemory(2, 4));
 
         var captured = _sends.Single().Payload;
         Assert.Equal(new byte[] { 12, 13, 14, 15 }, captured);
@@ -58,9 +60,9 @@ public class MessageBusWriteStreamTests
     {
         await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
 
-        await stream.WriteAsync([1], 0, 1);
-        await stream.WriteAsync([2], 0, 1);
-        await stream.WriteAsync([3], 0, 1);
+        await stream.WriteAsync(new byte[] { 1 });
+        await stream.WriteAsync(new byte[] { 2 });
+        await stream.WriteAsync(new byte[] { 3 });
 
         Assert.Equal("0", _sends[0].Headers![HeaderKeys.PacketNumber]);
         Assert.Equal("1", _sends[1].Headers![HeaderKeys.PacketNumber]);
@@ -73,39 +75,15 @@ public class MessageBusWriteStreamTests
         await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
         await stream.CloseAsync();
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => stream.WriteAsync([1], 0, 1));
-    }
-
-    [Fact]
-    public async Task WriteAsync_NullBuffer_ThrowsArgumentNullException()
-    {
-        await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
-
-        await Assert.ThrowsAsync<ArgumentNullException>(() => stream.WriteAsync(null!, 0, 0));
-    }
-
-    [Fact]
-    public async Task WriteAsync_InvalidOffset_ThrowsArgumentOutOfRangeException()
-    {
-        await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
-
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => stream.WriteAsync([1, 2], 3, 0));
-    }
-
-    [Fact]
-    public async Task WriteAsync_InvalidCount_ThrowsArgumentOutOfRangeException()
-    {
-        await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
-
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => stream.WriteAsync([1, 2], 1, 2));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => stream.WriteAsync(new byte[] { 1 }));
     }
 
     [Fact]
     public async Task CloseAsync_SendsEmptyPayloadWithLastPacketNumberHeader()
     {
         var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
-        await stream.WriteAsync([1], 0, 1);
-        await stream.WriteAsync([2], 0, 1);
+        await stream.WriteAsync(new byte[] { 1 });
+        await stream.WriteAsync(new byte[] { 2 });
 
         await stream.CloseAsync();
 
@@ -168,12 +146,12 @@ public class MessageBusWriteStreamTests
         await using var stream = new MessageBusWriteStream(failingProducer.Object, "dest", typeof(FakeStreamMsg));
 
         // First write surfaces the underlying failure.
-        var firstEx = await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync([1], 0, 1));
+        var firstEx = await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync(new byte[] { 1 }));
         Assert.Equal("transport down", firstEx.Message);
 
         // Second write must not attempt another send: a successful retry would consume
         // packet number N+1, leaving packet N permanently missing from the reader's view.
-        var secondEx = await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync([2], 0, 1));
+        var secondEx = await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync(new byte[] { 2 }));
         Assert.Contains("faulted", secondEx.Message, StringComparison.OrdinalIgnoreCase);
 
         failingProducer.Verify(
@@ -201,7 +179,7 @@ public class MessageBusWriteStreamTests
 
         await using var stream = new MessageBusWriteStream(failingProducer.Object, "dest", typeof(FakeStreamMsg));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync([1], 0, 1));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => stream.WriteAsync(new byte[] { 1 }));
 
         // CloseAsync on a faulted stream must complete without throwing AND without sending
         // a close packet — a close packet on a stream with a hole would set LastPacketNumber
@@ -228,7 +206,7 @@ public class MessageBusWriteStreamTests
         cts.Cancel();
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            () => stream.WriteAsync(new byte[10], 0, 10, cts.Token));
+            () => stream.WriteAsync(new byte[10], cts.Token));
     }
 
     [Fact]
@@ -245,10 +223,10 @@ public class MessageBusWriteStreamTests
         var stream = new MessageBusWriteStream(producer.Object, "queue", typeof(string));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            stream.WriteAsync([1, 2, 3], 0, 3, CancellationToken.None));
+            stream.WriteAsync(new byte[] { 1, 2, 3 }, CancellationToken.None));
 
         var secondAttempt = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            stream.WriteAsync([4, 5, 6], 0, 3, CancellationToken.None));
+            stream.WriteAsync(new byte[] { 4, 5, 6 }, CancellationToken.None));
         Assert.Contains("faulted", secondAttempt.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -303,7 +281,7 @@ public class MessageBusWriteStreamTests
         var stream = new MessageBusWriteStream(stalledProducer.Object, "dest", typeof(FakeStreamMsg));
 
         // Fire off a write that will never complete, keeping _inFlightWrites > 0.
-        _ = stream.WriteAsync([1], 0, 1);
+        _ = stream.WriteAsync(new byte[] { 1 });
 
         // CloseAsync must abort the drain when the token is cancelled rather than
         // waiting up to the full 30-second CloseDrainTimeout.

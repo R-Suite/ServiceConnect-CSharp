@@ -63,20 +63,9 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
     }
 
     /// <inheritdoc />
-    public async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default)
+    public async Task WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ArgumentNullException.ThrowIfNull(buffer);
-
-        if ((uint)offset > (uint)buffer.Length)
-        {
-            throw new ArgumentOutOfRangeException(nameof(offset));
-        }
-
-        if ((uint)count > (uint)(buffer.Length - offset))
-        {
-            throw new ArgumentOutOfRangeException(nameof(count));
-        }
 
         // Reserve the in-flight slot BEFORE checking the close flag so that a concurrent
         // CloseAsync observing _inFlightWrites == 0 cannot race past us. Rolled back below
@@ -95,9 +84,6 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
                     $"Stream {_sequenceId} is faulted from a previous send failure; create a new stream.");
             }
 
-            var packet = new byte[count];
-            Array.Copy(buffer, offset, packet, 0, count);
-
             var packetNum = Interlocked.Increment(ref _packetNumber) - 1;
 
             try
@@ -113,7 +99,9 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
 
                 headers[HeaderKeys.PacketNumber] = FormatInt64(packetNum);
 
-                await _producer.SendBytesAsync(_endpoint, _messageType, packet, headers, cancellationToken).ConfigureAwait(false);
+                // ROM<byte> threads directly to SendBytesAsync — no intermediate copy.
+                // The buffer is read once; after the await returns the caller is free to reuse it.
+                await _producer.SendBytesAsync(_endpoint, _messageType, buffer, headers, cancellationToken).ConfigureAwait(false);
             }
             catch
             {

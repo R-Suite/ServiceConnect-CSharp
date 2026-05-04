@@ -74,7 +74,7 @@ public class StreamCloseRaceE2ETests(MessagingFixture fixture)
                 {
                     try
                     {
-                        await stream.WriteAsync(payload, 0, payload.Length);
+                        await stream.WriteAsync(payload);
                         accepted.Add((w * packetsPerWriter) + p);
 
                         // When 95% accepted, close the stream from one writer

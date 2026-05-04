@@ -33,9 +33,9 @@ var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(document));
 var chunkSize = payload.Length / 3;
 
 await using var stream = bus.CreateStream<DocumentUploaded>(endpointName);
-await stream.WriteAsync(payload, 0, chunkSize);
-await stream.WriteAsync(payload, chunkSize, chunkSize);
-await stream.WriteAsync(payload, chunkSize * 2, payload.Length - (chunkSize * 2));
+await stream.WriteAsync(payload.AsMemory(0, chunkSize));
+await stream.WriteAsync(payload.AsMemory(chunkSize, chunkSize));
+await stream.WriteAsync(payload.AsMemory(chunkSize * 2, payload.Length - (chunkSize * 2)));
 await stream.CloseAsync();
 
 ConsoleStatus.Success("streaming-uploader", "sent 3 chunks for demo-document.txt");

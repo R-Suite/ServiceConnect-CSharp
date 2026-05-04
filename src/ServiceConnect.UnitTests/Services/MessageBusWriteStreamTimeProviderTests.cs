@@ -31,7 +31,7 @@ public class MessageBusWriteStreamTimeProviderTests
             stalledProducer.Object, "endpoint-x", typeof(byte[]), fakeTime);
 
         // Fire a write that will never complete, keeping _inFlightWrites > 0.
-        _ = stream.WriteAsync([1, 2, 3], 0, 3);
+        _ = stream.WriteAsync(new byte[] { 1, 2, 3 });
 
         // Start the drain without awaiting: the deadline is captured from fakeTime
         // (T+30s). The drain loop will spin until it yields, then do Task.Delay(10ms).

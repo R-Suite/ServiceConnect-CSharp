@@ -96,7 +96,7 @@ public class StreamRedeliveryIdempotencyE2ETests(MessagingFixture fixture)
             // is the smoke check that the bus end-to-end keeps the invariant.
             await using (var stream = producerBus.CreateStream<TestMessage>(consumerQueue))
             {
-                await stream.WriteAsync(serializedBytes, 0, serializedBytes.Length);
+                await stream.WriteAsync(serializedBytes);
                 await stream.CloseAsync();
             }
 

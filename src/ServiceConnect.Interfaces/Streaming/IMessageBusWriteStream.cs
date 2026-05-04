@@ -6,13 +6,13 @@ namespace ServiceConnect.Interfaces;
 public interface IMessageBusWriteStream : IAsyncDisposable
 {
     /// <summary>
-    /// Writes a slice of the source buffer to the stream.
+    /// Writes the supplied buffer to the stream as one or more transport packets.
     /// </summary>
-    /// <param name="buffer">The source buffer.</param>
-    /// <param name="offset">The starting offset within the buffer.</param>
-    /// <param name="count">The number of bytes to write.</param>
-    /// <param name="cancellationToken">Token that cancels the write before it is dispatched to the producer.</param>
-    Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default);
+    /// <param name="buffer">The bytes to write. The buffer is read once and the underlying
+    /// memory is not retained past the call completion; the caller can reuse the buffer.</param>
+    /// <param name="cancellationToken">Token that cancels the write before it is dispatched
+    /// to the producer.</param>
+    Task WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Flushes any remaining data and marks the stream as complete.
