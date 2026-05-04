@@ -6,7 +6,7 @@ Roadmap for working through findings from [architecture-review-deep.md](architec
 
 ---
 
-## Group A — v8 public-API tightening · *Phase A.2 done; A.3 pending*
+## Group A — v8 public-API tightening · *done*
 
 Breaking interface changes. **Ship blocker for v8 GA** because once v8 ships these become harder to change.
 
