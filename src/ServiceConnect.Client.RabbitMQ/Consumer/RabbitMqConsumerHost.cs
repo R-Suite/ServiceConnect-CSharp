@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using ServiceConnect.Diagnostics;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
@@ -380,10 +382,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 return;  // processed stays false; finally nacks-with-requeue
             }
 
-            processed = await messageProcessor.ProcessAsync(publishChannel!, args, cancellationToken).ConfigureAwait(false);
+            processed = await ProcessWithMetricsAsync(messageProcessor, publishChannel!, args, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
+            // Catches admission/header-validation failures that didn't reach the metric-instrumented
+            // ProcessAsync scope (e.g. _retryHandler.HandleTerminalFailureAsync throwing). Without
+            // this an uncaught exception would propagate into the AMQP consumer event loop.
             _logger.LogError(ex, "Error processing message");
         }
         finally
@@ -454,6 +459,89 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 }
             }
         }
+    }
+
+    // Inner metric scope: only the ProcessAsync invocation itself; admission/header validation
+    // are operator-visible failures of THIS host, not handler failures, so they don't show up
+    // on the messaging.process.* metrics. Returns the same processed flag the caller would
+    // otherwise have assigned, with handler exceptions logged-and-swallowed exactly as the
+    // pre-metrics path did so the outer ack/nack finally still drives the requeue decision.
+    private async Task<bool> ProcessWithMetricsAsync(
+        InboundMessageProcessor messageProcessor,
+        IChannel publishChannel,
+        BasicDeliverEventArgs args,
+        CancellationToken cancellationToken)
+    {
+        var processStartTimestamp = Stopwatch.GetTimestamp();
+        bool processed = false;
+        Exception? processFailure = null;
+        try
+        {
+            processed = await messageProcessor.ProcessAsync(publishChannel, args, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            processFailure = ex;
+            _logger.LogError(ex, "Error processing message");
+        }
+        finally
+        {
+            EmitProcessMetrics(processStartTimestamp, processed, processFailure);
+        }
+
+        return processed;
+    }
+
+    // Emits messaging.process.duration (always) and messaging.client.consumed.messages
+    // (always, tagged by outcome). Outcome is one of:
+    //   success — handler returned and ProcessAsync routed it through the success/audit path.
+    //   error   — ProcessAsync threw or the host caught a handler exception.
+    //   retry   — handler returned a non-success ConsumeEventResult; the message was routed
+    //             to the retry queue, so processed=false but no exception was thrown.
+    // The retry-publish-failure swallow at InboundMessageProcessor (catch (Exception retryEx))
+    // also surfaces here as outcome=success because ProcessAsync still returns true: that drop
+    // is reported separately on messaging.serviceconnect.retry.drops in a later commit.
+    private void EmitProcessMetrics(long startTimestamp, bool processed, Exception? processFailure)
+    {
+        var elapsed = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
+        var processTags = new TagList
+        {
+            { "messaging.system", "rabbitmq" },
+            { "messaging.operation", "process" },
+            { "messaging.destination.name", _queueConfiguration.QueueName },
+        };
+        if (processFailure != null)
+        {
+            processTags.Add("error.type", ExceptionTypeMapper.Map(processFailure));
+        }
+        ServiceConnectMeter.RecordProcessDuration(elapsed, processTags);
+
+        string outcome;
+        if (processFailure != null)
+        {
+            outcome = "error";
+        }
+        else if (processed)
+        {
+            outcome = "success";
+        }
+        else
+        {
+            outcome = "retry";
+        }
+
+        var consumedTags = new TagList
+        {
+            { "messaging.system", "rabbitmq" },
+            { "messaging.operation", "process" },
+            { "messaging.destination.name", _queueConfiguration.QueueName },
+            { "messaging.outcome", outcome },
+        };
+        if (processFailure != null)
+        {
+            consumedTags.Add("error.type", ExceptionTypeMapper.Map(processFailure));
+        }
+        ServiceConnectMeter.AddConsumedMessage(consumedTags);
     }
 
     private static Dictionary<string, object> CopyInboundHeaders(BasicDeliverEventArgs args)

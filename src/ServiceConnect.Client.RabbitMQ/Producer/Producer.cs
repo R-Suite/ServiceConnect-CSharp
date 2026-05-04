@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
+using ServiceConnect.Diagnostics;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
@@ -159,37 +161,58 @@ public sealed class Producer : IProducer
                 $"Message size {body.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         }
 
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        // Capture timestamp before EnsureConnectedAsync — connect latency is part of the
+        // user-visible publish duration. exchangeName resolves later (after lock + disposed
+        // re-check) so default to "<unresolved>" until then.
+        var startTimestamp = Stopwatch.GetTimestamp();
+        string exchangeName = string.Empty;
+        bool succeeded = false;
+        Exception? failure = null;
         try
         {
-            // Re-check after acquiring the lock — DisposeAsync may have set _disposedInt
-            // and torn down the channel while we were waiting. Without this check the publish
-            // would NRE on the missing channel.
-            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
-
-            var messageHeaders = _headerBuilder.BuildHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
-            var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
-
-            // Compute the exchange name once per type and cache it.
-            // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
-            string exchangeName = GetExchangeName(type);
-
-            await ExecuteWithConnectionRetryAsync(async () =>
+            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                await _producerConnection.EnsureExchangeDeclaredAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
+                // Re-check after acquiring the lock — DisposeAsync may have set _disposedInt
+                // and torn down the channel while we were waiting. Without this check the publish
+                // would NRE on the missing channel.
+                ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
-                await PublishWithTimeoutAsync(
-                    _producerConnection.Channel,
-                    exchangeName,
-                    string.Empty,
-                    false,
-                    basicProperties,
-                    body,
-                    cancellationToken).ConfigureAwait(false);
-            }, cancellationToken).ConfigureAwait(false);
+                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
+                var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
+
+                // Compute the exchange name once per type and cache it.
+                // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
+                exchangeName = GetExchangeName(type);
+
+                await ExecuteWithConnectionRetryAsync(async () =>
+                {
+                    await _producerConnection.EnsureExchangeDeclaredAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
+
+                    await PublishWithTimeoutAsync(
+                        _producerConnection.Channel,
+                        exchangeName,
+                        string.Empty,
+                        false,
+                        basicProperties,
+                        body,
+                        cancellationToken).ConfigureAwait(false);
+                }, cancellationToken).ConfigureAwait(false);
+
+                succeeded = true;
+            }
+            finally { _publishLock.Release(); }
         }
-        finally { _publishLock.Release(); }
+        catch (Exception ex)
+        {
+            failure = ex;
+            throw;
+        }
+        finally
+        {
+            EmitPublishMetrics(startTimestamp, exchangeName, succeeded, failure);
+        }
     }
 
     /// <summary>
@@ -235,16 +258,36 @@ public sealed class Producer : IProducer
                 baseHeaders[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
                 baseHeaders[HeaderKeys.TimeSent] = OutboundHeaderBuilder.FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
                 var basicProperties = _headerBuilder.BuildBasicProperties(baseHeaders);
-                await ExecuteWithConnectionRetryAsync(
-                    () => PublishWithTimeoutAsync(
-                        _producerConnection.Channel,
-                        string.Empty,
-                        endPoint,
-                        false,
-                        basicProperties,
-                        body,
-                        cancellationToken).AsTask(),
-                    cancellationToken).ConfigureAwait(false);
+                // Per-endpoint metric scope: each delivery on the fan-out is a logically
+                // independent publish — record duration + success/error individually so the
+                // tag set carries the correct destination queue and partial-fan-out failures
+                // are visible per endpoint.
+                var endpointStart = Stopwatch.GetTimestamp();
+                bool endpointSucceeded = false;
+                Exception? endpointFailure = null;
+                try
+                {
+                    await ExecuteWithConnectionRetryAsync(
+                        () => PublishWithTimeoutAsync(
+                            _producerConnection.Channel,
+                            string.Empty,
+                            endPoint,
+                            false,
+                            basicProperties,
+                            body,
+                            cancellationToken).AsTask(),
+                        cancellationToken).ConfigureAwait(false);
+                    endpointSucceeded = true;
+                }
+                catch (Exception ex)
+                {
+                    endpointFailure = ex;
+                    throw;
+                }
+                finally
+                {
+                    EmitPublishMetrics(endpointStart, endPoint, endpointSucceeded, endpointFailure);
+                }
             }
         }
         finally { _publishLock.Release(); }
@@ -273,27 +316,44 @@ public sealed class Producer : IProducer
                 $"Message size {body.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         }
 
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var startTimestamp = Stopwatch.GetTimestamp();
+        bool succeeded = false;
+        Exception? failure = null;
         try
         {
-            // Re-check disposed flag after winning the lock; see PublishAsync.
-            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                // Re-check disposed flag after winning the lock; see PublishAsync.
+                ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
-            var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send");
-            var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
-            await ExecuteWithConnectionRetryAsync(
-                () => PublishWithTimeoutAsync(
-                    _producerConnection.Channel,
-                    string.Empty,
-                    endPoint,
-                    false,
-                    basicProperties,
-                    body,
-                    cancellationToken).AsTask(),
-                cancellationToken).ConfigureAwait(false);
+                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send");
+                var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
+                await ExecuteWithConnectionRetryAsync(
+                    () => PublishWithTimeoutAsync(
+                        _producerConnection.Channel,
+                        string.Empty,
+                        endPoint,
+                        false,
+                        basicProperties,
+                        body,
+                        cancellationToken).AsTask(),
+                    cancellationToken).ConfigureAwait(false);
+
+                succeeded = true;
+            }
+            finally { _publishLock.Release(); }
         }
-        finally { _publishLock.Release(); }
+        catch (Exception ex)
+        {
+            failure = ex;
+            throw;
+        }
+        finally
+        {
+            EmitPublishMetrics(startTimestamp, endPoint, succeeded, failure);
+        }
     }
 
     /// <summary>
@@ -319,27 +379,79 @@ public sealed class Producer : IProducer
                 $"Message size {packet.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         }
 
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var startTimestamp = Stopwatch.GetTimestamp();
+        bool succeeded = false;
+        Exception? failure = null;
         try
         {
-            // Re-check disposed flag after winning the lock; see PublishAsync.
-            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                // Re-check disposed flag after winning the lock; see PublishAsync.
+                ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
 
-            var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
-            var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
-            await ExecuteWithConnectionRetryAsync(
-                () => PublishWithTimeoutAsync(
-                    _producerConnection.Channel,
-                    string.Empty,
-                    endPoint,
-                    false,
-                    basicProperties,
-                    packet,
-                    cancellationToken).AsTask(),
-                cancellationToken).ConfigureAwait(false);
+                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
+                var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
+                await ExecuteWithConnectionRetryAsync(
+                    () => PublishWithTimeoutAsync(
+                        _producerConnection.Channel,
+                        string.Empty,
+                        endPoint,
+                        false,
+                        basicProperties,
+                        packet,
+                        cancellationToken).AsTask(),
+                    cancellationToken).ConfigureAwait(false);
+
+                succeeded = true;
+            }
+            finally { _publishLock.Release(); }
         }
-        finally { _publishLock.Release(); }
+        catch (Exception ex)
+        {
+            failure = ex;
+            throw;
+        }
+        finally
+        {
+            EmitPublishMetrics(startTimestamp, endPoint, succeeded, failure);
+        }
+    }
+
+    // Emits messaging.publish.duration (always) and messaging.client.published.messages
+    // (only on success). Tags follow OTel semantic conventions for messaging.
+    // Caller passes the per-attempt destination — the exchange for fan-out publishes,
+    // the queue name for direct sends. An empty/null destination indicates the publish
+    // failed before the destination was resolved (e.g. EnsureConnectedAsync threw); we
+    // emit "<unresolved>" rather than dropping the metric so the failure is still visible.
+    private static void EmitPublishMetrics(long startTimestamp, string destination, bool succeeded, Exception? failure)
+    {
+        var elapsed = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
+        var resolvedDestination = string.IsNullOrEmpty(destination) ? "<unresolved>" : destination;
+
+        var durationTags = new TagList
+        {
+            { "messaging.system", "rabbitmq" },
+            { "messaging.operation", "publish" },
+            { "messaging.destination.name", resolvedDestination },
+        };
+        if (failure != null)
+        {
+            durationTags.Add("error.type", ExceptionTypeMapper.Map(failure));
+        }
+        ServiceConnectMeter.RecordPublishDuration(elapsed, durationTags);
+
+        if (succeeded)
+        {
+            var successTags = new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "messaging.operation", "publish" },
+                { "messaging.destination.name", resolvedDestination },
+            };
+            ServiceConnectMeter.AddPublishedMessage(successTags);
+        }
     }
 
     /// <summary>

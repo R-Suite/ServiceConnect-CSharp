@@ -9,8 +9,12 @@ namespace ServiceConnect.Diagnostics;
 /// The exception <i>message</i> is never used — message text is unbounded cardinality and
 /// would explode metric series counts.
 /// </remarks>
-internal static class ExceptionTypeMapper
+public static class ExceptionTypeMapper
 {
+    /// <summary>
+    /// Maps the exception to the corresponding stable, low-cardinality string used as the
+    /// <c>error.type</c> tag value on metric records.
+    /// </summary>
     public static string Map(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
