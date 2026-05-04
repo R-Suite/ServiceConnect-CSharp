@@ -55,4 +55,11 @@ public static class RabbitMQSettingKeys
     /// Accepts a <see cref="System.TimeSpan"/>; defaults to 30 seconds.
     /// </summary>
     public const string PublishTimeout = "PublishTimeout";
+
+    /// <summary>
+    /// Maximum outstanding publisher-confirms per producer channel before publishes back-pressure.
+    /// Without this cap, a stalled broker can let the RabbitMQ.Client tracker grow unboundedly.
+    /// Tunable via <c>SetClientSetting("MaxOutstandingPublishConfirms", N)</c>; defaults to 256.
+    /// </summary>
+    public const string MaxOutstandingPublishConfirms = nameof(MaxOutstandingPublishConfirms);
 }

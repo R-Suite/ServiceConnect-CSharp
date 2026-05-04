@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using ServiceConnect.Interfaces.Configuration;
@@ -18,6 +19,8 @@ internal sealed class ProducerConnection
     private const ushort DefaultRetryCount = 60;
     /// <summary>Default delay between publish retries, in seconds.</summary>
     private const ushort DefaultRetryTimeInSeconds = 10;
+    /// <summary>Default cap on outstanding publisher confirms when publisher acks are enabled.</summary>
+    private const int DefaultMaxOutstandingPublishConfirms = 256;
 
     // Cache process/assembly name — computed once at startup, reused on every reconnect.
     private static readonly string ProducerName = Assembly.GetEntryAssembly()?.GetName().Name
@@ -71,6 +74,22 @@ internal sealed class ProducerConnection
     private static T GetSetting<T>(IReadOnlyDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)
     {
         return settings.TryGetValue(key, out var value) ? converter(value) : defaultValue;
+    }
+
+    /// <summary>
+    /// Resolves the cap on outstanding publisher confirms from <c>ClientSettings</c>, falling back
+    /// to <see cref="DefaultMaxOutstandingPublishConfirms"/>. Only positive <c>int</c> values are
+    /// accepted; anything else (wrong type, zero, negative) takes the default. Exposed as
+    /// <c>internal</c> so the test access helper can share the resolution path.
+    /// </summary>
+    internal static int ResolveMaxOutstandingPublishConfirms(ITransportConfiguration transport)
+    {
+        if (transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.MaxOutstandingPublishConfirms, out var raw)
+            && raw is int permits && permits > 0)
+        {
+            return permits;
+        }
+        return DefaultMaxOutstandingPublishConfirms;
     }
 
     /// <summary>
@@ -245,9 +264,25 @@ internal sealed class ProducerConnection
 
             if (_publisherAcks)
             {
+                // RabbitMQ.Client v7.2.1's confirms tracker (Channel.PublisherConfirms.cs:
+                // _confirmsTaskCompletionSources, a ConcurrentDictionary keyed by delivery tag) is
+                // unbounded when OutstandingPublisherConfirmationsRateLimiter is null —
+                // MaybeStartPublisherConfirmationTracking calls TryAdd with no Count check, and the
+                // confirm semaphore only serialises adds, not the dictionary's size. A stalled
+                // broker can let it grow until memory pressure or PublishTimeout trips a reset.
+                // The ConcurrencyLimiter caps in-flight confirms; QueueLimit=int.MaxValue makes
+                // overflow back-pressure (queue, then publish) rather than throw.
+                var permitLimit = ResolveMaxOutstandingPublishConfirms(_transportConfiguration);
+                var rateLimiter = new ConcurrencyLimiter(new ConcurrencyLimiterOptions
+                {
+                    PermitLimit = permitLimit,
+                    QueueLimit = int.MaxValue,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                });
                 var channelOptions = new CreateChannelOptions(
                     publisherConfirmationsEnabled: true,
-                    publisherConfirmationTrackingEnabled: true);
+                    publisherConfirmationTrackingEnabled: true,
+                    outstandingPublisherConfirmationsRateLimiter: rateLimiter);
                 model = await connection.CreateChannelAsync(channelOptions, cancellationToken).ConfigureAwait(false);
             }
             else
@@ -357,6 +392,26 @@ internal sealed class ProducerConnection
             {
                 _logger.LogWarning(ex, "Error disposing connection");
             }
+        }
+    }
+
+    /// <summary>
+    /// Test-only access surface that exposes the rate-limiter construction path used when
+    /// publisher acknowledgements are enabled. Lets unit tests assert the configured permit
+    /// limit without standing up a real connection. Nested so the file/type-name analyzer
+    /// (MA0048) stays satisfied.
+    /// </summary>
+    internal static class TestAccess
+    {
+        public static RateLimiter BuildPermitLimiter(ITransportConfiguration transport)
+        {
+            var permitLimit = ResolveMaxOutstandingPublishConfirms(transport);
+            return new ConcurrencyLimiter(new ConcurrencyLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                QueueLimit = int.MaxValue,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            });
         }
     }
 }
