@@ -25,7 +25,7 @@ For new applications, take the latest stable of each package. For existing appli
 
 ## v8 highlights
 
-Version 8 is a public-API tightening pass: shrinks the surface, removes legacy abstractions, and replaces Newtonsoft.Json with System.Text.Json across the shipped packages. Upgrading from v7 requires code changes; the breaking-change list below is exhaustive for what has landed so far in the v7→v8 integration branch (Group A Phases A.1 + A.2). Phase A.3 — the `IBus` / `IConsumer` / `IMessageDispatcher` / `IConsumeContext` tightening and `ReplyOptions` — is queued and will extend this list.
+Version 8 is a public-API tightening pass: shrinks the surface, removes legacy abstractions, and replaces Newtonsoft.Json with System.Text.Json across the shipped packages. Upgrading from v7 requires code changes; the breaking-change list below is exhaustive for Group A — the v7→v8 public-API tightening pass spanning Phases A.1, A.2, and A.3.
 
 ### Breaking — `IHasCorrelationId` interface
 
