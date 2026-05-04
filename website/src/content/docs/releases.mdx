@@ -131,7 +131,75 @@ Callers passing `byte[]` get the implicit conversion to `ReadOnlyMemory<byte>` f
 
 `SendContext.MessageBytes` is `init`-only `ReadOnlyMemory<byte>`. Custom `ISendMessageMiddleware` implementations that previously read `byte[] context.MessageBytes` get the same wire bytes; middleware that needs to *replace* the body must construct a new `SendContext` (the property is init-only by design — middleware mutates `Headers`, never bytes).
 
+### Breaking — `IConsumeContext.ReplyAsync` uses `ReplyOptions`
 
+```csharp
+// Before:
+Task ReplyAsync<TReply>(TReply message, IDictionary<string,string>? headers = null, CancellationToken ct = default);
+
+// After:
+Task ReplyAsync<TReply>(TReply message, ReplyOptions? options = null, CancellationToken ct = default);
+```
+
+Mirrors the `PublishOptions`/`SendOptions` shape. Migration:
+
+```csharp
+// Was:
+await ctx.ReplyAsync(reply, new Dictionary<string,string> { ["X-Trace"] = "abc" });
+
+// Now:
+await ctx.ReplyAsync(reply, new ReplyOptions { Headers = new Dictionary<string,string> { ["X-Trace"] = "abc" } });
+```
+
+### Breaking — `IConsumer.StartConsumingAsync` and `IMessageDispatcher.DispatchAsync` use `IReadOnly*`
+
+```csharp
+// IConsumer.StartConsumingAsync messageTypes:
+//   IList<string> -> IReadOnlyList<string>
+// IMessageDispatcher.DispatchAsync headers:
+//   IDictionary<string, object> -> IReadOnlyDictionary<string, object>
+```
+
+`List<string>` and `Dictionary<string, object>` continue to compile as arguments via implicit conversion. Mock setups using `It.IsAny<IList<string>>()` / `It.IsAny<IDictionary<string,object>>()` must update to the readonly variants.
+
+### Breaking — `IBus.RouteAsync` destinations is `IReadOnlyList<string>`
+
+`IBus.RouteAsync(T, IList<string>, CT)` becomes `RouteAsync(T, IReadOnlyList<string>, CT)`. `List<string>` arguments continue to work via implicit conversion.
+
+### Breaking — `SendOptions.EndPoints` and `RequestOptions.EndPoints` removed; `IBus.SendToManyAsync` added
+
+`SendOptions` and `RequestOptions` no longer carry an `EndPoints` field. Migration:
+
+| Was | Now |
+|---|---|
+| `bus.SendAsync(msg, new SendOptions { EndPoints = ["a", "b"] })` | `bus.SendToManyAsync(msg, ["a", "b"])` |
+| `bus.SendRequestAsync(msg, new RequestOptions { EndPoints = ["a", "b"] })` | `bus.PublishRequestAsync(msg, onReply, options)` (broadcast pattern) |
+
+The previous runtime guard preventing both `EndPoint` and `EndPoints` from being set is gone — the trap is no longer reachable.
+
+`RequestOptions.ExpectedReplyCount`'s "fall back to `EndPoints.Count`" clause is gone; it now defaults to "wait the full Timeout, return every reply" when null/zero/negative.
+
+### Breaking — Streaming body-type cascade
+
+`IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` align with the v8 ROM<byte>-typed surface:
+
+```csharp
+// IMessageBusReadStream.Write:
+//   void Write(byte[] data, long packetNumber)
+//   -> void Write(ReadOnlyMemory<byte> data, long packetNumber)
+
+// IMessageBusWriteStream.WriteAsync:
+//   Task WriteAsync(byte[] buffer, int offset, int count, CT ct)
+//   -> Task WriteAsync(ReadOnlyMemory<byte> buffer, CT ct)
+```
+
+`IMessageBusWriteStream.WriteAsync` migration is mechanical:
+- `WriteAsync(buf, 0, buf.Length, ct)` → `WriteAsync(buf, ct)` (implicit `byte[]` → `ROM<byte>`)
+- `WriteAsync(buf, off, cnt, ct)` → `WriteAsync(buf.AsMemory(off, cnt), ct)`
+
+The outbound write path is now genuinely zero-copy (no internal buffer copy between user write and producer publish). The inbound read path retains its internal copy because RabbitMQ.Client v7 does not extend buffer lifetimes past the consumer callback.
+
+## v7 highlights
 
 Version 7 is a reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. If you are upgrading from v6, read the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
 
