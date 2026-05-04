@@ -106,9 +106,20 @@ When *order must matter* (stamp the trace id before an auth check that depends o
 
 ## The middleware alternative
 
-ServiceConnect also has two middleware hooks — `AddSendMessageMiddleware<T>` and `AddMessageProcessingMiddleware<T>` — which wrap the whole operation with `next`-delegate semantics, the way ASP.NET Core middleware does. Filters are the lighter tool: stateless, returning `FilterAction`. Middleware is heavier: full control over the surrounding context, `try`/`finally` around `next()`.
+ServiceConnect also has two middleware hooks — `AddSendMessageMiddleware<T>` and `AddMessageProcessingMiddleware<T>` — which wrap the whole operation with `next`-delegate semantics, the way ASP.NET Core middleware does. Filters are stateless inspect/stamp/maybe-stop; middleware is wrap-the-operation. Pick by scenario:
 
-Reach for a filter when "inspect or stamp headers, maybe stop" is the whole job. Reach for middleware when you need to wrap — time the whole operation, open and close a scope around it, catch exceptions from the inner pipeline.
+| You want to… | Use | Why |
+|---|---|---|
+| Read or stamp a header | Filter | Stateless inspect/produce; that's the whole filter contract |
+| Short-circuit the pipeline based on header content | Filter | `FilterAction.Stop` is a first-class outcome |
+| Authorise the message based on incoming claims and reject | Filter | Inspect headers, return `FilterAction.Stop` if rejected |
+| Wrap the inner pipeline with `try`/`finally` (open a tracing scope, close it) | Middleware | Filters can't observe completion of `next` |
+| Time the whole consume operation | Middleware | Need a `Stopwatch` that brackets `next()` |
+| Catch exceptions thrown by the inner pipeline | Middleware | Filters return `FilterAction`; they don't see exceptions from `next` |
+| Mutate the message body | Middleware | Filters expose body as read-only `ReadOnlyMemory<byte>` |
+| Open a unit-of-work, commit on success, rollback on exception | Middleware | Same `try`/`finally` reasoning |
+
+Rule of thumb: **filter when "inspect or stamp, maybe stop" is the whole job; middleware when you need to wrap the operation.**
 
 ## Reference
 
