@@ -196,6 +196,39 @@ public class ConsumeContextTests
     }
 
     [Fact]
+    public async Task ReplyAsync_WithCallerHeaders_PropagatesIntoSendOptions_AndStampedResponseMessageIdWins()
+    {
+        var requestMessageId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "my-queue" },
+            { HeaderKeys.RequestMessageId, requestMessageId }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        var callerHeaders = new Dictionary<string, string>
+        {
+            { "X-Trace", "abc" },
+            // Caller-supplied ResponseMessageId is overwritten by the framework's stamp; the
+            // framework owns request/reply correlation and won't let callers spoof it.
+            { HeaderKeys.ResponseMessageId, "caller-supplied-should-be-overwritten" }
+        };
+
+        await context.ReplyAsync(reply, new ReplyOptions { Headers = callerHeaders });
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o =>
+                o.HasValue &&
+                o.Value.Headers != null &&
+                o.Value.Headers["X-Trace"] == "abc" &&
+                o.Value.Headers[HeaderKeys.ResponseMessageId] == requestMessageId)),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task ReplyAsync_WithSpoofedRequestMessageIdAndUnknownSourceAddress_Throws()
     {
         var spoofedRequestId = Guid.NewGuid().ToString();
