@@ -171,7 +171,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         linkedCts.CancelAfter(options.Timeout);
 
         // See SendRequestAsync for the rationale; sendCompleted is flipped only after
-        // the entire fan-out loop succeeds so a mid-loop cancellation also fails fast.
+        // the send completes so a cancellation during the send also fails fast.
         var sendCompleted = 0;
 
         await using var reg = linkedCts.Token.Register(() =>

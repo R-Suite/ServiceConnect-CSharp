@@ -680,6 +680,40 @@ public class RequestReplyManagerTests
     }
 
     [Fact]
+    public async Task PublishRequestAsync_NullExpectedCount_NoReplies_CompletesAtTimeoutWithoutException()
+    {
+        // After Phase A.3 dropped RequestOptions.EndPoints, ExpectedReplyCount no longer
+        // falls back to "EndPoints.Count". With null/zero/negative ExpectedReplyCount,
+        // PublishRequestAsync must wait the full Timeout and complete successfully — even
+        // when zero replies arrive — rather than throwing RequestTimeoutException. This
+        // path is the silent-success branch in the timeout handler: the call is a "fire
+        // and collect whatever shows up" pattern, common for broadcast scatter-gather.
+        var request = new FakeMessage1(Guid.NewGuid());
+        var messageBytes = new byte[] { 1, 2, 3 };
+        _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
+
+        var options = new RequestOptions { Timeout = 25 };
+        var headers = new Dictionary<string, string>();
+
+        _mockSendPipeline.Setup(pipeline => pipeline.ExecutePublishMessagePipelineAsync(
+                It.Is<SendContext>(ctx => ctx.EndPoint == null),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+
+        var publishTask = manager.PublishRequestAsync<FakeMessage1, FakeMessage1>(
+            request,
+            headers,
+            options,
+            _ => Assert.Fail("Callback should not run when no replies arrive."));
+
+        // Should complete cleanly at timeout — no exception.
+        await publishTask;
+        Assert.True(publishTask.IsCompletedSuccessfully);
+    }
+
+    [Fact]
     public async Task PublishRequestAsync_CallbackException_FaultsPromptly()
     {
         var reply = new FakeMessage1(Guid.NewGuid()) { Username = "PublishReply" };
