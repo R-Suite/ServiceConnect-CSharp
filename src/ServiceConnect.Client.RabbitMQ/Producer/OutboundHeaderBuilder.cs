@@ -105,14 +105,15 @@ internal sealed class OutboundHeaderBuilder(
         // post-call. Callers MUST NOT mutate messageHeaders while a publish using the returned
         // BasicProperties is in flight. The four Producer.cs call sites are safe under the
         // current layout:
-        //   - PublishAsync, SendAsync(string,Type), SendBytesAsync: BuildBasicProperties is the
-        //     last touch before the awaited PublishWithTimeoutAsync. No mutation in between.
-        //   - SendAsync(Type) fan-out: re-stamps DestinationAddress / MessageId / TimeSent on
-        //     baseHeaders between iterations. Safe ONLY because publisher-confirms
-        //     (publisherConfirmationsEnabled: true in ProducerConnection) make the prior
-        //     await PublishWithTimeoutAsync return after the broker ack — by which time the
-        //     wire frame is serialized and RabbitMQ.Client no longer references the dict.
-        //     Disabling publisher-confirms or moving to fire-and-forget would invalidate this.
+        //   - PublishAsync, SendAsync(string endPoint, Type), SendBytesAsync: BuildBasicProperties
+        //     is the last touch before the awaited PublishWithTimeoutAsync. No mutation between.
+        //   - SendAsync(Type) — the queue-mapped fan-out overload — re-stamps DestinationAddress,
+        //     MessageId, and TimeSent on baseHeaders between iterations. Safe ONLY because
+        //     publisher-confirms (publisherConfirmationsEnabled: true in ProducerConnection)
+        //     make the prior await PublishWithTimeoutAsync return after the broker ack — by
+        //     which time the wire frame is serialized and RabbitMQ.Client no longer references
+        //     the dict. Disabling publisher-confirms or moving to fire-and-forget invalidates
+        //     this invariant.
         var basicProperties = new BasicProperties
         {
             Headers = messageHeaders,

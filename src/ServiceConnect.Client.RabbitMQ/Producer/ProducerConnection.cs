@@ -307,6 +307,12 @@ internal sealed class ProducerConnection
                     QueueLimit = int.MaxValue,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 });
+                // publisherConfirmationsEnabled is also load-bearing for
+                // OutboundHeaderBuilder.BuildBasicProperties' aliasing-safety invariant in the
+                // SendAsync(Type) fan-out: the broker ack gates the next iteration's
+                // re-stamping of baseHeaders. Disabling acks would let RabbitMQ.Client read
+                // the alias dict after the next iteration mutates it. See
+                // OutboundHeaderBuilder.BuildBasicProperties for the binding contract.
                 var channelOptions = new CreateChannelOptions(
                     publisherConfirmationsEnabled: true,
                     publisherConfirmationTrackingEnabled: true,

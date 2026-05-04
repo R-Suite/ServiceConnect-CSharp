@@ -55,24 +55,7 @@ internal sealed class InboundMessageProcessor(
         // Pre-size to incoming header count plus 3 consumer-added entries to avoid rehashes.
         // Ordinal comparer matches AMQP's case-sensitive wire contract: a sender that writes
         // "X-Trace-Id" reads it back exactly. User filters / middleware look up by string literal.
-        var sourceHeaders = args.BasicProperties.Headers;
-
-        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3, StringComparer.Ordinal);
-        if (sourceHeaders != null)
-        {
-            foreach (var kvp in sourceHeaders)
-            {
-                if (kvp.Value is null)
-                {
-                    continue;
-                }
-                // Mirrors RabbitMqConsumerHost.CopyInboundHeaders: eager-decode byte[] headers so
-                // HeaderDecoder.Decode hits the string fast-path on every downstream read.
-                headers[kvp.Key] = kvp.Value is byte[] bytes
-                    ? Encoding.UTF8.GetString(bytes)
-                    : kvp.Value;
-            }
-        }
+        var headers = CopyInboundHeadersWithEagerDecode(args);
 
         if (args.Redelivered)
         {
@@ -291,16 +274,11 @@ internal sealed class InboundMessageProcessor(
         return new string(buffer[..charsWritten]);
     }
 
-    // Test-access surface that exposes the inline header-copy logic so unit tests can
-    // assert the eager-decode invariant without driving the full ProcessAsync pipeline.
-    // internal for [InternalsVisibleTo].
-    //
-    // IMPORTANT: keep this byte-identical to the inline copy in ProcessAsync (the
-    // foreach over sourceHeaders that builds `headers`). The two are duplicated
-    // because the production copy is embedded in ProcessAsync — extracting it would
-    // be scope creep — but a silent drift here would let the eager-decode tests
-    // pass against stale production logic.
-    internal static Dictionary<string, object> CopyInboundHeadersForTests(BasicDeliverEventArgs args)
+    // Mirrors RabbitMqConsumerHost.CopyInboundHeaders: eager-decode byte[] headers so
+    // HeaderDecoder.Decode hits the string fast-path on every downstream read. Pre-size
+    // is +3 because ProcessAsync stamps Redelivered, TimeReceived, and DestinationAddress
+    // on top of the caller's headers.
+    private static Dictionary<string, object> CopyInboundHeadersWithEagerDecode(BasicDeliverEventArgs args)
     {
         var sourceHeaders = args.BasicProperties.Headers;
         var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3, StringComparer.Ordinal);
@@ -319,4 +297,9 @@ internal sealed class InboundMessageProcessor(
         }
         return headers;
     }
+
+    // Test-access surface for the eager-decode helper. Delegating one-liner so the test
+    // exercises the same code path ProcessAsync uses — no risk of silent drift.
+    internal static Dictionary<string, object> CopyInboundHeadersForTests(BasicDeliverEventArgs args)
+        => CopyInboundHeadersWithEagerDecode(args);
 }

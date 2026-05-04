@@ -19,6 +19,10 @@ internal static class HeaderHelpers
     }
 
     // foreach into a pre-sized dictionary avoids the LINQ ToDictionary allocation overhead.
+    // The CLR-side value-type can be either string (post-Group-F eager-decode for inbound
+    // headers) or byte[] (pre-eager-decode, or non-AMQP code paths). RabbitMQ.Client's wire
+    // format encodes both as longstr (AMQP S field), so the over-the-wire representation is
+    // identical regardless of which CLR type the in-memory dict holds.
     public static Dictionary<string, object?> ToNullableHeaders(IDictionary<string, object> headers)
     {
         var result = new Dictionary<string, object?>(headers.Count, StringComparer.Ordinal);
