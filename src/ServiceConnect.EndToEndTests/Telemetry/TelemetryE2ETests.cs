@@ -83,11 +83,7 @@ public class TelemetryE2ETests(MessagingFixture fixture)
                 t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
-            builder.ConfigureTransport(t =>
-            {
-                t.MaxRetries = 0;
-                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
-            });
+            builder.ConfigureTransport(t => t.MaxRetries = 0);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
             builder.AddTelemetry();
         });

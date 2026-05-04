@@ -19,11 +19,11 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// <summary>Default RabbitMQ graceful-shutdown drain timeout, in milliseconds.</summary>
     public const int DefaultGracefulShutdownTimeoutMilliseconds = 5000;
 
-    /// <remarks>WARNING: Default connects to localhost without authentication. Override in production.</remarks>
+    /// <remarks>Default targets <c>localhost</c>. Override in production deployments.</remarks>
     public string Host { get; set; } = "localhost";
-    /// <remarks>WARNING: Default connects to localhost without authentication. Override in production.</remarks>
+    /// <remarks>Default unset (no authentication). Override in production deployments.</remarks>
     public string? Username { get; set; }
-    /// <remarks>WARNING: Default connects to localhost without authentication. Override in production.</remarks>
+    /// <remarks>Default unset (no authentication). Override in production deployments.</remarks>
     public string? Password { get; set; }
     /// <inheritdoc />
     public string? VirtualHost { get; set; }
