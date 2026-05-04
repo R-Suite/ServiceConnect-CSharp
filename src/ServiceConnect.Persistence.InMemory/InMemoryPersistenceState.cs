@@ -1,5 +1,14 @@
 namespace ServiceConnect.Persistence.InMemory;
 
+/// <summary>
+/// Shared in-process state store for the in-memory persistence implementation.
+/// </summary>
+/// <remarks>
+/// <b>Intended for development and tests.</b> All state held by this type is in-process and
+/// is not durable across restarts. Use <c>UseMongoDbPersistence</c> or another durable
+/// persistor for production. <c>UseInMemoryPersistence</c> emits a startup warning when this
+/// type is materialised; see that method's remarks for filtering guidance.
+/// </remarks>
 internal sealed class InMemoryPersistenceState : IDisposable
 {
     private int _disposed;

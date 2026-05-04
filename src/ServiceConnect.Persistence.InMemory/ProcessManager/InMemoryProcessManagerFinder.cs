@@ -10,6 +10,12 @@ namespace ServiceConnect.Persistence.InMemory;
 /// Compiled predicates are cached by mapping shape so correlation lookups avoid both
 /// Expression.Compile and reflection on the hot path.
 /// </summary>
+/// <remarks>
+/// <b>Intended for development and tests.</b> Process-manager state is held in-process and is
+/// not durable across restarts; in-flight process-manager instances are lost on restart. Use a
+/// durable <see cref="ServiceConnect.Interfaces.IProcessManagerFinder"/> implementation (e.g.
+/// the MongoDB finder) for production.
+/// </remarks>
 public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 {
     private readonly ProcessManagerPredicateCache _cache;

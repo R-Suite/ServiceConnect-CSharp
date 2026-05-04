@@ -6,6 +6,11 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Stores aggregator messages and snapshots in the process memory of the current application.
 /// </summary>
+/// <remarks>
+/// <b>Intended for development and tests.</b> Aggregator data is held in-process and is not
+/// durable across restarts. Use a durable <see cref="ServiceConnect.Interfaces.IAggregatorPersistor"/>
+/// implementation (e.g. the MongoDB persistor) for production.
+/// </remarks>
 public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposable
 {
     private readonly TimeProvider _timeProvider;

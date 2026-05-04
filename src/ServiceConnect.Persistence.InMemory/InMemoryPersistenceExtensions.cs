@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistence.InMemory;
@@ -12,6 +13,26 @@ public static class InMemoryPersistenceExtensions
     /// <summary>
     /// Registers the in-memory persistence implementation with the builder.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Intended for development and tests.</b> All state is held in-process in
+    /// <see cref="InMemoryPersistenceState"/> and is not durable across restarts. This is the
+    /// right choice for unit and integration tests that need a real persistor without provisioning
+    /// infrastructure, and for local development.
+    /// </para>
+    /// <para>
+    /// <b>Do not use in production.</b> A process restart loses every in-flight process-manager
+    /// instance, every pending aggregator group, and every scheduled timeout. Use a durable
+    /// persistor (e.g. <c>UseMongoDbPersistence</c>) for production deployments.
+    /// </para>
+    /// <para>
+    /// At bus build time this method emits a <see cref="LogLevel.Warning"/>-level log under
+    /// the <c>ServiceConnect.Persistence.InMemory</c> category to surface the test/dev scope at
+    /// runtime. The warning fires once per bus instance. To silence in test runs, raise the
+    /// category's minimum level to <see cref="LogLevel.Error"/> via standard
+    /// <c>Microsoft.Extensions.Logging</c> filter configuration.
+    /// </para>
+    /// </remarks>
     /// <param name="builder">The ServiceConnect builder.</param>
     /// <param name="configure">
     /// Optional delegate to customise <see cref="InMemoryPersistenceOptions"/> before registration.
@@ -32,7 +53,11 @@ public static class InMemoryPersistenceExtensions
             services.TryAddSingleton<ProcessManagerPredicateCache>();
             services.TryAddSingleton(options);
             services.TryAddSingleton<InMemoryPersistenceState>(sp =>
-                new InMemoryPersistenceState(sp.GetRequiredService<TimeProvider>()));
+            {
+                var logger = sp.GetRequiredService<ILogger<InMemoryPersistenceState>>();
+                InMemoryPersistenceLog.InMemoryPersistenceRegistered(logger);
+                return new InMemoryPersistenceState(sp.GetRequiredService<TimeProvider>());
+            });
             services.TryAddSingleton<ICacheProvider>(sp =>
                 sp.GetRequiredService<InMemoryPersistenceState>().Provider);
             services.TryAddSingleton<IKeyValueStore>(sp =>

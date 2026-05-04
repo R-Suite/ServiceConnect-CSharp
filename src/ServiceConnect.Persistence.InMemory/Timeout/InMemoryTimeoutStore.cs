@@ -7,6 +7,11 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Stores timeout messages in process memory for local execution.
 /// </summary>
+/// <remarks>
+/// <b>Intended for development and tests.</b> Scheduled timeouts are held in-process and are
+/// lost on restart. Use a durable <see cref="ServiceConnect.Interfaces.ITimeoutStore"/>
+/// implementation (e.g. the MongoDB timeout store) for production.
+/// </remarks>
 public sealed class InMemoryTimeoutStore : ITimeoutStore
 {
     private readonly TimeProvider _timeProvider;
