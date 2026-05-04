@@ -199,6 +199,24 @@ The previous runtime guard preventing both `EndPoint` and `EndPoints` from being
 
 The outbound write path is now genuinely zero-copy (no internal buffer copy between user write and producer publish). The inbound read path retains its internal copy because RabbitMQ.Client v7 does not extend buffer lifetimes past the consumer callback.
 
+### Breaking — TLS is on by default
+
+`TransportConfiguration.SslEnabled` defaults to `true` in v8 (was `false` in v7). The framework now connects on AMQPS port 5671 by default; production deployments with TLS-configured brokers no longer need any transport setup beyond `Host` and credentials.
+
+**Migration.** If your broker runs without TLS — most localhost dev setups do — explicitly opt out:
+
+```csharp
+builder.ConfigureTransport(t =>
+{
+    t.Host = "localhost";
+    t.SslEnabled = false;        // local-dev plaintext; production must use TLS
+});
+```
+
+ServiceConnect emits a `Warning`-level log under the `ServiceConnect.Client.RabbitMQ` category when plaintext is configured against a non-loopback host. The warning is filterable via standard `Microsoft.Extensions.Logging` category configuration; it is NOT an error and the framework still connects.
+
+**Why.** ServiceConnect-CSharp v7 defaulted to plaintext for ergonomic localhost dev. v8 inverts the default to align with secure-by-default norms — production deployments connecting over plaintext to a non-loopback broker are almost always a misconfiguration, and the warning catches the rest.
+
 ## v7 highlights
 
 Version 7 is a reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. If you are upgrading from v6, read the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.

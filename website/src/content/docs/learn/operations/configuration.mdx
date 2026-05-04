@@ -43,16 +43,28 @@ Retry knobs drive the error-handling pipeline — see [Error Handling](/ServiceC
 
 ### TLS
 
-For brokers behind TLS:
+**As of v8, TLS is enabled by default.** `SslEnabled` defaults to `true`, and ServiceConnect connects on the default AMQPS port (5671). For production deployments connecting to a broker with TLS configured, no transport setup is required beyond `Host` and credentials.
+
+For brokers behind TLS with custom server names or client certificates:
 
 ```csharp
-transport.SslEnabled = true;
+transport.SslEnabled = true;            // (default)
 transport.ServerName = "rabbit.prod.example.com";
 transport.CertPath = "/etc/ssl/client.pfx";
 transport.CertPassphrase = Environment.GetEnvironmentVariable("CLIENT_CERT_PASSPHRASE");
 ```
 
 Client certs can also be supplied in memory via `Certs`, or selected dynamically via `CertificateSelectionCallback`. For broker chains that don't validate cleanly, `AcceptablePolicyErrors` lets you widen acceptance — use sparingly, and never `SslPolicyErrors.RemoteCertificateNameMismatch` in production.
+
+#### Connecting to a plaintext broker (local dev)
+
+If your broker runs without TLS — typically the official `rabbitmq:3-management` Docker image on port 5672 — set `SslEnabled = false`:
+
+```csharp
+transport.SslEnabled = false;          // local-dev plaintext; production must use TLS
+```
+
+ServiceConnect logs a `Warning`-level message under the `ServiceConnect.Client.RabbitMQ` category when plaintext is configured against a non-loopback host. To silence the warning in environments where plaintext is intentional (e.g. an isolated VPC), raise the category's minimum level to `Error` via standard `Microsoft.Extensions.Logging` filter configuration.
 
 ### Provider-specific settings
 
