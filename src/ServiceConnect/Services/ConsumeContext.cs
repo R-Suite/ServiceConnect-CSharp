@@ -113,7 +113,7 @@ public sealed class ConsumeContext : IConsumeContext
     }
 
     /// <inheritdoc />
-    public async Task ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public async Task ReplyAsync<TReply>(TReply message, ReplyOptions? options = null, CancellationToken cancellationToken = default)
         where TReply : Message
     {
         var sourceAddress = GetDecodedHeader(Headers, HeaderKeys.SourceAddress);
@@ -132,16 +132,17 @@ public sealed class ConsumeContext : IConsumeContext
                 "This may indicate a spoofed message. Configure queue mappings or use RequestReplyManager for safe replies.");
         }
 
-        Dictionary<string, string> replyHeaders = headers is null
+        var callerHeaders = options?.Headers;
+        Dictionary<string, string> replyHeaders = callerHeaders is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : (headers as Dictionary<string, string>) ?? new Dictionary<string, string>(headers, StringComparer.Ordinal);
+            : new Dictionary<string, string>(callerHeaders, StringComparer.Ordinal);
         if (!string.IsNullOrEmpty(requestMessageId))
         {
             replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;
         }
 
-        var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
-        await Bus.SendAsync(message, options, cancellationToken).ConfigureAwait(false);
+        var sendOptions = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
+        await Bus.SendAsync(message, sendOptions, cancellationToken).ConfigureAwait(false);
     }
 
     internal static bool IsKnownQueue(string address, IQueueConfiguration queueConfig)

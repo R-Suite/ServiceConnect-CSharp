@@ -76,11 +76,11 @@ internal sealed class ConsumeContextPool
             }
         }
 
-        public Task ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+        public Task ReplyAsync<TReply>(TReply message, ReplyOptions? options = null, CancellationToken cancellationToken = default)
             where TReply : Message
         {
             _inner.EnsureActive(_token);
-            return _inner.ReplyAsyncCore(message, headers, cancellationToken);
+            return _inner.ReplyAsyncCore(message, options, cancellationToken);
         }
 
         public void Release()
@@ -119,7 +119,7 @@ internal sealed class ConsumeContextPool
         CancellationToken IConsumeContext.CancellationToken => throw new NotSupportedException("Use RentalHandle.");
         string? IConsumeContext.MessageId => throw new NotSupportedException("Use RentalHandle.");
         Guid IConsumeContext.CorrelationId => throw new NotSupportedException("Use RentalHandle.");
-        Task IConsumeContext.ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers, CancellationToken cancellationToken)
+        Task IConsumeContext.ReplyAsync<TReply>(TReply message, ReplyOptions? options, CancellationToken cancellationToken)
             => throw new NotSupportedException("Use RentalHandle.");
 
         internal string? GetOrCacheMessageId()
@@ -172,7 +172,7 @@ internal sealed class ConsumeContextPool
             }
         }
 
-        internal Task ReplyAsyncCore<TReply>(TReply message, IDictionary<string, string>? headers, CancellationToken cancellationToken)
+        internal Task ReplyAsyncCore<TReply>(TReply message, ReplyOptions? options, CancellationToken cancellationToken)
             where TReply : Message
         {
             var sourceAddress = ConsumeContext.GetDecodedHeader(_headers, HeaderKeys.SourceAddress);
@@ -196,16 +196,17 @@ internal sealed class ConsumeContextPool
                     "This may indicate a spoofed message. Configure queue mappings or use RequestReplyManager for safe replies.");
             }
 
-            Dictionary<string, string> replyHeaders = headers is null
+            var callerHeaders = options?.Headers;
+            Dictionary<string, string> replyHeaders = callerHeaders is null
                 ? new Dictionary<string, string>(StringComparer.Ordinal)
-                : (headers as Dictionary<string, string>) ?? new Dictionary<string, string>(headers, StringComparer.Ordinal);
+                : new Dictionary<string, string>(callerHeaders, StringComparer.Ordinal);
             if (!string.IsNullOrEmpty(requestMessageId))
             {
                 replyHeaders[HeaderKeys.ResponseMessageId] = requestMessageId;
             }
 
-            var options = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
-            return BusUnsafe.SendAsync(message, options, cancellationToken);
+            var sendOptions = new SendOptions { EndPoint = sourceAddress, Headers = replyHeaders };
+            return BusUnsafe.SendAsync(message, sendOptions, cancellationToken);
         }
 
         public void Release()

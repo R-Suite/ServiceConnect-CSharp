@@ -27,5 +27,9 @@ public interface IConsumeContext
     /// <c>ResponseMessageId</c> header so the request/reply manager correlates it to the
     /// originating <c>SendRequestAsync</c> call.
     /// </summary>
-    Task ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default) where TReply : Message;
+    /// <param name="message">The reply message.</param>
+    /// <param name="options">Optional headers for the reply. The reply destination is implicit
+    /// from the request's reply-to header; no endpoint or routing key applies.</param>
+    /// <param name="cancellationToken">A token that cancels the reply send.</param>
+    Task ReplyAsync<TReply>(TReply message, Options.ReplyOptions? options = null, CancellationToken cancellationToken = default) where TReply : Message;
 }

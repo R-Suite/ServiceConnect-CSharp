@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services.Processors;
 using Xunit;
 
@@ -158,6 +159,6 @@ file class MhrFakeConsumeContext : IConsumeContext
     public string? MessageId => null;
     public Guid CorrelationId => Guid.Empty;
     public CancellationToken CancellationToken { get; set; }
-    public Task ReplyAsync<TReply>(TReply message, IDictionary<string, string>? headers = null, CancellationToken cancellationToken = default) where TReply : Message
+    public Task ReplyAsync<TReply>(TReply message, ReplyOptions? options = null, CancellationToken cancellationToken = default) where TReply : Message
         => throw new NotImplementedException();
 }
