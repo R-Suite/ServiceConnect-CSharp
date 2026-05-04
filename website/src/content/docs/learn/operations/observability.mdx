@@ -132,6 +132,72 @@ The framework injects W3C `traceparent`/`tracestate` headers onto every outgoing
 
 For bespoke headers that aren't tracing — redaction, a tenant stamp — the [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/) API remains the right hook. Filters and telemetry compose; they don't compete.
 
+## Metrics
+
+ServiceConnect emits operator-grade metrics via `System.Diagnostics.Metrics`. The Meter is named `ServiceConnect.Bus` and is **always-on** — instruments are zero-cost when no listener subscribes (BCL pattern, same as `HttpClient`).
+
+### Wiring
+
+For OpenTelemetry users:
+
+```csharp
+services.AddOpenTelemetry().WithMetrics(b => b.AddServiceConnectInstrumentation());
+```
+
+Without OpenTelemetry, attach a `MeterListener` directly:
+
+```csharp
+var listener = new MeterListener();
+listener.InstrumentPublished = (instrument, l) =>
+{
+    if (instrument.Meter.Name == "ServiceConnect.Bus") l.EnableMeasurementEvents(instrument);
+};
+listener.Start();
+```
+
+### Catalogue
+
+Tags follow the [OpenTelemetry messaging-metrics conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-metrics/). All metrics carry `messaging.system="rabbitmq"` and (where applicable) `messaging.destination.name`. ServiceConnect-specific metrics live under the `messaging.serviceconnect.*` sub-namespace.
+
+| Metric | Type | Unit | What it counts |
+|---|---|---|---|
+| `messaging.publish.duration` | Histogram | s | Wall time of a publish, from start to broker ack |
+| `messaging.process.duration` | Histogram | s | Wall time of consumer-side handler dispatch |
+| `messaging.client.published.messages` | Counter | \{message\} | Messages successfully published |
+| `messaging.client.consumed.messages` | Counter | \{message\} | Messages consumed; tagged `messaging.outcome=success\|error\|retry` |
+| `messaging.serviceconnect.retry.attempts` | Counter | \{attempt\} | Header-counter retry increments |
+| `messaging.serviceconnect.retry.drops` | Counter | \{drop\} | Messages dropped because retry publishing failed |
+| `messaging.serviceconnect.publish.confirm_timeouts` | Counter | \{timeout\} | Publishes that exceeded the configured publish timeout |
+| `messaging.serviceconnect.audit.drops` | Counter | \{drop\} | Audit messages that failed to publish |
+| `messaging.serviceconnect.process.messages.inflight` | UpDownCounter | \{message\} | Currently-dispatched, not-yet-acked messages |
+
+The `error.type` tag is added on failure paths via an allow-list mapper (`OperationCanceledException → cancelled`, `TimeoutException → timeout`, fallback to the exception type's short name). Exception messages are never used as tags — they're unbounded cardinality.
+
+### Cardinality
+
+Typical deployments — 5-20 queues, 5-20 exchanges, ~5 outcome / error categories — yield ~400 active series per metric upper-bound. Operators with very high queue counts (1000+) should consider this when sizing their TSDB.
+
+The `messaging.outcome` tag is a closed three-value set (`success | error | retry`) at the consumer-host emit site. The "drop" outcome (retry-publish-failure path) is captured separately on `messaging.serviceconnect.retry.drops` rather than as a fourth `outcome` value, because the drop decision is made in a deeper layer than the host-level counter sees.
+
+Per-message tags (`messaging.message.id`, routing keys, conversation IDs) are deliberately NOT included on metrics — they belong on traces, where one span per message matches the data model.
+
+### Tracing vs metrics
+
+Tracing is **opt-in** via `AddTelemetry()` (see the Wiring subsection under Tracing above) because span creation has a per-message allocation cost that's only worth paying when you'll actually export the spans. Metrics are **always-on** because instrument emission is free without a listener — same pattern as the .NET BCL libraries (`HttpClient`, `EFCore`, `Sockets`).
+
+### Connection-lifecycle logs
+
+Beyond metrics, ServiceConnect emits structured Info logs for connection state transitions. Filter on the `ServiceConnect.Client.RabbitMQ` category:
+
+| Event ID | Event name | Level | Emitted when |
+|---|---|---|---|
+| 2 | `ConnectionOpened` | Information | A consumer connection establishes |
+| 3 | `ProducerConnectionOpened` | Information | A producer connection establishes |
+| 4 | `ConnectionRecovered` | Information | RabbitMQ.Client's auto-recovery succeeds |
+| 5 | `ConnectionLost` | Information | The broker initiates `ConnectionShutdown` (e.g. broker restart, cluster failover) — NOT escalated to Warning because broker-initiated shutdowns happen for normal operational reasons |
+| 6 | `AckFailed` | Warning | An ack call fails; carries `MessageId` for correlation |
+| 7 | `NackFailed` | Warning | A nack call fails; carries `MessageId` for correlation |
+
 ## Health checks
 
 `ServiceConnect.HealthChecks` ships three opt-in `IHealthCheck` classes for `Microsoft.Extensions.Diagnostics.HealthChecks`:
