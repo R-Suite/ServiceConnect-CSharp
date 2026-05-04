@@ -56,7 +56,7 @@ Make implicit guarantees explicit. Mostly XML doc + website work, naturally pair
 
 ---
 
-## Group D — Security defaults · *pending*
+## Group D — Security defaults · *done*
 
 Decide v8 policy on TLS and connection-secret hygiene.
 
