@@ -21,8 +21,9 @@ namespace ServiceConnect.Interfaces;
 /// </para>
 /// <para>
 /// <b>Implication.</b> Either design handlers to be naturally idempotent (look up by a stable
-/// business key, reconcile rather than overwrite), or use a deduplication mechanism — the
-/// framework ships <c>MessageDeduplication</c> as a filter for this purpose.
+/// business key, reconcile rather than overwrite), or build a per-consumer deduplication
+/// filter pair (<c>BeforeConsuming</c> + <c>OnConsumedSuccessfully</c>) that records each
+/// completed <c>MessageId</c> and short-circuits redeliveries.
 /// </para>
 /// </remarks>
 public interface IBus : IAsyncDisposable

@@ -5,37 +5,33 @@ description: Why duplicates happen in ServiceConnect, how to design handlers tha
 
 import { Aside } from '@astrojs/starlight/components';
 
-ServiceConnect delivers messages **at least once**. Most of the time you receive
-a message exactly once, but occasionally you will see the same message twice:
-the broker redelivers when a consumer NACKs or disconnects before acknowledging.
-If your handler's side effects are not idempotent, the second delivery corrupts
-state.
-
-There are two places to defend against this, and they are not mutually
-exclusive.
-
 ## The delivery contract
 
-ServiceConnect delivers each logical message **at least once**. A handler may run
-more than once for the same message — the broker can redeliver, the consumer can
-redeliver, and a process crash between handler success and the broker recording
-the ack causes a redelivery on next startup.
+ServiceConnect delivers each logical [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/)
+message **at least once**. A handler may run more than once for the same message —
+the broker can redeliver, the consumer can redeliver, and a process crash between
+handler success and the broker recording the ack causes a redelivery on next
+startup.
 
 The framework persists state (process-manager finders, aggregator data, scheduled
 timeouts) **before** sending the ack. So when a redelivery happens, your handler
 runs against state that may already reflect the prior attempt's effects.
 
-Concretely: a payment handler that calls `chargeCard(...)` and then crashes will
-charge the card twice on redelivery. The framework will not stop this for you —
-it cannot tell your business intent from the message bytes. Two strategies for
-fixing it, in preference order:
+Concretely: a payment handler that calls `chargeCard(...)` and then crashes after
+the API call but before the broker records the ack will charge the card twice on
+redelivery. The framework will not stop this for you — it cannot tell your
+business intent from the message bytes. There are two places to defend, in
+preference order:
 
 1. **Make the handler naturally idempotent.** Look up by a stable business key
    first; reconcile rather than overwrite. (Most of this page from here on
    documents this approach.)
-2. **Deduplicate at the framework boundary.** The shipped `MessageDeduplication`
-   filter rejects messages whose `MessageId` it has seen before. Useful when the
-   work itself is hard to make idempotent and you want a generic guard.
+2. **Deduplicate at the framework boundary.** Build a per-consumer dedup filter
+   pair (`BeforeConsuming` + `OnConsumedSuccessfully`) that records each
+   completed `MessageId` and short-circuits redeliveries. Useful when the work
+   itself is hard to make idempotent and you want a generic guard. See
+   [Filter-based deduplication](#filter-based-deduplication-for-non-idempotent-side-effects)
+   below.
 
 Both are valid; the first is cheaper and composes better. Idempotent handlers
 also survive scenarios deduplication doesn't catch (e.g. a manual replay through
