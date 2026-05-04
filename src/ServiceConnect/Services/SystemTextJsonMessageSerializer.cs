@@ -100,4 +100,34 @@ public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
                 $"Failed to deserialize message of type {type.Name}", type, ex);
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Overrides the interface default to read across segments via Utf8JsonReader without
+    /// flattening into a byte[] first — the streaming path delivers messages as multi-segment
+    /// sequences and the per-message copy was a real regression vs. v7's Newtonsoft impl.
+    /// </remarks>
+    public object Deserialize(in ReadOnlySequence<byte> data, Type type)
+    {
+        try
+        {
+            var reader = new Utf8JsonReader(data, isFinalBlock: true, state: default);
+            return JsonSerializer.Deserialize(ref reader, type, _options)
+                ?? throw new SerializationException(
+                    $"Deserialization returned null for type {type.Name}", type);
+        }
+        catch (JsonException ex)
+        {
+            throw new SerializationException(
+                $"Failed to deserialize message of type {type.Name}", type, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // JsonSerializer.Deserialize(ref Utf8JsonReader, ...) throws InvalidOperationException
+            // on malformed reader state. The reader is freshly constructed here so this is
+            // unreachable in practice; wrap for consistency with other deserialize paths.
+            throw new SerializationException(
+                $"Failed to deserialize message of type {type.Name}", type, ex);
+        }
+    }
 }

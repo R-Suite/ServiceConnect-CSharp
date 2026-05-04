@@ -32,4 +32,22 @@ public interface IMessageSerializer
     /// <param name="type">The destination CLR type.</param>
     /// <returns>The deserialized object.</returns>
     object Deserialize(ReadOnlyMemory<byte> data, Type type);
+
+    /// <summary>
+    /// Deserializes a message from a (possibly multi-segment) <see cref="ReadOnlySequence{T}"/>.
+    /// Used by the streaming path where buffered packets are stitched as a sequence rather than
+    /// copied into a contiguous buffer.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation flattens the sequence into a <see cref="byte"/>[] before
+    /// delegating to <see cref="Deserialize(ReadOnlyMemory{byte}, Type)"/>, which allocates a
+    /// copy. Implementations that can read across segments without flattening — e.g. via
+    /// <c>System.Text.Json.Utf8JsonReader</c> on a sequence — should override to avoid the
+    /// allocation on multi-segment input.
+    /// </remarks>
+    /// <param name="data">The serialized payload, possibly spanning multiple segments.</param>
+    /// <param name="type">The destination CLR type.</param>
+    /// <returns>The deserialized object.</returns>
+    object Deserialize(in ReadOnlySequence<byte> data, Type type)
+        => Deserialize(BuffersExtensions.ToArray(data), type);
 }

@@ -257,13 +257,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                 return HandledTask;
             }
 
+            // The serializer's ReadOnlySequence overload reads across segments via
+            // Utf8JsonReader without flattening — keeps the streaming path zero-copy.
             var assembledSequence = state.Stream.ReadSequence();
-            // ReadOnlySequence may be multi-segment; flatten to a contiguous buffer so the
-            // ROM<byte>-based deserialize path can read it without reconstructing the segments.
-            var contiguous = assembledSequence.IsSingleSegment
-                ? assembledSequence.First
-                : System.Buffers.BuffersExtensions.ToArray(assembledSequence);
-            var originalMessage = _serializer.Deserialize(contiguous, resolvedType);
+            var originalMessage = _serializer.Deserialize(in assembledSequence, resolvedType);
 
             return InvokeHandlerAsync(descriptor, handler, originalMessage!, state.Stream, sequenceId, cancellationToken);
         }
