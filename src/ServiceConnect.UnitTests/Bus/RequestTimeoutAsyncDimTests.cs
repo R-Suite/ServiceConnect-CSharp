@@ -10,6 +10,7 @@ public class RequestTimeoutAsyncDimTests
     {
         public Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message => Task.CompletedTask;
         public Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message => Task.CompletedTask;
+        public Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message => Task.CompletedTask;
         public Task<TReply> SendRequestAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
             where TRequest : Message where TReply : Message => Task.FromResult<TReply>(default!);
         public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)

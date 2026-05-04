@@ -136,16 +136,48 @@ public sealed class Bus : IBus
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Reject ambiguous routing up front. Setting both EndPoint and EndPoints
-        // expresses two different routing intents; picking one silently could
-        // reroute traffic (for example, after a typo in the option name or a
-        // merge of two config paths) with no exception and no log. Require the
-        // caller to pick one.
-        if (options is { EndPoint.Length: > 0, EndPoints.Count: > 0 })
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
+        Dictionary<string, string> headers;
+
+        if (_hasOutgoingFilters)
         {
-            throw new ArgumentException(
-                "SendOptions.EndPoint and SendOptions.EndPoints cannot both be set. Provide one or the other.",
-                nameof(options));
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, options?.Headers);
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
+                return;
+            }
+
+            headers = ExtractHeaders(envelope);
+        }
+        else
+        {
+            headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
+        }
+
+        var context = new SendContext
+        {
+            Message = message,
+            MessageType = typeof(T),
+            MessageBytes = messageBytes,
+            Headers = headers,
+            EndPoint = options?.EndPoint,
+            RoutingKey = null,
+            Operation = SendOperation.Send,
+        };
+        await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(endPoints);
+        if (endPoints.Count == 0)
+        {
+            throw new ArgumentException("SendToManyAsync requires at least one endpoint.", nameof(endPoints));
         }
 
         var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
@@ -168,24 +200,7 @@ public sealed class Bus : IBus
             headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
         }
 
-        if (options?.EndPoints is { Count: > 0 } endpoints)
-        {
-            foreach (var endpoint in endpoints)
-            {
-                var context = new SendContext
-                {
-                    Message = message,
-                    MessageType = typeof(T),
-                    MessageBytes = messageBytes,
-                    Headers = headers,
-                    EndPoint = endpoint,
-                    RoutingKey = null,
-                    Operation = SendOperation.Send,
-                };
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        else
+        foreach (var endpoint in endPoints)
         {
             var context = new SendContext
             {
@@ -193,7 +208,7 @@ public sealed class Bus : IBus
                 MessageType = typeof(T),
                 MessageBytes = messageBytes,
                 Headers = headers,
-                EndPoint = options?.EndPoint,
+                EndPoint = endpoint,
                 RoutingKey = null,
                 Operation = SendOperation.Send,
             };

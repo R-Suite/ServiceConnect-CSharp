@@ -3,7 +3,6 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
-using ServiceConnect.Interfaces.Options;
 using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
@@ -124,10 +123,7 @@ public class MultiEndpointSendTests(MessagingFixture fixture)
             // Act
             var correlationId = Guid.NewGuid();
             var message = new TestMessage(correlationId) { Content = "multi-endpoint send" };
-            await senderBus.SendAsync(message, new SendOptions
-            {
-                EndPoints = [queue1, queue2]
-            });
+            await senderBus.SendToManyAsync(message, [queue1, queue2]);
 
             // Assert: wait up to 30 seconds for both handlers to be called
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));

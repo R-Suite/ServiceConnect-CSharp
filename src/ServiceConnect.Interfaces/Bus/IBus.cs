@@ -18,6 +18,14 @@ public interface IBus : IAsyncDisposable
     Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
 
     /// <summary>
+    /// Sends a message to each of the specified endpoints. Each delivery is dispatched as a
+    /// separate <see cref="SendAsync{T}"/>-equivalent call; failures on one endpoint do not
+    /// abort the others. The <c>options.EndPoint</c> field is ignored when this method is
+    /// called — the explicit <paramref name="endPoints"/> parameter wins.
+    /// </summary>
+    Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
+
+    /// <summary>
     /// Sends a request and waits for a single reply.
     /// </summary>
     Task<TReply> SendRequestAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)

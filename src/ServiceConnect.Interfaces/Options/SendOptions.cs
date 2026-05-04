@@ -13,12 +13,8 @@ public readonly record struct SendOptions
     public IReadOnlyDictionary<string, string>? Headers { get; init; }
 
     /// <summary>
-    /// Gets the single destination endpoint.
+    /// Gets the destination endpoint. Use <see cref="IBus.SendToManyAsync"/> for fan-out
+    /// to multiple endpoints.
     /// </summary>
     public string? EndPoint { get; init; }
-
-    /// <summary>
-    /// Gets the destination endpoints when sending to multiple queues.
-    /// </summary>
-    public IReadOnlyList<string>? EndPoints { get; init; }
 }

@@ -589,47 +589,49 @@ public class BusTests
     }
 
     [Fact]
-    public async Task SendAsync_WithMultipleEndPoints_ShouldSendToEach()
+    public async Task SendToManyAsync_FansOut_ToEachEndpoint()
     {
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-        var options = new SendOptions { EndPoints = ["EP1", "EP2"] };
+        var capturedEndpoints = new List<string?>();
 
-        _mockSendPipeline.Setup(x => x.ExecuteSendMessagePipelineAsync(
-            It.IsAny<SendContext>(),
-            It.IsAny<CancellationToken>()))
+        _mockSendPipeline
+            .Setup(x => x.ExecuteSendMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
+            .Callback<SendContext, CancellationToken>((ctx, _) => capturedEndpoints.Add(ctx.EndPoint))
             .Returns(Task.CompletedTask);
 
         // Act
-        await _bus.SendAsync(message, options);
+        await _bus.SendToManyAsync(message, ["queue-a", "queue-b", "queue-c"]);
 
-        // Assert
-        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-            It.Is<SendContext>(ctx =>
-                ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.EndPoint == "EP1"),
-            It.IsAny<CancellationToken>()), Times.Once);
-        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
-            It.Is<SendContext>(ctx =>
-                ctx.MessageType == typeof(FakeMessage1) &&
-                ctx.EndPoint == "EP2"),
-            It.IsAny<CancellationToken>()), Times.Once);
+        // Assert: pipeline called once per endpoint, in order
+        Assert.Equal(3, capturedEndpoints.Count);
+        Assert.Equal("queue-a", capturedEndpoints[0]);
+        Assert.Equal("queue-b", capturedEndpoints[1]);
+        Assert.Equal("queue-c", capturedEndpoints[2]);
     }
 
     [Fact]
-    public async Task SendAsync_WhenBothEndPointAndEndPointsSet_ThrowsArgumentException()
+    public async Task SendToManyAsync_EmptyEndpointList_Throws()
     {
-        // Setting both EndPoint and EndPoints is ambiguous — the caller has
-        // expressed two different routing intents. The bus must reject the
-        // call up front rather than pick one and silently discard the other.
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-        var options = new SendOptions
-        {
-            EndPoint = "single",
-            EndPoints = ["many-1", "many-2"],
-        };
 
-        await Assert.ThrowsAsync<ArgumentException>(() => _bus.SendAsync(message, options));
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            _bus.SendToManyAsync(message, []));
+
+        Assert.Contains("at least one endpoint", ex.Message);
+
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<SendContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task SendToManyAsync_NullEndpointList_ThrowsArgumentNull()
+    {
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            _bus.SendToManyAsync(message, null!));
 
         _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
             It.IsAny<SendContext>(), It.IsAny<CancellationToken>()),
