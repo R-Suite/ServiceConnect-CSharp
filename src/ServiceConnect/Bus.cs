@@ -202,12 +202,18 @@ public sealed class Bus : IBus
 
         foreach (var endpoint in endPoints)
         {
+            // Per-iteration shallow copy: ISendMessageMiddleware writes to ctx.Headers
+            // (telemetry stamps, signing, dedup keys) and per-endpoint mutations would
+            // otherwise leak into subsequent iterations of this fan-out loop. The copy
+            // is O(n) on header count (typically < 10 entries); negligible per-message.
+            var perEndpointHeaders = new Dictionary<string, string>(headers, StringComparer.Ordinal);
+
             var context = new SendContext
             {
                 Message = message,
                 MessageType = typeof(T),
                 MessageBytes = messageBytes,
-                Headers = headers,
+                Headers = perEndpointHeaders,
                 EndPoint = endpoint,
                 RoutingKey = null,
                 Operation = SendOperation.Send,

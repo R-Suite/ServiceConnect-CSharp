@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -594,10 +595,15 @@ public class BusTests
         // Arrange
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
         var capturedEndpoints = new List<string?>();
+        var capturedHeaders = new List<IDictionary<string, string>>();
 
         _mockSendPipeline
             .Setup(x => x.ExecuteSendMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
-            .Callback<SendContext, CancellationToken>((ctx, _) => capturedEndpoints.Add(ctx.EndPoint))
+            .Callback<SendContext, CancellationToken>((ctx, _) =>
+            {
+                capturedEndpoints.Add(ctx.EndPoint);
+                capturedHeaders.Add(ctx.Headers);
+            })
             .Returns(Task.CompletedTask);
 
         // Act
@@ -608,6 +614,15 @@ public class BusTests
         Assert.Equal("queue-a", capturedEndpoints[0]);
         Assert.Equal("queue-b", capturedEndpoints[1]);
         Assert.Equal("queue-c", capturedEndpoints[2]);
+
+        // Serialiser called exactly once — fan-out reuses the bytes across iterations.
+        _mockSerializer.Verify(x => x.Serialize(It.IsAny<FakeMessage1>(), It.IsAny<IBufferWriter<byte>>()), Times.Once);
+
+        // Each iteration receives a distinct Headers dictionary so middleware cannot
+        // leak per-endpoint mutations into the next iteration.
+        Assert.NotSame(capturedHeaders[0], capturedHeaders[1]);
+        Assert.NotSame(capturedHeaders[1], capturedHeaders[2]);
+        Assert.NotSame(capturedHeaders[0], capturedHeaders[2]);
     }
 
     [Fact]
