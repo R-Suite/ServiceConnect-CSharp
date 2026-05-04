@@ -6,7 +6,9 @@ namespace ServiceConnect.Interfaces;
 public interface IMessageBusWriteStream : IAsyncDisposable
 {
     /// <summary>
-    /// Writes the supplied buffer to the stream as one or more transport packets.
+    /// Writes the supplied buffer to the stream as a single transport packet. The caller
+    /// is responsible for chunking large payloads into multiple <c>WriteAsync</c> calls
+    /// when packet sizes need to stay below a transport limit.
     /// </summary>
     /// <param name="buffer">The bytes to write. The buffer is read once and the underlying
     /// memory is not retained past the call completion; the caller can reuse the buffer.</param>
