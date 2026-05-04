@@ -16,7 +16,7 @@ public class RequestTimeoutAsyncDimTests
             where TRequest : Message where TReply : Message => Task.FromResult<IList<TReply>>([]);
         public Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
             where TRequest : Message where TReply : Message => Task.CompletedTask;
-        public Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message => Task.CompletedTask;
+        public Task RouteAsync<T>(T message, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default) where T : Message => Task.CompletedTask;
         public IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message => throw new NotImplementedException();
         public Task StartConsumingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task StopConsumingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;

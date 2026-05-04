@@ -115,7 +115,7 @@ public class HandlerProcessorTests
     {
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
-        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()))
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()))
             .Returns(Task.CompletedTask);
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
@@ -135,7 +135,7 @@ public class HandlerProcessorTests
         await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
 
         Assert.True(handler.Invoked);
-        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 2 && d[0] == "Step2" && d[1] == "Step3")), Times.Once);
+        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 2 && d[0] == "Step2" && d[1] == "Step3")), Times.Once);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class HandlerProcessorTests
     {
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
-        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()))
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()))
             .Returns(Task.CompletedTask);
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
@@ -161,7 +161,7 @@ public class HandlerProcessorTests
 
         await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
 
-        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 1 && d[0] == "NextQueue")), Times.Once);
+        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 1 && d[0] == "NextQueue")), Times.Once);
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class HandlerProcessorTests
 
         await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
 
-        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()), Times.Never);
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()), Times.Never);
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public class HandlerProcessorTests
         // registered in queueConfig is now allowed — only format validation applies.
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
-        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>(), It.IsAny<CancellationToken>()))
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
                .Returns(Task.CompletedTask);
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
@@ -207,7 +207,7 @@ public class HandlerProcessorTests
 
         Assert.Equal(ProcessResult.Handled, result);
         mockBus.Verify(
-            b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 1 && d[0] == "unknown-cross-service-queue"), It.IsAny<CancellationToken>()),
+            b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 1 && d[0] == "unknown-cross-service-queue"), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -232,7 +232,7 @@ public class HandlerProcessorTests
 
         Assert.Equal(ProcessResult.Handled, result);
         Assert.True(handler.Invoked);
-        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IList<string>>()), Times.Never);
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()), Times.Never);
     }
 
     [Fact]

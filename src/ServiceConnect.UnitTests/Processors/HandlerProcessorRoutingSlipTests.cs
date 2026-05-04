@@ -55,7 +55,7 @@ public class HandlerProcessorRoutingSlipTests
     {
         var handler = new SlipTestHandler();
         var mockBus = new Mock<IBus>();
-        mockBus.Setup(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IList<string>>(), It.IsAny<CancellationToken>()))
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
                .Returns(Task.CompletedTask);
 
         var services = new ServiceCollection();
@@ -85,7 +85,7 @@ public class HandlerProcessorRoutingSlipTests
 
         Assert.Equal(ProcessResult.Handled, result);
         mockBus.Verify(
-            b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 1 && d[0] == "remote-service-q"), It.IsAny<CancellationToken>()),
+            b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 1 && d[0] == "remote-service-q"), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -99,7 +99,7 @@ public class HandlerProcessorRoutingSlipTests
     {
         var handler = new SlipTestHandler();
         var mockBus = new Mock<IBus>();
-        mockBus.Setup(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IList<string>>(), It.IsAny<CancellationToken>()))
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
                .Returns(Task.CompletedTask);
 
         var services = new ServiceCollection();
@@ -126,7 +126,7 @@ public class HandlerProcessorRoutingSlipTests
         await processor.ProcessAsync(new byte[] { 1 }, typeof(SlipTestMsg), msg, headers, envelope);
 
         mockBus.Verify(
-            b => b.RouteAsync(msg, It.Is<IList<string>>(d => d.Count == 2 && d[0] == "service-b-q" && d[1] == "service-c-q"), It.IsAny<CancellationToken>()),
+            b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 2 && d[0] == "service-b-q" && d[1] == "service-c-q"), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -215,7 +215,7 @@ public class HandlerProcessorRoutingSlipTests
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(SlipTestMsg), msg, headers, envelope);
 
         Assert.Equal(ProcessResult.Handled, result);
-        mockBus.Verify(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>
@@ -255,7 +255,7 @@ public class HandlerProcessorRoutingSlipTests
             () => processor.ProcessAsync(new byte[] { 1 }, typeof(SlipTestMsg), msg, headers, envelope));
 
         // The AggregateException propagates before ForwardRoutingSlipAsync is reached.
-        mockBus.Verify(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
 

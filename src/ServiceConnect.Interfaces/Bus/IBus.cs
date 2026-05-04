@@ -46,7 +46,7 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Routes a message through a series of destinations using a routing slip.
     /// </summary>
-    Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message;
+    Task RouteAsync<T>(T message, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default) where T : Message;
 
     /// <summary>
     /// Creates a streaming connection for sending large messages in chunks.

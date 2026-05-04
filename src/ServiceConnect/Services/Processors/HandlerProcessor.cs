@@ -123,25 +123,25 @@ internal sealed class HandlerProcessor(
     // Cache compiled delegates for IBus.RouteAsync<T> keyed by message type.
     // Building a delegate via Expression.Lambda avoids repeated MakeGenericMethod + Invoke
     // overhead on every routed message.
-    private static readonly ConcurrentDictionary<Type, Func<IBus, object, IList<string>, CancellationToken, Task>>
+    private static readonly ConcurrentDictionary<Type, Func<IBus, object, IReadOnlyList<string>, CancellationToken, Task>>
         RouteAsyncDelegateCache = new();
 
-    private static Func<IBus, object, IList<string>, CancellationToken, Task> BuildRouteAsyncDelegate(Type messageType)
+    private static Func<IBus, object, IReadOnlyList<string>, CancellationToken, Task> BuildRouteAsyncDelegate(Type messageType)
     {
-        // IBus.RouteAsync<T>(T message, IList<string> destinations, CancellationToken ct)
+        // IBus.RouteAsync<T>(T message, IReadOnlyList<string> destinations, CancellationToken ct)
         var openMethod = typeof(IBus).GetMethod(nameof(IBus.RouteAsync))!;
         var closedMethod = openMethod.MakeGenericMethod(messageType);
 
         var busParam = Expression.Parameter(typeof(IBus), "bus");
         var msgParam = Expression.Parameter(typeof(object), "message");
-        var destParam = Expression.Parameter(typeof(IList<string>), "destinations");
+        var destParam = Expression.Parameter(typeof(IReadOnlyList<string>), "destinations");
         var ctParam = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
 
         // Cast the untyped object parameter to the concrete message type expected by RouteAsync<T>.
         var castMsg = Expression.Convert(msgParam, messageType);
 
         var callExpr = Expression.Call(busParam, closedMethod, castMsg, destParam, ctParam);
-        return Expression.Lambda<Func<IBus, object, IList<string>, CancellationToken, Task>>(
+        return Expression.Lambda<Func<IBus, object, IReadOnlyList<string>, CancellationToken, Task>>(
             callExpr, busParam, msgParam, destParam, ctParam).Compile();
     }
 

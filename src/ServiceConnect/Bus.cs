@@ -316,7 +316,7 @@ public sealed class Bus : IBus
     }
 
     /// <inheritdoc />
-    public async Task RouteAsync<T>(T message, IList<string> destinations, CancellationToken cancellationToken = default) where T : Message
+    public async Task RouteAsync<T>(T message, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
@@ -683,7 +683,7 @@ public sealed class Bus : IBus
         return headers;
     }
 
-    private static string BuildRoutingSlip(IList<string> destinations)
+    private static string BuildRoutingSlip(IReadOnlyList<string> destinations)
     {
         if (destinations.Count <= 1)
         {
