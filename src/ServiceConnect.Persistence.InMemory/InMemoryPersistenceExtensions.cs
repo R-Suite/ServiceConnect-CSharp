@@ -26,11 +26,13 @@ public static class InMemoryPersistenceExtensions
     /// persistor (e.g. <c>UseMongoDbPersistence</c>) for production deployments.
     /// </para>
     /// <para>
-    /// At bus build time this method emits a <see cref="LogLevel.Warning"/>-level log under
-    /// the <c>ServiceConnect.Persistence.InMemory.InMemoryPersistenceState</c> category (any
-    /// filter on the <c>ServiceConnect.Persistence.InMemory</c> prefix matches it). The warning
-    /// fires once per bus instance. To silence in test runs, raise the category's minimum level
-    /// to <see cref="LogLevel.Error"/> via standard <c>Microsoft.Extensions.Logging</c> filter
+    /// When the in-memory persistence singleton is first resolved (typically at bus build) this
+    /// method emits a <see cref="LogLevel.Warning"/>-level log under the
+    /// <c>ServiceConnect.Persistence.InMemory.InMemoryPersistenceState</c> category (any filter on
+    /// the <c>ServiceConnect.Persistence.InMemory</c> prefix matches it). The warning fires once
+    /// per <see cref="IServiceProvider"/> — building two providers in the same process produces
+    /// two warnings. To silence in test runs, raise the category's minimum level to
+    /// <see cref="LogLevel.Error"/> via standard <c>Microsoft.Extensions.Logging</c> filter
     /// configuration.
     /// </para>
     /// </remarks>
