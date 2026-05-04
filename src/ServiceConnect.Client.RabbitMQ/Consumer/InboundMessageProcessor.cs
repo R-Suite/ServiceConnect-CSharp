@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using ServiceConnect.Diagnostics;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
@@ -152,6 +154,15 @@ internal sealed class InboundMessageProcessor(
                 _logger.LogError(retryEx,
                     "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
                     args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
+                // Surface the drop on a dedicated counter so operators can alert on the
+                // ack-and-drop branch separately from logged errors. error.type goes through
+                // the allow-list mapper to keep cardinality bounded.
+                ServiceConnectMeter.AddRetryDrop(new TagList
+                {
+                    { "messaging.system", "rabbitmq" },
+                    { "messaging.destination.name", _queueConfiguration.QueueName },
+                    { "error.type", ExceptionTypeMapper.Map(retryEx) },
+                });
                 // Intentionally swallow: includes PublishException (mandatory:true, retry queue gone).
                 // Acking now prevents the broker from redelivering into the same failed path; letting
                 // this propagate would nack with requeue:true and hot-loop on a poison message.
@@ -218,35 +229,52 @@ internal sealed class InboundMessageProcessor(
                 return false;
             }
 
-            // Audit publish failures must not fail message delivery — audit is an
-            // observability side-effect, not part of the business transaction. A
-            // throw here would bubble out of ProcessAsync, leave `processed` false
-            // in the caller (EventAsync), and the already-handled message would be
-            // nacked with requeue:true → duplicate handler invocation.
-            try
-            {
-                await _auditPublisher.PublishAuditIfEnabledAsync(publishChannel, args, headers, shutdownToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
-            {
-                // Audit is fire-and-forget; shutdown cancellation is expected, not an error.
-                // Swallow (do NOT rethrow) so the already-handled message gets ack'd — see the
-                // pre-existing fire-and-forget rationale comment above. Rethrowing here would
-                // leave processed=false in the caller, the outer finally nacks-with-requeue,
-                // and the broker redelivers a successfully-handled message → duplicate handler
-                // invocation. See learn/operations/cancellation: observability paths log Debug
-                // and continue.
-                _logger.LogDebug(
-                    "Audit publish cancelled by shutdown for delivery {DeliveryTag}; continuing to ack the original message",
-                    args.DeliveryTag);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to publish audit message for delivery {DeliveryTag}; continuing to ack the original message", args.DeliveryTag);
-            }
+            await PublishAuditWithDropMetricAsync(publishChannel, args, headers, shutdownToken).ConfigureAwait(false);
         }
 
         return !_shutdownTimedOut();
+    }
+
+    // Extracted from ProcessAsync to keep the dispatch method under the analyzer's
+    // length budget. Audit publish failures must not fail message delivery — audit is
+    // an observability side-effect, not part of the business transaction. A throw
+    // here would bubble out of ProcessAsync, leave `processed` false in EventAsync,
+    // and the already-handled message would be nacked with requeue:true → duplicate
+    // handler invocation.
+    private async Task PublishAuditWithDropMetricAsync(
+        IChannel publishChannel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        CancellationToken shutdownToken)
+    {
+        try
+        {
+            await _auditPublisher.PublishAuditIfEnabledAsync(publishChannel, args, headers, shutdownToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
+            // Audit is fire-and-forget; shutdown cancellation is expected, not an error.
+            // Swallow (do NOT rethrow) so the already-handled message gets ack'd. Rethrowing
+            // would leave processed=false in the caller, the outer finally nacks-with-requeue,
+            // and the broker redelivers a successfully-handled message → duplicate handler
+            // invocation. See learn/operations/cancellation: observability paths log Debug
+            // and continue.
+            _logger.LogDebug(
+                "Audit publish cancelled by shutdown for delivery {DeliveryTag}; continuing to ack the original message",
+                args.DeliveryTag);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish audit message for delivery {DeliveryTag}; continuing to ack the original message", args.DeliveryTag);
+            // Audit queue is a single global destination per the spec — emitting
+            // messaging.destination.name here would imply per-queue audit topology
+            // that doesn't exist. Tag only system + error.type.
+            ServiceConnectMeter.AddAuditDrop(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "error.type", ExceptionTypeMapper.Map(ex) },
+            });
+        }
     }
 
     // Avoid StringBuilder allocation inside DateTime.ToString("O").

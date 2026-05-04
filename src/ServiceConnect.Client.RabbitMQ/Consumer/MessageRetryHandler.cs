@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using ServiceConnect.Diagnostics;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Client.RabbitMQ;
@@ -62,6 +64,16 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
         {
             retryCount++;
             HeaderHelpers.SetHeader(headers, HeaderKeys.RetryCount, retryCount);
+
+            // Emitted at the increment site so a counter delta corresponds 1:1 with a retry-queue
+            // republish, regardless of whether the subsequent BasicPublishAsync ultimately succeeds.
+            // messaging.destination.name = retryQueueName matches the queue the publish targets.
+            ServiceConnectMeter.AddRetryAttempt(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "messaging.destination.name", retryQueueName },
+            });
+
             // Explicit copy avoids the copy-constructor's "any malformed source field throws" risk.
             // The set of fields here mirrors the AMQP BASIC properties RabbitMQ.Client exposes;
             // adding a field to BasicProperties without updating this copy is a silent regression —

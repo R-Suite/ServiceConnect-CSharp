@@ -578,6 +578,15 @@ public sealed class Producer : IProducer
             // on the next publish clears the confirm-tracker's state before any subsequent publish runs.
             _producerConnection.MarkResetRequired();
 
+            // SendAsync passes exchange="" with the destination on routingKey; use a
+            // conventional sentinel so the metric tag stays present (downstream alerts
+            // and panels rely on a stable schema).
+            ServiceConnectMeter.AddPublishConfirmTimeout(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "messaging.destination.name", string.IsNullOrEmpty(exchange) ? "<empty>" : exchange },
+            });
+
             throw new TimeoutException(
                 $"BasicPublishAsync exceeded the configured publish timeout of {_publishTimeout.TotalSeconds:0.###}s " +
                 $"(exchange='{exchange}', routingKey='{routingKey}', messageId='{basicProperties.MessageId ?? "<none>"}'). " +

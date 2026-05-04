@@ -284,6 +284,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 // atomic discipline of the matching Interlocked.Decrement at the bottom of the
                 // EventAsync finally block.
                 Interlocked.Increment(ref _messagesBeingProcessed);
+                // UpDownCounter mirrors _messagesBeingProcessed; the matching -1 is in the finally.
+                ServiceConnectMeter.AddInFlight(1, BuildInFlightTags());
                 callbackAdmitted = true;
             }
 
@@ -339,39 +341,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
             if (inboundHeaders != null)
             {
-                foreach (var kvp in inboundHeaders)
+                var oversizedHeaderRejection = await TryRejectOversizedHeaderAsync(inboundHeaders, args, publishChannel!).ConfigureAwait(false);
+                if (oversizedHeaderRejection)
                 {
-                    int byteSize;
-                    if (kvp.Value is byte[] bytes)
-                    {
-                        byteSize = bytes.Length;
-                    }
-                    else if (kvp.Value is string s)
-                    {
-                        // string headers stamped by ServiceConnect (TypeName, FullTypeName, etc.) need
-                        // bounding too — a buggy producer could send a 100MB string and exhaust memory
-                        // on every consumer in the system. UTF-8 byte count matches the on-wire size.
-                        byteSize = System.Text.Encoding.UTF8.GetByteCount(s);
-                    }
-                    else
-                    {
-                        // Non-string, non-byte-array headers (int, bool, etc.) are size-bounded by their type.
-                        continue;
-                    }
-
-                    if (byteSize > DefaultMaxHeaderValueBytes)
-                    {
-                        await _retryHandler.HandleTerminalFailureAsync(
-                            publishChannel!,
-                            args,
-                            CopyInboundHeaders(args),
-                            new InvalidOperationException(
-                                $"Inbound header '{kvp.Key}' size {byteSize} bytes exceeds configured limit {DefaultMaxHeaderValueBytes} bytes."),
-                            GetShutdownPublishToken())
-                            .ConfigureAwait(false);
-                        processed = true;
-                        return;
-                    }
+                    processed = true;
+                    return;
                 }
             }
 
@@ -456,9 +430,65 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 if (callbackAdmitted)
                 {
                     Interlocked.Decrement(ref _messagesBeingProcessed);
+                    // Matching -1 for the +1 emitted at the admission site; net delta must stay
+                    // zero across the increment/decrement pair, otherwise the gauge climbs.
+                    ServiceConnectMeter.AddInFlight(-1, BuildInFlightTags());
                 }
             }
         }
+    }
+
+    // Single tag-builder reused by the +1 admission emit and the -1 finally emit so the two
+    // points of the pair carry identical tags. Both call sites live inside EventAsync, so
+    // factoring them keeps the method itself under the analyzer length budget.
+    private TagList BuildInFlightTags() => new()
+    {
+        { "messaging.system", "rabbitmq" },
+        { "messaging.destination.name", _queueConfiguration.QueueName },
+    };
+
+    // Returns true if a header value exceeded DefaultMaxHeaderValueBytes and was routed to
+    // the terminal-failure path. The caller then treats the message as processed.
+    // Extracted from EventAsync to keep that method under the analyzer length budget.
+    private async Task<bool> TryRejectOversizedHeaderAsync(
+        IDictionary<string, object?> inboundHeaders,
+        BasicDeliverEventArgs args,
+        IChannel publishChannel)
+    {
+        foreach (var kvp in inboundHeaders)
+        {
+            int byteSize;
+            if (kvp.Value is byte[] bytes)
+            {
+                byteSize = bytes.Length;
+            }
+            else if (kvp.Value is string s)
+            {
+                // string headers stamped by ServiceConnect (TypeName, FullTypeName, etc.) need
+                // bounding too — a buggy producer could send a 100MB string and exhaust memory
+                // on every consumer in the system. UTF-8 byte count matches the on-wire size.
+                byteSize = System.Text.Encoding.UTF8.GetByteCount(s);
+            }
+            else
+            {
+                // Non-string, non-byte-array headers (int, bool, etc.) are size-bounded by their type.
+                continue;
+            }
+
+            if (byteSize > DefaultMaxHeaderValueBytes)
+            {
+                await _retryHandler.HandleTerminalFailureAsync(
+                    publishChannel,
+                    args,
+                    CopyInboundHeaders(args),
+                    new InvalidOperationException(
+                        $"Inbound header '{kvp.Key}' size {byteSize} bytes exceeds configured limit {DefaultMaxHeaderValueBytes} bytes."),
+                    GetShutdownPublishToken())
+                    .ConfigureAwait(false);
+                return true;
+            }
+        }
+        return false;
     }
 
     // Inner metric scope: only the ProcessAsync invocation itself; admission/header validation

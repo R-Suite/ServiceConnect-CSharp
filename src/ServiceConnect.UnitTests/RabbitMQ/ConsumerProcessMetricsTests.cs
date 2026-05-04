@@ -123,6 +123,37 @@ public sealed class ConsumerProcessMetricsTests
         Assert.Null(consumed.GetTag("error.type"));
     }
 
+    [Fact]
+    public async Task OnMessageReceived_TogglesInFlightUpDownCounter()
+    {
+        // Drives a successful dispatch through RabbitMqConsumerHost.EventAsync so the
+        // admission-site +1 and the finally-site -1 both fire. Net delta must be zero —
+        // an unmatched +1 would surface as a steadily-climbing in-flight gauge.
+        var queueName = $"q-inflight-{Guid.NewGuid():N}";
+        using var collector = new MetricCollector("messaging.destination.name", queueName);
+
+        static Task<ConsumeEventResult> Handler(
+            ReadOnlyMemory<byte> _, string __, IDictionary<string, object> ___, CancellationToken ____)
+            => Task.FromResult(new ConsumeEventResult { Success = true });
+
+        var (host, _, _) = await BuildHostAsync(Handler, queueName: queueName);
+        await using (host)
+        {
+            await host.RaiseDeliveryForTests(MakeArgs(deliveryTag: 4));
+        }
+
+        var deltas = collector.GetLongRecords(MetricNames.InFlightMessages);
+        Assert.Equal(2, deltas.Count);
+        Assert.Equal(1, deltas[0].Value);   // +1 at admission
+        Assert.Equal(-1, deltas[1].Value);  // -1 in the finally
+        Assert.Equal(0, deltas.Sum(r => r.Value));  // net-zero invariant
+        Assert.All(deltas, r =>
+        {
+            Assert.Equal("rabbitmq", r.GetTag("messaging.system"));
+            Assert.Equal(queueName, r.GetTag("messaging.destination.name"));
+        });
+    }
+
     // ── Harness ───────────────────────────────────────────────────────────────
     // Mirrors RabbitMqConsumerHostInflightCounterTests.BuildHostAsync; parameterised
     // to optionally raise AlreadyClosedException from the publish channel so the
