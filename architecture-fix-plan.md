@@ -79,7 +79,7 @@ Genuine new behaviour, not docs/metrics. The idempotency call is the strategic o
 
 ---
 
-## Group F — Perf reductions · *pending*
+## Group F — Perf reductions · *done — items 3 and 4; items 1 and 2 deferred (see notes.md)*
 
 Allocation-shaving and small inefficiencies. Internal-only changes; safe in any minor release.
 
