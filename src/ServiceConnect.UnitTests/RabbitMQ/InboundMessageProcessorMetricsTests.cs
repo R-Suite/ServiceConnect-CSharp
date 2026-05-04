@@ -143,7 +143,9 @@ public sealed class InboundMessageProcessorMetricsTests
         Assert.Equal("rabbitmq", record.GetTag("messaging.system"));
         Assert.Equal(expectedErrorType, record.GetTag("error.type"));
         // Spec invariant: audit drop carries no destination-name tag (audit queue is global).
-        Assert.Null(record.GetTag("messaging.destination.name"));
+        // Use ContainsKey rather than GetTag so the assertion fails for both "tag absent" AND
+        // "tag present with null value" — GetTag returns null for either case.
+        Assert.False(record.Tags.ContainsKey("messaging.destination.name"));
     }
 
     // Custom exception type whose runtime GetType().Name is unique to this test file —

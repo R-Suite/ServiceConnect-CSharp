@@ -269,6 +269,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         var publishChannel = _publishChannel;
         bool processed = false;
         bool callbackAdmitted = false;
+        // Tags reused by both the +1 admission emit and the -1 finally emit. Built once and
+        // captured so neither emit can throw mid-construction (defence-in-depth on the
+        // gauge-balance invariant) and so the hot path doesn't pay for two TagList builds
+        // per delivery. Default-init only — populated at admission, used only when
+        // callbackAdmitted is true (which guarantees the +1 fired with these exact tags).
+        TagList inFlightTags = default;
         try
         {
             lock (_callbackAdmissionGate)
@@ -285,7 +291,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 // EventAsync finally block.
                 Interlocked.Increment(ref _messagesBeingProcessed);
                 // UpDownCounter mirrors _messagesBeingProcessed; the matching -1 is in the finally.
-                ServiceConnectMeter.AddInFlight(1, BuildInFlightTags());
+                inFlightTags = BuildInFlightTags();
+                ServiceConnectMeter.AddInFlight(1, inFlightTags);
                 callbackAdmitted = true;
             }
 
@@ -432,7 +439,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                     Interlocked.Decrement(ref _messagesBeingProcessed);
                     // Matching -1 for the +1 emitted at the admission site; net delta must stay
                     // zero across the increment/decrement pair, otherwise the gauge climbs.
-                    ServiceConnectMeter.AddInFlight(-1, BuildInFlightTags());
+                    // Reuses the captured inFlightTags so both halves carry identical tags by
+                    // construction.
+                    ServiceConnectMeter.AddInFlight(-1, inFlightTags);
                 }
             }
         }
