@@ -30,6 +30,7 @@ public static class ExampleBusFactory
                 transport.SetClientSetting("Port", settings.RabbitMqPort);
                 transport.SetClientSetting("RetryCount", 3);
                 transport.SetClientSetting("RetrySeconds", 1);
+                transport.SslEnabled = false; // local-dev plaintext; production must use TLS
             });
 
             builder.ConfigureQueues(queues =>

@@ -37,8 +37,8 @@ public sealed class TransportConfiguration : ITransportConfiguration
     /// Time to wait for in-flight messages to drain during graceful shutdown, in milliseconds.
     /// </summary>
     public int GracefulShutdownTimeoutMilliseconds { get; set; } = DefaultGracefulShutdownTimeoutMilliseconds;
-    /// <remarks>Defaults to false. Consider logging a warning when disabled on non-localhost hosts.</remarks>
-    public bool SslEnabled { get; set; }
+    /// <inheritdoc />
+    public bool SslEnabled { get; set; } = true;
     /// <summary>
     /// Gets or sets the SSL policy errors that are acceptable.
     /// WARNING: Setting any value other than <see cref="SslPolicyErrors.None"/> weakens TLS security

@@ -61,6 +61,7 @@ public class StreamOutOfOrderTests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = consumerQueue);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
@@ -85,6 +86,7 @@ public class StreamOutOfOrderTests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = producerQueue);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);

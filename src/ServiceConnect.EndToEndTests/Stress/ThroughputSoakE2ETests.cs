@@ -75,6 +75,7 @@ public class ThroughputSoakE2ETests(MessagingFixture fixture)
                 t.Username = _fixture.RabbitMqUsername;
                 t.Password = _fixture.RabbitMqPassword;
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q =>
             {
@@ -161,6 +162,7 @@ public class ThroughputSoakE2ETests(MessagingFixture fixture)
                 t.Username = _fixture.RabbitMqUsername;
                 t.Password = _fixture.RabbitMqPassword;
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q =>
             {

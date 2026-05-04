@@ -49,6 +49,7 @@ public class MultiEndpointSendTests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = queue1);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
@@ -83,6 +84,7 @@ public class MultiEndpointSendTests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = queue2);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
@@ -107,6 +109,7 @@ public class MultiEndpointSendTests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = senderQueue);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);

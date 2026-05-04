@@ -98,6 +98,7 @@ public class PoisonMessageRedeliveryTests(MessagingFixture fixture)
                 // Pass the same args the queue was pre-declared with so the bus's QueueDeclareAsync
                 // sees equivalent arguments and doesn't fail with inequivalent_arg on initial setup.
                 t.SetClientSetting("UtilityQueueArguments", errorQueueArgs);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q =>
             {

@@ -30,6 +30,7 @@ var host = Host.CreateDefaultBuilder(args)
             builder.UseRabbitMQ(transport =>
             {
                 transport.Host = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
+                transport.SslEnabled = false; // local-dev plaintext; production must use TLS
             });
             builder.AddBeforeConsumingFilter<DedupeIncomingFilter>();
             builder.AddOnConsumedSuccessfullyFilter<DedupeOnSuccessFilter>();

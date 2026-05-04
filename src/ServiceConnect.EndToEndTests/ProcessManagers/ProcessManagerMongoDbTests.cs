@@ -49,6 +49,7 @@ public class ProcessManagerMongoDbTests(PersistenceFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);

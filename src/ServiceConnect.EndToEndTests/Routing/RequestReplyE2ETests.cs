@@ -45,6 +45,7 @@ public class RequestReplyE2ETests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = responderQueue);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
@@ -71,6 +72,7 @@ public class RequestReplyE2ETests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = requesterQueue);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);

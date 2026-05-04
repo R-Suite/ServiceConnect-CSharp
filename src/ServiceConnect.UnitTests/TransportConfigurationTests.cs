@@ -57,10 +57,10 @@ public class TransportConfigurationTests
     }
 
     [Fact]
-    public void DefaultSslEnabledIsFalse()
+    public void DefaultSslEnabledIsTrue()
     {
         var config = new TransportConfiguration();
-        Assert.False(config.SslEnabled);
+        Assert.True(config.SslEnabled);
     }
 
     [Fact]

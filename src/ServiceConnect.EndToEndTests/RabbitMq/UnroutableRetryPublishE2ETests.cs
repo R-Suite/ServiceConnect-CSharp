@@ -53,6 +53,7 @@ public sealed class UnroutableRetryPublishE2ETests(MessagingFixture fixture)
                 // raises PublishException, which InboundMessageProcessor catches and acks.
                 t.SetClientSetting("RetryCount", 1);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);

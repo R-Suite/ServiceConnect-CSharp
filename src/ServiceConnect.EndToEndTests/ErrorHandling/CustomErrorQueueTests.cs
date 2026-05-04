@@ -53,6 +53,7 @@ public class CustomErrorQueueTests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 3);
                 t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q =>
             {

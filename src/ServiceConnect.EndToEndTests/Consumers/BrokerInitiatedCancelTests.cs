@@ -66,6 +66,7 @@ public class BrokerInitiatedCancelTests(MessagingFixture fixture)
                 t.SetClientSetting("Port", _fixture.RabbitMqPort);
                 t.SetClientSetting("RetryCount", 0);
                 t.SetClientSetting("RetrySeconds", 0);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
             });
             builder.ConfigureQueues(q => q.QueueName = queueName);
             builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
