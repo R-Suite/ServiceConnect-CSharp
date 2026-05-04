@@ -54,7 +54,7 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     }
 
     private ConnectionFactory BuildConnectionFactory() =>
-        ConnectionFactoryBuilder.Build(transportSettings);
+        ConnectionFactoryBuilder.Build(transportSettings, logger);
 
     /// <summary>
     /// Determines whether the underlying RabbitMQ connection is open.

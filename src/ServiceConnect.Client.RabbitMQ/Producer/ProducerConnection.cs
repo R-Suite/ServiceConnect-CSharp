@@ -252,7 +252,7 @@ internal sealed class ProducerConnection
 
     private async Task CreateConnectionAsync(CancellationToken cancellationToken)
     {
-        _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration);
+        _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration, _logger);
 
         // Exchange declarations are per-connection — reset the cache on every (re)connect.
         _declaredExchanges.Clear();
