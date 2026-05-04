@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -615,15 +616,29 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         {
             foreach (var kvp in sourceHeaders)
             {
-                if (kvp.Value is not null)
+                if (kvp.Value is null)
                 {
-                    headers[kvp.Key] = kvp.Value;
+                    continue;
                 }
+                // Eagerly decode AMQP byte[] header values to UTF8 strings. The existing
+                // HeaderDecoder.Decode string fast-path then short-circuits every downstream
+                // decode (dispatcher, processors, telemetry, filters, middleware, handlers),
+                // each of which currently re-runs Encoding.UTF8.GetString on the same bytes.
+                // Typed values (bool, int, IDictionary, IEnumerable) stay as objects so
+                // HeaderDecoder.Render still handles them on demand.
+                headers[kvp.Key] = kvp.Value is byte[] bytes
+                    ? Encoding.UTF8.GetString(bytes)
+                    : kvp.Value;
             }
         }
 
         return headers;
     }
+
+    // Test-access surface: mirrors the production copy so unit tests can assert the eager-decode
+    // invariant without driving the full consumer-host pipeline. internal for [InternalsVisibleTo].
+    internal static Dictionary<string, object> CopyInboundHeadersForTests(BasicDeliverEventArgs args)
+        => CopyInboundHeaders(args);
 
     private CancellationToken GetShutdownPublishToken()
     {

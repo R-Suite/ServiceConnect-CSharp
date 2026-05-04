@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -61,10 +62,15 @@ internal sealed class InboundMessageProcessor(
         {
             foreach (var kvp in sourceHeaders)
             {
-                if (kvp.Value is not null)
+                if (kvp.Value is null)
                 {
-                    headers[kvp.Key] = kvp.Value;
+                    continue;
                 }
+                // Mirrors RabbitMqConsumerHost.CopyInboundHeaders: eager-decode byte[] headers so
+                // HeaderDecoder.Decode hits the string fast-path on every downstream read.
+                headers[kvp.Key] = kvp.Value is byte[] bytes
+                    ? Encoding.UTF8.GetString(bytes)
+                    : kvp.Value;
             }
         }
 
@@ -283,5 +289,28 @@ internal sealed class InboundMessageProcessor(
         Span<char> buffer = stackalloc char[33]; // "O" format max length
         dt.TryFormat(buffer, out int charsWritten, "O");
         return new string(buffer[..charsWritten]);
+    }
+
+    // Test-access surface that exposes the inline header-copy logic so unit tests can
+    // assert the eager-decode invariant without driving the full ProcessAsync pipeline.
+    // internal for [InternalsVisibleTo].
+    internal static Dictionary<string, object> CopyInboundHeadersForTests(BasicDeliverEventArgs args)
+    {
+        var sourceHeaders = args.BasicProperties.Headers;
+        var headers = new Dictionary<string, object>((sourceHeaders?.Count ?? 4) + 3, StringComparer.Ordinal);
+        if (sourceHeaders != null)
+        {
+            foreach (var kvp in sourceHeaders)
+            {
+                if (kvp.Value is null)
+                {
+                    continue;
+                }
+                headers[kvp.Key] = kvp.Value is byte[] bytes
+                    ? Encoding.UTF8.GetString(bytes)
+                    : kvp.Value;
+            }
+        }
+        return headers;
     }
 }
