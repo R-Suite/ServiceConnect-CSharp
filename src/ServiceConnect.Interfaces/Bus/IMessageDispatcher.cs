@@ -8,5 +8,5 @@ public interface IMessageDispatcher
     /// <summary>
     /// Deserializes and dispatches a message to its registered handler.
     /// </summary>
-    Task<ConsumeEventResult> DispatchAsync(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default);
+    Task<ConsumeEventResult> DispatchAsync(ReadOnlyMemory<byte> messageBytes, string messageType, IReadOnlyDictionary<string, object> headers, CancellationToken cancellationToken = default);
 }

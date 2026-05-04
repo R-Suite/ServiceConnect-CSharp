@@ -45,7 +45,7 @@ public class MessageDispatcherTests
     private readonly Mock<IBus> _mockBus;
     private readonly IReplyStatusRequestReplyManager _replyManager;
 
-    private static IDictionary<string, object> MakeHeaders(string? responseMessageId = null)
+    private static Dictionary<string, object> MakeHeaders(string? responseMessageId = null)
     {
         var headers = new Dictionary<string, object>
         {

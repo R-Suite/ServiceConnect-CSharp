@@ -62,7 +62,7 @@ public sealed class BusLifecycleCancellationTests
         consumer
             .Setup(c => c.StartConsumingAsync(
                 It.IsAny<string>(),
-                It.IsAny<IList<string>>(),
+                It.IsAny<IReadOnlyList<string>>(),
                 It.IsAny<ConsumerEventHandler>(),
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);

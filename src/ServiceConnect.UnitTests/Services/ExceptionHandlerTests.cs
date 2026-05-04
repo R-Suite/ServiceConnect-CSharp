@@ -30,7 +30,7 @@ public class ExceptionHandlerTests
         _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
     }
 
-    private static IDictionary<string, object> MakeHeaders()
+    private static Dictionary<string, object> MakeHeaders()
     {
         return new Dictionary<string, object>
         {

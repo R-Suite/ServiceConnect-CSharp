@@ -459,7 +459,16 @@ public sealed class Bus : IBus
             _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
                 _queueConfig.QueueName, messageTypeNames.Count);
 
-            await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames, _dispatcher.DispatchAsync, cancellationToken).ConfigureAwait(false);
+            // ConsumerEventHandler passes IDictionary<string,object>; DispatchAsync accepts
+            // IReadOnlyDictionary<string,object>. The transport always supplies Dictionary<,>
+            // (which implements both) so the as-cast succeeds on the hot path; the fallback
+            // copy handles any non-Dictionary<,> transport implementation.
+            await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames,
+                (msg, type, hdrs, ct) => _dispatcher.DispatchAsync(msg, type,
+                    hdrs as IReadOnlyDictionary<string, object>
+                        ?? new Dictionary<string, object>(hdrs, StringComparer.Ordinal),
+                    ct),
+                cancellationToken).ConfigureAwait(false);
 
             lock (_stateLock) { _consuming = true; }
         }

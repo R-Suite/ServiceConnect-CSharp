@@ -24,7 +24,7 @@ public class BusIsConsumingTests
     {
         var consumer = new Mock<IConsumer>();
         consumer.Setup(c => c.StartConsumingAsync(
-                It.IsAny<string>(), It.IsAny<IList<string>>(),
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(),
                 It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         consumer.SetupGet(c => c.IsConnected).Returns(true);
@@ -44,7 +44,7 @@ public class BusIsConsumingTests
     {
         var consumer = new Mock<IConsumer>();
         consumer.Setup(c => c.StartConsumingAsync(
-                It.IsAny<string>(), It.IsAny<IList<string>>(),
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(),
                 It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         consumer.SetupGet(c => c.IsConnected).Returns(true);
@@ -76,7 +76,7 @@ public class BusIsConsumingTests
         var brokerCancel = false;
         var consumer = new Mock<IConsumer>();
         consumer.Setup(c => c.StartConsumingAsync(
-                It.IsAny<string>(), It.IsAny<IList<string>>(),
+                It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(),
                 It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         consumer.SetupGet(c => c.IsCancelledByBroker).Returns(() => brokerCancel);

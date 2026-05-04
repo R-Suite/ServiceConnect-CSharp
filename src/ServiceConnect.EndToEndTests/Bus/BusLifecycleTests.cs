@@ -16,7 +16,7 @@ public class BusLifecycleTests
         if (withConsumer)
         {
             var mockConsumer = new Mock<IConsumer>();
-            mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
                 .Returns(Task.CompletedTask);
             services.AddSingleton<IConsumer>(mockConsumer.Object);
         }

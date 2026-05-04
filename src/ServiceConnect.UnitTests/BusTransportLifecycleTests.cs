@@ -26,7 +26,7 @@ public sealed class BusTransportLifecycleTests
         consumer.SetupGet(c => c.IsConnected).Returns(true);
         consumer.SetupGet(c => c.IsCancelledByBroker).Returns(false);
         consumer
-            .Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         int disposeCount = 0;
         consumer.Setup(c => c.DisposeAsync())
@@ -62,7 +62,7 @@ public sealed class BusTransportLifecycleTests
         consumer.SetupGet(c => c.IsConnected).Returns(true);
         consumer.SetupGet(c => c.IsCancelledByBroker).Returns(false);
         consumer
-            .Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         int disposeCount = 0;
         consumer.Setup(c => c.DisposeAsync())

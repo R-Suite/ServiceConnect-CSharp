@@ -88,7 +88,7 @@ public class BusTests
     {
         // Arrange
         var mockConsumer = new Mock<IConsumer>();
-        mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+        mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
             .Returns(Task.CompletedTask);
 
         var bus = new Bus(
@@ -136,7 +136,7 @@ public class BusTests
         var releaseDispose = new TaskCompletionSource();
         var mockConsumer = new Mock<IConsumer>();
         mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
             .Returns(Task.CompletedTask);
         mockConsumer
             .Setup(x => x.DisposeAsync())
@@ -1151,7 +1151,7 @@ public class BusTests
         // transport — there is no Bus-owned dispose path on the consumer any more.
         var mockConsumer = new Mock<IConsumer>();
         mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
             .Returns(Task.CompletedTask);
         mockConsumer
             .Setup(x => x.DisposeAsync())
@@ -1181,7 +1181,7 @@ public class BusTests
         // A defensive stop on an unstarted bus must leave it restartable.
         var mockConsumer = new Mock<IConsumer>();
         mockConsumer
-            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
             .Returns(Task.CompletedTask);
 
         await using var bus = CreateBusWithConsumer(mockConsumer.Object);
@@ -1219,7 +1219,7 @@ public class BusTests
         var consumerStarted = new TaskCompletionSource();
         var releaseStart = new TaskCompletionSource();
         var mockConsumer = new Mock<IConsumer>();
-        mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+        mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
             .Returns(async () =>
             {
                 consumerStarted.SetResult();
@@ -1253,7 +1253,7 @@ public class BusTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => bus.StartConsumingAsync(cts.Token));
         mockConsumer.Verify(c => c.StartConsumingAsync(
-            It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()),
+            It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()),
             Times.Never);
     }
 
@@ -1265,7 +1265,7 @@ public class BusTests
         var startCompleted = new TaskCompletionSource();
 
         var mockConsumer = new Mock<IConsumer>();
-        mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>()))
+        mockConsumer.Setup(c => c.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
             .Returns(async () =>
             {
                 consumerStarted.SetResult();
@@ -1357,7 +1357,7 @@ public class BusTests
         for (int i = 0; i < iterations; i++)
         {
             var mockConsumer = new Mock<IConsumer>();
-            mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
+            mockConsumer.Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             var bus = new Bus(

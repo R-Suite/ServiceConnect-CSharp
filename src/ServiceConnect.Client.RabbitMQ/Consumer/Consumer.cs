@@ -84,7 +84,7 @@ public sealed class Consumer : IConsumer
     /// <param name="messageTypes">The message types whose exchanges should be bound for this consumer.</param>
     /// <param name="eventHandler">The callback invoked when a message is delivered.</param>
     /// <param name="cancellationToken">A token used to cancel startup or consumption initialization.</param>
-    public async Task StartConsumingAsync(string queueName, IList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default)
+    public async Task StartConsumingAsync(string queueName, IReadOnlyList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default)
     {
         if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
         {

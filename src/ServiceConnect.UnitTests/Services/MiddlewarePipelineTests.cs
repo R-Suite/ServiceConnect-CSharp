@@ -171,7 +171,7 @@ public class ProcessingMiddlewarePipelineTests
         _mockFilterPipeline.Setup(f => f.ExecuteAfterConsumingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Continue);
     }
 
-    private static IDictionary<string, object> MakeHeaders(Type messageType)
+    private static Dictionary<string, object> MakeHeaders(Type messageType)
     {
         return new Dictionary<string, object>
         {

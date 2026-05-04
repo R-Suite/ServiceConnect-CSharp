@@ -43,7 +43,7 @@ public sealed class MessageDispatcher(
     private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
 
     /// <inheritdoc />
-    public async Task<ConsumeEventResult> DispatchAsync(ReadOnlyMemory<byte> messageBytes, string messageType, IDictionary<string, object> headers, CancellationToken cancellationToken = default)
+    public async Task<ConsumeEventResult> DispatchAsync(ReadOnlyMemory<byte> messageBytes, string messageType, IReadOnlyDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
         using var scope = _scopeFactory.CreateScope();
         using var _ = _scopeAccessor.Push(scope.ServiceProvider);
@@ -71,7 +71,14 @@ public sealed class MessageDispatcher(
 
             fullTypeName = primaryCandidate ?? fullTypeNameCandidate ?? typeNameCandidate!;
 
-            envelope = new Envelope { Headers = headers, Body = messageBytes };
+            // Downstream pipeline (IMessageProcessor, MessageProcessingDelegate, Envelope.Headers)
+            // requires a mutable IDictionary<string,object> for middleware mutation. Fast-path
+            // succeeds when the runtime type is Dictionary<,> (the expected hot path); the fallback
+            // copy handles non-Dictionary<,> runtime types (e.g. ReadOnlyDictionary<,>).
+            var mutableHeaders = headers as IDictionary<string, object>
+                ?? new Dictionary<string, object>(headers, StringComparer.Ordinal);
+
+            envelope = new Envelope { Headers = mutableHeaders, Body = messageBytes };
 
             var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
 
@@ -102,7 +109,7 @@ public sealed class MessageDispatcher(
                     continue;
                 }
 
-                var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope, cancellationToken).ConfigureAwait(false);
+                var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
                 if (preResult == ProcessResult.Handled)
                 {
                     return new ConsumeEventResult { Success = true };
@@ -131,7 +138,7 @@ public sealed class MessageDispatcher(
 
             if (replyProcessor != null && hasResponseMessageId)
             {
-                var replyResult = await replyProcessor.ProcessAsync(messageBytes, type!, null, headers, envelope, cancellationToken).ConfigureAwait(false);
+                var replyResult = await replyProcessor.ProcessAsync(messageBytes, type!, null, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
                 if (replyResult == ProcessResult.Handled)
                 {
                     return new ConsumeEventResult { Success = true };
@@ -161,7 +168,7 @@ public sealed class MessageDispatcher(
             // middleware lifetimes are honoured — a cached chain would pin the first instance for
             // the lifetime of the bus.
             var chain = BuildProcessingChain(scope.ServiceProvider);
-            var result = await chain(messageBytes, type!, message, headers, envelope, cancellationToken).ConfigureAwait(false);
+            var result = await chain(messageBytes, type!, message, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
 
             if (result.Success && !result.NotHandled)
             {
