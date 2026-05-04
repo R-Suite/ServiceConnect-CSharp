@@ -14,7 +14,7 @@ namespace ServiceConnect.Diagnostics;
 /// </remarks>
 public static class MetricNames
 {
-    /// <summary>Histogram (seconds) — duration of a publish operation, broker ack to ack.</summary>
+    /// <summary>Histogram (seconds) — duration of a publish operation, from start to broker ack.</summary>
     public const string PublishDuration = "messaging.publish.duration";
 
     /// <summary>Histogram (seconds) — duration of consumer-side message processing (handler dispatch).</summary>

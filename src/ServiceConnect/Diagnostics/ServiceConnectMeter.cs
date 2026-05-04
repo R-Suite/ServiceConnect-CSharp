@@ -18,10 +18,10 @@ public static class ServiceConnectMeter
     /// <summary>The meter name used by every ServiceConnect instrument.</summary>
     public const string MeterName = "ServiceConnect.Bus";
 
-    private static readonly string Version =
+    private static readonly string _version =
         typeof(ServiceConnectMeter).Assembly.GetName().Version?.ToString() ?? "0.0.0";
 
-    private static readonly Meter _meter = new(MeterName, Version);
+    private static readonly Meter _meter = new(MeterName, _version);
 
     private static readonly Histogram<double> _publishDuration = _meter.CreateHistogram<double>(
         name: MetricNames.PublishDuration,
@@ -96,4 +96,12 @@ public static class ServiceConnectMeter
 
     /// <summary>Adjusts the in-flight UpDownCounter by <paramref name="delta"/> with the given tags.</summary>
     public static void AddInFlight(long delta, in TagList tags) => _inFlightMessages.Add(delta, tags);
+
+    /// <summary>
+    /// Disposes the underlying <see cref="Meter"/>. Call only when unloading the assembly in a
+    /// collectible <c>AssemblyLoadContext</c>; for normal long-running processes the meter lives
+    /// for process lifetime and disposal is unnecessary. Mirrors
+    /// <c>ServiceConnectActivitySource.Shutdown()</c>.
+    /// </summary>
+    public static void Shutdown() => _meter.Dispose();
 }
