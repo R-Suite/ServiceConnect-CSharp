@@ -24,7 +24,7 @@ Breaking interface changes. **Ship blocker for v8 GA** because once v8 ships the
 
 ---
 
-## Group B — Metrics rollout · *pending*
+## Group B — Metrics rollout · *done*
 
 Add a `Meter` and operator-grade counters/histograms. Additive, low risk, the highest-leverage observability win.
 
