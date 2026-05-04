@@ -20,6 +20,19 @@ public static class HeaderDecoder
     /// FullName if rendering throws, which prevents a bad header from taking down the
     /// consumer host via an infinite nack-requeue cycle.
     /// </summary>
+    /// <remarks>
+    /// <b>String-input identity contract.</b> When <paramref name="value"/> is already
+    /// a <see cref="string"/>, this method returns the same instance unchanged
+    /// (no copy, no normalization). The consumer-side eager-decode optimisation in
+    /// <c>RabbitMqConsumerHost.CopyInboundHeaders</c> and
+    /// <c>InboundMessageProcessor.ProcessAsync</c> relies on this: by storing the
+    /// UTF-8-decoded string back into the headers dictionary on copy, every subsequent
+    /// <see cref="Decode"/> call short-circuits to the same string instance instead of
+    /// re-running <see cref="System.Text.Encoding.UTF8"/>.GetString on each read.
+    /// Future changes that wrap the string fast-path (e.g. <see cref="string.Intern"/>,
+    /// case normalisation) would break that optimisation and the regression test at
+    /// <c>InboundHeaderDecodeCachingTests.HeaderDecoder_Decode_ReturnsCachedString...</c>.
+    /// </remarks>
     /// <param name="value">The raw header value.</param>
     /// <returns>The decoded string, or <see langword="null"/> when the value is <see langword="null"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

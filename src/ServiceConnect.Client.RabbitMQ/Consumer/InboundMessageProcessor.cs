@@ -294,6 +294,12 @@ internal sealed class InboundMessageProcessor(
     // Test-access surface that exposes the inline header-copy logic so unit tests can
     // assert the eager-decode invariant without driving the full ProcessAsync pipeline.
     // internal for [InternalsVisibleTo].
+    //
+    // IMPORTANT: keep this byte-identical to the inline copy in ProcessAsync (the
+    // foreach over sourceHeaders that builds `headers`). The two are duplicated
+    // because the production copy is embedded in ProcessAsync — extracting it would
+    // be scope creep — but a silent drift here would let the eager-decode tests
+    // pass against stale production logic.
     internal static Dictionary<string, object> CopyInboundHeadersForTests(BasicDeliverEventArgs args)
     {
         var sourceHeaders = args.BasicProperties.Headers;

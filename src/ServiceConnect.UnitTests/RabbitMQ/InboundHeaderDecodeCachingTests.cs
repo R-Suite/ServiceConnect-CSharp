@@ -1,6 +1,7 @@
 using System.Text;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces;
 using Xunit;
 
@@ -24,7 +25,7 @@ public sealed class InboundHeaderDecodeCachingTests
             ["X-Plain"] = "already-string",
         });
 
-        var copied = global::ServiceConnect.Client.RabbitMQ.RabbitMqConsumerHost.CopyInboundHeadersForTests(args);
+        var copied = RabbitMqConsumerHost.CopyInboundHeadersForTests(args);
 
         Assert.IsType<string>(copied["X-Trace"]);
         Assert.Equal("abc-123", copied["X-Trace"]);
@@ -40,7 +41,7 @@ public sealed class InboundHeaderDecodeCachingTests
         {
             ["X-Trace"] = Encoding.UTF8.GetBytes("identity-test"),
         });
-        var copied = global::ServiceConnect.Client.RabbitMQ.RabbitMqConsumerHost.CopyInboundHeadersForTests(args);
+        var copied = RabbitMqConsumerHost.CopyInboundHeadersForTests(args);
 
         var first = HeaderDecoder.Decode(copied["X-Trace"]);
         var second = HeaderDecoder.Decode(copied["X-Trace"]);
@@ -60,7 +61,7 @@ public sealed class InboundHeaderDecodeCachingTests
             ["X-Typed"] = true,
         });
 
-        var copied = global::ServiceConnect.Client.RabbitMQ.InboundMessageProcessor.CopyInboundHeadersForTests(args);
+        var copied = InboundMessageProcessor.CopyInboundHeadersForTests(args);
 
         Assert.IsType<string>(copied[HeaderKeys.TypeName]);
         Assert.Equal("My.Type.Name", copied[HeaderKeys.TypeName]);
