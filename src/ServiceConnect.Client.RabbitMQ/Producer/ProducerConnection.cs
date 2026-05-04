@@ -78,18 +78,27 @@ internal sealed class ProducerConnection
 
     /// <summary>
     /// Resolves the cap on outstanding publisher confirms from <c>ClientSettings</c>, falling back
-    /// to <see cref="DefaultMaxOutstandingPublishConfirms"/>. Only positive <c>int</c> values are
-    /// accepted; anything else (wrong type, zero, negative) takes the default. Exposed as
-    /// <c>internal</c> so the test access helper can share the resolution path.
+    /// to <see cref="DefaultMaxOutstandingPublishConfirms"/> when the setting is unset. Throws on
+    /// non-<c>int</c> or non-positive values so misconfiguration surfaces loudly, consistent with
+    /// the convention in <c>ConnectionFactoryBuilder.ConvertSettingToInt32</c>.
     /// </summary>
     internal static int ResolveMaxOutstandingPublishConfirms(ITransportConfiguration transport)
     {
-        if (transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.MaxOutstandingPublishConfirms, out var raw)
-            && raw is int permits && permits > 0)
+        if (!transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.MaxOutstandingPublishConfirms, out var raw))
         {
-            return permits;
+            return DefaultMaxOutstandingPublishConfirms;
         }
-        return DefaultMaxOutstandingPublishConfirms;
+        if (raw is not int permits)
+        {
+            throw new InvalidOperationException(
+                $"Setting '{RabbitMQSettingKeys.MaxOutstandingPublishConfirms}' must be an int; got value '{raw}' of type '{raw?.GetType().FullName ?? "<null>"}'.");
+        }
+        if (permits <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Setting '{RabbitMQSettingKeys.MaxOutstandingPublishConfirms}' must be positive; got {permits}.");
+        }
+        return permits;
     }
 
     /// <summary>
@@ -264,14 +273,19 @@ internal sealed class ProducerConnection
 
             if (_publisherAcks)
             {
-                // RabbitMQ.Client v7.2.1's confirms tracker (Channel.PublisherConfirms.cs:
-                // _confirmsTaskCompletionSources, a ConcurrentDictionary keyed by delivery tag) is
-                // unbounded when OutstandingPublisherConfirmationsRateLimiter is null —
-                // MaybeStartPublisherConfirmationTracking calls TryAdd with no Count check, and the
-                // confirm semaphore only serialises adds, not the dictionary's size. A stalled
-                // broker can let it grow until memory pressure or PublishTimeout trips a reset.
-                // The ConcurrencyLimiter caps in-flight confirms; QueueLimit=int.MaxValue makes
-                // overflow back-pressure (queue, then publish) rather than throw.
+                // The producer's primary bound on outstanding confirms is _publishLock = new(1, 1):
+                // every publish runs under that single permit, so the RabbitMQ.Client
+                // _confirmsTaskCompletionSources dictionary never holds more than one entry at a
+                // time even though the upstream library leaves it unbounded by default.
+                //
+                // The ConcurrencyLimiter installed here is defence-in-depth: RabbitMQ.Client v7.2.1
+                // releases the rate-limiter lease BEFORE awaiting the broker confirm
+                // (MaybeReleasePublisherConfirmationLock fires before MaybeEndPublisherConfirmationTrackingAsync),
+                // so the limiter caps concurrent wire sends, not outstanding-but-unacked confirms.
+                // It is a no-op against the current single-permit _publishLock layout, but if a
+                // future change ever lets multiple publishes run concurrently against one channel,
+                // the upstream tracker would otherwise grow without bound. QueueLimit=int.MaxValue
+                // makes overflow back-pressure (queue, then publish) rather than throw.
                 var permitLimit = ResolveMaxOutstandingPublishConfirms(_transportConfiguration);
                 var rateLimiter = new ConcurrencyLimiter(new ConcurrencyLimiterOptions
                 {
@@ -395,23 +409,4 @@ internal sealed class ProducerConnection
         }
     }
 
-    /// <summary>
-    /// Test-only access surface that exposes the rate-limiter construction path used when
-    /// publisher acknowledgements are enabled. Lets unit tests assert the configured permit
-    /// limit without standing up a real connection. Nested so the file/type-name analyzer
-    /// (MA0048) stays satisfied.
-    /// </summary>
-    internal static class TestAccess
-    {
-        public static RateLimiter BuildPermitLimiter(ITransportConfiguration transport)
-        {
-            var permitLimit = ResolveMaxOutstandingPublishConfirms(transport);
-            return new ConcurrencyLimiter(new ConcurrencyLimiterOptions
-            {
-                PermitLimit = permitLimit,
-                QueueLimit = int.MaxValue,
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-            });
-        }
-    }
 }
