@@ -29,6 +29,16 @@ public class ProducerRetryTests
         return new Producer(transport.Object, queue.Object, bus.Object, NullLogger<Producer>.Instance);
     }
 
+    // Stamps the connection-lifecycle properties read by ProducerConnection's source-gen
+    // log emit (ProducerConnectionOpened) onto a strict IConnection mock. Without these
+    // setups the strict mock would throw on Endpoint/ClientProvidedName access from
+    // ResolveEndpoint, masking the actual test scenario as an "unexpected invocation".
+    private static void StubLifecycleSurface(Mock<IConnection> connection)
+    {
+        connection.SetupGet(c => c.Endpoint).Returns(new AmqpTcpEndpoint("localhost", 5672));
+        connection.SetupGet(c => c.ClientProvidedName).Returns("test");
+    }
+
     private static void SetField<T>(Producer producer, string fieldName, T value) =>
         ProducerInternals.SetField(producer, fieldName, value);
 
@@ -203,6 +213,8 @@ public class ProducerRetryTests
         var secondConnection = new Mock<IConnection>(MockBehavior.Strict);
         var secondChannel = new Mock<IChannel>(MockBehavior.Strict);
         var connectionAttempts = 0;
+        StubLifecycleSurface(firstConnection);
+        StubLifecycleSurface(secondConnection);
 
         firstConnection.SetupGet(c => c.IsOpen).Returns(true);
         firstConnection
@@ -257,6 +269,7 @@ public class ProducerRetryTests
         var connection = new Mock<IConnection>(MockBehavior.Strict);
         using var cancellationSource = new CancellationTokenSource();
         var cancellationToken = cancellationSource.Token;
+        StubLifecycleSurface(connection);
 
         connection.SetupGet(c => c.IsOpen).Returns(true);
         connection
@@ -293,6 +306,7 @@ public class ProducerRetryTests
         var cancellationToken = cancellationSource.Token;
         CancellationToken? createConnectionToken = null;
         var createChannelStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        StubLifecycleSurface(connection);
 
         connection
             .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
@@ -414,6 +428,8 @@ public class ProducerRetryTests
         var secondConnection = new Mock<IConnection>(MockBehavior.Strict);
         var secondChannel = new Mock<IChannel>(MockBehavior.Strict);
         var connectionAttempts = 0;
+        StubLifecycleSurface(firstConnection);
+        StubLifecycleSurface(secondConnection);
 
         firstConnection.SetupGet(c => c.IsOpen).Returns(true);
         firstConnection

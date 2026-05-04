@@ -414,7 +414,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 }
                 else
                 {
-                    _logger.LogWarning(ex, "Channel already closed while acking/nacking message {DeliveryTag}", args.DeliveryTag);
+                    LogAckOrNackFailure(ex, args, processed);
                 }
             }
             catch (ObjectDisposedException ex)
@@ -425,12 +425,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 }
                 else
                 {
-                    _logger.LogWarning(ex, "Channel disposed while acking/nacking message {DeliveryTag}", args.DeliveryTag);
+                    LogAckOrNackFailure(ex, args, processed);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error acking/nacking the message");
+                LogAckOrNackFailure(ex, args, processed);
             }
             finally
             {
@@ -455,6 +455,25 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         { "messaging.system", "rabbitmq" },
         { "messaging.destination.name", _queueConfiguration.QueueName },
     };
+
+    // Emit AckFailed when we were trying to ack (processed=true) and NackFailed when we
+    // were trying to nack-with-requeue (processed=false). Carries MessageId from
+    // BasicProperties.MessageId so log readers can correlate to a specific message;
+    // falls back to DeliveryTag when the producer didn't stamp a MessageId.
+    private void LogAckOrNackFailure(Exception ex, BasicDeliverEventArgs args, bool processed)
+    {
+        var messageId = string.IsNullOrEmpty(args.BasicProperties.MessageId)
+            ? args.DeliveryTag.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : args.BasicProperties.MessageId;
+        if (processed)
+        {
+            RabbitMqClientLog.AckFailed(_logger, ex, messageId, args.DeliveryTag, _queueConfiguration.QueueName);
+        }
+        else
+        {
+            RabbitMqClientLog.NackFailed(_logger, ex, messageId, args.DeliveryTag, _queueConfiguration.QueueName);
+        }
+    }
 
     // Returns true if a header value exceeded DefaultMaxHeaderValueBytes and was routed to
     // the terminal-failure path. The caller then treats the message as processed.
