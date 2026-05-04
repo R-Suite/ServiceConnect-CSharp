@@ -221,7 +221,7 @@ ServiceConnect emits a `Warning`-level log under the `ServiceConnect.Client.Rabb
 
 ServiceConnect now emits operator-grade metrics via `System.Diagnostics.Metrics`. Six instruments under the OTel `messaging.*` namespace (publish/process duration histograms, published/consumed message counters with outcome dimensions) plus four ServiceConnect-specific extensions (`messaging.serviceconnect.retry.attempts / retry.drops / publish.confirm_timeouts / audit.drops`) and an in-flight gauge.
 
-OpenTelemetry users wire them with `MeterProvider.AddServiceConnectInstrumentation()` from the `ServiceConnect.Telemetry` package. Without OTel, attach a `MeterListener` to the `ServiceConnect.Bus` meter.
+OpenTelemetry users wire them with `MeterProvider.AddServiceConnectInstrumentation()` from the `ServiceConnect.Telemetry` package — which transitively brings `OpenTelemetry.Api` ≥ 1.15.3 (the patched line for [GHSA-g94r-2vxg-569j](https://github.com/advisories/GHSA-g94r-2vxg-569j)). Apps pinning an older `OpenTelemetry` line will see a NuGet downgrade warning during restore; bump the pin to a 1.11+ release alongside the v8 upgrade. Without OTel, attach a `MeterListener` to the `ServiceConnect.Bus` meter.
 
 Always-on: instruments are zero-cost when no listener subscribes — operator opt-in is wiring the listener, not changing config. See [Observability — Metrics](/ServiceConnect-CSharp/learn/operations/observability/#metrics) for the full catalogue and tag schema.
 

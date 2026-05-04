@@ -175,9 +175,11 @@ The `error.type` tag is added on failure paths via an allow-list mapper (`Operat
 
 ### Cardinality
 
-Typical deployments — 5-20 queues, 5-20 exchanges, ~5 outcome / error categories — yield ~400 active series per metric upper-bound. Operators with very high queue counts (1000+) should consider this when sizing their TSDB.
+Typical deployments — 5-20 queues, 5-20 exchanges, ~5 outcome / error categories — yield ~400-500 active series per metric upper-bound. Operators with very high queue counts (1000+) should consider this when sizing their TSDB.
 
-The `messaging.outcome` tag is a closed three-value set (`success | error | retry`) at the consumer-host emit site. The "drop" outcome (retry-publish-failure path) is captured separately on `messaging.serviceconnect.retry.drops` rather than as a fourth `outcome` value, because the drop decision is made in a deeper layer than the host-level counter sees.
+The `messaging.outcome` tag is a closed three-value set (`success | error | retry`) at the consumer-host emit site. The "drop" outcome (retry-publish-failure path) is captured separately on `messaging.serviceconnect.retry.drops` rather than as a fourth `outcome` value: when the retry publish fails, `InboundMessageProcessor` returns `processed=true` so the broker stops redelivering the poison message, and that signal collapses with normal success at the host emit site — there's no fourth value to surface without changing the contract.
+
+Note that `messaging.serviceconnect.audit.drops` is the one metric that doesn't carry `messaging.destination.name` — the audit queue is a single global destination, so per-queue cardinality doesn't apply there.
 
 Per-message tags (`messaging.message.id`, routing keys, conversation IDs) are deliberately NOT included on metrics — they belong on traces, where one span per message matches the data model.
 

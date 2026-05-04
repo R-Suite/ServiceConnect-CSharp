@@ -15,6 +15,14 @@ namespace ServiceConnect.UnitTests.RabbitMQ;
 /// Uses the same hanging-channel pattern as <see cref="ProducerPublishTimeoutTimingTests"/>
 /// but with a much shorter timeout (100ms) so the test completes in well under a second.
 /// </summary>
+/// <remarks>
+/// Serial collection because (a) the SendAsync test filters the global meter on the literal
+/// <c>"&lt;empty&gt;"</c> destination sentinel — a future test class that emits the same
+/// counter with an empty exchange would poison Assert.Single under parallel xUnit scheduling —
+/// and (b) the 100ms timeout window is itself sensitive to thread-pool contention from
+/// parallel tests. Aligns with the project's existing timing-sensitive collection.
+/// </remarks>
+[Collection(SerialConcurrencyCollection.Name)]
 public sealed class ProducerConfirmTimeoutMetricsTests
 {
     [Fact]
