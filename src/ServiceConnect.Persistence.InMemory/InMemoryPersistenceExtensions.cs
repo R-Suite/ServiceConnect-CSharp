@@ -27,10 +27,11 @@ public static class InMemoryPersistenceExtensions
     /// </para>
     /// <para>
     /// At bus build time this method emits a <see cref="LogLevel.Warning"/>-level log under
-    /// the <c>ServiceConnect.Persistence.InMemory</c> category to surface the test/dev scope at
-    /// runtime. The warning fires once per bus instance. To silence in test runs, raise the
-    /// category's minimum level to <see cref="LogLevel.Error"/> via standard
-    /// <c>Microsoft.Extensions.Logging</c> filter configuration.
+    /// the <c>ServiceConnect.Persistence.InMemory.InMemoryPersistenceState</c> category (any
+    /// filter on the <c>ServiceConnect.Persistence.InMemory</c> prefix matches it). The warning
+    /// fires once per bus instance. To silence in test runs, raise the category's minimum level
+    /// to <see cref="LogLevel.Error"/> via standard <c>Microsoft.Extensions.Logging</c> filter
+    /// configuration.
     /// </para>
     /// </remarks>
     /// <param name="builder">The ServiceConnect builder.</param>
