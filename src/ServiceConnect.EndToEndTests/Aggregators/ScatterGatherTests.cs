@@ -15,7 +15,7 @@ public class ScatterGatherTests(MessagingFixture fixture)
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task SendRequestMultiAsync_TwoResponders_BothRepliesReceived()
+    public async Task PublishRequestAsync_TwoResponders_BothRepliesReceived()
     {
         // Arrange
         var responder1Queue = _fixture.GetUniqueQueueName("scatter-responder1");
@@ -119,13 +119,14 @@ public class ScatterGatherTests(MessagingFixture fixture)
 
         try
         {
-            // Act
+            // Act — broadcast to all subscribers; both responders will see the request and reply
             var request = new TestRequest(Guid.NewGuid()) { Question = "scatter-question" };
-            var replies = await requesterBus.SendRequestMultiAsync<TestRequest, TestResponse>(
+            var replies = new List<TestResponse>();
+            await requesterBus.PublishRequestAsync<TestRequest, TestResponse>(
                 request,
+                reply => { lock (replies) { replies.Add(reply); } },
                 new RequestOptions
                 {
-                    EndPoints = [responder1Queue, responder2Queue],
                     ExpectedReplyCount = 2,
                     Timeout = 30000
                 });

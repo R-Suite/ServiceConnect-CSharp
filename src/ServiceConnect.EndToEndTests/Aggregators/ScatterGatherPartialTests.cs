@@ -15,7 +15,7 @@ public class ScatterGatherPartialTests(MessagingFixture fixture)
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task SendRequestMultiAsync_OneOfTwoResponds_ReturnsPartialResults()
+    public async Task PublishRequestAsync_OneRespondsOneSilent_ReturnsPartialResultsAtTimeout()
     {
         // Arrange
         var responderQueue = _fixture.GetUniqueQueueName("scatter-partial-responder");
@@ -119,14 +119,17 @@ public class ScatterGatherPartialTests(MessagingFixture fixture)
 
         try
         {
-            // Act — request sent to both endpoints; only one will reply; timeout returns partial results
+            // Act — broadcast to all subscribers; only the active responder replies;
+            // the silent consumer receives the message but never calls ReplyAsync.
+            // No ExpectedReplyCount is set so the call always runs to the full Timeout
+            // and returns every reply received — in this case just the one.
             var request = new TestRequest(Guid.NewGuid()) { Question = "partial-question" };
-            var replies = await requesterBus.SendRequestMultiAsync<TestRequest, TestResponse>(
+            var replies = new List<TestResponse>();
+            await requesterBus.PublishRequestAsync<TestRequest, TestResponse>(
                 request,
+                reply => { lock (replies) { replies.Add(reply); } },
                 new RequestOptions
                 {
-                    EndPoints = [responderQueue, silentQueue],
-                    ExpectedReplyCount = 2,
                     Timeout = 5000
                 });
 

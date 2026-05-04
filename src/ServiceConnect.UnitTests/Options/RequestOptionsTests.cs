@@ -35,14 +35,6 @@ public class RequestOptionsShapeTests
     }
 
     [Fact]
-    public void RequestOptions_EndPoints_IsReadOnlyList()
-    {
-        Assert.Equal(
-            "System.Collections.Generic.IReadOnlyList`1[System.String]",
-            typeof(RequestOptions).GetProperty("EndPoints")!.PropertyType.ToString());
-    }
-
-    [Fact]
     public void RequestOptions_Default_HasDefaultTimeout()
     {
         Assert.Equal(RequestOptions.DefaultTimeoutMs, RequestOptions.Default.Timeout);

@@ -302,9 +302,9 @@ public sealed class Bus : IBus
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
 
-        if (!string.IsNullOrEmpty(requestOptions.EndPoint) || requestOptions.EndPoints is { Count: > 0 })
+        if (!string.IsNullOrEmpty(requestOptions.EndPoint))
         {
-            throw new ArgumentException("PublishRequestAsync does not support EndPoint or EndPoints. Use SendRequestAsync or SendRequestMultiAsync instead.", nameof(options));
+            throw new ArgumentException("PublishRequestAsync does not support EndPoint. Use SendRequestAsync for single-destination requests.", nameof(options));
         }
 
         Dictionary<string, string> headers;

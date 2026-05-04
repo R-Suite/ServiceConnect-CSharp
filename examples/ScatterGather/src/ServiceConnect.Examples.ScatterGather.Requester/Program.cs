@@ -27,11 +27,15 @@ var bus = provider.GetRequiredService<IBus>();
 await bus.StartConsumingAsync();
 await Task.Delay(1000);
 
-var replies = await bus.SendRequestMultiAsync<SearchRequest, SearchResponse>(
+// Scatter-gather uses PublishRequestAsync (broadcast) and collects replies from all
+// catalog services that respond within the timeout window. EndPoints fan-out is no
+// longer supported on request/reply; broadcast + manual correlation is the right pattern.
+var replies = new List<SearchResponse>();
+await bus.PublishRequestAsync<SearchRequest, SearchResponse>(
     new SearchRequest(Guid.NewGuid()) { Query = searchQuery },
+    reply => { lock (replies) { replies.Add(reply); } },
     new RequestOptions
     {
-        EndPoints = [catalogAQueueName, catalogBQueueName],
         ExpectedReplyCount = 2,
         Timeout = 30000
     });

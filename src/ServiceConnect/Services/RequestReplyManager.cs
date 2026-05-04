@@ -149,12 +149,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         var messageBytes = bufferWriter.WrittenMemory;
 
         var messageId = Guid.NewGuid();
-        int? configuredEndPointCount = options.EndPoints is { Count: > 0 } ? options.EndPoints.Count : null;
         // List<T> with explicit lock outperforms ConcurrentBag for the request/reply
         // fan-in case because we need Count to be O(1) and we're appending on the
         // reply thread with no parallel readers until completion.
-        var responses = new List<TReply>(Math.Max(0, options.ExpectedReplyCount ?? configuredEndPointCount ?? 0));
-        int expectedCount = options.ExpectedReplyCount ?? configuredEndPointCount ?? -1;
+        var responses = new List<TReply>(Math.Max(0, options.ExpectedReplyCount ?? 0));
+        int expectedCount = options.ExpectedReplyCount ?? -1;
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var state = new RequestState(tcs, expectedCount, typeof(TReply), reply =>
@@ -192,38 +191,18 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         try
         {
-            if (options.EndPoints is { Count: > 0 })
+            var endPoint = string.IsNullOrEmpty(options.EndPoint) ? null : options.EndPoint;
+            var context = new SendContext
             {
-                foreach (string endPoint in options.EndPoints)
-                {
-                    var context = new SendContext
-                    {
-                        Message = message,
-                        MessageType = typeof(TRequest),
-                        MessageBytes = messageBytes,
-                        Headers = headers,
-                        EndPoint = endPoint,
-                        RoutingKey = null,
-                        Operation = SendOperation.Request,
-                    };
-                    await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
-                }
-            }
-            else
-            {
-                var endPoint = string.IsNullOrEmpty(options.EndPoint) ? null : options.EndPoint;
-                var context = new SendContext
-                {
-                    Message = message,
-                    MessageType = typeof(TRequest),
-                    MessageBytes = messageBytes,
-                    Headers = headers,
-                    EndPoint = endPoint,
-                    RoutingKey = null,
-                    Operation = SendOperation.Request,
-                };
-                await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
-            }
+                Message = message,
+                MessageType = typeof(TRequest),
+                MessageBytes = messageBytes,
+                Headers = headers,
+                EndPoint = endPoint,
+                RoutingKey = null,
+                Operation = SendOperation.Request,
+            };
+            await _sendPipeline.ExecuteSendMessagePipelineAsync(context, linkedCts.Token).ConfigureAwait(false);
             Interlocked.Exchange(ref sendCompleted, 1);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -233,10 +212,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
         {
-            // Timeout cancelled the send fan-out before it finished. Surface the typed
-            // exception immediately rather than returning the partial-results path,
-            // which would otherwise hand the caller an empty list and obscure the
-            // transport-layer failure.
+            // Timeout cancelled the send before it finished. Surface the typed exception
+            // immediately rather than returning the partial-results path, which would
+            // otherwise hand the caller an empty list and obscure the transport-layer failure.
             _pendingRequests.TryRemove(messageId, out _);
             // The registration callback may have already (or will momentarily) fault the TCS
             // with RequestTimeoutException. Since we're throwing the typed cancel exception

@@ -763,18 +763,6 @@ public class BusTests
     }
 
     [Fact]
-    public async Task PublishRequestAsync_WithEndPoints_ThrowsArgumentException()
-    {
-        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
-        var options = new RequestOptions { EndPoints = ["EP1", "EP2"] };
-
-        var ex = await Assert.ThrowsAsync<ArgumentException>(
-            () => _bus.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }, options));
-
-        Assert.Equal("options", ex.ParamName);
-    }
-
-    [Fact]
     public async Task PublishRequestAsync_WhenFilterBlocksMessage_ThrowsInvalidOperationException()
     {
         _mockFilterPipeline

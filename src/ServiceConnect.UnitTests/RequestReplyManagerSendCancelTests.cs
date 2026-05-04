@@ -143,7 +143,7 @@ public sealed class RequestReplyManagerSendCancelTests
         var options = new RequestOptions
         {
             Timeout = 200,
-            EndPoints = ["endpoint-a", "endpoint-b"],
+            EndPoint = "endpoint-a",
             ExpectedReplyCount = 2,
         };
         var headers = new Dictionary<string, string>();

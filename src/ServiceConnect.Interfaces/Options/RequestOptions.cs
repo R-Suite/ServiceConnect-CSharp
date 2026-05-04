@@ -23,34 +23,22 @@ public readonly record struct RequestOptions
     /// <summary>Optional headers added to the outbound request envelope.</summary>
     public IReadOnlyDictionary<string, string>? Headers { get; init; }
 
-    /// <summary>Single-destination override. Mutually exclusive with <see cref="EndPoints"/>.</summary>
+    /// <summary>Single-destination override for the request.</summary>
     public string? EndPoint { get; init; }
-
-    /// <summary>
-    /// Multi-destination fan-out. Mutually exclusive with <see cref="EndPoint"/>.
-    /// <see cref="List{T}"/> and any <see cref="IReadOnlyList{T}"/> implementation
-    /// are assignable at construction time via an object initialiser.
-    /// </summary>
-    public IReadOnlyList<string>? EndPoints { get; init; }
 
     /// <summary>Per-call timeout in milliseconds. Defaults to <see cref="DefaultTimeoutMs"/>.</summary>
     public int Timeout { get; init; }
 
     /// <summary>
-    /// Expected reply count. <c>null</c> falls back to <see cref="EndPoints"/>.Count when set,
-    /// or single-reply behaviour when not.
+    /// Expected reply count.
     /// <list type="bullet">
     /// <item><description>
-    /// <b>Positive value</b> — the call completes as soon as that many replies
-    /// have arrived, or when <see cref="Timeout"/> elapses (whichever happens first).
+    /// <b>Positive value</b> — the call completes as soon as that many replies have arrived,
+    /// or when <see cref="Timeout"/> elapses (whichever happens first).
     /// </description></item>
     /// <item><description>
-    /// <b>Zero or negative</b> — the call always waits the full <see cref="Timeout"/>
-    /// and returns every reply received during the window.
-    /// </description></item>
-    /// <item><description>
-    /// <b><c>null</c> (default)</b> — falls back to <see cref="EndPoints"/>.Count if
-    /// <see cref="EndPoints"/> is set; otherwise behaves as the negative case (timeout-only).
+    /// <b>Zero, negative, or null (default)</b> — the call always waits the full
+    /// <see cref="Timeout"/> and returns every reply received during the window.
     /// </description></item>
     /// </list>
     /// </summary>

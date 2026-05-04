@@ -354,9 +354,9 @@ public class RequestReplyManagerTests
     }
 
     [Fact]
-    public async Task SendRequestMultiAsync_FallsBackToEndPoint_WhenEndPointsIsEmpty()
+    public async Task SendRequestMultiAsync_UsesEndPoint_WhenSet()
     {
-        var reply = new FakeMessage1(Guid.NewGuid()) { Username = "EndpointFallbackUser" };
+        var reply = new FakeMessage1(Guid.NewGuid()) { Username = "EndpointUser" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
         _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);
@@ -371,14 +371,13 @@ public class RequestReplyManagerTests
         var options = new RequestOptions
         {
             Timeout = 5000,
-            EndPoint = "fallback-queue",
-            EndPoints = [],
+            EndPoint = "target-queue",
             ExpectedReplyCount = 1,
         };
         var headers = new Dictionary<string, string>();
 
         _mockSendPipeline.Setup(pipeline => pipeline.ExecuteSendMessagePipelineAsync(
-                It.Is<SendContext>(ctx => ctx.EndPoint == "fallback-queue"),
+                It.Is<SendContext>(ctx => ctx.EndPoint == "target-queue"),
                 It.IsAny<CancellationToken>()))
             .Callback<SendContext, CancellationToken>((ctx, _) =>
             {
@@ -398,7 +397,7 @@ public class RequestReplyManagerTests
             headers,
             options);
 
-        Assert.Equal("fallback-queue", capturedEndpoint);
+        Assert.Equal("target-queue", capturedEndpoint);
         Assert.Single(results);
         Assert.Equal(reply.Username, results[0].Username);
     }
