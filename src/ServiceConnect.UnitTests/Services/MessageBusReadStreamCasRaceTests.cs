@@ -13,7 +13,7 @@ public class MessageBusReadStreamCasRaceTests
         // subsequent SetLastPacketNumber(3) must reject — the stream's
         // declared total is below an already-stored slot.
         var stream = new MessageBusReadStream("test-seq");
-        stream.Write([0xAA], packetNumber: 5);
+        stream.Write(new byte[] { 0xAA }, packetNumber: 5);
 
         var ex = Assert.Throws<InvalidOperationException>(() => stream.SetLastPacketNumber(3));
         Assert.Contains("5", ex.Message);
@@ -40,7 +40,7 @@ public class MessageBusReadStreamCasRaceTests
             Exception? setEx = null;
             var tWrite = Task.Run(() =>
             {
-                try { stream.Write([0xBB], packetNumber: N + 1); }
+                try { stream.Write(new byte[] { 0xBB }, packetNumber: N + 1); }
                 catch (Exception ex) { writeEx = ex; }
             });
             var tSet = Task.Run(() =>

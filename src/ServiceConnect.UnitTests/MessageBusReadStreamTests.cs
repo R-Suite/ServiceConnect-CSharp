@@ -11,9 +11,9 @@ public class MessageBusReadStreamTests
     {
         var stream = new MessageBusReadStream("seq");
         stream.SetLastPacketNumber(2);
-        stream.Write([1, 2], 0);
-        stream.Write([5, 6], 2);
-        stream.Write([3, 4], 1);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 5, 6 }, 2);
+        stream.Write(new byte[] { 3, 4 }, 1);
 
         Assert.True(stream.IsComplete());
         Assert.Equal(new byte[] { 1, 2, 3, 4, 5, 6 }, stream.Read());
@@ -24,8 +24,8 @@ public class MessageBusReadStreamTests
     {
         var stream = new MessageBusReadStream("seq");
         stream.SetLastPacketNumber(2);
-        stream.Write([1], 0);
-        stream.Write([3], 2);
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 3 }, 2);
 
         Assert.False(stream.IsComplete());
     }
@@ -34,7 +34,7 @@ public class MessageBusReadStreamTests
     public void IsComplete_NoLastPacketNumber_ReturnsFalse()
     {
         var stream = new MessageBusReadStream("seq");
-        stream.Write([1], 0);
+        stream.Write(new byte[] { 1 }, 0);
 
         Assert.False(stream.IsComplete());
     }
@@ -43,7 +43,7 @@ public class MessageBusReadStreamTests
     public void Read_WhenNotComplete_ThrowsInvalidOperationException()
     {
         var stream = new MessageBusReadStream("seq");
-        stream.Write([1], 0);
+        stream.Write(new byte[] { 1 }, 0);
 
         Assert.Throws<InvalidOperationException>(stream.Read);
     }
@@ -55,7 +55,7 @@ public class MessageBusReadStreamTests
         // packet number is treated as an idempotent ack rather than a stream-corruption
         // signal that would nack-with-requeue and produce a poison loop.
         var stream = new MessageBusReadStream("seq");
-        stream.Write([1, 2], 0);
+        stream.Write(new byte[] { 1, 2 }, 0);
 
         var ex = Record.Exception(() => stream.Write("\t\t"u8.ToArray(), 0));
 
@@ -67,7 +67,7 @@ public class MessageBusReadStreamTests
     {
         var stream = new MessageBusReadStream("seq");
         stream.SetLastPacketNumber(0);
-        stream.Write([1, 2], 0);
+        stream.Write(new byte[] { 1, 2 }, 0);
         stream.Write("\t\t"u8.ToArray(), 0); // ignored
 
         Assert.True(stream.IsComplete());
@@ -86,7 +86,7 @@ public class MessageBusReadStreamTests
     {
         var stream = new MessageBusReadStream("seq");
         stream.SetLastPacketNumber(0);
-        stream.Write([1, 2, 3], 0);
+        stream.Write(new byte[] { 1, 2, 3 }, 0);
         var seq = stream.ReadSequence();
         Assert.Equal(3, seq.Length);
         Assert.Equal(new byte[] { 1, 2, 3 }, seq.ToArray());
@@ -97,9 +97,9 @@ public class MessageBusReadStreamTests
     {
         var stream = new MessageBusReadStream("seq");
         stream.SetLastPacketNumber(2);
-        stream.Write([1, 2], 0);
-        stream.Write([3], 1);
-        stream.Write([4, 5], 2);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 3 }, 1);
+        stream.Write(new byte[] { 4, 5 }, 2);
         var seq = stream.ReadSequence();
         Assert.Equal(5, seq.Length);
         Assert.False(seq.IsSingleSegment);
@@ -111,9 +111,9 @@ public class MessageBusReadStreamTests
     {
         var stream = new MessageBusReadStream("seq");
         stream.SetLastPacketNumber(2);
-        stream.Write([4, 5], 2);
-        stream.Write([1, 2], 0);
-        stream.Write([3], 1);
+        stream.Write(new byte[] { 4, 5 }, 2);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 3 }, 1);
         var seq = stream.ReadSequence();
         Assert.False(seq.IsSingleSegment);
         Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, seq.ToArray());
@@ -124,7 +124,7 @@ public class MessageBusReadStreamTests
     {
         // Packet 0 arrives, then the close-packet declares LastPacketNumber=0 — consistent.
         var stream = new MessageBusReadStream("seq");
-        stream.Write([1], 0);
+        stream.Write(new byte[] { 1 }, 0);
 
         var ex = Record.Exception(() => stream.SetLastPacketNumber(0));
 
@@ -154,8 +154,8 @@ public class MessageBusReadStreamTests
         // Read/ReadSequence silently returned truncated bytes.
 
         var stream = new MessageBusReadStream("seq");
-        stream.Write([1], 0);
-        stream.Write([2], 1);
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 2 }, 1);
         stream.SetLastPacketNumber(2);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => stream.Write("\t"u8.ToArray(), 999));

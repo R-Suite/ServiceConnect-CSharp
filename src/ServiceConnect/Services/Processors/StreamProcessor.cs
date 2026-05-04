@@ -155,7 +155,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
 
         try
         {
-            state.Stream.Write(messageBytes.ToArray(), packetNumber);
+            state.Stream.Write(messageBytes, packetNumber);
 
             // Touch: replace the dict entry with a new ActiveStreamState carrying a fresh
             // LastSeenUtc. The eviction sweep's TryRemove(KVP) compares records by

@@ -8,9 +8,10 @@ public interface IMessageBusReadStream
     /// <summary>
     /// Writes a packet into the stream buffer.
     /// </summary>
-    /// <param name="data">The packet payload.</param>
+    /// <param name="data">The packet payload. The implementation copies the bytes for retention;
+    /// the caller's buffer can be reused after the call returns.</param>
     /// <param name="packetNumber">The zero-based packet number.</param>
-    void Write(byte[] data, long packetNumber);
+    void Write(ReadOnlyMemory<byte> data, long packetNumber);
 
     /// <summary>
     /// Reads the assembled payload as a single byte array.

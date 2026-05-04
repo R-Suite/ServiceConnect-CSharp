@@ -71,9 +71,8 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
     }
 
     /// <inheritdoc />
-    public void Write(byte[] data, long packetNumber)
+    public void Write(ReadOnlyMemory<byte> data, long packetNumber)
     {
-        ArgumentNullException.ThrowIfNull(data);
         if (packetNumber < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(packetNumber), packetNumber,
@@ -89,6 +88,10 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
                 $"Packet number {packetNumber} exceeds LastPacketNumber {preLast} for stream {SequenceId}.");
         }
 
+        // RabbitMQ.Client v7 does not extend the consumer-callback buffer lifetime past
+        // the callback return, so we must copy before storing. ToArray() is the copy.
+        var stored = data.ToArray();
+
         // Atomically reserve capacity: if the reservation pushes us past the cap,
         // roll it back before any concurrent writer can observe the inflated total
         // and before we insert into the packet dictionary.
@@ -99,7 +102,7 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
             throw new InvalidOperationException($"Stream exceeds maximum size of {MaxTotalStreamSize / (1024 * 1024)} MB.");
         }
 
-        if (!_packets.TryAdd(packetNumber, data))
+        if (!_packets.TryAdd(packetNumber, stored))
         {
             // Broker redelivery: the same packet has arrived twice. Roll back the size
             // reservation so the in-memory total mirrors the dictionary's contents and
