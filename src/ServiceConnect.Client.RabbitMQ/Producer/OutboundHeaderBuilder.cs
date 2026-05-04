@@ -46,13 +46,13 @@ internal sealed class OutboundHeaderBuilder(
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger _logger = logger;
 
-    public Dictionary<string, object> BuildHeaders(Type type, IReadOnlyDictionary<string, string>? headers, string queueName, string messageType)
+    public Dictionary<string, object?> BuildHeaders(Type type, IReadOnlyDictionary<string, string>? headers, string queueName, string messageType)
     {
         // Build the final object-valued dictionary directly rather than populating a
         // string-valued copy and then rewriting it. Pre-sized to the maximum
         // number of stamped keys + any caller-provided entries.
         var callerCount = headers?.Count ?? 0;
-        var result = new Dictionary<string, object>(callerCount + StampedHeaderCount, StringComparer.Ordinal);
+        var result = new Dictionary<string, object?>(callerCount + StampedHeaderCount, StringComparer.Ordinal);
 
         if (headers is not null)
         {
@@ -96,18 +96,17 @@ internal sealed class OutboundHeaderBuilder(
         return result;
     }
 
-    public BasicProperties BuildBasicProperties(Dictionary<string, object> messageHeaders)
+    public BasicProperties BuildBasicProperties(Dictionary<string, object?> messageHeaders)
     {
-        // foreach avoids the LINQ Select + enumerator allocation per message.
-        var headersCopy = new Dictionary<string, object?>(messageHeaders.Count, StringComparer.Ordinal);
-        foreach (var kvp in messageHeaders)
-        {
-            headersCopy[kvp.Key] = kvp.Value;
-        }
-
+        // Direct assign — type alignment with BasicProperties.Headers (IDictionary<string, object?>)
+        // is now native after BuildHeaders' return-type widening, so no copy is needed.
+        // Aliasing safety: Producer.cs callers do not mutate messageHeaders after this call
+        // (BuildBasicProperties is the last touch before PublishWithTimeoutAsync). If a future
+        // caller mutates post-BuildBasicProperties, RabbitMQ.Client may observe a torn dict —
+        // see the Group F design's no-mutation invariant for the binding contract.
         var basicProperties = new BasicProperties
         {
-            Headers = headersCopy,
+            Headers = messageHeaders,
             Persistent = true
         };
 
