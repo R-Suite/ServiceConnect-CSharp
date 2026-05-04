@@ -405,12 +405,28 @@ public class StreamProcessorTests
 
         var payload = new byte[] { 0x01 };
 
+        // Pre-prime the stream so all concurrent tasks find it in the dictionary via
+        // the existing-stream path (TryGetValue → hit). Without pre-priming, a thread
+        // delayed by the scheduler can arrive at the admission block after TryRemove
+        // has already evicted the completed entry, causing re-admission of the same
+        // sequenceId as a brand-new stream and a second handler dispatch.
+        // Send packet 0 WITHOUT LastPacketNumber so the stream is admitted but stays open.
+        var primeHeaders = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+        };
+        await processor.ProcessAsync(payload, msgType, null, primeHeaders, new Envelope { Headers = primeHeaders, Body = payload });
+
         const int concurrent = 8;
         using var barrier = new System.Threading.Barrier(concurrent);
         var tasks = Enumerable.Range(0, concurrent).Select(_ => Task.Run(async () =>
         {
             // Each task gets its own headers dict so the dispatch path doesn't race on
-            // a shared dictionary; values are identical.
+            // a shared dictionary; values are identical. Packet 0 is already in the
+            // stream (from pre-prime); Write silently no-ops on duplicate packet numbers,
+            // SetLastPacketNumber(0) completes the stream, and all 8 tasks race TryRemove.
             var headers = new Dictionary<string, object>
             {
                 [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
