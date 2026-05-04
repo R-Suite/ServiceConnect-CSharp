@@ -43,7 +43,7 @@ Add a `Meter` and operator-grade counters/histograms. Additive, low risk, the hi
 
 ---
 
-## Group C — Docs & contracts · *pending*
+## Group C — Docs & contracts · *done — except item 6 (deferred to Group D)*
 
 Make implicit guarantees explicit. Mostly XML doc + website work, naturally pairs with the API churn in Group A.
 
