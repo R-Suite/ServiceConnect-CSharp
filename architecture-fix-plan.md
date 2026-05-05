@@ -91,7 +91,7 @@ Allocation-shaving and small inefficiencies. Internal-only changes; safe in any 
 
 ---
 
-## Group G — Smaller extensibility · *pending*
+## Group G — Smaller extensibility · *deferred (see notes.md)*
 
 Pure feature adds. Patch/minor safe.
 
