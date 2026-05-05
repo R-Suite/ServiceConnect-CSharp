@@ -62,4 +62,12 @@ public static class RabbitMQSettingKeys
     /// Tunable via <c>SetClientSetting("MaxOutstandingPublishConfirms", N)</c>; defaults to 256.
     /// </summary>
     public const string MaxOutstandingPublishConfirms = nameof(MaxOutstandingPublishConfirms);
+
+    /// <summary>
+    /// Interval RabbitMQ.Client waits between automatic-recovery attempts after a connection
+    /// drop. Accepts a <see cref="System.TimeSpan"/>; when unset, RabbitMQ.Client's own default
+    /// applies (5 seconds at the time of writing). Tune longer to reduce log/network thrash
+    /// during prolonged broker outages.
+    /// </summary>
+    public const string NetworkRecoveryInterval = nameof(NetworkRecoveryInterval);
 }

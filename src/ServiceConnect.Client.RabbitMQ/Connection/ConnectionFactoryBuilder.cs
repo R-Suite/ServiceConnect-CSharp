@@ -48,6 +48,20 @@ internal static class ConnectionFactoryBuilder
             RequestedHeartbeat = ResolveHeartbeat(transport),
         };
 
+        // Apply NetworkRecoveryInterval only when explicitly configured. The unset path leaves
+        // RabbitMQ.Client's own default in place, so a future client release that adjusts the
+        // default isn't silently overridden by an opinionated value here. Throw on bad type to
+        // surface misconfiguration loudly, matching the convention in ConvertSettingToInt32.
+        if (transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.NetworkRecoveryInterval, out var recoveryRaw))
+        {
+            if (recoveryRaw is not TimeSpan recoveryInterval)
+            {
+                throw new InvalidOperationException(
+                    $"Setting '{RabbitMQSettingKeys.NetworkRecoveryInterval}' must be a TimeSpan; got value '{recoveryRaw}' of type '{recoveryRaw?.GetType().FullName ?? "<null>"}'.");
+            }
+            factory.NetworkRecoveryInterval = recoveryInterval;
+        }
+
         if (!string.IsNullOrEmpty(transport.Username))
         {
             factory.UserName = transport.Username;

@@ -253,6 +253,18 @@ Misconfiguration throws `InvalidOperationException` at first publish: non-`int` 
 
 ---
 
+### `NetworkRecoveryInterval` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.NetworkRecoveryInterval, TimeSpan.FromSeconds(15));
+```
+
+Sets the interval RabbitMQ.Client waits between automatic-recovery attempts after a connection drop. Accepts a `TimeSpan`; when unset, RabbitMQ.Client's own default applies (5 seconds at the time of writing).
+
+**Remarks.** Operators seeing prolonged broker-outage thrash — repeated reconnect failures filling logs and pressuring the network — can lengthen the interval to reduce the load. ServiceConnect doesn't add an exponential backoff or circuit-breaker layer on top: RabbitMQ.Client's auto-recovery uses a fixed interval, and tuning that interval is the supported control today. Misconfiguration throws `InvalidOperationException` at connection setup: non-`TimeSpan` values surface loudly with the offending value and its type.
+
+---
+
 ### `SetClientSetting`
 
 ```csharp
