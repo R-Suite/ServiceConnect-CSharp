@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Moq;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
@@ -38,7 +40,7 @@ public class ExceptionHandlerTests
         };
     }
 
-    private MessageDispatcher CreateDispatcher(IList<IMessageProcessor> processors)
+    private MessageDispatcher CreateDispatcher(IList<IMessageProcessor> processors, ILogger<MessageDispatcher>? logger = null)
     {
         var mockPipelineConfig = new Mock<IPipelineConfiguration>();
         mockPipelineConfig.Setup(p => p.MessageProcessingMiddleware).Returns([]);
@@ -49,7 +51,7 @@ public class ExceptionHandlerTests
             _mockSerializer.Object,
             _mockFilterPipeline.Object,
             processors,
-            NullLogger<MessageDispatcher>.Instance,
+            logger ?? NullLogger<MessageDispatcher>.Instance,
             _mockConfig.Object,
             mockPipelineConfig.Object,
             sp.GetRequiredService<IServiceScopeFactory>(),
@@ -152,5 +154,44 @@ public class ExceptionHandlerTests
         // Assert — still returns failure without crashing
         Assert.False(result.Success);
         Assert.NotNull(result.Exception);
+    }
+
+    [Fact]
+    public async Task Dispatch_ExceptionHandlerThrows_LogsAtErrorLevelWithMessageType()
+    {
+        var hookCrash = new InvalidOperationException("hook itself crashed");
+        _mockConfig.SetupProperty(
+            c => c.ExceptionHandler,
+            (Func<Exception, CancellationToken, ValueTask>)((_, _) => throw hookCrash));
+
+        var mockProcessor = new Mock<IMessageProcessor>();
+        mockProcessor.Setup(p => p.RunBeforeDeserialization).Returns(false);
+        mockProcessor
+            .Setup(p => p.ProcessAsync(
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<Type>(),
+                It.IsAny<object?>(),
+                It.IsAny<IDictionary<string, object>>(),
+                It.IsAny<Envelope>()))
+            .ThrowsAsync(new InvalidOperationException("original dispatch error"));
+
+        var message = new FakeMessage1(Guid.NewGuid());
+        _mockSerializer.Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), typeof(FakeMessage1))).Returns(message);
+
+        var fakeLogger = new FakeLogger<MessageDispatcher>();
+        var dispatcher = CreateDispatcher([mockProcessor.Object], fakeLogger);
+        var headers = MakeHeaders();
+
+        await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        // Hook crashes are operator-actionable failures of an opt-in surface; the dispatcher
+        // logs them at Error so they aren't silently filtered out at default Warning ceilings.
+        // The message-type lands in the template so log readers can correlate the hook crash
+        // to the specific dispatch that triggered it.
+        var hookCrashRecord = Assert.Single(
+            fakeLogger.Collector.GetSnapshot(),
+            r => r.Exception is InvalidOperationException ex && ex.Message == "hook itself crashed");
+        Assert.Equal(LogLevel.Error, hookCrashRecord.Level);
+        Assert.Contains("FakeMessage1", hookCrashRecord.Message);
     }
 }

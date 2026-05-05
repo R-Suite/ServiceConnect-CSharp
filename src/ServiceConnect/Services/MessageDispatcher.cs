@@ -198,7 +198,13 @@ public sealed class MessageDispatcher(
                 }
                 catch (Exception handlerEx)
                 {
-                    _logger.LogWarning(handlerEx, "ExceptionHandler threw while handling dispatch error");
+                    // Error level: ExceptionHandler is an opt-in user-configured notification
+                    // hook; a crash inside it is a real failure of an explicitly-installed
+                    // surface and operators must see it. The dispatcher continues regardless —
+                    // the original message-dispatch exception (ex) is already attached to the
+                    // returned ConsumeEventResult and drives the retry/error-queue path; the
+                    // hook crash is a secondary signal that must not block message processing.
+                    _logger.LogError(handlerEx, "ExceptionHandler threw while handling dispatch error for message of type {MessageType}", messageType);
                 }
             }
             return new ConsumeEventResult { Success = false, Exception = ex };

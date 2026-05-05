@@ -41,11 +41,28 @@ public interface IBusConfiguration
     /// thread (v7 used <c>Action&lt;Exception&gt;</c> and was synchronous).
     /// </summary>
     /// <remarks>
-    /// The cancellation token is the dispatcher's shutdown CTS; honour it to avoid
-    /// stretching shutdown deadlines. If the handler itself throws, the dispatcher logs
-    /// at warning level and continues (a handler-thrown exception is not propagated).
+    /// <para>
+    /// The cancellation token is the dispatcher's shutdown CTS; honour it to avoid stretching
+    /// shutdown deadlines.
+    /// </para>
+    /// <para>
+    /// <b>Notification hook semantics.</b> The dispatcher invokes this callback after the
+    /// message-dispatch failure has already been recorded. The original exception is attached
+    /// to the returned <c>ConsumeEventResult</c> regardless of what the callback does — there
+    /// is no way for the callback to signal "treat this exception as success." To suppress
+    /// retries, throw or swallow inside the handler, or configure <c>DisableErrors</c> at the
+    /// queue level.
+    /// </para>
+    /// <para>
+    /// <b>Crash visibility.</b> If the callback itself throws, the dispatcher catches the
+    /// exception, logs at <c>Error</c> level with the message-type for correlation, and
+    /// continues. The original dispatch failure flows through to the retry/error-queue path
+    /// normally; a flaky notification hook cannot block message processing.
+    /// </para>
+    /// <para>
     /// Migration from v7: wrap your <c>Action&lt;Exception&gt;</c> as
     /// <c>(ex, _) =&gt; { Sync(ex); return ValueTask.CompletedTask; }</c>.
+    /// </para>
     /// </remarks>
     Func<Exception, CancellationToken, ValueTask>? ExceptionHandler { get; set; }
     /// <summary>
