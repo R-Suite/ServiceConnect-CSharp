@@ -200,6 +200,7 @@ public sealed class Bus : IBus
             headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
         }
 
+        List<Exception>? endpointFailures = null;
         foreach (var endpoint in endPoints)
         {
             // Per-iteration shallow copy: ISendMessageMiddleware writes to ctx.Headers
@@ -218,7 +219,25 @@ public sealed class Bus : IBus
                 RoutingKey = null,
                 Operation = SendOperation.Send,
             };
-            await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                (endpointFailures ??= []).Add(ex);
+            }
+        }
+
+        if (endpointFailures is { Count: > 0 })
+        {
+            throw new AggregateException(
+                $"One or more endpoints failed during SendToManyAsync of message type '{typeof(T).FullName}'.",
+                endpointFailures);
         }
     }
 

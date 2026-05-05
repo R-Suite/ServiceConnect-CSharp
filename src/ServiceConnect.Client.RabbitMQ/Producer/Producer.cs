@@ -222,6 +222,12 @@ public sealed class Producer : IProducer
     /// <param name="body">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
+    /// <remarks>
+    /// When the message type maps to multiple queues, every endpoint is attempted; per-endpoint
+    /// failures are collected and surface as an <see cref="AggregateException"/> at the end of
+    /// the loop. Cancellation via <paramref name="cancellationToken"/> propagates as
+    /// <see cref="OperationCanceledException"/> directly and aborts the remaining iterations.
+    /// </remarks>
     public async Task SendAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -249,6 +255,7 @@ public sealed class Producer : IProducer
             // identity. CorrelationId (Bus-stamped, copied in via BuildHeaders) is the
             // cross-fan-out correlator and is deliberately NOT re-minted here.
             var baseHeaders = _headerBuilder.BuildHeaders(type, headers, string.Empty, "Send");
+            List<Exception>? endpointFailures = null;
             foreach (string endPoint in endPoints)
             {
                 // Each delivery is an independent on-wire message: distinct MessageId + TimeSent per
@@ -279,15 +286,32 @@ public sealed class Producer : IProducer
                         cancellationToken).ConfigureAwait(false);
                     endpointSucceeded = true;
                 }
+                catch (OperationCanceledException ex)
+                {
+                    // Cancellation propagates directly — never wrapped, never aggregated.
+                    // endpointFailure is set so the finally's metric emit matches the
+                    // single-endpoint SendAsync(string) path (cancel-as-failure metric with
+                    // error.type=OperationCanceledException). Subsequent endpoints are not
+                    // attempted.
+                    endpointFailure = ex;
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     endpointFailure = ex;
-                    throw;
+                    (endpointFailures ??= []).Add(ex);
                 }
                 finally
                 {
                     EmitPublishMetrics(endpointStart, endPoint, endpointSucceeded, endpointFailure);
                 }
+            }
+
+            if (endpointFailures is { Count: > 0 })
+            {
+                throw new AggregateException(
+                    $"One or more endpoints failed during fan-out send for message type '{type.FullName}'.",
+                    endpointFailures);
             }
         }
         finally { _publishLock.Release(); }

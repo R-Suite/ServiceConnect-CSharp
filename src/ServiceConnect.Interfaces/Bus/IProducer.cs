@@ -21,6 +21,12 @@ public interface IProducer : IAsyncDisposable
     /// <param name="body">The serialized message body.</param>
     /// <param name="headers">Optional read-only headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
+    /// <remarks>
+    /// When the message type maps to multiple queues, every endpoint is attempted; per-endpoint
+    /// failures are collected and surface as an <see cref="AggregateException"/> at the end of
+    /// the loop. Cancellation via <paramref name="cancellationToken"/> propagates as
+    /// <see cref="OperationCanceledException"/> directly and aborts the remaining iterations.
+    /// </remarks>
     Task SendAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -36,13 +36,23 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Sends a message to a specific endpoint or to the configured queue mapping.
     /// </summary>
+    /// <remarks>
+    /// When the message type maps to multiple queues (queue-mapping fan-out), every endpoint is
+    /// attempted; per-endpoint failures are collected and surface as an
+    /// <see cref="AggregateException"/>. Cancellation via <paramref name="cancellationToken"/>
+    /// propagates as <see cref="OperationCanceledException"/> directly.
+    /// </remarks>
     Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
 
     /// <summary>
     /// Sends a message to each of the specified endpoints. Each delivery is dispatched as a
     /// separate <see cref="SendAsync{T}"/>-equivalent call; failures on one endpoint do not
-    /// abort the others. The <c>options.EndPoint</c> field is ignored when this method is
-    /// called — the explicit <paramref name="endPoints"/> parameter wins.
+    /// abort the others — per-endpoint failures are collected and surface as an
+    /// <see cref="AggregateException"/> at the end of the loop. Cancellation via
+    /// <paramref name="cancellationToken"/> propagates as
+    /// <see cref="OperationCanceledException"/> directly. The <c>options.EndPoint</c> field is
+    /// ignored when this method is called — the explicit <paramref name="endPoints"/> parameter
+    /// wins.
     /// </summary>
     Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
 

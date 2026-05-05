@@ -93,8 +93,11 @@ public class ProducerPublishTimeoutTests
     }
 
     [Fact]
-    public async Task SendAsync_ByType_ThrowsTimeoutException_WhenBasicPublishHangs()
+    public async Task SendAsync_ByType_ThrowsAggregateException_ContainingTimeoutException_WhenBasicPublishHangs()
     {
+        // B.2 (fan-out continue-on-failure): SendAsync(Type) now collects per-endpoint failures
+        // and surfaces them as AggregateException. A single-endpoint mapping still wraps the
+        // TimeoutException — callers must unwrap or use .Handle()/.Flatten().
         var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
         var channel = MakeHangingChannel();
 
@@ -102,8 +105,11 @@ public class ProducerPublishTimeoutTests
         SetField(producer, "_connected", true);
         producer.ReconnectForTests = _ => Task.CompletedTask;
 
-        await Assert.ThrowsAsync<TimeoutException>(() =>
+        var ex = await Assert.ThrowsAsync<AggregateException>(() =>
             producer.SendAsync(typeof(object), new byte[] { 1, 2, 3 }));
+
+        Assert.Single(ex.InnerExceptions);
+        Assert.IsType<TimeoutException>(ex.InnerExceptions[0]);
     }
 
     [Fact]
