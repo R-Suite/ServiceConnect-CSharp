@@ -25,7 +25,8 @@ public sealed class ProducerPublishTimeoutTimingTests
         //   reconnectDelay   = 2 000 ms (simulated slow reconnect after the timeout)
         //   publisherCount   = 5
         //
-        // Pre-fix observed >7s for the worst publisher; post-fix observed ~1s; threshold 3000ms.
+        // Threshold = 3 000 ms. Awaiting ReconnectAsync under _publishLock would push
+        // the worst publisher above 7 s; the off-lock reconnect path keeps it near ~1 s.
         const int publisherCount = 5;
         const int publishTimeoutMs = 200;
         const int reconnectDelayMs = 2_000;
@@ -78,12 +79,12 @@ public sealed class ProducerPublishTimeoutTimingTests
             return Task.FromResult(conn.Object);
         };
 
-        // Seam 2: slow-reconnect simulation.
-        // Pre-fix: ReconnectAsync is awaited inside PublishWithTimeoutAsync while _publishLock is
-        // held — this delay blocks all queued publishers for reconnectDelayMs per timed-out publish.
-        // Post-fix: ReconnectAsync is only driven from EnsureConnectedAsync (before _publishLock)
-        // and only by the first caller that wins the CAS on _resetRequired.  In this single-publish
-        // test that call never runs during the publish phase, so the delay does not contribute.
+        // Seam 2: slow-reconnect simulation. ReconnectAsync is only driven from
+        // EnsureConnectedAsync (before _publishLock is acquired) and only by the first
+        // caller that wins the CAS on _resetRequired. In this single-publish test that
+        // call never runs during the publish phase, so the delay does not contribute.
+        // Awaiting ReconnectAsync inside PublishWithTimeoutAsync while _publishLock is
+        // held would block all queued publishers for reconnectDelayMs per timed-out publish.
         producer.ReconnectForTests = ct => Task.Delay(reconnectDelayMs, ct);
 
         // Act ─────────────────────────────────────────────────────────────────────────────────
@@ -100,17 +101,16 @@ public sealed class ProducerPublishTimeoutTimingTests
             }
             catch (TimeoutException)
             {
-                // Expected post-fix: BasicPublishAsync hangs and the publish-timeout CTS fires.
+                // Expected: BasicPublishAsync hangs and the publish-timeout CTS fires.
                 // The timeout is raised in PublishWithTimeoutAsync, _publishLock is released,
                 // and elapsed time should be ~publishTimeout.
             }
             catch (Exception)
             {
-                // Pre-fix: the in-lock ReconnectAsync path may produce exceptions other than
-                // TimeoutException (e.g. NullReferenceException from a null channel after
-                // DisposeConnectionAsync clears _model). Capture here so the timing assertion
-                // below can report the actual wall-clock regression rather than surfacing the
-                // unrelated NRE as the test failure.
+                // Swallow other exceptions (e.g. an in-lock ReconnectAsync path could
+                // surface a NullReferenceException from a null _model after DisposeConnectionAsync).
+                // The timing assertion below is the load-bearing check; capturing here keeps
+                // the wall-clock regression visible rather than surfacing an unrelated NRE.
             }
             finally
             {
@@ -123,17 +123,17 @@ public sealed class ProducerPublishTimeoutTimingTests
         await producer.DisposeAsync();
 
         // Assert ──────────────────────────────────────────────────────────────────────────────
-        // Post-fix: every publisher returns in ~publishTimeout ≈ 200ms; threshold = 3 000ms.
-        // Pre-fix: publisher #N returns in ≥ N × (publishTimeout + reconnectDelay), which for
-        // the worst publisher exceeded 7 000ms.
+        // Every publisher should return in ~publishTimeout ≈ 200 ms; threshold = 3 000 ms.
+        // Serialising publishers behind an in-lock ReconnectAsync would push publisher #N to
+        // ≥ N × (publishTimeout + reconnectDelay) — the worst publisher would exceed 7 000 ms.
         for (var i = 0; i < publisherCount; i++)
         {
             Assert.True(
                 stopwatches[i].Elapsed < assertThreshold,
                 $"Publisher {i} took {stopwatches[i].Elapsed.TotalMilliseconds:F0}ms; " +
                 $"expected < {assertThreshold.TotalMilliseconds:F0}ms. " +
-                $"Exceeding the threshold indicates the H22 regression: ReconnectAsync is being " +
-                $"awaited under _publishLock (pre-fix worst case ≈ {reconnectDelayMs * publisherCount}ms).");
+                $"Exceeding the threshold indicates ReconnectAsync is being awaited under " +
+                $"_publishLock (worst-case ≈ {reconnectDelayMs * publisherCount}ms).");
         }
     }
 

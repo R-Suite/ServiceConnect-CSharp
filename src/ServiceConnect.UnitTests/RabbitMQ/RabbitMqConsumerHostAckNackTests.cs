@@ -11,10 +11,10 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies that the ack/nack block in EventAsync's finally demotes
-/// expected-during-teardown conditions to Debug rather than Warning:
-///   - null channel captured at delivery entry (M7 fix)
-///   - channel already closed (IsOpen == false) at ack time (M7 fix)
+/// The ack/nack block in EventAsync's finally must demote expected-during-teardown
+/// conditions to Debug rather than Warning:
+///   - null channel captured at delivery entry
+///   - channel already closed (IsOpen == false) at ack time
 /// Uses the same harness pattern established by RabbitMqConsumerHostHeaderSizeTests.
 /// </summary>
 public sealed class RabbitMqConsumerHostAckNackTests

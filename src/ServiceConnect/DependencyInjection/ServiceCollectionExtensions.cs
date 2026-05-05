@@ -6,7 +6,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 
-namespace ServiceConnect;
+namespace ServiceConnect.DependencyInjection;
 
 /// <summary>
 /// Extension methods for registering ServiceConnect services with dependency injection.

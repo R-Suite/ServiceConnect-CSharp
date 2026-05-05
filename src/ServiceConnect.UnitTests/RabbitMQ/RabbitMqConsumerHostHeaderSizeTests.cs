@@ -10,13 +10,11 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies that the header-size admission guard in RabbitMqConsumerHost rejects
-/// oversized string header values in the same way it already rejects oversized byte[]
-/// values (M15 fix). Tests drive deliveries through the internal RaiseDeliveryForTests
-/// seam rather than going through the broker.
-///
-/// This is the first test class to exercise EventAsync directly. BuildHostAsync
-/// establishes the harness pattern that Tasks 7/8/9 should copy.
+/// The header-size admission guard in RabbitMqConsumerHost rejects oversized string
+/// header values in the same way it already rejects oversized byte[] values. Tests
+/// drive deliveries through the internal RaiseDeliveryForTests seam rather than
+/// going through the broker. BuildHostAsync establishes the harness pattern reused
+/// by other EventAsync-direct tests.
 /// </summary>
 public sealed class RabbitMqConsumerHostHeaderSizeTests
 {

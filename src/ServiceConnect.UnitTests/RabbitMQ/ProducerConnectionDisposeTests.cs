@@ -54,8 +54,8 @@ public sealed class ProducerConnectionDisposeTests
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
         var sw = Stopwatch.StartNew();
-        // ReconnectAsync routes through DisposeConnectionAsync which (after the fix) honours
-        // both the 30s ceiling and the cancellation token rather than blocking indefinitely.
+        // ReconnectAsync routes through DisposeConnectionAsync which honours both the
+        // 30s ceiling and the cancellation token rather than blocking indefinitely.
         await producerConnection.ReconnectAsync(new InvalidOperationException("test"), cts.Token);
         sw.Stop();
 

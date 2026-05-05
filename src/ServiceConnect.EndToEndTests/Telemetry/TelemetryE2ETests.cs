@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Telemetry;

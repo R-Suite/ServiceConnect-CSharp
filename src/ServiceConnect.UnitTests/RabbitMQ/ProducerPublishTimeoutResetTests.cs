@@ -9,12 +9,12 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies the H22 fix: <see cref="Producer.PublishWithTimeoutAsync"/> must NOT await
-/// <c>ReconnectAsync</c> while holding <c>_publishLock</c>. Doing so would block every
-/// concurrent publisher for up to <c>retryCount * retrySeconds</c> (default 60 * 10s = 10 min).
-/// Instead, the publish-timeout catch path sets a synchronous <c>_resetRequired</c> flag on
-/// <see cref="ProducerConnection"/>; the next call to <c>EnsureConnectedAsync</c> consumes
-/// the flag and drives the reconnect off the publish lock.
+/// <see cref="Producer.PublishWithTimeoutAsync"/> must NOT await <c>ReconnectAsync</c>
+/// while holding <c>_publishLock</c>. Doing so would block every concurrent publisher
+/// for up to <c>retryCount * retrySeconds</c> (default 60 * 10s = 10 min). Instead, the
+/// publish-timeout catch path sets a synchronous <c>_resetRequired</c> flag on
+/// <see cref="ProducerConnection"/>; the next call to <c>EnsureConnectedAsync</c>
+/// consumes the flag and drives the reconnect off the publish lock.
 /// </summary>
 public sealed class ProducerPublishTimeoutResetTests
 {

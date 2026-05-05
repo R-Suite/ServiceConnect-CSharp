@@ -66,9 +66,9 @@ public class ConsumeContextVolatileTests
     [Fact]
     public void CorrelationId_AbsentHeader_ReturnsGuidEmpty()
     {
-        // Regression guard: pre-fix _correlationId was Guid? with null sentinel; post-fix
-        // it is Guid with Guid.Empty sentinel. Both produce CorrelationId == Guid.Empty
-        // when the header is absent.
+        // _correlationId is a Guid with Guid.Empty as the sentinel for "absent header".
+        // Modelling it as Guid? with a null sentinel would also produce Guid.Empty here,
+        // so this test pins the absent-header outcome regardless of the underlying field type.
         var headers = new Dictionary<string, object>();
         var ctx = BuildContext(headers);
 

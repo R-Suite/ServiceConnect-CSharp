@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Helpers;
 using ServiceConnect.EndToEndTests.Messages;

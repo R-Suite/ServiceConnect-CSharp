@@ -1,6 +1,7 @@
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.Interfaces;
 using Xunit;
 

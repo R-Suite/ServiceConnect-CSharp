@@ -73,8 +73,8 @@ public class StreamProcessorDisposeTests
             envelope: envelope,
             cancellationToken: CancellationToken.None);
 
-        // The dictionary must remain empty; pre-fix ProcessAsync would call GetOrAdd
-        // and leave an entry even after disposal.
+        // The dictionary must remain empty — once disposed, ProcessAsync must short-circuit
+        // before calling GetOrAdd, otherwise stream entries leak past disposal.
         Assert.Equal(0, processor.ActiveStreamCount);
     }
 

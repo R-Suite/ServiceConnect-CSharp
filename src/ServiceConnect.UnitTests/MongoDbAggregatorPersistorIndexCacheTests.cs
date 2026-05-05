@@ -46,7 +46,7 @@ public class MongoDbAggregatorPersistorIndexCacheTests
                 It.IsAny<IEnumerable<CreateIndexModel<MongoDbAggregatorPersistor.AggregatorDocument>>>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new MongoCommandException(connectionId, "options conflict", command, result))
-            .ReturnsAsync(["ok"]);  // should not be reached post-fix
+            .ReturnsAsync(["ok"]);  // second call should be skipped via the cache
 
         var data = new AggregatorTestData(Guid.NewGuid());
         await persistor.InsertDataAsync(data, "test-name");   // benign 85 → flag flips

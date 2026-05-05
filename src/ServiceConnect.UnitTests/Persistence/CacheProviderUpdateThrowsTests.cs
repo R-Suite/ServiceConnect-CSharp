@@ -30,8 +30,9 @@ public class CacheProviderUpdateThrowsTests
     public void Update_KeyRemovedConcurrently_ThrowsInsteadOfSilentReturn()
     {
         // White-box: simulate a concurrent removal by adding then removing the key
-        // before Update runs. With the pre-fix early-guard structure this could
-        // race; the new in-loop check makes the throw deterministic.
+        // before Update runs. The in-loop key check makes the throw deterministic; an
+        // early-guard structure (check-then-act outside the loop) would race against
+        // a concurrent remove and silently no-op.
         var cache = new CacheProvider(new FakeTimeProvider());
         cache.Add("k", "v", CacheItemPriority.Normal);
         cache.Remove("k");

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using ServiceConnect;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;

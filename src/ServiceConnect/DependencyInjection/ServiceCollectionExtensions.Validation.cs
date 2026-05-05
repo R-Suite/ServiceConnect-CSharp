@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
-namespace ServiceConnect;
+namespace ServiceConnect.DependencyInjection;
 
 /// <summary>
 /// Pipeline-registration validators for <see cref="ServiceCollectionExtensions"/>. Catches

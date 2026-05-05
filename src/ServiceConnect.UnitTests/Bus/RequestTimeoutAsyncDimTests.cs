@@ -31,8 +31,9 @@ public class RequestTimeoutAsyncDimTests
     {
         IBus bus = new StubBus();
 
-        // Pre-fix: throws synchronously on the call line.
-        // Post-fix: returns a faulted Task; exception observed at await.
+        // The DIM must return a faulted Task — exception observed only at await — rather
+        // than throwing synchronously on the call line. Synchronous throws break callers
+        // that pattern-match on Task.Exception or chain ContinueWith.
         Task task = bus.RequestTimeoutAsync(Guid.NewGuid(), TimeSpan.FromSeconds(1));
         Assert.NotNull(task);  // synchronous throw would prevent reaching here
 

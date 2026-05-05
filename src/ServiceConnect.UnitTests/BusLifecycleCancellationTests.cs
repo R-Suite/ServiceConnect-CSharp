@@ -13,10 +13,9 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests;
 
-// Regression coverage for H14: StopConsumingCoreAsync must rethrow OCE without
-// mutating _consuming/_stopped. The structural fix (all mutation sits behind
-// _lifecycleSemaphore.WaitAsync, which propagates OCE before the body runs)
-// was introduced in the Task-12 simplification. These tests lock that invariant in.
+// Invariant: StopConsumingCoreAsync rethrows OperationCanceledException without
+// mutating _consuming/_stopped. All mutation sits behind _lifecycleSemaphore.WaitAsync,
+// which propagates OCE before the body runs.
 public sealed class BusLifecycleCancellationTests
 {
     [Fact]

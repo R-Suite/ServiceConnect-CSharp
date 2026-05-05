@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;

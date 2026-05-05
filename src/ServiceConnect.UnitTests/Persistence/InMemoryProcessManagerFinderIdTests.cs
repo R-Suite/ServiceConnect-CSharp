@@ -78,7 +78,8 @@ public class InMemoryProcessManagerFinderIdTests
         Assert.NotNull(afterUpdate);
         var updatedId = ((IIdentified)afterUpdate).Id;
 
-        // Assert — Id must survive the update; pre-fix this would be Guid.Empty
+        // Id must survive the update — _id is stamped once on insert and is never
+        // re-issued by subsequent updates.
         Assert.Equal(originalId, updatedId);
         Assert.Equal("updated", afterUpdate.Data.Value);
     }

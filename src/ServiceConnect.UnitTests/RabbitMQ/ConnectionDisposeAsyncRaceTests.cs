@@ -57,7 +57,7 @@ public sealed class ConnectionDisposeAsyncRaceTests
             catch (Exception ex)
             {
                 // Anything else — especially ObjectDisposedException with ObjectName "SemaphoreSlim" —
-                // indicates the H2 race fired.
+                // indicates a connect/dispose race against the SemaphoreSlim leaked through.
                 connectExceptions.Add(ex);
             }
         })).ToArray();
@@ -69,14 +69,14 @@ public sealed class ConnectionDisposeAsyncRaceTests
         })).ToArray();
 
         // Let the dispose tasks run a moment before cancelling the hang gate, so the
-        // dispose-timeout has fired and the lock has been disposed (pre-fix) before the
-        // connect tasks reach their finally block.
+        // dispose-timeout fires and the lock has been disposed before the connect tasks
+        // reach their finally block — this is the window the race would exploit.
         await Task.Delay(200);
         hangGate.TrySetCanceled();
 
         await Task.WhenAll(connectTasks.Concat(disposeTasks));
 
-        // Post-fix invariant: no ObjectDisposedException from SemaphoreSlim escapes.
+        // Invariant: no ObjectDisposedException from SemaphoreSlim escapes.
         var semaphoreOdes = connectExceptions
             .Where(e => e is ObjectDisposedException ode &&
                         (ode.ObjectName?.Contains("Semaphore", StringComparison.Ordinal) == true ||

@@ -14,8 +14,8 @@ public sealed class QueueConfigurationCachedMappingsTests
         var first = config.QueueMappings;
         var second = config.QueueMappings;
 
-        // Pre-fix: each access allocates a new QueueMappingsView wrapper → references differ.
-        // Post-fix: the wrapper is cached → same reference.
+        // The QueueMappingsView wrapper is cached, so repeated access without mutation
+        // returns the same reference instead of allocating per call.
         Assert.Same(first, second);
     }
 

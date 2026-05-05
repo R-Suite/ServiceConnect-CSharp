@@ -65,17 +65,17 @@ public class MongoDbTimeoutStoreIndexMigrationTests
     [Fact]
     public async Task EnsureTimeoutIndex_CreatesTimeLockedCompoundAndLockExpiresAtSingle()
     {
-        // The pre-Phase-9 single (Time, Locked, LockExpiresAt) compound was rejected
-        // by real MongoDB with code 171 ("cannot index parallel arrays") because the
-        // C# driver serialises DateTimeOffset as a 2-element BSON array, and a
-        // compound spanning two array-typed fields trips that rule. The same applies
-        // to a hypothetical (Time, LockExpiresAt) — both fields are DateTimeOffset.
+        // A single (Time, Locked, LockExpiresAt) compound is rejected by real MongoDB
+        // with code 171 ("cannot index parallel arrays") because the C# driver serialises
+        // DateTimeOffset as a 2-element BSON array, and a compound spanning two array-typed
+        // fields trips that rule. The same applies to a hypothetical (Time, LockExpiresAt)
+        // — both fields are DateTimeOffset.
         //
-        // The fix uses (Time, Locked) — one array + one scalar, OK — for the
-        // Locked == false branch of the due filter (with Time as the sort prefix),
-        // plus a single-field (LockExpiresAt) index for the LockExpiresAt <= utcNow
-        // branch. Single array-valued fields are fine; only multi-array compounds
-        // are rejected.
+        // The store therefore creates two indexes: (Time, Locked) — one array + one
+        // scalar, OK — for the Locked == false branch of the due filter (with Time as
+        // the sort prefix), plus a single-field (LockExpiresAt) index for the
+        // LockExpiresAt <= utcNow branch. Single array-valued fields are fine; only
+        // multi-array compounds are rejected.
         IEnumerable<CreateIndexModel<TimeoutData>>? captured = null;
         var (store, _) = BuildStore(indexes =>
         {

@@ -483,9 +483,10 @@ public class ProcessManagerTimeoutServiceTests
     [Fact]
     public async Task PollOnce_WhenSendSucceeds_PropagatesLifecycleTokenToRemove()
     {
-        // Previously this test asserted CancellationToken.None was passed (the old buggy behaviour).
-        // After the fix, the lifecycle token is propagated — it may already be cancelled if the
-        // token was signalled during SendAsync, but it is the same token supplied to PollOnceAsync.
+        // The lifecycle token must be propagated to ReleaseDispatchedTimeoutAsync — it may
+        // already be cancelled if the token was signalled during SendAsync, but it is the
+        // same token supplied to PollOnceAsync. Passing CancellationToken.None instead would
+        // let release work continue past a shutdown signal.
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
 
         var timeoutId = Guid.NewGuid();

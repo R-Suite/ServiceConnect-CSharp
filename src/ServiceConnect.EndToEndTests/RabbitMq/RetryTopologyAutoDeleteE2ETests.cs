@@ -47,7 +47,7 @@ public sealed class RetryTopologyAutoDeleteE2ETests(MessagingFixture fixture)
         // Phase 1: declare the main queue with autoDelete:true, attach a consumer (autoDelete
         // fires when the last consumer disconnects), provision the retry topology, and publish
         // into the retry queue. ConfigureRetryTopologyAsync hard-codes autoDelete:false on the
-        // DLX regardless of the autoDelete argument — that is the fix under test.
+        // DLX regardless of the autoDelete argument — that is the invariant under test.
         await using (var setupChannel = await connection.CreateChannelAsync())
         {
             await setupChannel.QueueDeclareAsync(
@@ -86,9 +86,9 @@ public sealed class RetryTopologyAutoDeleteE2ETests(MessagingFixture fixture)
 
         // setupChannel disposed here → its consumer is cancelled → main queue loses its last
         // consumer → autoDelete fires and the broker drops the main queue. The binding from the
-        // main queue to the retry DLX therefore dissolves. Pre-fix the DLX would also have been
-        // declared with autoDelete:true and would auto-delete when its binding count hit zero;
-        // post-fix the DLX is declared with autoDelete:false and survives.
+        // main queue to the retry DLX therefore dissolves. The DLX itself is declared with
+        // autoDelete:false and must survive — declaring it with autoDelete:true would let the
+        // broker drop it once its binding count hit zero.
 
         // Allow up to 2 s for the broker to process the autoDelete on the main queue.
         var dropped = false;
@@ -113,13 +113,13 @@ public sealed class RetryTopologyAutoDeleteE2ETests(MessagingFixture fixture)
         // process re-declares its queue and re-provisions topology on startup. The binding must
         // exist at the moment the TTL fires so the dead-lettered message can route through.
         //
-        // Post-fix: the retry DLX is still alive (autoDelete:false), so QueueBindAsync succeeds.
-        // Pre-fix: the retry DLX was auto-deleted when the main queue's binding dissolved, so
-        // QueueBindAsync would fail with 404 — or, if the DLX declaration in
-        // ConfigureRetryTopologyAsync re-created it silently, the message would still be lost
-        // because dead-letter routing captures the DLX reference at enqueue time (when the
-        // retry queue was first declared), and an auto-deleted+recreated exchange is a different
-        // object with a different internal reference.
+        // The retry DLX is still alive (autoDelete:false), so QueueBindAsync succeeds.
+        // If the DLX had been declared with autoDelete:true, it would have been removed
+        // when the main queue's binding dissolved — QueueBindAsync would then fail with
+        // 404, and even a silent re-create by ConfigureRetryTopologyAsync would lose the
+        // message, because dead-letter routing captures the DLX reference at enqueue time
+        // (when the retry queue was first declared), and an auto-deleted+recreated exchange
+        // is a different object with a different internal reference.
         await using var consumerChannel = await connection.CreateChannelAsync();
         await consumerChannel.QueueDeclareAsync(
             queueName,
@@ -140,11 +140,11 @@ public sealed class RetryTopologyAutoDeleteE2ETests(MessagingFixture fixture)
         };
         await consumerChannel.BasicConsumeAsync(queueName, autoAck: true, consumer);
 
-        // Wait for the retry queue's TTL to fire (1000 ms) plus a safety margin.
-        // Post-fix: the dead-lettered message routes through the surviving DLX to the
-        //           re-declared main queue, and the consumer receives it.
-        // Pre-fix:  the DLX was gone; QueueBindAsync above would have thrown (404), or the
-        //           message is unroutable at TTL expiry and silently dropped.
+        // Wait for the retry queue's TTL to fire (1000 ms) plus a safety margin. The
+        // dead-lettered message routes through the surviving DLX to the re-declared main
+        // queue, and the consumer receives it. An auto-deleted DLX would either have made
+        // QueueBindAsync above throw 404, or — worse — left the message unroutable at TTL
+        // expiry to be silently dropped.
         var received = await receivedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(new byte[] { 1, 2, 3 }, received);
     }

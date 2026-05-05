@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.HealthChecks;
 using ServiceConnect.Interfaces;

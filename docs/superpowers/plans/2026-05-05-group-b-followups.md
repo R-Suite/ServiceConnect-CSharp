@@ -268,8 +268,6 @@ The retry-attempt counter now carries messaging.destination.name =
 MessageRetryHandler gains a consumerQueueName ctor parameter; threaded through
 from Consumer.cs via _queueConfiguration.QueueName. Tag cardinality is unchanged
 (retry-queue identity is determined by consumer-queue identity).
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -652,8 +650,6 @@ aggregated.
 
 XML docs on IBus.SendAsync<T>, IBus.SendToManyAsync<T>, and IProducer.SendAsync(Type)
 specify the new exception contract.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
@@ -1244,8 +1240,6 @@ Behaviour-preserving: identical AMQP frame sequence, identical metric tags
 on every counter/histogram, identical shutdown semantics. Logic-level
 tests migrate to per-collaborator test classes; the host's test file
 shrinks to wiring/integration coverage.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```

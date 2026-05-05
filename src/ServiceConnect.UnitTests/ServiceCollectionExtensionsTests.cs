@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
 using ServiceConnect;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;

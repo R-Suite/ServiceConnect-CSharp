@@ -16,8 +16,8 @@ public class ProcessManagerTimeoutServiceLeaseGuardTests
     {
         // Arrange a timeout whose lease expires DURING SendAsync — the SendAsync
         // mock callback advances FakeTimeProvider so the post-send lease check
-        // sees expiration. Pre-fix Remove ran unconditionally; post-fix it must skip,
-        // leaving reclaim to the lease-expiry sweep on the next poll.
+        // sees expiration. Remove must skip when the lease has expired, leaving
+        // reclaim to the lease-expiry sweep on the next poll.
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 5, 3, 12, 0, 0, TimeSpan.Zero));
         var bus = new Mock<IBus>();
         var store = new Mock<ITimeoutStore>();

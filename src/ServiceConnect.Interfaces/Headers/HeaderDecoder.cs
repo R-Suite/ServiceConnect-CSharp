@@ -145,7 +145,7 @@ public static class HeaderDecoder
 
     private static string EscapeJsonString(string s)
     {
-        // Full RFC 8259 escape table. Pre-fix only " was handled; raw control
+        // Full RFC 8259 escape table. Escaping only " is insufficient — raw control
         // characters inside a JSON string literal cause parse failures downstream.
         var sb = new StringBuilder(s.Length + 2);
         foreach (var c in s)

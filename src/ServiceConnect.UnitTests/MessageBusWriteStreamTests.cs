@@ -235,7 +235,8 @@ public class MessageBusWriteStreamTests
     {
         // The close-packet send blocks until the token is cancelled. If CloseAsync does NOT
         // forward the token, the mock's WaitAsync(ct) receives CancellationToken.None and never
-        // unblocks — the test would hang indefinitely. The fix is line 195: pass cancellationToken.
+        // unblocks — the test would hang indefinitely. CloseAsync must forward cancellationToken
+        // through to the producer's send call.
         var sendStarted = new TaskCompletionSource();
         var sendBlock = new TaskCompletionSource();
 

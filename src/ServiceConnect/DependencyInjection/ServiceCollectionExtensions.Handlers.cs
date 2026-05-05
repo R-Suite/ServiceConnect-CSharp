@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 
-namespace ServiceConnect;
+namespace ServiceConnect.DependencyInjection;
 
 /// <summary>
 /// Handler-scanning and handler-registration parts of <see cref="ServiceCollectionExtensions"/>.

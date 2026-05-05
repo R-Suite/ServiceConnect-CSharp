@@ -68,8 +68,9 @@ public sealed class InboundMessageProcessorNullHandlerTests
         Assert.NotNull(exJson);
         Assert.IsType<string>(exJson);
         var json = (string)exJson;
-        // Pre-fix: ex is null so the Exception header is never written to the error-exchange publish.
-        // Post-fix: the JSON contains the synthetic InvalidOperationException type and message.
+        // The Exception header on the error-exchange publish must contain a synthesised
+        // InvalidOperationException — without one, ex would be null and the header would
+        // never be written.
         Assert.Contains("InvalidOperationException", json);
         Assert.Contains("Consumer event handler not set", json);
     }

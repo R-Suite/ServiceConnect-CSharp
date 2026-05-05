@@ -40,8 +40,8 @@ public sealed class MessageDispatcherUnresolvedTypeTests
     public async Task DispatchAsync_UnresolvedType_NoResponseId_ReturnsNotHandled()
     {
         // Site 1: !typeResolvedFromRegistry && !hasResponseMessageId.
-        // Before this fix the dispatcher returned Success=false, driving nack/requeue → retry
-        // → DLQ burn. An unregistered type is terminal, so we route as not-handled instead.
+        // An unregistered type is terminal — the dispatcher must route as not-handled
+        // instead of returning Success=false (which would drive nack/requeue → retry → DLQ burn).
         var dispatcher = BuildDispatcher(replyManager: null);
 
         var headers = new Dictionary<string, object>(StringComparer.Ordinal)

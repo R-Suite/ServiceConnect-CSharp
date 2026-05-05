@@ -15,10 +15,10 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Covers the H17 fix: when the linked CTS (timeout) cancels the outbound send pipeline
-/// before the send completes, and the caller's own token did NOT fire, the call must
-/// surface the typed <see cref="RequestSendCancelledException"/> immediately rather than
-/// stalling on the pending-reply TCS until the timeout deadline.
+/// When the linked CTS (timeout) cancels the outbound send pipeline before the send
+/// completes, and the caller's own token did NOT fire, the call must surface the typed
+/// <see cref="RequestSendCancelledException"/> immediately rather than stalling on the
+/// pending-reply TCS until the timeout deadline.
 /// </summary>
 [Collection(SerialConcurrencyCollection.Name)]
 public sealed class RequestReplyManagerSendCancelTests
@@ -57,9 +57,9 @@ public sealed class RequestReplyManagerSendCancelTests
             manager.SendRequestAsync<FakeMessage1, FakeMessage1>(new FakeMessage1(Guid.NewGuid()), headers, options));
         sw.Stop();
 
-        // Pre-fix the caller would block on the reply TCS until the timeout fires
-        // (~200ms) and observe RequestTimeoutException. Post-fix the typed exception
-        // surfaces as soon as the send pipeline reports cancellation.
+        // The typed exception must surface as soon as the send pipeline reports
+        // cancellation; blocking on the reply TCS until the timeout (~200ms) and
+        // observing RequestTimeoutException would miss the send-failure signal.
         Assert.True(sw.ElapsedMilliseconds < FailFastBudgetMs,
             $"Expected fail-fast (< {FailFastBudgetMs}ms); got {sw.ElapsedMilliseconds}ms.");
         Assert.NotEqual(Guid.Empty, ex.MessageId);

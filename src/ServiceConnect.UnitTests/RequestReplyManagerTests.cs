@@ -629,9 +629,9 @@ public class RequestReplyManagerTests
         // path both contend for RequestState._stateLock. A reply that lands AFTER Close
         // has acquired the lock and flipped the state to closed is rejected (no
         // deserialize, no callback). A reply that landed earlier and is mid-lifecycle
-        // completes — a slow Deserialize is no longer interrupted by the timeout, since
-        // attempting to interrupt a partially-mutated state was the source of the
-        // original C10/H18 defects this state machine was rewritten to fix.
+        // completes — a slow Deserialize is not interrupted by the timeout. Interrupting
+        // a partially-mutated state across the lock boundary is unsafe, so the design
+        // requires that any in-flight reply observe a stable terminal state.
         var firstReply = new FakeMessage1(Guid.NewGuid()) { Username = "Reply1" };
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };

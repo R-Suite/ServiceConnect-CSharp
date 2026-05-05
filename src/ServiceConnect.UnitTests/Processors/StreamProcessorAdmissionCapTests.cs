@@ -29,7 +29,7 @@ public class StreamProcessorAdmissionCapTests
     public async Task ConcurrentInserts_ExceedingCap_LeaveExactlyCapEntries()
     {
         // Saturate the admission cap with concurrent packets for distinct sequenceIds.
-        // Post-fix: _activeStreams.Count == MaxActiveStreams (1000), no leaked rejections.
+        // _activeStreams.Count must settle at MaxActiveStreams (1000) — no leaked rejections.
         // The Interlocked counter is the admission gate; GetOrAdd is only called after a
         // successful counter bump, so no rejected entry ever appears in the dictionary.
         var processor = BuildProcessor();
@@ -57,7 +57,7 @@ public class StreamProcessorAdmissionCapTests
         await Task.WhenAll(tasks);
 
         // Each successful admission is the first packet of its stream; nothing completes,
-        // nothing evicts. Post-fix the dictionary contains exactly MaxActiveStreams (1000)
+        // nothing evicts. The dictionary must contain exactly MaxActiveStreams (1000)
         // entries — no rejected entries leak through.
         Assert.Equal(1000, processor.ActiveStreamCount);
     }

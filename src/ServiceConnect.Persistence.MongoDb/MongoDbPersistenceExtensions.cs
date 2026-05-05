@@ -24,7 +24,7 @@ public static class MongoDbPersistenceExtensions
     // The success flag is set only after every step (mode toggle, verification, serializer
     // registration) completes without throwing. A broken init therefore throws on every call
     // — no silent short-circuit into a misconfigured MongoClient — until the underlying
-    // configuration problem is fixed. The first-time setup is serialised via the lock so
+    // configuration is valid. The first-time setup is serialised via the lock so
     // concurrent callers don't race on the global BSON mutations.
     private static int _guidSerializerRegistered;
 #if NET9_0_OR_GREATER

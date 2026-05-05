@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
 using Xunit;

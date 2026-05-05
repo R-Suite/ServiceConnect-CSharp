@@ -59,8 +59,9 @@ public sealed class RabbitMqConsumerHostConnectionEventCaptureTests
         Assert.Equal(1, tagChangeSubs);
 
         // Simulate the parent Connection's DisposeAsync having run first: UnderlyingConnection now null.
-        // Pre-fix: DisposeAsync re-fetched null, skipped unsubscribe, counters stayed at 1 (LEAKED).
-        // Post-fix: DisposeAsync uses _subscribedUnderlyingConnection (set at subscribe time), all 0.
+        // DisposeAsync must use _subscribedUnderlyingConnection (captured at subscribe time)
+        // for unsubscription. Re-fetching UnderlyingConnection here would observe null,
+        // skip unsubscribe, and leak the four event handlers.
         serviceConn.SetupGet(c => c.UnderlyingConnection).Returns((IConnection?)null);
 
         await host.DisposeAsync();

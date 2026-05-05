@@ -10,16 +10,16 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies the atomicity discipline of the in-flight counter (now owned by
+/// Atomicity discipline of the in-flight counter (owned by
 /// <see cref="RabbitMqAdmissionGate"/>): under concurrent deliveries, the counter
 /// must never go negative and must settle to zero once all in-flight handlers
 /// complete.
 ///
-/// The pre-fix host mixed lock-protected `++` with lock-free decrements and
-/// volatile reads, so a concurrent decrement during the lock-protected read-modify-write
-/// `++` could lose updates, leaving the counter stuck above the true in-flight count.
-/// Post-fix, all increments/decrements happen under the gate's lock, so the counter
-/// is exact regardless of interleaving.
+/// All increments and decrements happen under the gate's lock, so the counter is
+/// exact regardless of interleaving. Mixing lock-protected `++` with lock-free
+/// decrements and volatile reads would let a concurrent decrement lose an update
+/// against a stale read inside the lock-protected `++`, leaving the counter stuck
+/// above the true in-flight count.
 /// </summary>
 public sealed class RabbitMqConsumerHostInflightCounterTests
 {
@@ -29,7 +29,7 @@ public sealed class RabbitMqConsumerHostInflightCounterTests
         // Yielding handler maximises interleaving by forcing the continuation onto
         // the thread pool — this widens the window between the increment (admission)
         // and decrement (finally) so concurrent producers/decrementers exercise the
-        // full read-modify-write race surface that the H3 fix targets.
+        // full read-modify-write race surface of the in-flight counter.
         static async Task<ConsumeEventResult> YieldingHandler(
             ReadOnlyMemory<byte> _, string __, IDictionary<string, object> ___, CancellationToken ____)
         {

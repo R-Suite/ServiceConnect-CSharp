@@ -46,9 +46,9 @@ public class HandlerProcessorRoutingSlipTests
     }
 
     /// <summary>
-    /// Pre-fix, the IsKnownQueue check threw InvalidOperationException for any destination
-    /// not present in queueConfig. Post-fix, a well-formed cross-service queue name that is
-    /// not in the local config is allowed; IBus.RouteAsync is called with that destination.
+    /// A well-formed cross-service queue name that is not in the local queueConfig must be
+    /// allowed; IBus.RouteAsync is called with that destination. A strict IsKnownQueue check
+    /// would throw InvalidOperationException and block legitimate cross-service routing slips.
     /// </summary>
     [Fact]
     public async Task ForwardRoutingSlip_DestinationNotInLocalConfig_DoesNotThrow()
@@ -63,7 +63,7 @@ public class HandlerProcessorRoutingSlipTests
         services.AddSingleton(mockBus.Object);
         var provider = services.BuildServiceProvider();
 
-        // MinimalQueueConfig has no mapping for "remote-service-q" — pre-fix this threw.
+        // MinimalQueueConfig has no mapping for "remote-service-q" — must still be accepted.
         var processor = new HandlerProcessor(
             BuildRegistry(typeof(SlipTestMsg)),
             NewScope(provider),
@@ -80,7 +80,7 @@ public class HandlerProcessorRoutingSlipTests
         };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
-        // Post-fix: no throw — the destination passes format validation.
+        // No throw — the destination passes format validation.
         var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(SlipTestMsg), msg, headers, envelope);
 
         Assert.Equal(ProcessResult.Handled, result);
@@ -131,9 +131,9 @@ public class HandlerProcessorRoutingSlipTests
     }
 
     /// <summary>
-    /// The IsValidRoutingSlipDestination format check is the remaining gate post-fix.
-    /// Malformed destinations containing AMQP wildcards or control characters must still
-    /// be rejected with InvalidOperationException.
+    /// IsValidRoutingSlipDestination is the remaining gate once the IsKnownQueue check is
+    /// relaxed. Malformed destinations containing AMQP wildcards or control characters must
+    /// still be rejected with InvalidOperationException.
     /// </summary>
     /// <remarks>
     /// A whitespace-only header value is caught by the outer IsNullOrWhiteSpace guard

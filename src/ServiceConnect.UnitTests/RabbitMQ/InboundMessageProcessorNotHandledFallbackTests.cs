@@ -14,14 +14,14 @@ public sealed class InboundMessageProcessorNotHandledFallbackTests
     [Fact]
     public async Task ProcessAsync_NotHandled_FullTypeNameNullFallsBackToTypeName()
     {
-        // Regression guard for the not-handled fallback type-name resolution. Note: the production
-        // fix at InboundMessageProcessor.cs:169-172 (`|| typeNameRaw is null`) is defensive symmetry
-        // with the line-87 pattern. The internal `headers` dict is built from
-        // args.BasicProperties.Headers via a loop that filters out null-valued entries (lines 60-66
-        // of InboundMessageProcessor), so a wire-headers `FullTypeName=null` never reaches the
-        // fallback site. This test exercises the resolved type name in the not-handled exception
-        // payload; it does NOT exercise the fix in isolation. The fix protects against any future
-        // path that bypasses the upstream null filter.
+        // Covers not-handled fallback type-name resolution. The production guard at
+        // InboundMessageProcessor.cs:169-172 (`|| typeNameRaw is null`) is defensive
+        // symmetry with the line-87 pattern. The internal `headers` dict is built from
+        // args.BasicProperties.Headers via a loop that filters out null-valued entries
+        // (lines 60-66 of InboundMessageProcessor), so a wire-headers `FullTypeName=null`
+        // never reaches the fallback site. This test exercises the resolved type name in
+        // the not-handled exception payload; the explicit `is null` guard protects any
+        // future path that bypasses the upstream null filter.
         BasicProperties? capturedProps = null;
         var channel = new Mock<IChannel>();
         channel
@@ -59,8 +59,8 @@ public sealed class InboundMessageProcessorNotHandledFallbackTests
         // FullTypeName key present in wire headers but value is null; TypeName carries
         // the real type. The null-filtering loop drops FullTypeName from the internal
         // headers dict, so TryGetValue misses it and the TypeName fallback is used.
-        // After the || typeNameRaw is null fix, an explicit null entry (if ever present
-        // in the dict) also triggers the fallback.
+        // The explicit `|| typeNameRaw is null` guard ensures an explicit null entry
+        // (if ever present in the dict) also triggers the fallback.
         var props = new BasicProperties
         {
             Headers = new Dictionary<string, object?>(StringComparer.Ordinal)

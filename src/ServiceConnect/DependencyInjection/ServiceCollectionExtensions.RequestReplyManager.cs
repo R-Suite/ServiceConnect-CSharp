@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 
-namespace ServiceConnect;
+namespace ServiceConnect.DependencyInjection;
 
 /// <summary>
 /// Request/reply manager registration logic for <see cref="ServiceCollectionExtensions"/>.

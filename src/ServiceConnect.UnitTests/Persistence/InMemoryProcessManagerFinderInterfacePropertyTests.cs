@@ -40,11 +40,11 @@ public class InMemoryProcessManagerFinderInterfacePropertyTests
     [Fact]
     public async Task FindData_ExplicitInterfaceImpl_BuildsCorrectPredicate()
     {
-        // Pre-fix: Expression.Property(left, left.Type, "FooId") resolves the property
-        // by string name on ExplicitSagaData, which misses the explicit-interface impl
-        // and throws ArgumentException (property not found on the type).
-        // Post-fix: MakeMemberAccess with the IFooSource.FooId PropertyInfo resolves
-        // correctly through the declaring interface type.
+        // GetPredicate must build the member access via MakeMemberAccess with the
+        // IFooSource.FooId PropertyInfo, so the lookup resolves through the declaring
+        // interface type. Resolving by string name on the saga's runtime type
+        // (Expression.Property(left, left.Type, "FooId")) would miss explicit-interface
+        // implementations and throw ArgumentException.
 
         var fooId = Guid.NewGuid();
         var data = new ExplicitSagaData

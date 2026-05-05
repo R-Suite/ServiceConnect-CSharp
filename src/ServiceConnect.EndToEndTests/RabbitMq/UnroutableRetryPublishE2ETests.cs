@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
 using ServiceConnect.Interfaces;
 using Xunit;

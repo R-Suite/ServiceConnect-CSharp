@@ -14,7 +14,7 @@ namespace ServiceConnect.Services;
 /// <c>ServiceConnect.Client.RabbitMQ</c>) need to derive the same name as the core bus.
 /// The output format is wire-compatibility-stable: changing how the name is computed
 /// would silently re-route messages across deployed services that pinned different
-/// versions of the core and adapter packages, so the algorithm is fixed.
+/// versions of the core and adapter packages, so the algorithm is frozen.
 /// </remarks>
 public static class MessageTypeExchangeName
 {
@@ -25,8 +25,8 @@ public static class MessageTypeExchangeName
     /// <returns>
     /// The flattened type name (dots stripped) suffixed with an underscore and an
     /// eight-hex-character SHA-256 prefix derived from the full type name plus the
-    /// assembly simple name (version-stable). Pre-v8 the suffix was derived from
-    /// the assembly-qualified name and changed across version bumps.
+    /// assembly simple name. The simple name is used (rather than the assembly-qualified
+    /// name) so the suffix is stable across assembly-version bumps.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="type"/> has no <see cref="Type.FullName"/>.</exception>

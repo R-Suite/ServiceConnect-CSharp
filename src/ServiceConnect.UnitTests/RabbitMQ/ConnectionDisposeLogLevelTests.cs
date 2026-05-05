@@ -57,11 +57,11 @@ public sealed class ConnectionDisposeLogLevelTests
         // Establish the connection by creating a channel.
         await connection.CreateChannelAsync(default);
 
-        // Now dispose; CloseAsync throws → catch logs at Warning post-fix.
+        // Dispose; CloseAsync throws → the catch block must log at Warning.
         await connection.DisposeAsync();
 
-        // Pre-fix: log entry at Debug.
-        // Post-fix: log entry at Warning containing "Error closing connection".
+        // The teardown failure surfaces as a Warning entry containing "Error closing
+        // connection"; the Debug-level entry is suppressed for this branch.
         Assert.Contains(logs, l => l.Level == LogLevel.Warning && l.Message.Contains("Error closing connection"));
         Assert.DoesNotContain(logs, l => l.Level == LogLevel.Debug && l.Message.Contains("Error closing connection"));
     }

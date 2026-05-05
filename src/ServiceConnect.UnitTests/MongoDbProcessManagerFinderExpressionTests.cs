@@ -37,9 +37,9 @@ public class MongoDbProcessManagerFinderExpressionTests
 
     public sealed class TestMessage(Guid correlationId) : Message(correlationId)
     {
-        // int on the message side, long on the saga side — the type-mismatch case
-        // that motivates H10. Pre-fix, the expression-tree's RHS is Constant(int);
-        // post-fix it is Convert(Constant(int), long).
+        // int on the message side, long on the saga side — the type-mismatch case where
+        // the expression-tree's RHS must be Convert(Constant(int), long) rather than a
+        // bare Constant(int) so the MongoDB driver can match the saga's long-typed field.
         public int LongProp { get; set; }
         public int NullableIntProp { get; set; }
     }
@@ -150,8 +150,9 @@ public class MongoDbProcessManagerFinderExpressionTests
 
         var expr = capture();
         var equal = Assert.IsAssignableFrom<BinaryExpression>(expr.Body);
-        // Pre-fix: equal.Right is a ConstantExpression of type int (= msgPropValue.GetType()).
-        // Post-fix: equal.Right is a UnaryExpression(Convert, type=long) wrapping the constant.
+        // equal.Right must be a UnaryExpression(Convert, type=long) wrapping the int
+        // constant — a bare ConstantExpression of type int would not match the saga's
+        // long-typed field via the MongoDB driver's expression translation.
         var convert = Assert.IsAssignableFrom<UnaryExpression>(equal.Right);
         Assert.Equal(ExpressionType.Convert, convert.NodeType);
         Assert.Equal(typeof(long), convert.Type);
@@ -177,7 +178,8 @@ public class MongoDbProcessManagerFinderExpressionTests
 
         var expr = capture();
         var equal = Assert.IsAssignableFrom<BinaryExpression>(expr.Body);
-        // Pre-fix: equal.Right is Constant(int). Post-fix it is Convert(Constant(int), int?).
+        // equal.Right must be Convert(Constant(int), int?) so the comparison lifts to
+        // the saga's nullable-int field type.
         var convert = Assert.IsAssignableFrom<UnaryExpression>(equal.Right);
         Assert.Equal(ExpressionType.Convert, convert.NodeType);
         Assert.Equal(typeof(int?), convert.Type);
