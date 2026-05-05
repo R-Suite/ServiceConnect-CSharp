@@ -117,7 +117,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
@@ -148,7 +148,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
@@ -164,7 +164,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
@@ -186,7 +186,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
@@ -222,7 +222,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         using var cts = new CancellationTokenSource();
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q", cancellationToken: cts.Token);
@@ -251,7 +251,7 @@ public class RabbitMqConsumerHostTests
             return Task.FromResult(new ConsumeEventResult { Success = true });
         }
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         using var startupCts = new CancellationTokenSource();
         await host.StartConsumingAsync(handler, "q", cancellationToken: startupCts.Token);
@@ -277,7 +277,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
         await host.ConsumeMessageTypeAsync("SomeMsg");
@@ -296,7 +296,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         await host.DisposeAsync();
@@ -313,7 +313,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         await host.DisposeAsync();
@@ -332,7 +332,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         var thrown = await Record.ExceptionAsync(() => host.DisposeAsync().AsTask());
@@ -350,6 +350,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -388,6 +389,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance);
 
@@ -419,6 +421,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -473,6 +476,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -531,6 +535,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -585,6 +590,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -651,6 +657,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -699,6 +706,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -738,6 +746,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -775,6 +784,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -836,6 +846,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance,
             timeProvider);
@@ -905,6 +916,7 @@ public class RabbitMqConsumerHostTests
             qcfg.Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(qcfg.Object),
             NullLogger.Instance,
             timeProvider);
@@ -971,6 +983,7 @@ public class RabbitMqConsumerHostTests
             qcfg.Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(qcfg.Object),
             NullLogger.Instance);
 
@@ -1061,7 +1074,7 @@ public class RabbitMqConsumerHostTests
         var audit = new MessageAuditPublisher(qcfg.Object);
 
         bool handlerInvoked = false;
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         await host.StartConsumingAsync(
             (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
             "q");
@@ -1091,7 +1104,7 @@ public class RabbitMqConsumerHostTests
         var audit = new MessageAuditPublisher(qcfg.Object);
 
         bool handlerInvoked = false;
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         await host.StartConsumingAsync(
             (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
             "q");
@@ -1116,7 +1129,7 @@ public class RabbitMqConsumerHostTests
         var audit = new MessageAuditPublisher(qcfg.Object);
 
         bool handlerInvoked = false;
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         await host.StartConsumingAsync(
             (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
             "q");
@@ -1149,7 +1162,7 @@ public class RabbitMqConsumerHostTests
         var audit = new MessageAuditPublisher(qcfg.Object);
 
         bool handlerInvoked = false;
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         await host.StartConsumingAsync(
             (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
             "q");
@@ -1182,6 +1195,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance);
 
@@ -1223,6 +1237,7 @@ public class RabbitMqConsumerHostTests
             qcfg.Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(qcfg.Object),
             NullLogger.Instance);
 
@@ -1251,6 +1266,7 @@ public class RabbitMqConsumerHostTests
             qcfg.Object,
             busCfg.Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(qcfg.Object),
             NullLogger.Instance);
 
@@ -1287,6 +1303,7 @@ public class RabbitMqConsumerHostTests
             qcfg.Object,
             busCfg.Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(qcfg.Object),
             NullLogger.Instance);
 
@@ -1324,6 +1341,7 @@ public class RabbitMqConsumerHostTests
             qcfg.Object,
             busCfg.Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(qcfg.Object),
             NullLogger.Instance);
 
@@ -1357,6 +1375,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance);
 
@@ -1397,6 +1416,7 @@ public class RabbitMqConsumerHostTests
             MakeQueueCfg().Object,
             MakeBusCfg().Object,
             new MessageRetryHandler(3, "err", "q", NullLogger.Instance),
+            new RabbitMqAdmissionGate("q"),
             new MessageAuditPublisher(MakeQueueCfg().Object),
             NullLogger.Instance);
 
@@ -1436,7 +1456,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", testLogger);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, testLogger);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, testLogger);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         // Retrieve the private _consumer via reflection and fire HandleChannelShutdownAsync.
@@ -1481,7 +1501,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", testLogger);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, testLogger);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, testLogger);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         var consumerField = typeof(RabbitMqConsumerHost)
@@ -1524,7 +1544,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", testLogger);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, testLogger);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, testLogger);
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "q");
 
         // Raise the ChannelShutdownAsync event on the consumer channel mock.
@@ -1553,7 +1573,7 @@ public class RabbitMqConsumerHostTests
         var qcfg = MakeQueueCfg();
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         var deliveryCtsField = typeof(RabbitMqConsumerHost)
             .GetField("_deliveryCts", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -1617,7 +1637,7 @@ public class RabbitMqConsumerHostTests
         var audit = new MessageAuditPublisher(qcfg.Object);
 
         var ex = Record.Exception(() => new RabbitMqConsumerHost(
-            conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance));
+            conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance));
         Assert.Null(ex);
     }
 
@@ -1649,7 +1669,7 @@ public class RabbitMqConsumerHostTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(qcfg.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, tcfg.Object, qcfg.Object, MakeBusCfg().Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync(
             (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }),

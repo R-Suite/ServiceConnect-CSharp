@@ -172,7 +172,7 @@ public sealed class RabbitMqConsumerHostHeaderSizeTests
 
         var host = new RabbitMqConsumerHost(
             conn.Object, transport.Object, queue.Object, bus.Object,
-            retry, audit, NullLogger.Instance);
+            retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         // Wire up the consumer channel and publish channel by calling StartConsumingAsync.
         // A no-op handler is sufficient — we are testing the admission guard, not dispatch.

@@ -164,7 +164,7 @@ public sealed class RabbitMqConsumerHostAckNackTests
 
         var host = new RabbitMqConsumerHost(
             conn.Object, transport.Object, queue.Object, bus.Object,
-            retry, audit, logger.Object);
+            retry, new RabbitMqAdmissionGate("q"), audit, logger.Object);
 
         await host.StartConsumingAsync(
             (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }),

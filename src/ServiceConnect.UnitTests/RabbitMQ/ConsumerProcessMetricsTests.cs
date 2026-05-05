@@ -247,7 +247,7 @@ public sealed class ConsumerProcessMetricsTests
 
         var host = new RabbitMqConsumerHost(
             conn.Object, transport.Object, queue.Object, bus.Object,
-            retry, audit, NullLogger.Instance);
+            retry, new RabbitMqAdmissionGate(queueName), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync(handler, queueName).ConfigureAwait(false);
 

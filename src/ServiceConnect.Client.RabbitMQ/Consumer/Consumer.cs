@@ -173,12 +173,14 @@ public sealed class Consumer : IConsumer
             var retryHandler = new MessageRetryHandler(
                 _transportConfiguration.MaxRetries, _queueConfiguration.ErrorQueueName, _queueConfiguration.QueueName, _logger);
             var auditPublisher = new MessageAuditPublisher(_queueConfiguration);
+            var admissionGate = new RabbitMqAdmissionGate(_queueConfiguration.QueueName);
             RabbitMqConsumerHost client = new(
                 _connection,
                 _transportConfiguration,
                 _queueConfiguration,
                 _busConfiguration,
                 retryHandler,
+                admissionGate,
                 auditPublisher,
                 _logger);
             // Register the host before starting so a failure in PrepareAsync or

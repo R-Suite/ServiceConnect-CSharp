@@ -112,7 +112,7 @@ public sealed class RabbitMqConsumerHostBrokerCancelTests
 
         var host = new RabbitMqConsumerHost(
             conn.Object, transport.Object, queue.Object, bus.Object,
-            retry, audit, NullLogger.Instance);
+            retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync(NoOpHandler, queueName: "q").ConfigureAwait(false);
 

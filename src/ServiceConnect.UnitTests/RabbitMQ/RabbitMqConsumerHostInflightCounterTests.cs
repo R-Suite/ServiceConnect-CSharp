@@ -10,16 +10,16 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies the atomicity discipline of <c>_messagesBeingProcessed</c>: under
-/// concurrent deliveries, the inflight counter must never go negative and must
-/// settle to zero once all in-flight handlers complete.
+/// Verifies the atomicity discipline of the in-flight counter (now owned by
+/// <see cref="RabbitMqAdmissionGate"/>): under concurrent deliveries, the counter
+/// must never go negative and must settle to zero once all in-flight handlers
+/// complete.
 ///
-/// The pre-fix host mixed lock-protected `++` (admission gate) with lock-free
-/// <c>Interlocked.Decrement</c> (finally) and <c>Volatile.Read</c> (drain loop).
-/// Concurrent decrement during the lock-protected read-modify-write `++` could
-/// lose updates, leaving the counter stuck above the true in-flight count.
-/// Post-fix, all reads/writes use atomic primitives, so the counter is exact
-/// regardless of interleaving.
+/// The pre-fix host mixed lock-protected `++` with lock-free decrements and
+/// volatile reads, so a concurrent decrement during the lock-protected read-modify-write
+/// `++` could lose updates, leaving the counter stuck above the true in-flight count.
+/// Post-fix, all increments/decrements happen under the gate's lock, so the counter
+/// is exact regardless of interleaving.
 /// </summary>
 public sealed class RabbitMqConsumerHostInflightCounterTests
 {
@@ -37,7 +37,7 @@ public sealed class RabbitMqConsumerHostInflightCounterTests
             return new ConsumeEventResult { Success = true };
         }
 
-        var (host, _, _) = await BuildHostAsync(YieldingHandler);
+        var (host, gate, _, _) = await BuildHostAsync(YieldingHandler);
 
         // Background sampler reads the counter every 1ms and tracks the minimum value
         // observed. A negative value indicates a lost-update race (decrement applied
@@ -48,7 +48,7 @@ public sealed class RabbitMqConsumerHostInflightCounterTests
         {
             while (!samplerCts.IsCancellationRequested)
             {
-                var v = ReadInflightCount(host);
+                var v = ReadInflightCount(gate);
                 int snapshot;
                 do { snapshot = minObserved; }
                 while (v < snapshot && Interlocked.CompareExchange(ref minObserved, v, snapshot) != snapshot);
@@ -88,15 +88,19 @@ public sealed class RabbitMqConsumerHostInflightCounterTests
         await Task.Delay(100);
 
         // Counter is at zero after drain.
-        Assert.Equal(0, ReadInflightCount(host));
+        Assert.Equal(0, ReadInflightCount(gate));
     }
 
-    private static int ReadInflightCount(RabbitMqConsumerHost host)
+    private static int ReadInflightCount(RabbitMqAdmissionGate gate)
     {
-        var field = typeof(RabbitMqConsumerHost).GetField(
-            "_messagesBeingProcessed",
+        // The in-flight counter now lives on the gate, not the host. Reflection still
+        // probes it directly so the sampler observes the same primitive the production
+        // path increments/decrements, without needing a public surface that exists only
+        // for tests.
+        var field = typeof(RabbitMqAdmissionGate).GetField(
+            "_inFlight",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        return (int)field!.GetValue(host)!;
+        return (int)field!.GetValue(gate)!;
     }
 
     // ── Harness ───────────────────────────────────────────────────────────────
@@ -109,6 +113,7 @@ public sealed class RabbitMqConsumerHostInflightCounterTests
     /// </summary>
     private static async Task<(
         RabbitMqConsumerHost Host,
+        RabbitMqAdmissionGate Gate,
         Mock<IChannel> ConsumerChannel,
         Mock<IChannel> PublishChannel)> BuildHostAsync(ConsumerEventHandler handler)
     {
@@ -176,14 +181,15 @@ public sealed class RabbitMqConsumerHostInflightCounterTests
 
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(queue.Object);
+        var gate = new RabbitMqAdmissionGate("q");
 
         var host = new RabbitMqConsumerHost(
             conn.Object, transport.Object, queue.Object, bus.Object,
-            retry, audit, NullLogger.Instance);
+            retry, gate, audit, NullLogger.Instance);
 
         await host.StartConsumingAsync(handler, queueName: "q").ConfigureAwait(false);
 
-        return (host, consumerChannel, publishChannel);
+        return (host, gate, consumerChannel, publishChannel);
     }
 
     /// <summary>

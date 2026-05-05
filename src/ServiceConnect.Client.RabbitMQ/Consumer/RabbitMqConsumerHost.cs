@@ -1,10 +1,8 @@
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
-using ServiceConnect.Diagnostics;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
@@ -20,6 +18,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly IServiceConnectConnection _connection;
     private readonly IQueueConfiguration _queueConfiguration;
     private readonly MessageRetryHandler _retryHandler;
+    private readonly RabbitMqAdmissionGate _admissionGate;
+    private readonly RabbitMqHeaderValidator _validator;
+    private readonly RabbitMqDispatchPipeline _dispatch;
     private readonly MessageAuditPublisher _auditPublisher;
     private readonly ILogger _logger;
     private readonly TimeProvider _timeProvider;
@@ -36,11 +37,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly bool _includeMachineNameInHeaders;
     private readonly bool _deadLetterUnhandledMessages;
     private readonly long _maxInboundMessageSize;
-#if NET9_0_OR_GREATER
-    private readonly System.Threading.Lock _callbackAdmissionGate = new();
-#else
-    private readonly object _callbackAdmissionGate = new();
-#endif
 
     private IChannel? _model;
     // RabbitMQ.Client requires per-channel serialization. The consumer channel is used for
@@ -62,20 +58,16 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private bool _autoDelete;
     private string _queueName = "";
     private string _retryQueueName = "";
-    // All reads/writes use atomic primitives (Interlocked.Increment, Interlocked.Decrement,
-    // Volatile.Read). The pre-fix bug was a non-atomic `_messagesBeingProcessed++` (read-modify-write)
-    // inside the admission lock racing with a lock-free Interlocked.Decrement: a concurrent
-    // decrement between the increment's read and write would be silently overwritten. The
-    // increment now uses Interlocked.Increment, but is kept INSIDE the admission lock so
-    // DisposeAsync (which sets _shutdownStarted under the same lock) cannot release the drain
-    // wait before an admitted delivery has been counted.
-    private int _messagesBeingProcessed;
     private int _shutdownTimedOut;
     // Set by OnConsumerUnregisteredAsync when the broker cancels our consumer (queue deleted,
     // policy expired, mirror promoted). Bubbled up through Consumer.IsCancelledByBroker → Bus.IsConsuming
     // → BusConsumingHealthCheck so operators see the bus go Unhealthy when this happens.
     private int _consumerCancelledByBroker;
-    private bool _shutdownStarted;
+    // Defends against concurrent DisposeAsync calls. The admission gate's BeginShutdown is
+    // idempotent under its own lock, but two concurrent disposes could both pass the
+    // IsShuttingDown check before either calls BeginShutdown, then both run teardown.
+    // CompareExchange ensures exactly one dispose proceeds; the other returns early.
+    private int _disposeStarted;
     private CancellationTokenSource _shutdownPublishCts = new();
     // Consumer-lifetime token: created at StartConsumingAsync, cancelled on DisposeAsync.
     // Delivery callbacks hand this to handlers so they observe *consumer* teardown rather
@@ -98,6 +90,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         IQueueConfiguration queueConfiguration,
         IBusConfiguration busConfiguration,
         MessageRetryHandler retryHandler,
+        RabbitMqAdmissionGate admissionGate,
         MessageAuditPublisher auditPublisher,
         ILogger logger,
         TimeProvider? timeProvider = null)
@@ -105,6 +98,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         _queueConfiguration = queueConfiguration ?? throw new ArgumentNullException(nameof(queueConfiguration));
         _retryHandler = retryHandler ?? throw new ArgumentNullException(nameof(retryHandler));
+        _admissionGate = admissionGate ?? throw new ArgumentNullException(nameof(admissionGate));
         _auditPublisher = auditPublisher ?? throw new ArgumentNullException(nameof(auditPublisher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -129,6 +123,27 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _maxInboundMessageSize = settings.TryGetValue(RabbitMQSettingKeys.MessageSize, out var maxSizeVal)
             ? Convert.ToInt64(maxSizeVal, System.Globalization.CultureInfo.InvariantCulture)
             : 64 * 1024;
+
+        // Constructed inside the host (not Consumer.cs) because the validator needs
+        // GetShutdownPublishToken — a method on the host whose backing CTS rotates per
+        // PrepareAsync cycle. Injecting a delegate here keeps the rotation invariant
+        // intact without exposing the CTS externally.
+        _validator = new RabbitMqHeaderValidator(
+            retryHandler,
+            _maxInboundMessageSize,
+            DefaultMaxHeaderCount,
+            DefaultMaxHeaderValueBytes,
+            GetShutdownPublishToken);
+
+        // Constructed inside the host for the same reason as the validator: the dispatch
+        // pipeline's channel-state guards query host-managed flags (_shutdownTimedOut and
+        // _admissionGate.IsShuttingDown). Delegate injection keeps the host as the single
+        // owner of those flags while the dispatch class drives the per-delivery ack/nack.
+        _dispatch = new RabbitMqDispatchPipeline(
+            queueConfiguration.QueueName,
+            shutdownTimedOutQuery: () => Volatile.Read(ref _shutdownTimedOut) != 0,
+            shutdownStartedQuery: () => _admissionGate.IsShuttingDown,
+            logger);
     }
 
     /// <summary>
@@ -261,351 +276,77 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     internal Task RaiseDeliveryForTests(BasicDeliverEventArgs args, CancellationToken ct = default)
         => EventAsync(this, args, ct);
 
-    // Pass cancellationToken as a method parameter instead of storing it.
+    // Small orchestrator: admit → validate → dispatch → release. The metric-instrumented
+    // handler invocation, ack/nack against the model channel, and ack/nack failure logging
+    // all live in RabbitMqDispatchPipeline.
     private async Task EventAsync(object _, BasicDeliverEventArgs args, CancellationToken cancellationToken)
     {
+        // Reject before doing any per-delivery work if shutdown has begun: the gate is the
+        // single source of truth for admission. A return here is the "drop" path; the
+        // broker will redeliver this delivery on the next consumer start.
+        if (!_admissionGate.TryAdmit())
+        {
+            return;
+        }
+
         // Capture channels before any await so that a concurrent DisposeAsync cannot
-        // null them out from under us in the finally block.
+        // null them out from under the dispatch pipeline. The pipeline's AckOrNackAsync
+        // tolerates a null model (logs at Debug, does not ack).
         var model = _model;
         var publishChannel = _publishChannel;
-        bool processed = false;
-        bool callbackAdmitted = false;
-        // Tags reused by both the +1 admission emit and the -1 finally emit. Built once and
-        // captured so neither emit can throw mid-construction (defence-in-depth on the
-        // gauge-balance invariant) and so the hot path doesn't pay for two TagList builds
-        // per delivery. Default-init only — populated at admission, used only when
-        // callbackAdmitted is true (which guarantees the +1 fired with these exact tags).
-        TagList inFlightTags = default;
+
         try
         {
-            lock (_callbackAdmissionGate)
+            // CopyInboundHeaders is a pure allocate-and-copy with no side effects, so
+            // hoisting the call out of each rule's rejection block is semantically equivalent.
+            // The validator routes a rejection through the terminal-failure path; we then
+            // ack the broker delivery (processed=true), since redelivery would re-trigger
+            // the same rule.
+            var copiedHeaders = CopyInboundHeaders(args);
+            var validation = await _validator.ValidateAsync(args, publishChannel!, copiedHeaders, cancellationToken).ConfigureAwait(false);
+            if (!validation.Accepted)
             {
-                if (_shutdownStarted)
-                {
-                    return;
-                }
-
-                // Increment INSIDE the lock so DisposeAsync, which sets _shutdownStarted under the
-                // same lock, cannot release the drain wait before this admitted delivery has been
-                // counted. Interlocked.Increment is atomic — calling it under the lock matches the
-                // atomic discipline of the matching Interlocked.Decrement at the bottom of the
-                // EventAsync finally block.
-                Interlocked.Increment(ref _messagesBeingProcessed);
-                // UpDownCounter mirrors _messagesBeingProcessed; the matching -1 is in the finally.
-                inFlightTags = BuildInFlightTags();
-                ServiceConnectMeter.AddInFlight(1, inFlightTags);
-                callbackAdmitted = true;
-            }
-
-            // ContainsKey admits a key whose value is null; use TryGetValue+non-null instead.
-            // A null-valued TypeName passes ContainsKey but CopyInboundHeaders skips null values,
-            // so the dispatch-site indexer would throw KeyNotFoundException and burn a retry cycle
-            // on a guaranteed-fail dispatch. Reject at admission instead.
-            static bool HasNonNullValue(IDictionary<string, object?> h, string key)
-                => h.TryGetValue(key, out var v) && v is not null;
-
-            if (args.BasicProperties.Headers == null ||
-                (!HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.TypeName) &&
-                 !HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.FullTypeName)))
-            {
-                await _retryHandler.HandleTerminalFailureAsync(
-                    publishChannel!,
-                    args,
-                    CopyInboundHeaders(args),
-                    new InvalidOperationException("Message headers must contain type name."),
-                    GetShutdownPublishToken()).ConfigureAwait(false);
-                processed = true;
+                await _dispatch.AckOrNackAsync(model, args, processed: true).ConfigureAwait(false);
                 return;
-            }
-
-            if (args.Body.Length > _maxInboundMessageSize)
-            {
-                await _retryHandler.HandleTerminalFailureAsync(
-                    publishChannel!,
-                    args,
-                    CopyInboundHeaders(args),
-                    new InvalidOperationException(
-                        $"Inbound message size {args.Body.Length} bytes exceeds configured limit {_maxInboundMessageSize} bytes."),
-                    GetShutdownPublishToken())
-                    .ConfigureAwait(false);
-                processed = true;
-                return;
-            }
-
-            var inboundHeaders = args.BasicProperties.Headers;
-            if (inboundHeaders != null && inboundHeaders.Count > DefaultMaxHeaderCount)
-            {
-                await _retryHandler.HandleTerminalFailureAsync(
-                    publishChannel!,
-                    args,
-                    CopyInboundHeaders(args),
-                    new InvalidOperationException(
-                        $"Inbound header count {inboundHeaders.Count} exceeds configured limit {DefaultMaxHeaderCount}."),
-                    GetShutdownPublishToken())
-                    .ConfigureAwait(false);
-                processed = true;
-                return;
-            }
-
-            if (inboundHeaders != null)
-            {
-                var oversizedHeaderRejection = await TryRejectOversizedHeaderAsync(inboundHeaders, args, publishChannel!).ConfigureAwait(false);
-                if (oversizedHeaderRejection)
-                {
-                    processed = true;
-                    return;
-                }
             }
 
             var messageProcessor = _messageProcessor;
             if (messageProcessor == null)
             {
                 _logger.LogWarning("Message processor not initialised — message {DeliveryTag} will be nacked for redelivery", args.DeliveryTag);
-                return;  // processed stays false; finally nacks-with-requeue
+                await _dispatch.AckOrNackAsync(model, args, processed: false).ConfigureAwait(false);
+                return;
             }
 
-            processed = await ProcessWithMetricsAsync(messageProcessor, publishChannel!, args, cancellationToken).ConfigureAwait(false);
+            await _dispatch.DispatchAndAckAsync(messageProcessor, model, publishChannel!, args, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             // Catches admission/header-validation failures that didn't reach the metric-instrumented
             // ProcessAsync scope (e.g. _retryHandler.HandleTerminalFailureAsync throwing). Without
-            // this an uncaught exception would propagate into the AMQP consumer event loop.
+            // this an uncaught exception would propagate into the AMQP consumer event loop. The
+            // delivery is nacked-with-requeue so the broker redelivers it once the validator's
+            // dependency (typically the publish channel) recovers.
             _logger.LogError(ex, "Error processing message");
-        }
-        finally
-        {
             try
             {
-                if (callbackAdmitted)
-                {
-                    if (model == null)
-                    {
-                        // Channel was nulled by concurrent DisposeAsync. Expected during teardown;
-                        // broker will redeliver unacked messages on next consumer start.
-                        _logger.LogDebug("Channel was null during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
-                    }
-                    else if (!model.IsOpen)
-                    {
-                        // Channel closed concurrently. Expected during teardown / connection drop.
-                        _logger.LogDebug("Channel was closed during ack/nack — message {DeliveryTag} may be redelivered", args.DeliveryTag);
-                    }
-                    else if (Volatile.Read(ref _shutdownTimedOut) != 0)
-                    {
-                        _logger.LogDebug("Shutdown grace window expired before finishing message {DeliveryTag}; leaving unacked for broker redelivery", args.DeliveryTag);
-                    }
-                    else if (processed)
-                    {
-                        await model.BasicAckAsync(args.DeliveryTag, false).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await model.BasicNackAsync(args.DeliveryTag, false, true).ConfigureAwait(false);
-                    }
-                }
+                await _dispatch.AckOrNackAsync(model, args, processed: false).ConfigureAwait(false);
             }
-            catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException ex)
+            catch (Exception nackEx)
             {
-                // Expected when the connection/channel is torn down concurrently with
-                // message processing (typical during shutdown). The broker will redeliver
-                // unacked messages after the connection drops, so this is not an error.
-                if (_shutdownStarted)
-                {
-                    _logger.LogDebug(ex, "Channel already closed while acking/nacking message {DeliveryTag} during shutdown", args.DeliveryTag);
-                }
-                else
-                {
-                    LogAckOrNackFailure(ex, args, processed);
-                }
+                // AckOrNackAsync swallows its own broker-level errors via LogAckOrNackFailure,
+                // so anything that escapes here is a programmer error in the pipeline. Logging
+                // it (rather than letting it bubble) keeps the AMQP consumer loop alive.
+                _logger.LogError(nackEx, "Error nacking message after validation failure");
             }
-            catch (ObjectDisposedException ex)
-            {
-                if (_shutdownStarted)
-                {
-                    _logger.LogDebug(ex, "Channel disposed while acking/nacking message {DeliveryTag} during shutdown", args.DeliveryTag);
-                }
-                else
-                {
-                    LogAckOrNackFailure(ex, args, processed);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogAckOrNackFailure(ex, args, processed);
-            }
-            finally
-            {
-                if (callbackAdmitted)
-                {
-                    Interlocked.Decrement(ref _messagesBeingProcessed);
-                    // Matching -1 for the +1 emitted at the admission site; net delta must stay
-                    // zero across the increment/decrement pair, otherwise the gauge climbs.
-                    // Reuses the captured inFlightTags so both halves carry identical tags by
-                    // construction.
-                    ServiceConnectMeter.AddInFlight(-1, inFlightTags);
-                }
-            }
-        }
-    }
-
-    // Single tag-builder reused by the +1 admission emit and the -1 finally emit so the two
-    // points of the pair carry identical tags. Both call sites live inside EventAsync, so
-    // factoring them keeps the method itself under the analyzer length budget.
-    private TagList BuildInFlightTags() => new()
-    {
-        { "messaging.system", "rabbitmq" },
-        { "messaging.destination.name", _queueConfiguration.QueueName },
-    };
-
-    // Emit AckFailed when we were trying to ack (processed=true) and NackFailed when we
-    // were trying to nack-with-requeue (processed=false). Carries MessageId from
-    // BasicProperties.MessageId so log readers can correlate to a specific message;
-    // falls back to DeliveryTag when the producer didn't stamp a MessageId.
-    private void LogAckOrNackFailure(Exception ex, BasicDeliverEventArgs args, bool processed)
-    {
-        var messageId = string.IsNullOrEmpty(args.BasicProperties.MessageId)
-            ? args.DeliveryTag.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            : args.BasicProperties.MessageId;
-        if (processed)
-        {
-            RabbitMqClientLog.AckFailed(_logger, ex, messageId, args.DeliveryTag, _queueConfiguration.QueueName);
-        }
-        else
-        {
-            RabbitMqClientLog.NackFailed(_logger, ex, messageId, args.DeliveryTag, _queueConfiguration.QueueName);
-        }
-    }
-
-    // Returns true if a header value exceeded DefaultMaxHeaderValueBytes and was routed to
-    // the terminal-failure path. The caller then treats the message as processed.
-    // Extracted from EventAsync to keep that method under the analyzer length budget.
-    private async Task<bool> TryRejectOversizedHeaderAsync(
-        IDictionary<string, object?> inboundHeaders,
-        BasicDeliverEventArgs args,
-        IChannel publishChannel)
-    {
-        foreach (var kvp in inboundHeaders)
-        {
-            int byteSize;
-            if (kvp.Value is byte[] bytes)
-            {
-                byteSize = bytes.Length;
-            }
-            else if (kvp.Value is string s)
-            {
-                // string headers stamped by ServiceConnect (TypeName, FullTypeName, etc.) need
-                // bounding too — a buggy producer could send a 100MB string and exhaust memory
-                // on every consumer in the system. UTF-8 byte count matches the on-wire size.
-                byteSize = System.Text.Encoding.UTF8.GetByteCount(s);
-            }
-            else
-            {
-                // Non-string, non-byte-array headers (int, bool, etc.) are size-bounded by their type.
-                continue;
-            }
-
-            if (byteSize > DefaultMaxHeaderValueBytes)
-            {
-                await _retryHandler.HandleTerminalFailureAsync(
-                    publishChannel,
-                    args,
-                    CopyInboundHeaders(args),
-                    new InvalidOperationException(
-                        $"Inbound header '{kvp.Key}' size {byteSize} bytes exceeds configured limit {DefaultMaxHeaderValueBytes} bytes."),
-                    GetShutdownPublishToken())
-                    .ConfigureAwait(false);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Inner metric scope: only the ProcessAsync invocation itself; admission/header validation
-    // are operator-visible failures of THIS host, not handler failures, so they don't show up
-    // on the messaging.process.* metrics. Returns the same processed flag the caller would
-    // otherwise have assigned, with handler exceptions logged-and-swallowed exactly as the
-    // pre-metrics path did so the outer ack/nack finally still drives the requeue decision.
-    private async Task<bool> ProcessWithMetricsAsync(
-        InboundMessageProcessor messageProcessor,
-        IChannel publishChannel,
-        BasicDeliverEventArgs args,
-        CancellationToken cancellationToken)
-    {
-        var processStartTimestamp = Stopwatch.GetTimestamp();
-        bool processed = false;
-        Exception? processFailure = null;
-        try
-        {
-            processed = await messageProcessor.ProcessAsync(publishChannel, args, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            processFailure = ex;
-            _logger.LogError(ex, "Error processing message");
         }
         finally
         {
-            EmitProcessMetrics(processStartTimestamp, processed, processFailure);
+            // Release pairs with the TryAdmit at the top: the gate's invariant is exactly one
+            // Release per successful TryAdmit. The pre-finally returns above all happen AFTER
+            // admission, so they fall through to this finally.
+            _admissionGate.Release();
         }
-
-        return processed;
-    }
-
-    // Emits messaging.process.duration (always) and messaging.client.consumed.messages
-    // (always, tagged by outcome). Outcome is one of:
-    //   success — handler returned and ProcessAsync routed it through the success/audit path.
-    //   error   — ProcessAsync threw or the host caught a handler exception.
-    //   retry   — handler returned a non-success ConsumeEventResult; the message was routed
-    //             to the retry queue, so processed=false but no exception was thrown.
-    // The retry-publish-failure swallow at InboundMessageProcessor (catch (Exception retryEx))
-    // also surfaces here as outcome=success because ProcessAsync still returns true: that drop
-    // is reported separately on messaging.serviceconnect.retry.drops in a later commit.
-    private void EmitProcessMetrics(long startTimestamp, bool processed, Exception? processFailure)
-    {
-        // Cache the mapped error type once — used on both the duration histogram and the
-        // consumed-messages counter when the handler threw. ExceptionTypeMapper.Map performs
-        // a virtual call + switch, so caching avoids a redundant lookup per emit pair.
-        var elapsed = Stopwatch.GetElapsedTime(startTimestamp).TotalSeconds;
-        var errorType = processFailure is null ? null : ExceptionTypeMapper.Map(processFailure);
-
-        var processTags = new TagList
-        {
-            { "messaging.system", "rabbitmq" },
-            { "messaging.operation", "process" },
-            { "messaging.destination.name", _queueConfiguration.QueueName },
-        };
-        if (errorType is not null)
-        {
-            processTags.Add("error.type", errorType);
-        }
-        ServiceConnectMeter.RecordProcessDuration(elapsed, processTags);
-
-        string outcome;
-        if (processFailure != null)
-        {
-            outcome = "error";
-        }
-        else if (processed)
-        {
-            outcome = "success";
-        }
-        else
-        {
-            outcome = "retry";
-        }
-
-        var consumedTags = new TagList
-        {
-            { "messaging.system", "rabbitmq" },
-            { "messaging.operation", "process" },
-            { "messaging.destination.name", _queueConfiguration.QueueName },
-            { "messaging.outcome", outcome },
-        };
-        if (errorType is not null)
-        {
-            consumedTags.Add("error.type", errorType);
-        }
-        ServiceConnectMeter.AddConsumedMessage(consumedTags);
     }
 
     private static Dictionary<string, object> CopyInboundHeaders(BasicDeliverEventArgs args)
@@ -726,15 +467,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        lock (_callbackAdmissionGate)
+        // Only one DisposeAsync call may proceed; concurrent calls return early. The admission
+        // gate's BeginShutdown is idempotent, but two concurrent disposes would otherwise both
+        // run the rest of teardown (channel close, CTS dispose), which is not safe to repeat.
+        if (Interlocked.CompareExchange(ref _disposeStarted, 1, 0) != 0)
         {
-            if (_shutdownStarted)
-            {
-                return;
-            }
-
-            _shutdownStarted = true;
+            return;
         }
+        _admissionGate.BeginShutdown();
 
         var deadline = _timeProvider.GetUtcNow().AddMilliseconds(_gracefulShutdownTimeoutMs);
         var shutdownPublishCts = _shutdownPublishCts;
@@ -758,19 +498,28 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             }
         }
 
-        while (Volatile.Read(ref _messagesBeingProcessed) > 0)
+        // Event-driven drain: the gate completes its drain task as soon as the last
+        // in-flight Release() lands, so the success path is faster than the prior 50ms
+        // busy-wait. Cancellation fires when the deadline expires, mapping to the same
+        // "set _shutdownTimedOut + cancel helper publishes" behaviour as the old break path.
+        var drainRemaining = deadline - _timeProvider.GetUtcNow();
+        if (drainRemaining > TimeSpan.Zero)
         {
-            var remaining = deadline - _timeProvider.GetUtcNow();
-            if (remaining <= TimeSpan.Zero)
+            using var drainCts = new CancellationTokenSource(drainRemaining, _timeProvider);
+            try
+            {
+                await _admissionGate.DrainAsync(drainCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (drainCts.IsCancellationRequested)
             {
                 Volatile.Write(ref _shutdownTimedOut, 1);
                 await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
-                break;
             }
-
-            await Task.Delay(
-                remaining < TimeSpan.FromMilliseconds(50) ? remaining : TimeSpan.FromMilliseconds(50),
-                _timeProvider).ConfigureAwait(false);
+        }
+        else
+        {
+            Volatile.Write(ref _shutdownTimedOut, 1);
+            await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
         }
 
         if (_autoDelete && _model != null)

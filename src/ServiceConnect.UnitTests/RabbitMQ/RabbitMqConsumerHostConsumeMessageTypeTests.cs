@@ -59,7 +59,7 @@ public class RabbitMqConsumerHostConsumeMessageTypeTests
         var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(queue.Object);
 
-        var host = new RabbitMqConsumerHost(conn.Object, transport.Object, queue.Object, bus.Object, retry, audit, NullLogger.Instance);
+        var host = new RabbitMqConsumerHost(conn.Object, transport.Object, queue.Object, bus.Object, retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
         return (host, consumerChannel);
     }
 

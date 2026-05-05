@@ -138,7 +138,7 @@ public sealed class RabbitMqConsumerHostConnectionEventCaptureTests
 
         var host = new RabbitMqConsumerHost(
             serviceConn.Object, transport.Object, queue.Object, bus.Object,
-            retry, audit, NullLogger.Instance);
+            retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
 
         await host.StartConsumingAsync(
             (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }),
