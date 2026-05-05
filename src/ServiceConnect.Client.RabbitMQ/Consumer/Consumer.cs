@@ -171,7 +171,7 @@ public sealed class Consumer : IConsumer
         for (int i = 0; i < clientCount; i++)
         {
             var retryHandler = new MessageRetryHandler(
-                _transportConfiguration.MaxRetries, _queueConfiguration.ErrorQueueName, _logger);
+                _transportConfiguration.MaxRetries, _queueConfiguration.ErrorQueueName, _queueConfiguration.QueueName, _logger);
             var auditPublisher = new MessageAuditPublisher(_queueConfiguration);
             RabbitMqConsumerHost client = new(
                 _connection,

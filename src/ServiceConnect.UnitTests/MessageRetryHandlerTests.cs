@@ -35,7 +35,7 @@ public class MessageRetryHandlerTests
             .Returns(ValueTask.CompletedTask);
 
         var handler = new MessageRetryHandler(
-            maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+            maxRetries: 3, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
 
         var args = MakeArgs();
         var headers = new Dictionary<string, object>();
@@ -59,7 +59,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 1, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 1, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 1 };
 
@@ -81,7 +81,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 2 };
 
@@ -108,7 +108,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object>();
 
@@ -134,7 +134,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object>();
 
@@ -161,7 +161,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object>();
 
@@ -184,7 +184,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 2 };
 
@@ -206,7 +206,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = "not-a-number" };
 
@@ -235,7 +235,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = badCount };
 
@@ -267,7 +267,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         // Simulate an AMQP string-typed header arriving as UTF-8 bytes (non-.NET producer).
         var utf8 = System.Text.Encoding.UTF8.GetBytes("3");
@@ -298,7 +298,7 @@ public class MessageRetryHandlerTests
             It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 5, errorExchange: "err", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var args = MakeArgs();
         var headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 5 };
 

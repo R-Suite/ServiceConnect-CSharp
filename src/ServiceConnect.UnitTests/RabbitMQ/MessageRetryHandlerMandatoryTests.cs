@@ -22,7 +22,7 @@ public sealed class MessageRetryHandlerMandatoryTests
                 (_, _, mandatory, _, _, _) => captures.Add(mandatory))
             .Returns(ValueTask.CompletedTask);
 
-        return (new MessageRetryHandler(maxRetries, "error.exchange", NullLogger.Instance), channel, captures);
+        return (new MessageRetryHandler(maxRetries, "error.exchange", "test.consumer.queue", NullLogger.Instance), channel, captures);
     }
 
     private static BasicDeliverEventArgs MakeArgs() => new(

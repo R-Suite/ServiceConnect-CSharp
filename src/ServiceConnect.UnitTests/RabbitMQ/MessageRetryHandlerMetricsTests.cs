@@ -31,8 +31,9 @@ public sealed class MessageRetryHandlerMetricsTests
     {
         // Per-test unique queue name so MetricCollector's tag filter isolates this test
         // from any other test running in parallel that emits on the same instrument.
-        var retryQueueName = $"q-retry-{Guid.NewGuid():N}.Retries";
-        using var collector = new MetricCollector("messaging.destination.name", retryQueueName);
+        var consumerQueueName = $"q-consumer-{Guid.NewGuid():N}";
+        var retryQueueName = $"{consumerQueueName}.Retries";
+        using var collector = new MetricCollector("messaging.destination.name", consumerQueueName);
 
         var channel = new Mock<IChannel>();
         channel
@@ -41,7 +42,7 @@ public sealed class MessageRetryHandlerMetricsTests
                 It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", consumerQueueName, NullLogger.Instance);
         var headers = new Dictionary<string, object>(StringComparer.Ordinal);
 
         await handler.HandleFailureAsync(channel.Object, retryQueueName, MakeArgs(), headers, ex: null);
@@ -49,7 +50,8 @@ public sealed class MessageRetryHandlerMetricsTests
         var record = Assert.Single(collector.GetLongRecords(MetricNames.RetryAttempts));
         Assert.Equal(1, record.Value);
         Assert.Equal("rabbitmq", record.GetTag("messaging.system"));
-        Assert.Equal(retryQueueName, record.GetTag("messaging.destination.name"));
+        Assert.Equal(consumerQueueName, record.GetTag("messaging.destination.name"));
+        Assert.Equal(retryQueueName, record.GetTag("messaging.serviceconnect.retry.target"));
     }
 
     [Fact]
@@ -57,8 +59,9 @@ public sealed class MessageRetryHandlerMetricsTests
     {
         // maxRetries=0 routes the first failure straight to the error exchange (no retry-publish),
         // so the increment site is not reached and the counter stays at zero.
-        var retryQueueName = $"q-noretry-{Guid.NewGuid():N}.Retries";
-        using var collector = new MetricCollector("messaging.destination.name", retryQueueName);
+        var consumerQueueName = $"q-consumer-{Guid.NewGuid():N}";
+        var retryQueueName = $"{consumerQueueName}.Retries";
+        using var collector = new MetricCollector("messaging.destination.name", consumerQueueName);
 
         var channel = new Mock<IChannel>();
         channel
@@ -67,7 +70,7 @@ public sealed class MessageRetryHandlerMetricsTests
                 It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<CancellationToken>()))
             .Returns(ValueTask.CompletedTask);
 
-        var handler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", consumerQueueName, NullLogger.Instance);
         var headers = new Dictionary<string, object>(StringComparer.Ordinal);
 
         await handler.HandleFailureAsync(channel.Object, retryQueueName, MakeArgs(), headers, ex: new InvalidOperationException("test"));

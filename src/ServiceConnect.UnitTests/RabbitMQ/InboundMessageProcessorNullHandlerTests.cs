@@ -27,7 +27,7 @@ public sealed class InboundMessageProcessorNullHandlerTests
                 (_, _, _, p, _, _) => capturedProps = p)
             .Returns(ValueTask.CompletedTask);
 
-        var retryHandler = new MessageRetryHandler(maxRetries: 0, errorExchange: "error", NullLogger.Instance);
+        var retryHandler = new MessageRetryHandler(maxRetries: 0, errorExchange: "error", consumerQueueName: "main-q", NullLogger.Instance);
         var queueConfig = Mock.Of<IQueueConfiguration>(q => q.QueueName == "main-q");
         var auditPublisher = new MessageAuditPublisher(queueConfig);
 

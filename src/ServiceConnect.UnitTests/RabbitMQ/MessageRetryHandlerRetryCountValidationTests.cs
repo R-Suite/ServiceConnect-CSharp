@@ -41,7 +41,7 @@ public sealed class MessageRetryHandlerRetryCountValidationTests
                 captured.Add((level, message));
             }));
 
-        var handler = new MessageRetryHandler(MaxRetries, "test.error", logger.Object);
+        var handler = new MessageRetryHandler(MaxRetries, "test.error", "test.consumer.queue", logger.Object);
         return (handler, channel, publishes, captured);
     }
 

@@ -14,10 +14,16 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// once max retries are exhausted, publishes to the configured error exchange with
 /// redacted exception info in the header.
 /// </summary>
-internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, ILogger logger, TimeProvider? timeProvider = null)
+internal sealed class MessageRetryHandler(
+    int maxRetries,
+    string errorExchange,
+    string consumerQueueName,
+    ILogger logger,
+    TimeProvider? timeProvider = null)
 {
     private readonly int _maxRetries = maxRetries;
     private readonly string _errorExchange = errorExchange ?? throw new ArgumentNullException(nameof(errorExchange));
+    private readonly string _consumerQueueName = consumerQueueName ?? throw new ArgumentNullException(nameof(consumerQueueName));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
@@ -67,11 +73,13 @@ internal sealed class MessageRetryHandler(int maxRetries, string errorExchange, 
 
             // Emitted at the increment site so a counter delta corresponds 1:1 with a retry-queue
             // republish, regardless of whether the subsequent BasicPublishAsync ultimately succeeds.
-            // messaging.destination.name = retryQueueName matches the queue the publish targets.
+            // messaging.destination.name carries the consumer queue (operator filter key);
+            // messaging.serviceconnect.retry.target carries the per-message retry-queue destination.
             ServiceConnectMeter.AddRetryAttempt(new TagList
             {
                 { "messaging.system", "rabbitmq" },
-                { "messaging.destination.name", retryQueueName },
+                { "messaging.destination.name", _consumerQueueName },
+                { "messaging.serviceconnect.retry.target", retryQueueName },
             });
 
             // Explicit copy avoids the copy-constructor's "any malformed source field throws" risk.

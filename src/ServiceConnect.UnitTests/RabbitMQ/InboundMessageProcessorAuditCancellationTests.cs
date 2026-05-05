@@ -65,6 +65,7 @@ public sealed class InboundMessageProcessorAuditCancellationTests
         var retryHandler = new MessageRetryHandler(
             maxRetries: 0,
             errorExchange: "err",
+            consumerQueueName: "q",
             logger: loggerMock.Object);
 
         // Consumer event handler: returns Success=true, NotHandled=false so the audit

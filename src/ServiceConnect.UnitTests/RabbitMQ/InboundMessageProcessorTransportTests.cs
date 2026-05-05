@@ -46,6 +46,7 @@ public sealed class InboundMessageProcessorTransportTests
         var retryHandler = new MessageRetryHandler(
             maxRetries: 3,
             errorExchange: "err",
+            consumerQueueName: "q",
             logger: loggerMock.Object);
 
         // Handler returns Success=false to trigger the retry-publish branch.
@@ -97,6 +98,7 @@ public sealed class InboundMessageProcessorTransportTests
         var retryHandler = new MessageRetryHandler(
             maxRetries: 0,
             errorExchange: "err",
+            consumerQueueName: "q",
             logger: loggerMock.Object);
 
         // Handler returns Success=true, NotHandled=true to trigger the terminal-failure branch.

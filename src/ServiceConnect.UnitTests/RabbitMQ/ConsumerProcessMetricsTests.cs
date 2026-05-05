@@ -242,7 +242,7 @@ public sealed class ConsumerProcessMetricsTests
         bus.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
         bus.SetupGet(b => b.DeadLetterUnhandledMessages).Returns(false);
 
-        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var retry = new MessageRetryHandler(3, "err", queueName, NullLogger.Instance);
         var audit = new MessageAuditPublisher(queue.Object);
 
         var host = new RabbitMqConsumerHost(

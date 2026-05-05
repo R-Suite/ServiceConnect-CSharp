@@ -58,7 +58,7 @@ public sealed class InboundMessageProcessorMetricsTests
         queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
 
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);
-        var retryHandler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", NullLogger.Instance);
+        var retryHandler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", consumerQueueName: queueName, NullLogger.Instance);
 
         // Handler returns Success=false so the retry-publish branch fires.
         static Task<ConsumeEventResult> HandleAsync(ReadOnlyMemory<byte> _, string __, IDictionary<string, object> ___, CancellationToken ____) =>
@@ -115,7 +115,7 @@ public sealed class InboundMessageProcessorMetricsTests
         queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
 
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);
-        var retryHandler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", NullLogger.Instance);
+        var retryHandler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", consumerQueueName: "q-auditdrop", NullLogger.Instance);
 
         // Handler returns Success=true, NotHandled=false → audit branch fires.
         static Task<ConsumeEventResult> HandleAsync(ReadOnlyMemory<byte> _, string __, IDictionary<string, object> ___, CancellationToken ____) =>

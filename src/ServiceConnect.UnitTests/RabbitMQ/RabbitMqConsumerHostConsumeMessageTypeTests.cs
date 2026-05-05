@@ -56,7 +56,7 @@ public class RabbitMqConsumerHostConsumeMessageTypeTests
         var bus = new Mock<IBusConfiguration>();
         bus.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
 
-        var retry = new MessageRetryHandler(3, "err", NullLogger.Instance);
+        var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
         var audit = new MessageAuditPublisher(queue.Object);
 
         var host = new RabbitMqConsumerHost(conn.Object, transport.Object, queue.Object, bus.Object, retry, audit, NullLogger.Instance);

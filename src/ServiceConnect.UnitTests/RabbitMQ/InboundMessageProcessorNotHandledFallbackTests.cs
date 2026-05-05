@@ -39,7 +39,7 @@ public sealed class InboundMessageProcessorNotHandledFallbackTests
         queueConfig.SetupGet(q => q.QueueName).Returns("main-q");
 
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);
-        var retryHandler = new MessageRetryHandler(maxRetries: 3, errorExchange: "error.exchange", NullLogger.Instance);
+        var retryHandler = new MessageRetryHandler(maxRetries: 3, errorExchange: "error.exchange", consumerQueueName: "main-q", NullLogger.Instance);
 
         var processor = new InboundMessageProcessor(
             consumerEventHandler: (_, _, _, _) =>

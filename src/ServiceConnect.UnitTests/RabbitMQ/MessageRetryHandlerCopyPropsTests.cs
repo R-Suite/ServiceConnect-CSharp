@@ -49,7 +49,7 @@ public sealed class MessageRetryHandlerCopyPropsTests
             properties: sourceProps,
             body: new byte[] { 1 });
 
-        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "error", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "error", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var headers = new Dictionary<string, object>(StringComparer.Ordinal);
 
         await handler.HandleFailureAsync(channel.Object, "main.Retries", args, headers, ex: null);
@@ -100,7 +100,7 @@ public sealed class MessageRetryHandlerCopyPropsTests
             properties: sourceProps,
             body: new byte[] { 1 });
 
-        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "error", NullLogger.Instance);
+        var handler = new MessageRetryHandler(maxRetries: 3, errorExchange: "error", consumerQueueName: "test.consumer.queue", NullLogger.Instance);
         var headers = new Dictionary<string, object>(StringComparer.Ordinal);
 
         await handler.HandleTerminalFailureAsync(channel.Object, args, headers, new InvalidOperationException("test"));
