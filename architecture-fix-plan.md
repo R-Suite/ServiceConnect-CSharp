@@ -68,7 +68,7 @@ Decide v8 policy on TLS and connection-secret hygiene.
 
 ---
 
-## Group E — Resilience features · *pending*
+## Group E — Resilience features · *done — items 1 and 2; items 3 and 4 deferred (see notes.md)*
 
 Genuine new behaviour, not docs/metrics. The idempotency call is the strategic one.
 
