@@ -39,4 +39,21 @@ public class RequestOptionsShapeTests
     {
         Assert.Equal(RequestOptions.DefaultTimeoutMs, RequestOptions.Default.Timeout);
     }
+
+    [Fact]
+    public void Default_HasNonZeroTimeout()
+    {
+        Assert.Equal(RequestOptions.DefaultTimeoutMs, RequestOptions.Default.Timeout);
+        Assert.True(RequestOptions.Default.Timeout > 0);
+    }
+
+    [Fact]
+    public void DefaultStruct_HasZeroTimeout_DocumentingTheTrap()
+    {
+        // Documents the language-level behaviour the ValidateOptions guard exists to catch:
+        // default(RequestOptions) skips the parameterless ctor and leaves Timeout=0.
+#pragma warning disable IDE0034 // explicit form documents the default(T) trap intentionally
+        Assert.Equal(0, default(RequestOptions).Timeout);
+#pragma warning restore IDE0034
+    }
 }

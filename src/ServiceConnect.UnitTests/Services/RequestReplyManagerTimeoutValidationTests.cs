@@ -85,4 +85,25 @@ public class RequestReplyManagerTimeoutValidationTests
                 options,
                 cts.Token));
     }
+
+    [Fact]
+    public async Task SendRequestAsync_ZeroTimeout_ThrowsWithGuidanceTowardDefault()
+    {
+        // default(RequestOptions) skips the parameterless ctor and leaves Timeout=0;
+        // ValidateOptions must reject it so callers get a clear error instead of
+        // an immediate RequestTimeoutException after 0ms.
+        var manager = CreateManager();
+
+#pragma warning disable IDE0034 // explicit form documents the default(T) trap intentionally
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
+                new FakeMessage1(Guid.NewGuid()),
+                new Dictionary<string, string>(),
+                default(RequestOptions),
+                CancellationToken.None));
+#pragma warning restore IDE0034
+
+        Assert.Equal("options", ex.ParamName);
+        Assert.Contains("RequestOptions.Default", ex.Message);
+    }
 }

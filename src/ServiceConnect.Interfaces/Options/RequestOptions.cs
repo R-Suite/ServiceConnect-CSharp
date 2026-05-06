@@ -6,6 +6,13 @@ namespace ServiceConnect.Interfaces.Options;
 /// Options for a request-reply call. Immutable readonly record struct so equality and
 /// allocation behaviour match <see cref="PublishOptions"/> and <see cref="SendOptions"/>.
 /// </summary>
+/// <remarks>
+/// <b>Do not pass <c>default(RequestOptions)</c>.</b> The C# language semantics of
+/// <c>default</c> for a struct skip the parameterless constructor, leaving
+/// <see cref="Timeout"/> at <c>0</c>. The request-reply path rejects this with
+/// <see cref="ArgumentOutOfRangeException"/> rather than silently expiring after 0 ms.
+/// Use <see cref="Default"/> or <c>new RequestOptions()</c> instead.
+/// </remarks>
 public readonly record struct RequestOptions
 {
     /// <summary>Default per-call timeout in milliseconds.</summary>

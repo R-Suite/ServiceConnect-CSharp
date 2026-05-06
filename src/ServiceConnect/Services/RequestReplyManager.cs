@@ -433,6 +433,17 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             throw new ArgumentOutOfRangeException(nameof(options),
                 $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} must be non-negative or Timeout.Infinite.");
         }
+
+        // default(RequestOptions) skips the parameterless ctor and leaves Timeout=0,
+        // which would CancelAfter(0) and immediately fail every caller. Reject with
+        // pointer to the right replacement.
+        if (options.Timeout == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options),
+                $"{nameof(RequestOptions)}.{nameof(RequestOptions.Timeout)} is 0 (likely default(RequestOptions)). " +
+                $"Use RequestOptions.Default or new RequestOptions() to get the default {RequestOptions.DefaultTimeoutMs}ms timeout, " +
+                $"or set Timeout = Timeout.Infinite to wait indefinitely.");
+        }
     }
 
     private sealed class RequestState(TaskCompletionSource<object> tcs, int expectedCount, Type replyType, Action<object>? onReply = null)
