@@ -85,4 +85,60 @@ public sealed class ConnectionDisposeAsyncRaceTests
         Assert.Empty(semaphoreOdes);
         Assert.Empty(disposeExceptions);
     }
+
+    [Fact]
+    public async Task DisposeDuringCreate_DoesNotOrphanConnection()
+    {
+        // Stage: a CreateConnectionForTests that blocks until the test releases. While the
+        // create is hanging inside _connectionLock, drive DisposeAsync with a tight lock
+        // timeout. DisposeAsync sets _disposed=1 (line 119), times out on _connectionLock,
+        // and proceeds to its forced-teardown path — but _connection is still null at this
+        // point, so the teardown is a no-op. The just-built connection that the create is
+        // about to return must be torn down by the post-build disposed check, NOT orphaned.
+        var transport = new Mock<ITransportConfiguration>();
+        transport.SetupGet(t => t.Host).Returns("localhost");
+        transport.SetupGet(t => t.ClientSettings).Returns(new Dictionary<string, object>());
+
+        var connection = new Connection(transport.Object, "test-queue", NullLogger.Instance);
+
+        // Tight dispose-lock timeout so DisposeAsync gives up after 50ms instead of 30s.
+        var timeoutField = typeof(Connection).GetField("_disposeLockTimeout",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        timeoutField!.SetValue(connection, TimeSpan.FromMilliseconds(50));
+
+        var disposeCount = 0;
+        var fakeConnection = new Mock<IConnection>();
+        fakeConnection.SetupGet(c => c.IsOpen).Returns(false); // avoid mocking CloseAsync's overload
+        fakeConnection.Setup(c => c.Dispose()).Callback(() => Interlocked.Increment(ref disposeCount));
+
+        var createInvoked = new TaskCompletionSource();
+        var createReleased = new TaskCompletionSource();
+        connection.CreateConnectionForTests = async (_, _, _, _) =>
+        {
+            createInvoked.TrySetResult();
+            await createReleased.Task; // hold here until the test releases
+            return fakeConnection.Object;
+        };
+
+        // Begin a connect on a worker task. CreateChannelAsync calls ConnectAsync which
+        // acquires _connectionLock and calls into CreateConnectionForTests, blocking.
+        var connectTask = Task.Run(async () =>
+        {
+            try { _ = await connection.CreateChannelAsync(); }
+            catch { /* expected — the create will throw ObjectDisposedException post-build */ }
+        });
+        await createInvoked.Task;
+
+        // DisposeAsync sets _disposed first, fails to acquire the lock within 50ms, falls
+        // through to the forced-teardown path, returns. _connection is still null.
+        var disposeTask = connection.DisposeAsync().AsTask();
+        await disposeTask;
+
+        // Release the create. The post-build disposed check should detect _disposed and
+        // tear down the just-built fakeConnection.
+        createReleased.TrySetResult();
+        await connectTask;
+
+        Assert.Equal(1, disposeCount);
+    }
 }

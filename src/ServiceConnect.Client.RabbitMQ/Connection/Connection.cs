@@ -51,8 +51,30 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         logger.LogDebug("Creating connection to queue {QueueName}", queueName);
         var connectionFactory = BuildConnectionFactory();
         var connector = CreateConnectionForTests ?? ((f, h, n, ct) => f.CreateConnectionAsync(h, n, ct));
-        _connection = await connector(connectionFactory, _hosts, queueName, cancellationToken).ConfigureAwait(false);
+        var newConnection = await connector(connectionFactory, _hosts, queueName, cancellationToken).ConfigureAwait(false);
 
+        // Race window: DisposeAsync may have set _disposed and forced teardown (after a lock-wait
+        // timeout) while we were creating. If so, tear down the just-built connection rather than
+        // assigning it to a disposed instance.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            try
+            {
+                if (newConnection.IsOpen)
+                {
+                    await newConnection.CloseAsync().ConfigureAwait(false);
+                }
+                newConnection.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error tearing down orphan connection after dispose-during-create race");
+            }
+            throw new ObjectDisposedException(nameof(Connection),
+                "Connection was disposed while a connection create was in flight; the just-built connection has been torn down.");
+        }
+
+        _connection = newConnection;
         _lifecycle.Attach(_connection);
         // VirtualHost is set on the ConnectionFactory (and thus the connection) but is not
         // surfaced on AmqpTcpEndpoint. Read it from the transport config — the value the
