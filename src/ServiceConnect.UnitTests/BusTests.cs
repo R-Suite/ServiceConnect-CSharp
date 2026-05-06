@@ -818,7 +818,7 @@ public class BusTests
         Assert.NotNull(captured);
         Assert.Equal("test-queue", captured!.Destination);
         Assert.Equal("value", captured.Headers["Custom"]);
-        Assert.Equal(3, captured.Headers[HeaderKeys.RetryCount]);
+        Assert.False(captured.Headers.ContainsKey(HeaderKeys.RetryCount));
         Assert.False(captured.Headers.ContainsKey(HeaderKeys.MessageId));
         Assert.False(captured.Headers.ContainsKey(HeaderKeys.SourceAddress));
     }

@@ -105,7 +105,7 @@ public class ProcessManagerTimeoutServiceTests
                     ProcessManagerId = Guid.NewGuid(),
                     Destination = "test-queue",
                     Time = DateTimeOffset.UtcNow.AddMinutes(-1),
-                    Headers = new Dictionary<string, object> { [HeaderKeys.RetryCount] = 3 }
+                    Headers = new Dictionary<string, object> { ["X-Custom-Header"] = "value" }
                 }
             ],
         };
@@ -125,7 +125,7 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<TimeoutMessage>(),
                 It.Is<SendOptions>(options =>
                     options.Headers != null &&
-                    options.Headers[HeaderKeys.RetryCount] == "3"),
+                    options.Headers["X-Custom-Header"] == "value"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -160,7 +160,10 @@ public class ProcessManagerTimeoutServiceTests
             [HeaderKeys.Redelivered] = "spoofed-redelivered",
             [HeaderKeys.ConsumerType] = "spoofed-consumer-type",
             [HeaderKeys.Language] = "spoofed-language",
-            [HeaderKeys.Exception] = "spoofed-exception"
+            [HeaderKeys.Exception] = "spoofed-exception",
+            [HeaderKeys.RetryCount] = "spoofed-retry-count",
+            [HeaderKeys.CorrelationId] = "spoofed-correlation-id",
+            [HeaderKeys.Priority] = "spoofed-priority"
         };
 
         var timeoutId = Guid.NewGuid();
@@ -176,7 +179,7 @@ public class ProcessManagerTimeoutServiceTests
                     Time = DateTimeOffset.UtcNow.AddMinutes(-1),
                     Headers = new Dictionary<string, object>(reservedHeaders)
                     {
-                        [HeaderKeys.RetryCount] = "3"
+                        ["X-Custom-Header"] = "value"
                     }
                 }
             ],
@@ -203,7 +206,7 @@ public class ProcessManagerTimeoutServiceTests
 
         var sendOptions = Assert.IsType<SendOptions>(dispatchedOptions);
         var outgoingHeaders = Assert.IsAssignableFrom<IDictionary<string, string>>(sendOptions.Headers);
-        Assert.Equal("3", outgoingHeaders[HeaderKeys.RetryCount]);
+        Assert.Equal("value", outgoingHeaders["X-Custom-Header"]);
 
         foreach (var reservedHeader in reservedHeaders.Keys)
         {
@@ -229,7 +232,7 @@ public class ProcessManagerTimeoutServiceTests
                     Time = DateTimeOffset.UtcNow.AddMinutes(-1),
                     Headers = new Dictionary<string, object>
                     {
-                        [HeaderKeys.RetryCount] = "3",
+                        ["X-Custom-Header"] = "value",
                         ["Unsupported"] = new object()
                     }
                 }
@@ -251,7 +254,7 @@ public class ProcessManagerTimeoutServiceTests
                 It.IsAny<TimeoutMessage>(),
                 It.Is<SendOptions>(options =>
                     options.Headers != null &&
-                    options.Headers[HeaderKeys.RetryCount] == "3" &&
+                    options.Headers["X-Custom-Header"] == "value" &&
                     !options.Headers.ContainsKey("Unsupported")),
                 It.IsAny<CancellationToken>()),
             Times.Once);
