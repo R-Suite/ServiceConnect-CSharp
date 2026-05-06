@@ -367,6 +367,8 @@ The MongoDB implementation (`MongoDbProcessManagerFinder`) adds several requirem
 
 If the `IMongoClient` supplied to the MongoDB provider is configured with `WriteConcern.Unacknowledged` (w:0), `MongoDbProcessManagerFinder` throws `InvalidOperationException` during startup — before any consumer host begins polling. Unacknowledged writes disable the optimistic concurrency version checks, which would silently advance the version on missed updates and wedge sagas on the next real conflict.
 
+The same guard applies to [`ITimeoutStore`](../itimeoutstore/) and [`IAggregatorPersistor`](../iaggregatorpersistor/) MongoDB implementations; see [Persistence Configuration → MongoDB provider contract](/ServiceConnect-CSharp/reference/configuration/ipersistenceconfiguration/#writeconcern-requirement) for the consolidated description.
+
 ### CorrelationId uniqueness via pre-created unique index
 
 A startup `IHostedService` pre-creates a unique index on `CorrelationId` for each saga data type registered via `AddProcessManager<TSaga>` before consumer polling starts. This closes the cross-process startup race that could admit duplicate saga rows. The index creation is idempotent — running it again on an existing index is safe.

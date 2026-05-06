@@ -232,6 +232,14 @@ builder.AddRegistration(services =>
 });
 ```
 
+## MongoDB timeout-store contract
+
+### WriteConcern.Unacknowledged rejected
+
+`MongoDbTimeoutStore` requires the `IMongoClient` to be configured with an acknowledged write concern (`w:1` or higher). Construction throws `InvalidOperationException` for `WriteConcern.Unacknowledged`. Under `w:0`, lock-aware delete and release operations silently no-op-succeed — converting a stale-lease no-op into an apparent successful delete and admitting duplicate timeout dispatch.
+
+See [Persistence Configuration → MongoDB provider contract](/ServiceConnect-CSharp/reference/configuration/ipersistenceconfiguration/#writeconcern-requirement) for the full guard set across all three Mongo stores.
+
 ## See also
 
 - [`ILeaseAwareTimeoutStore`](./ileaseawaretimeoutstore/) — lease-aware variant for multi-instance deployments

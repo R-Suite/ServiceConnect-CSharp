@@ -393,6 +393,12 @@ services.AddServiceConnect(builder =>
 
 The MongoDB implementation (`MongoDbAggregatorPersistor`) adds several behaviours and exception contracts beyond the base interface.
 
+### WriteConcern.Unacknowledged rejected
+
+`MongoDbAggregatorPersistor` requires the `IMongoClient` to be configured with an acknowledged write concern (`w:1` or higher). Construction throws `InvalidOperationException` for `WriteConcern.Unacknowledged`. Under `w:0`, `RemoveDataAsync`'s `IsAcknowledged`-gated branch silently succeeds and the documented `ConcurrencyException` contract on stale-version updates is broken — admitting duplicate aggregate dispatch.
+
+See [Persistence Configuration → MongoDB provider contract](/ServiceConnect-CSharp/reference/configuration/ipersistenceconfiguration/#writeconcern-requirement) for the full guard set across all three Mongo stores.
+
 ### Insertion order semantics
 
 Records inserted with identical `InsertedAtTicks` values — for example, two messages processed within a single `DateTime.Tick` — are ordered by a per-process monotonic counter (`InsertSequence`). This ensures that within a single process, records appear in their actual insertion order regardless of clock resolution. Cross-process ties (two processes inserting the same tick value simultaneously) remain unresolved and produce an arbitrary but stable order.
