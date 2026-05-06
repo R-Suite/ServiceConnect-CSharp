@@ -96,24 +96,28 @@ internal sealed class OutboundHeaderBuilder(
         return result;
     }
 
+    /// <summary>
+    /// Builds <see cref="BasicProperties"/> by aliasing <paramref name="messageHeaders"/> directly
+    /// into <see cref="BasicProperties.Headers"/>. No copy. Callers MUST NOT mutate
+    /// <paramref name="messageHeaders"/> while a publish using the returned properties is in flight.
+    /// </summary>
+    /// <remarks>
+    /// The fan-out <c>SendAsync(Type)</c> path re-stamps <c>DestinationAddress</c>,
+    /// <c>MessageId</c>, and <c>TimeSent</c> on a single <c>baseHeaders</c> dict between iterations.
+    /// Safety relies on publisher confirms (the default since Phase 2; the
+    /// <c>PublisherAcknowledgements=false + PublishTimeout&gt;0</c> combo is rejected by the
+    /// <see cref="Producer"/> constructor): the prior await on <c>PublishWithTimeoutAsync</c>
+    /// returns only after the broker ack, by which time the wire frame is serialised and
+    /// RabbitMQ.Client no longer references the dict. The other three publish methods make
+    /// <c>BuildBasicProperties</c> the last touch before <c>await PublishWithTimeoutAsync</c>,
+    /// so no concurrent mutation is possible there.
+    /// </remarks>
     public BasicProperties BuildBasicProperties(Dictionary<string, object?> messageHeaders)
     {
-        // Direct assign — type alignment with BasicProperties.Headers (IDictionary<string, object?>)
-        // is now native after BuildHeaders' return-type widening, so no copy is needed.
-        //
-        // Aliasing safety: BasicProperties.Headers and the input messageHeaders share storage
-        // post-call. Callers MUST NOT mutate messageHeaders while a publish using the returned
-        // BasicProperties is in flight. The four Producer.cs call sites are safe under the
-        // current layout:
-        //   - PublishAsync, SendAsync(string endPoint, Type), SendBytesAsync: BuildBasicProperties
-        //     is the last touch before the awaited PublishWithTimeoutAsync. No mutation between.
-        //   - SendAsync(Type) — the queue-mapped fan-out overload — re-stamps DestinationAddress,
-        //     MessageId, and TimeSent on baseHeaders between iterations. Safe ONLY because
-        //     publisher-confirms (publisherConfirmationsEnabled: true in ProducerConnection)
-        //     make the prior await PublishWithTimeoutAsync return after the broker ack — by
-        //     which time the wire frame is serialized and RabbitMQ.Client no longer references
-        //     the dict. Disabling publisher-confirms or moving to fire-and-forget invalidates
-        //     this invariant.
+        // Direct assign — Dictionary<string, object?> aligns with BasicProperties.Headers's
+        // IDictionary<string, object?> after BuildHeaders' return-type widening. Aliasing
+        // is intentional; OutboundHeaderBuilderAliasingTests.BuildBasicProperties_AssignsHeadersDirectly_WithoutCopy
+        // asserts the reference identity so a future refactor cannot silently introduce a copy.
         var basicProperties = new BasicProperties
         {
             Headers = messageHeaders,
