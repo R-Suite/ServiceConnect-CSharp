@@ -40,13 +40,19 @@ internal sealed class ProducerConnection
 
     private ConnectionFactory? _connectionFactory;
     private volatile IChannel? _model;
-    private IConnection? _connection;
+    private volatile IConnection? _connection;
     private volatile bool _connected;
 
     // Set by Producer.PublishWithTimeoutAsync when a publish times out (broker confirm did not
     // arrive within the publish budget). The next EnsureConnectedAsync drives the reconnect off
     // the publish lock so concurrent publishers are not blocked behind a worst-case retry budget.
     private int _resetRequired;
+
+    // Set by CloseAsync before its semaphore-wait. CreateConnectionAsync re-checks AFTER assigning
+    // _connection/_model so a dispose that timed out on the semaphore (and forced teardown anyway)
+    // is followed by the in-flight create tearing down its own just-built connection rather than
+    // orphaning it on the disposed instance.
+    private int _disposed;
 
     // Flipped to 1 on the first EnsureConnectedAsync call. Stays true for the producer's lifetime
     // so the health check can distinguish "lazy, not yet tried" from "tried and currently failed".
@@ -171,11 +177,20 @@ internal sealed class ProducerConnection
                 return;
             }
 
-            await Retry.DoAsync(() => CreateConnectionAsync(cancellationToken), async ex =>
-            {
-                _logger.LogError(ex, "Error creating connection");
-                await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
-            }, TimeSpan.FromSeconds(_retryTimeInSeconds), _retryCount, cancellationToken).ConfigureAwait(false);
+            // Skip retry on ObjectDisposedException: that signals CloseAsync set _disposed
+            // mid-create and the just-built connection has already been torn down. Retrying
+            // would just re-throw on the next iteration's post-assign disposed check.
+            await Retry.DoAsync(
+                () => CreateConnectionAsync(cancellationToken),
+                async ex =>
+                {
+                    _logger.LogError(ex, "Error creating connection");
+                    await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+                },
+                TimeSpan.FromSeconds(_retryTimeInSeconds),
+                _retryCount,
+                shouldRetry: ex => ex is not ObjectDisposedException,
+                cancellationToken).ConfigureAwait(false);
 
             _connected = true;
         }
@@ -228,6 +243,10 @@ internal sealed class ProducerConnection
     /// </summary>
     public async Task CloseAsync(TimeSpan timeoutBudget)
     {
+        // Set _disposed BEFORE waiting for the semaphore, so a concurrent create can detect
+        // it after assignment and tear down its own work rather than orphaning the connection.
+        Interlocked.Exchange(ref _disposed, 1);
+
         var connectionLockAcquired = false;
         try
         {
@@ -334,6 +353,23 @@ internal sealed class ProducerConnection
 
             _connection = connection;
             _model = model;
+
+            // Race window: CloseAsync may have set _disposed and forced teardown while we were
+            // creating. If so, tear down the just-built instances rather than orphaning them.
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                var orphanModel = Interlocked.Exchange(ref _model, null);
+                var orphanConnection = Interlocked.Exchange(ref _connection, null);
+                await DisposeModelAsync(orphanModel).ConfigureAwait(false);
+                await DisposeConnectionInstanceAsync(orphanConnection).ConfigureAwait(false);
+                _connected = false;
+                // Null the locals so the outer catch's redundant dispose path is a no-op —
+                // the helpers are null-guarded and we have already disposed the references.
+                model = null;
+                connection = null;
+                throw new ObjectDisposedException(nameof(ProducerConnection),
+                    "ProducerConnection was disposed while a connection create was in flight; the just-built connection has been torn down.");
+            }
         }
         catch
         {

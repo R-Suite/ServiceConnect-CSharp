@@ -65,4 +65,58 @@ public sealed class ProducerConnectionDisposeTests
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2),
             $"DisposeConnectionAsync took {sw.Elapsed} — should have returned within ~50ms+best-effort-teardown after cancellation, well under 2s.");
     }
+
+    [Fact]
+    public async Task DisposeDuringCreate_DoesNotOrphanConnection()
+    {
+        // Set up: stage a CreateConnectionForTests that takes long enough for Close to start
+        // and time out its semaphore wait. After the create returns, _disposed is already 1
+        // and the just-created connection should be torn down rather than assigned.
+        var producerConnection = CreateProducerConnection();
+
+        // Track whether the just-created connection's Dispose / DisposeAsync gets called.
+        var disposeCount = 0;
+        var fakeConnection = new Mock<global::RabbitMQ.Client.IConnection>();
+        // IsOpen=false avoids the need to mock CloseAsync's full overload set; we only need
+        // to verify Dispose() runs against the just-built instance.
+        fakeConnection.SetupGet(c => c.IsOpen).Returns(false);
+        fakeConnection.Setup(c => c.Dispose()).Callback(() => Interlocked.Increment(ref disposeCount));
+        // Also need to mock CreateChannelAsync because CreateConnectionAsync calls it after the connection is built.
+        var fakeChannel = new Mock<global::RabbitMQ.Client.IChannel>();
+        fakeChannel.SetupGet(c => c.IsOpen).Returns(false);
+        fakeConnection
+            .Setup(c => c.CreateChannelAsync(It.IsAny<global::RabbitMQ.Client.CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(fakeChannel.Object);
+
+        var createReleased = new TaskCompletionSource();
+        var createInvoked = new TaskCompletionSource();
+        producerConnection.CreateConnectionForTests = async (_, _, _, _) =>
+        {
+            createInvoked.TrySetResult();
+            await createReleased.Task; // hold here until the test releases
+            return fakeConnection.Object;
+        };
+
+        // Begin a connection create on a worker task. EnsureConnectedAsync acquires the
+        // semaphore and calls into CreateConnectionForTests, which blocks until createReleased.
+        var ensureTask = producerConnection.EnsureConnectedAsync(CancellationToken.None);
+        await createInvoked.Task;
+
+        // Now drive Close with a tight timeout — it cannot acquire the semaphore (the create
+        // holds it via the Retry loop's awaitable wait). Close sets _disposed and forces teardown
+        // (which is a no-op since _connection/_model are still null).
+        var closeTask = producerConnection.CloseAsync(TimeSpan.FromMilliseconds(50));
+        await closeTask;
+
+        // Allow the create to complete. The post-assign disposed check should detect _disposed
+        // and tear down the just-built fakeConnection rather than orphaning it.
+        createReleased.TrySetResult();
+
+        // ensureTask may complete or throw; both are acceptable post-dispose. Wait for it.
+        try { await ensureTask; }
+        catch (ObjectDisposedException) { /* expected: post-assign check throws this */ }
+        catch (Exception) { /* other races acceptable as long as fakeConnection.Dispose was called */ }
+
+        Assert.Equal(1, disposeCount);
+    }
 }
