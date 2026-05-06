@@ -1064,6 +1064,47 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
             listener.Dispose();
         }
     }
+
+    // ---------------- C1: Sanitiser-bypass via exception.stacktrace ----------------
+
+    [Fact]
+    public void SetError_WithSanitiser_StacktraceTagDoesNotContainRawMessage()
+    {
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = _ => true,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        using var source = new ActivitySource("ServiceConnectActivitySourceTests-C1");
+        using var activity = source.StartActivity("op");
+        Assert.NotNull(activity);
+
+        Exception thrown;
+        try
+        {
+            throw new InvalidOperationException("RAW-SECRET-MESSAGE");
+        }
+        catch (Exception ex)
+        {
+            thrown = ex;
+        }
+
+        var options = new ServiceConnectInstrumentationOptions
+        {
+            ExceptionMessageSanitiser = _ => "REDACTED",
+        };
+
+        ServiceConnectActivitySource.SetError(activity, thrown, options);
+
+        var exceptionEvent = activity!.Events.Single(e => e.Name == "exception");
+        var stacktrace = exceptionEvent.Tags.Single(t => t.Key == "exception.stacktrace").Value?.ToString() ?? string.Empty;
+        var message = exceptionEvent.Tags.Single(t => t.Key == "exception.message").Value?.ToString() ?? string.Empty;
+
+        Assert.DoesNotContain("RAW-SECRET-MESSAGE", stacktrace);
+        Assert.Equal("REDACTED", message);
+    }
 }
 
 [Collection("ActivityListener")]

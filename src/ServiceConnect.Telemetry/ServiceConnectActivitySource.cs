@@ -335,20 +335,24 @@ public static class ServiceConnectActivitySource
         {
             // Sanitiser supplied — opt out of AddException (would re-record the unsanitised
             // message). Record the OTel "exception" event manually with the sanitised message.
+            // Use StackTrace directly rather than ToString() because ToString() includes the
+            // formatted Message, which would bypass the sanitiser and leak the raw message.
             activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
             {
                 ["exception.type"] = exception.GetType().FullName,
                 ["exception.message"] = message,
-                ["exception.stacktrace"] = exception.ToString(),
+                ["exception.stacktrace"] = exception.StackTrace ?? string.Empty,
             }));
         }
 #else
         // .NET 8 fallback: record the OTel semantic-convention "exception" event manually.
+        // Use StackTrace directly rather than ToString() because ToString() includes the
+        // formatted Message, which would bypass the sanitiser and leak the raw message.
         activity.AddEvent(new ActivityEvent("exception", tags: new ActivityTagsCollection
         {
             ["exception.type"] = exception.GetType().FullName,
             ["exception.message"] = message,
-            ["exception.stacktrace"] = exception.ToString(),
+            ["exception.stacktrace"] = exception.StackTrace ?? string.Empty,
         }));
 #endif
     }
