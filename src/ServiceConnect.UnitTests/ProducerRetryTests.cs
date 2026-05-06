@@ -48,6 +48,10 @@ public class ProducerRetryTests
     [Fact]
     public async Task PublishAsync_WhenFirstPublishFails_ReconnectsAndRetriesSuccessfully()
     {
+        // The publish-side retry triggers the reset-required flag, and the next attempt's
+        // EnsureConnectedAsync drives the recreate via CreateConnectionAsync. The test seam
+        // therefore uses CreateConnectionForTests: the second connection serves the second
+        // (healthy) channel.
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
         firstChannel.SetupGet(c => c.IsOpen).Returns(true);
@@ -76,12 +80,14 @@ public class ProducerRetryTests
 
         SetField(producer, "_model", firstChannel.Object);
         SetField(producer, "_connected", true);
-        producer.ReconnectForTests = _ =>
-        {
-            SetField(producer, "_model", secondChannel.Object);
-            SetField(producer, "_connected", true);
-            return Task.CompletedTask;
-        };
+
+        var secondConnection = new Mock<IConnection>();
+        StubLifecycleSurface(secondConnection);
+        secondConnection.SetupGet(c => c.IsOpen).Returns(true);
+        secondConnection
+            .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(secondChannel.Object);
+        producer.CreateConnectionForTests = (_, _, _, _) => Task.FromResult(secondConnection.Object);
 
         await producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 });
 
@@ -109,7 +115,7 @@ public class ProducerRetryTests
         declaredExchanges["SystemObject"] = true;
         using var cancellationSource = new CancellationTokenSource();
         var cancellationToken = cancellationSource.Token;
-        var reconnectCalls = 0;
+        var connectionAttempts = 0;
 
         channel.Setup(c => c.BasicPublishAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -119,17 +125,25 @@ public class ProducerRetryTests
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
-        producer.ReconnectForTests = _ =>
+        // The reconnect-on-retry path goes through CreateConnectionAsync; the assertion that
+        // cancellation does NOT trigger a retry shifts to counting connect attempts. OCE
+        // remains non-retriable so this seam should never fire.
+        producer.CreateConnectionForTests = (_, _, _, _) =>
         {
-            reconnectCalls++;
-            return Task.CompletedTask;
+            Interlocked.Increment(ref connectionAttempts);
+            var conn = new Mock<IConnection>();
+            StubLifecycleSurface(conn);
+            conn.SetupGet(c => c.IsOpen).Returns(true);
+            conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(channel.Object);
+            return Task.FromResult(conn.Object);
         };
 
         var ex = await Assert.ThrowsAsync<OperationCanceledException>(() =>
             producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken));
 
         Assert.Equal(cancellationToken, ex.CancellationToken);
-        Assert.Equal(0, reconnectCalls);
+        Assert.Equal(0, connectionAttempts);
         channel.Verify(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
@@ -139,6 +153,10 @@ public class ProducerRetryTests
     [Fact]
     public async Task PublishAsync_WhenCanceledDuringReconnect_StopsRetryingPromptly()
     {
+        // The slow-reconnect simulation runs through CreateConnectionForTests: when the
+        // first publish fails, the next attempt's EnsureConnectedAsync drives
+        // CreateConnectionAsync, which we hang on the caller token to verify cancellation
+        // propagates promptly.
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
         firstChannel.SetupGet(c => c.IsOpen).Returns(true);
@@ -147,7 +165,7 @@ public class ProducerRetryTests
         using var cancellationSource = new CancellationTokenSource();
         var cancellationToken = cancellationSource.Token;
         var reconnectStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var reconnectCalls = 0;
+        var connectionAttempts = 0;
 
         firstChannel.Setup(c => c.BasicPublishAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -157,11 +175,12 @@ public class ProducerRetryTests
 
         SetField(producer, "_model", firstChannel.Object);
         SetField(producer, "_connected", true);
-        producer.ReconnectForTests = async reconnectToken =>
+        producer.CreateConnectionForTests = async (_, _, _, ct) =>
         {
-            reconnectCalls++;
+            Interlocked.Increment(ref connectionAttempts);
             reconnectStarted.TrySetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, reconnectToken);
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            throw new InvalidOperationException("unreachable");
         };
 
         var publishTask = producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken);
@@ -172,7 +191,7 @@ public class ProducerRetryTests
         var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => publishTask);
 
         Assert.Equal(cancellationToken, ex.CancellationToken);
-        Assert.Equal(1, reconnectCalls);
+        Assert.Equal(1, connectionAttempts);
         firstChannel.Verify(c => c.BasicPublishAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
@@ -338,6 +357,8 @@ public class ProducerRetryTests
     [Fact]
     public async Task PublishAsync_WhenExchangeDeclareFails_ReconnectsAndRetriesSuccessfully()
     {
+        // Migrated from ReconnectForTests to CreateConnectionForTests: see
+        // PublishAsync_WhenFirstPublishFails for the rationale.
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
         firstChannel.SetupGet(c => c.IsOpen).Returns(true);
@@ -363,12 +384,14 @@ public class ProducerRetryTests
 
         SetField(producer, "_model", firstChannel.Object);
         SetField(producer, "_connected", true);
-        producer.ReconnectForTests = _ =>
-        {
-            SetField(producer, "_model", secondChannel.Object);
-            SetField(producer, "_connected", true);
-            return Task.CompletedTask;
-        };
+
+        var secondConnection = new Mock<IConnection>();
+        StubLifecycleSurface(secondConnection);
+        secondConnection.SetupGet(c => c.IsOpen).Returns(true);
+        secondConnection
+            .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(secondChannel.Object);
+        producer.CreateConnectionForTests = (_, _, _, _) => Task.FromResult(secondConnection.Object);
 
         await producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 });
 
@@ -390,7 +413,7 @@ public class ProducerRetryTests
         channel.SetupGet(c => c.IsOpen).Returns(true);
         using var cancellationSource = new CancellationTokenSource();
         var cancellationToken = cancellationSource.Token;
-        var reconnectCalls = 0;
+        var connectionAttempts = 0;
 
         channel.Setup(c => c.ExchangeDeclareAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(),
@@ -400,17 +423,23 @@ public class ProducerRetryTests
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
-        producer.ReconnectForTests = _ =>
+        // Migrated to CreateConnectionForTests: counts retry-driven reconnect attempts.
+        producer.CreateConnectionForTests = (_, _, _, _) =>
         {
-            reconnectCalls++;
-            return Task.CompletedTask;
+            Interlocked.Increment(ref connectionAttempts);
+            var conn = new Mock<IConnection>();
+            StubLifecycleSurface(conn);
+            conn.SetupGet(c => c.IsOpen).Returns(true);
+            conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(channel.Object);
+            return Task.FromResult(conn.Object);
         };
 
         var ex = await Assert.ThrowsAsync<OperationCanceledException>(() =>
             producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }, cancellationToken: cancellationToken));
 
         Assert.Equal(cancellationToken, ex.CancellationToken);
-        Assert.Equal(0, reconnectCalls);
+        Assert.Equal(0, connectionAttempts);
         channel.Verify(c => c.ExchangeDeclareAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(),
             It.IsAny<IDictionary<string, object?>?>(), It.IsAny<bool>(), It.IsAny<bool>(),
@@ -469,6 +498,7 @@ public class ProducerRetryTests
     [Fact]
     public async Task SendAsync_ByEndpoint_WhenFirstPublishFails_ReconnectsAndRetriesSuccessfully()
     {
+        // Migrated from ReconnectForTests to CreateConnectionForTests.
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
         firstChannel.SetupGet(c => c.IsOpen).Returns(true);
@@ -489,12 +519,14 @@ public class ProducerRetryTests
 
         SetField(producer, "_model", firstChannel.Object);
         SetField(producer, "_connected", true);
-        producer.ReconnectForTests = _ =>
-        {
-            SetField(producer, "_model", secondChannel.Object);
-            SetField(producer, "_connected", true);
-            return Task.CompletedTask;
-        };
+
+        var secondConnection = new Mock<IConnection>();
+        StubLifecycleSurface(secondConnection);
+        secondConnection.SetupGet(c => c.IsOpen).Returns(true);
+        secondConnection
+            .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(secondChannel.Object);
+        producer.CreateConnectionForTests = (_, _, _, _) => Task.FromResult(secondConnection.Object);
 
         await producer.SendAsync("endpoint", typeof(object), new byte[] { 1, 2, 3 });
 

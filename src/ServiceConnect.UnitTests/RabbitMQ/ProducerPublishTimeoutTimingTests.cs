@@ -9,7 +9,7 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Asserts the H22 user-visible wall-clock contract: a publish timeout returns to the caller
+/// Asserts the user-visible wall-clock contract: a publish timeout returns to the caller
 /// within ~publishTimeout, not within the reconnect retry budget. Uses Producer test seams to
 /// bypass the broker so the timing window is deterministic. Complements
 /// <see cref="ProducerPublishTimeoutResetTests"/> (which asserts the mechanism — flag set,
@@ -25,8 +25,9 @@ public sealed class ProducerPublishTimeoutTimingTests
         //   reconnectDelay   = 2 000 ms (simulated slow reconnect after the timeout)
         //   publisherCount   = 5
         //
-        // Threshold = 3 000 ms. Awaiting ReconnectAsync under _publishLock would push
-        // the worst publisher above 7 s; the off-lock reconnect path keeps it near ~1 s.
+        // Threshold = 3 000 ms. If EnsureConnectedAsync ran inside _publishLock the slow
+        // reconnect would serialise behind every other publisher, pushing the worst publisher
+        // above 7 s; with EnsureConnectedAsync outside the lock it stays near ~1 s.
         const int publisherCount = 5;
         const int publishTimeoutMs = 200;
         const int reconnectDelayMs = 2_000;
@@ -39,12 +40,18 @@ public sealed class ProducerPublishTimeoutTimingTests
             Host = "localhost",
             Username = "guest",
             Password = "guest",
+            // EnsureConnectedAsync drives the post-reset recreate by calling
+            // CreateConnectionAsync directly. CreateConnectionAsync calls
+            // ConnectionFactoryBuilder.Build, which validates SSL config; the default
+            // SslEnabled=true requires a ServerName the test doesn't supply. Plain-text
+            // here matches the test's loopback Host.
+            SslEnabled = false,
         };
         transport.SetClientSetting(RabbitMQSettingKeys.Port, 5672);
         transport.SetClientSetting(RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromMilliseconds(publishTimeoutMs));
         // RetryCount / RetrySeconds bound how long EnsureConnectedAsync retries if
-        // CreateConnectionAsync throws.  They do not affect the ReconnectForTests path but must
-        // be set to non-default values so the test is clearly scoped.
+        // CreateConnectionAsync throws. Set to small non-default values so the test is
+        // clearly scoped and CreateConnectionAsync failures cannot extend the wall clock.
         transport.SetClientSetting(RabbitMQSettingKeys.RetryCount, 1);
         transport.SetClientSetting(RabbitMQSettingKeys.RetrySeconds, 1);
         // PublisherAcknowledgements=true makes BasicPublishAsync wait for a broker confirm.
@@ -67,25 +74,29 @@ public sealed class ProducerPublishTimeoutTimingTests
         // This replaces CreateConnectionAsync inside ProducerConnection, so the first
         // EnsureConnectedAsync call succeeds quickly (mock returns immediately) but every
         // BasicPublishAsync on the resulting channel blocks until the timeout CTS fires.
+        // The slow-reconnect simulation is layered on top: after the FIRST connect, every
+        // subsequent recreate (driven by reset-required) waits reconnectDelayMs. The
+        // load-bearing property under test: this delay runs under _connectionSemaphore, NOT
+        // _publishLock, so concurrent publishers are not serialised behind it.
         var hangingChannel = BuildHangingChannel();
-        producer.CreateConnectionForTests = (_, _, _, _) =>
+        int connectCalls = 0;
+        producer.CreateConnectionForTests = async (_, _, _, ct) =>
         {
+            // Skip the delay on the first connect so the test setup doesn't pay the
+            // reconnect cost. Subsequent calls (driven by post-timeout reset) simulate
+            // a slow reconnect under _connectionSemaphore.
+            if (Interlocked.Increment(ref connectCalls) > 1)
+            {
+                await Task.Delay(reconnectDelayMs, ct).ConfigureAwait(false);
+            }
             var conn = new Mock<IConnection>();
             conn.SetupGet(c => c.IsOpen).Returns(true);
             conn.Setup(c => c.CreateChannelAsync(
                     It.IsAny<CreateChannelOptions?>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(hangingChannel.Object);
-            return Task.FromResult(conn.Object);
+            return conn.Object;
         };
-
-        // Seam 2: slow-reconnect simulation. ReconnectAsync is only driven from
-        // EnsureConnectedAsync (before _publishLock is acquired) and only by the first
-        // caller that wins the CAS on _resetRequired. In this single-publish test that
-        // call never runs during the publish phase, so the delay does not contribute.
-        // Awaiting ReconnectAsync inside PublishWithTimeoutAsync while _publishLock is
-        // held would block all queued publishers for reconnectDelayMs per timed-out publish.
-        producer.ReconnectForTests = ct => Task.Delay(reconnectDelayMs, ct);
 
         // Act ─────────────────────────────────────────────────────────────────────────────────
         var stopwatches = Enumerable.Range(0, publisherCount)
@@ -107,10 +118,12 @@ public sealed class ProducerPublishTimeoutTimingTests
             }
             catch (Exception)
             {
-                // Swallow other exceptions (e.g. an in-lock ReconnectAsync path could
-                // surface a NullReferenceException from a null _model after DisposeConnectionAsync).
-                // The timing assertion below is the load-bearing check; capturing here keeps
-                // the wall-clock regression visible rather than surfacing an unrelated NRE.
+                // Swallow other exceptions: the timing assertion below is the load-bearing
+                // check, and a regression that pulls EnsureConnectedAsync back inside
+                // _publishLock could surface a transient race (e.g. NullReferenceException
+                // from a torn-down _model) rather than a clean timeout. Capture here so the
+                // wall-clock regression remains visible rather than masked by an unrelated
+                // throw type.
             }
             finally
             {
@@ -124,15 +137,16 @@ public sealed class ProducerPublishTimeoutTimingTests
 
         // Assert ──────────────────────────────────────────────────────────────────────────────
         // Every publisher should return in ~publishTimeout ≈ 200 ms; threshold = 3 000 ms.
-        // Serialising publishers behind an in-lock ReconnectAsync would push publisher #N to
-        // ≥ N × (publishTimeout + reconnectDelay) — the worst publisher would exceed 7 000 ms.
+        // If EnsureConnectedAsync ran inside _publishLock, the slow recreate would serialise
+        // publishers behind it, pushing publisher #N to ≥ N × (publishTimeout + reconnectDelay)
+        // — the worst publisher would exceed 7 000 ms.
         for (var i = 0; i < publisherCount; i++)
         {
             Assert.True(
                 stopwatches[i].Elapsed < assertThreshold,
                 $"Publisher {i} took {stopwatches[i].Elapsed.TotalMilliseconds:F0}ms; " +
                 $"expected < {assertThreshold.TotalMilliseconds:F0}ms. " +
-                $"Exceeding the threshold indicates ReconnectAsync is being awaited under " +
+                $"Exceeding the threshold indicates EnsureConnectedAsync is being awaited under " +
                 $"_publishLock (worst-case ≈ {reconnectDelayMs * publisherCount}ms).");
         }
     }

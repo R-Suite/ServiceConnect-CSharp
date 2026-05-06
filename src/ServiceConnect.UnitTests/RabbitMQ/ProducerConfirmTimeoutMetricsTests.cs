@@ -110,9 +110,6 @@ public sealed class ProducerConfirmTimeoutMetricsTests
             .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(hangingChannel.Object);
         producer.CreateConnectionForTests = (_, _, _, _) => Task.FromResult(fakeConnection.Object);
-        // The producer marks the connection for reset on timeout; the test must not block on
-        // the seam reconnect path, so resolve it instantly.
-        producer.ReconnectForTests = _ => Task.CompletedTask;
 
         return producer;
     }

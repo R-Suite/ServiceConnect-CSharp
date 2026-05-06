@@ -9,7 +9,7 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// <see cref="Producer.PublishWithTimeoutAsync"/> must NOT await <c>ReconnectAsync</c>
+/// <see cref="Producer.PublishWithTimeoutAsync"/> must NOT drive a reconnect inline
 /// while holding <c>_publishLock</c>. Doing so would block every concurrent publisher
 /// for up to <c>retryCount * retrySeconds</c> (default 60 * 10s = 10 min). Instead, the
 /// publish-timeout catch path sets a synchronous <c>_resetRequired</c> flag on
@@ -99,17 +99,18 @@ public sealed class ProducerPublishTimeoutResetTests
         var channel = MakeHangingChannel(TimeSpan.FromSeconds(5));
         PrimeProducer(producer, channel.Object);
 
-        int reconnectCalls = 0;
-        producer.ReconnectForTests = _ => { Interlocked.Increment(ref reconnectCalls); return Task.CompletedTask; };
+        // No CreateConnectionForTests is installed: if PublishWithTimeoutAsync's catch path
+        // wrongly drove a reconnect inline it would call into the production
+        // CreateConnectionAsync (and ConnectionFactoryBuilder.Build), which would either
+        // attempt a real AMQP connect or throw out of the catch path — both visible regressions.
 
         // Act: publish should time out.
         await Assert.ThrowsAsync<TimeoutException>(() =>
             producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
 
-        // Assert: reconnect probe was NOT called from inside PublishWithTimeoutAsync's catch path.
-        Assert.Equal(0, reconnectCalls);
-
-        // Assert: reset-required flag is set on _producerConnection.
+        // Assert: reset-required flag is set on _producerConnection. The deferred reset is
+        // the load-bearing contract: the next EnsureConnectedAsync consumes the flag under
+        // _connectionSemaphore, NOT under _publishLock.
         Assert.True(ResetRequiredFlag(producer));
     }
 
@@ -123,9 +124,9 @@ public sealed class ProducerPublishTimeoutResetTests
         await using var producer = CreateProducer(TimeSpan.FromMilliseconds(50));
         PrimeProducer(producer, hangingChannel.Object);
 
-        // CreateConnectionForTests counts how many fresh connections are built. Each ReconnectAsync
-        // on the no-test-hook path tears down then recurses into EnsureConnectedAsync, which calls
-        // CreateConnectionAsync exactly once. So this counter == reconnect-driven rebuilds.
+        // CreateConnectionForTests counts how many fresh connections are built. Each
+        // EnsureConnectedAsync that consumes the reset flag tears down then calls
+        // CreateConnectionAsync exactly once, so this counter == reconnect-driven rebuilds.
         int connectionBuilds = 0;
         var fakeConnection = new Mock<IConnection>();
         fakeConnection.SetupGet(c => c.IsOpen).Returns(true);

@@ -22,17 +22,20 @@ public sealed class ProducerConnectionDisposeTests
     }
 
     [Fact]
-    public async Task ReconnectAsync_CancellationTokenCancelled_DisposeReturnsWithinBoundedTime()
+    public async Task EnsureConnectedAsync_AfterMarkResetRequired_CancellationTokenCancelled_ReturnsWithinBoundedTime()
     {
         // Arrange: construct a ProducerConnection, acquire its _connectionSemaphore in a
         // background task and hold it for longer than any reasonable test timeout, then
-        // cancel the token quickly and assert ReconnectAsync returns within ~2s (well under
-        // the 30s ceiling).
+        // mark reset required, call EnsureConnectedAsync (which now drives the slow
+        // teardown+create under semaphore — the same code path the prior ReconnectAsync
+        // exercised), cancel the token quickly, and assert the call returns within ~2s.
+        // The invariant under test: a wedged in-flight create cannot block the cancellation
+        // token's delivery into a queued semaphore-wait.
         var producerConnection = CreateProducerConnection();
 
-        // Install a no-op ReconnectForTests hook so EnsureConnectedAsync is not called after
-        // DisposeConnectionAsync (that would attempt a real AMQP connection).
-        producerConnection.ReconnectForTests = _ => Task.CompletedTask;
+        // Flip the reset flag so EnsureConnectedAsync takes the semaphore-acquiring branch
+        // (rather than the lock-free fast path that returns when IsHealthy()).
+        producerConnection.MarkResetRequired();
 
         var semaphoreField = typeof(ProducerConnection).GetField(
             "_connectionSemaphore",
@@ -54,16 +57,18 @@ public sealed class ProducerConnectionDisposeTests
         cts.CancelAfter(TimeSpan.FromMilliseconds(50));
 
         var sw = Stopwatch.StartNew();
-        // ReconnectAsync routes through DisposeConnectionAsync which honours both the
-        // 30s ceiling and the cancellation token rather than blocking indefinitely.
-        await producerConnection.ReconnectAsync(new InvalidOperationException("test"), cts.Token);
+        // EnsureConnectedAsync's WaitAsync(cts.Token) on _connectionSemaphore should observe
+        // the cancellation and surface OperationCanceledException promptly, well before any
+        // 30s timeout the production path might honour.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            producerConnection.EnsureConnectedAsync(cts.Token));
         sw.Stop();
 
         holderRelease.Set();
         await holderTask;
 
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(2),
-            $"DisposeConnectionAsync took {sw.Elapsed} — should have returned within ~50ms+best-effort-teardown after cancellation, well under 2s.");
+            $"EnsureConnectedAsync took {sw.Elapsed} — should have returned within ~50ms after cancellation, well under 2s.");
     }
 
     [Fact]

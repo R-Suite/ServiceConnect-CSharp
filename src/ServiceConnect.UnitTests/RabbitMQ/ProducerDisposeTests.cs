@@ -28,6 +28,25 @@ public class ProducerDisposeTests
         return new Producer(transport.Object, queue.Object, bus.Object, NullLogger<Producer>.Instance);
     }
 
+    private static Producer CreateProducerWithRetrySettings(ushort retryCount, ushort retrySeconds)
+    {
+        var transport = new Mock<ITransportConfiguration>();
+        transport.SetupGet(t => t.Host).Returns("localhost");
+        transport.SetupGet(t => t.ClientSettings).Returns(new Dictionary<string, object>
+        {
+            [RabbitMQSettingKeys.RetryCount] = retryCount,
+            [RabbitMQSettingKeys.RetrySeconds] = retrySeconds,
+        });
+
+        var queue = new Mock<IQueueConfiguration>();
+        queue.SetupGet(q => q.QueueName).Returns("q");
+
+        var bus = new Mock<IBusConfiguration>();
+        bus.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
+
+        return new Producer(transport.Object, queue.Object, bus.Object, NullLogger<Producer>.Instance);
+    }
+
     private static void SetField<T>(Producer producer, string fieldName, T value) =>
         ProducerInternals.SetField(producer, fieldName, value);
 
@@ -216,6 +235,87 @@ public class ProducerDisposeTests
         publishLock.Release();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => publishTask);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WhenDisposedMidRetry_AbortsPromptlyInsteadOfBurningRetryBudget()
+    {
+        // Regression guard: when DisposeAsync flips _disposedInt while a publisher's retry loop
+        // is mid-Task.Delay (the lock is released between attempts), the next attempt's
+        // EnsureConnectedAsync throws ObjectDisposedException. That exception MUST surface
+        // immediately. Pre-fix, the catch-when at the bottom of ExecuteRetryingPublishAsync
+        // treated ObjectDisposedException as retriable and burned the full retryCount *
+        // retrySeconds budget (default 60 * 10s = 10 min) against a permanently dead instance.
+        //
+        // Test parameters: retryCount=60, retrySeconds=1 — pre-fix would take up to ~60s,
+        // post-fix returns within one Task.Delay window (~1s) plus dispose teardown.
+        var producer = CreateProducerWithRetrySettings(retryCount: 60, retrySeconds: 1);
+
+        // Pre-seed a healthy mock channel so the first publisher iteration's
+        // EnsureConnectedAsync is a fast lock-free fast-path (no CreateConnectionAsync,
+        // no inner Retry loop). The publish itself then fails with a retriable exception,
+        // sending the publisher into the inter-attempt Task.Delay window.
+        var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
+        channel.Setup(c => c.ExchangeDeclareAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<IDictionary<string, object?>?>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        channel.Setup(c => c.BasicPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                publishStarted.TrySetResult();
+                throw new InvalidOperationException("simulated retriable publish failure");
+            });
+        // Mock channel close so dispose-side teardown does not hit a strict-mock invocation.
+        channel.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        SetField(producer, "_model", channel.Object);
+        SetField(producer, "_connected", true);
+
+        // Keep DisposeAsync responsive — its lock-wait budget should not dominate the observed
+        // wall clock.
+        SetField(producer, "DisposeTimeoutForTests", (TimeSpan?)TimeSpan.FromMilliseconds(50));
+
+        var publishTask = Task.Run(() =>
+            producer.PublishAsync(typeof(TestPayload), new byte[] { 1, 2, 3 }));
+
+        // Wait for the first BasicPublishAsync invocation. The publisher then enters the
+        // catch-when arm: MarkResetRequired + Task.Delay(retrySeconds=1s).
+        await publishStarted.Task;
+
+        // Small buffer so the publisher is definitely inside Task.Delay rather than mid-throw.
+        await Task.Delay(100);
+
+        // Dispose: flips _disposedInt. The next iteration's EnsureConnectedAsync (which runs
+        // OUTSIDE _publishLock) will throw ObjectDisposedException from its disposed pre-check.
+        // Note: DisposeAsync also runs concurrently with whatever Task.Delay the publisher is
+        // still in; that delay shares the publisher's caller token, which is the publish task's
+        // ambient token (CancellationToken.None here), so the delay completes naturally.
+        await producer.DisposeAsync();
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var ex = await Assert.ThrowsAnyAsync<Exception>(async () => await publishTask);
+        sw.Stop();
+
+        // Tolerance: one full retrySeconds=1s for the inter-attempt Task.Delay window the
+        // publisher may already be inside, plus generous headroom for scheduler jitter under
+        // the cgroup CPU quota. Pre-fix this would be ~60s. Anything < 5s proves the disposed
+        // catch fired and short-circuited the retry loop.
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5),
+            $"Publish task took {sw.Elapsed} after dispose; pre-fix this was ~60s. " +
+            "ObjectDisposedException must short-circuit the retry loop, not be treated as retriable.");
+
+        // The surfaced exception is ObjectDisposedException — directly from EnsureConnectedAsync's
+        // disposed pre-check, propagated by the new explicit catch arm.
+        Assert.IsType<ObjectDisposedException>(ex);
     }
 
     // Minimal payload type for PublishAsync's `Type` argument; PublishAsync only uses

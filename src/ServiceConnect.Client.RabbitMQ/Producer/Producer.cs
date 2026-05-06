@@ -34,15 +34,6 @@ public sealed class Producer : IProducer
     internal TimeSpan? DisposeTimeoutForTests;
 
     /// <summary>
-    /// Test seam: routed through to <see cref="ProducerConnection.ReconnectForTests"/>.
-    /// </summary>
-    internal Func<CancellationToken, Task>? ReconnectForTests
-    {
-        get => _producerConnection.ReconnectForTests;
-        set => _producerConnection.ReconnectForTests = value;
-    }
-
-    /// <summary>
     /// Test seam: routed through to <see cref="ProducerConnection.CreateConnectionForTests"/>.
     /// </summary>
     internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests
@@ -115,23 +106,90 @@ public sealed class Producer : IProducer
         await _producerConnection.EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task ExecuteWithConnectionRetryAsync(Func<Task> action, CancellationToken cancellationToken)
+    /// <summary>
+    /// Executes <paramref name="lockedAction"/> under <see cref="_publishLock"/> with retry on
+    /// retriable failures. Critically: <see cref="EnsureConnectedAsync"/> and the inter-attempt
+    /// delay run OUTSIDE the lock, so a slow reconnect cannot block concurrent publishers.
+    /// On retriable failure the lock is released, <see cref="ProducerConnection.MarkResetRequired"/>
+    /// is called, then the next attempt's prologue calls <see cref="EnsureConnectedAsync"/> which
+    /// drives the reconnect under <c>_connectionSemaphore</c>.
+    /// </summary>
+    private async Task ExecuteRetryingPublishAsync(
+        Func<CancellationToken, Task> lockedAction,
+        CancellationToken cancellationToken)
     {
-        try
+        Exception? lastException = null;
+        for (int attempt = 0; attempt <= _retryCount; attempt++)
         {
-            await Retry.DoAsync(
-                action,
-                ex => _producerConnection.ReconnectAsync(ex, cancellationToken),
-                TimeSpan.FromSeconds(_retryTimeInSeconds),
-                _retryCount,
-                IsRetriablePublishException,
-                cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                // EnsureConnectedAsync runs OUTSIDE _publishLock so a slow reconnect (held under
+                // _connectionSemaphore) never serialises concurrent publishers behind it.
+                await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+                await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    // Re-check after acquiring the lock — DisposeAsync may have set _disposedInt
+                    // and torn down the channel while we were waiting.
+                    ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+                    await lockedAction(cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                finally { _publishLock.Release(); }
+            }
+            catch (global::RabbitMQ.Client.Exceptions.PublishException pex)
+            {
+                // Broker-side nack — poison message, not a transport failure. Log and propagate
+                // immediately; retrying would just re-fail against the same policy condition.
+                _logger.LogWarning(pex, "Broker nacked publish: {Reason}", pex.Message);
+                throw;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (TimeoutException)
+            {
+                // PublishWithTimeoutAsync already flagged MarkResetRequired before throwing —
+                // do not double-flag and do not retry. The next publish's EnsureConnectedAsync
+                // consumes the flag and rebuilds the channel.
+                throw;
+            }
+            catch (ObjectDisposedException)
+            {
+                // The producer was disposed mid-loop: EnsureConnectedAsync (or the post-lock
+                // disposed re-check) sees _disposedInt flipped and throws. Retrying would burn
+                // the full retryCount * retrySeconds budget against a permanently dead instance
+                // (default 60 * 10s = 10 min). Pre-restructure this could not happen because
+                // _publishLock spanned every retry attempt; now the lock is released between
+                // attempts so dispose can race in. Mirror the predicate used in
+                // ProducerConnection.EnsureConnectedAsync's Retry.DoAsync.
+                throw;
+            }
+            catch (Exception ex) when (IsRetriablePublishException(ex))
+            {
+                lastException = ex;
+                _producerConnection.MarkResetRequired();
+                if (attempt < _retryCount)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Publish attempt {Attempt}/{Total} failed; will retry after {Delay}s",
+                        attempt + 1,
+                        _retryCount + 1,
+                        _retryTimeInSeconds);
+                    // Inter-attempt delay also runs OUTSIDE the lock so other publishers can interleave.
+                    // The delay is intentionally fixed (not exponential) — connection-create inside
+                    // EnsureConnectedAsync already does its own exponential backoff via Retry.DoAsync,
+                    // so layering exponentials would double-grow the wall-clock budget.
+                    await Task.Delay(TimeSpan.FromSeconds(_retryTimeInSeconds), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+                throw;
+            }
         }
-        catch (global::RabbitMQ.Client.Exceptions.PublishException pex)
-        {
-            _logger.LogWarning(pex, "Broker nacked publish: {Reason}", pex.Message);
-            throw;
-        }
+
+        // Defensive: every loop arm either returns or throws; this is a regression guard.
+        throw lastException ?? new InvalidOperationException(
+            "ExecuteRetryingPublishAsync exited without success or exception.");
     }
 
     // Broker-side nacks (PublishException) are usually poison messages — rejected by a
@@ -181,23 +239,16 @@ public sealed class Producer : IProducer
         }
 
         // Capture timestamp before EnsureConnectedAsync — connect latency is part of the
-        // user-visible publish duration. exchangeName is resolved mid-method (after the lock
-        // and disposed re-check); see EmitPublishMetrics for the empty-destination fallback.
+        // user-visible publish duration. exchangeName is resolved inside the locked action;
+        // see EmitPublishMetrics for the empty-destination fallback.
         var startTimestamp = Stopwatch.GetTimestamp();
         string exchangeName = string.Empty;
         bool succeeded = false;
         Exception? failure = null;
         try
         {
-            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-            await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+            await ExecuteRetryingPublishAsync(async ct =>
             {
-                // Re-check after acquiring the lock — DisposeAsync may have set _disposedInt
-                // and torn down the channel while we were waiting. Without this check the publish
-                // would NRE on the missing channel.
-                ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
-
                 var messageHeaders = _headerBuilder.BuildHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
                 var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
 
@@ -205,23 +256,18 @@ public sealed class Producer : IProducer
                 // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
                 exchangeName = GetExchangeName(type);
 
-                await ExecuteWithConnectionRetryAsync(async () =>
-                {
-                    await _producerConnection.EnsureExchangeDeclaredAsync(exchangeName, ExchangeType.Fanout, cancellationToken).ConfigureAwait(false);
+                await _producerConnection.EnsureExchangeDeclaredAsync(exchangeName, ExchangeType.Fanout, ct).ConfigureAwait(false);
+                await PublishWithTimeoutAsync(
+                    _producerConnection.Channel,
+                    exchangeName,
+                    string.Empty,
+                    false,
+                    basicProperties,
+                    body,
+                    ct).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
 
-                    await PublishWithTimeoutAsync(
-                        _producerConnection.Channel,
-                        exchangeName,
-                        string.Empty,
-                        false,
-                        basicProperties,
-                        body,
-                        cancellationToken).ConfigureAwait(false);
-                }, cancellationToken).ConfigureAwait(false);
-
-                succeeded = true;
-            }
-            finally { _publishLock.Release(); }
+            succeeded = true;
         }
         catch (Exception ex)
         {
@@ -257,89 +303,84 @@ public sealed class Producer : IProducer
                 $"Message size {body.Length} bytes exceeds maximum allowed size of {MaximumMessageSize} bytes.");
         }
 
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        if (!_queueConfiguration.TryGetQueueMapping(type, out IReadOnlyList<string>? endPoints))
         {
-            // Re-check disposed flag after winning the lock; see PublishAsync.
-            ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+            throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
+        }
 
-            if (!_queueConfiguration.TryGetQueueMapping(type, out IReadOnlyList<string>? endPoints))
+        // Build base headers once outside the loop. DestinationAddress, MessageId, and TimeSent
+        // are re-stamped per endpoint because each on-wire message is logically distinct.
+        // The aliasing-safety invariant: publisher confirms gate the prior await before the
+        // next iteration mutates baseHeaders, so reuse is safe. CorrelationId is the
+        // cross-fan-out correlator and is NOT re-minted here.
+        var baseHeaders = _headerBuilder.BuildHeaders(type, headers, string.Empty, "Send");
+        List<Exception>? endpointFailures = null;
+        foreach (string endPoint in endPoints)
+        {
+            baseHeaders[HeaderKeys.DestinationAddress] = endPoint;
+            baseHeaders[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+            baseHeaders[HeaderKeys.TimeSent] = OutboundHeaderBuilder.FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
+            var basicProperties = _headerBuilder.BuildBasicProperties(baseHeaders);
+
+            // Per-endpoint metric scope: each delivery on the fan-out is a logically
+            // independent publish — record duration + success/error individually so the
+            // tag set carries the correct destination queue and partial-fan-out failures
+            // are visible per endpoint.
+            var endpointStart = Stopwatch.GetTimestamp();
+            bool endpointSucceeded = false;
+            Exception? endpointFailure = null;
+            try
             {
-                throw new InvalidOperationException($"No queue mapping configured for message type '{type.FullName}'. Register a mapping via AddQueueMapping.");
+                // Each endpoint is independently retriable; ExecuteRetryingPublishAsync releases
+                // _publishLock between endpoints so other publishers may interleave. The
+                // aliasing invariant still holds — publisher confirms gate each endpoint's
+                // await before the next iteration mutates baseHeaders.
+                await ExecuteRetryingPublishAsync(async ct =>
+                {
+                    await PublishWithTimeoutAsync(
+                        _producerConnection.Channel,
+                        string.Empty,
+                        endPoint,
+                        false,
+                        basicProperties,
+                        body,
+                        ct).ConfigureAwait(false);
+                }, cancellationToken).ConfigureAwait(false);
+                endpointSucceeded = true;
             }
-
-            // Build base headers once outside the loop; DestinationAddress, MessageId, and
-            // TimeSent are re-stamped per endpoint so each on-wire message has a distinct
-            // identity. CorrelationId (Bus-stamped, copied in via BuildHeaders) is the
-            // cross-fan-out correlator and is deliberately NOT re-minted here.
-            var baseHeaders = _headerBuilder.BuildHeaders(type, headers, string.Empty, "Send");
-            List<Exception>? endpointFailures = null;
-            foreach (string endPoint in endPoints)
+            catch (OperationCanceledException ex)
             {
-                // Each delivery is an independent on-wire message: distinct MessageId + TimeSent per
-                // endpoint. CorrelationId (Bus-stamped, copied in via BuildHeaders) is the cross-fan-out
-                // correlator and is deliberately NOT re-minted.
-                baseHeaders[HeaderKeys.DestinationAddress] = endPoint;
-                baseHeaders[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
-                baseHeaders[HeaderKeys.TimeSent] = OutboundHeaderBuilder.FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime);
-                var basicProperties = _headerBuilder.BuildBasicProperties(baseHeaders);
-                // Per-endpoint metric scope: each delivery on the fan-out is a logically
-                // independent publish — record duration + success/error individually so the
-                // tag set carries the correct destination queue and partial-fan-out failures
-                // are visible per endpoint.
-                var endpointStart = Stopwatch.GetTimestamp();
-                bool endpointSucceeded = false;
-                Exception? endpointFailure = null;
-                try
+                // Cancellation aborts subsequent endpoints, but if prior endpoints already
+                // failed in this fan-out, those failures must NOT be lost: aggregate them
+                // with the OCE. With no prior failures, OCE propagates plain so caller-side
+                // cancellation handlers see the canonical type.
+                endpointFailure = ex;
+                if (endpointFailures is { Count: > 0 })
                 {
-                    await ExecuteWithConnectionRetryAsync(
-                        () => PublishWithTimeoutAsync(
-                            _producerConnection.Channel,
-                            string.Empty,
-                            endPoint,
-                            false,
-                            basicProperties,
-                            body,
-                            cancellationToken).AsTask(),
-                        cancellationToken).ConfigureAwait(false);
-                    endpointSucceeded = true;
+                    endpointFailures.Add(ex);
+                    throw new AggregateException(
+                        $"One or more endpoints failed during fan-out send for message type '{type.FullName}', and a later endpoint was cancelled.",
+                        endpointFailures);
                 }
-                catch (OperationCanceledException ex)
-                {
-                    // Cancellation aborts subsequent endpoints, but if prior endpoints already
-                    // failed in this fan-out, those failures must NOT be lost: aggregate them
-                    // with the OCE. With no prior failures, OCE propagates plain so caller-side
-                    // cancellation handlers see the canonical type.
-                    endpointFailure = ex;
-                    if (endpointFailures is { Count: > 0 })
-                    {
-                        endpointFailures.Add(ex);
-                        throw new AggregateException(
-                            $"One or more endpoints failed during fan-out send for message type '{type.FullName}', and a later endpoint was cancelled.",
-                            endpointFailures);
-                    }
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    endpointFailure = ex;
-                    (endpointFailures ??= []).Add(ex);
-                }
-                finally
-                {
-                    EmitPublishMetrics(endpointStart, endPoint, endpointSucceeded, endpointFailure);
-                }
+                throw;
             }
-
-            if (endpointFailures is { Count: > 0 })
+            catch (Exception ex)
             {
-                throw new AggregateException(
-                    $"One or more endpoints failed during fan-out send for message type '{type.FullName}'.",
-                    endpointFailures);
+                endpointFailure = ex;
+                (endpointFailures ??= []).Add(ex);
+            }
+            finally
+            {
+                EmitPublishMetrics(endpointStart, endPoint, endpointSucceeded, endpointFailure);
             }
         }
-        finally { _publishLock.Release(); }
+
+        if (endpointFailures is { Count: > 0 })
+        {
+            throw new AggregateException(
+                $"One or more endpoints failed during fan-out send for message type '{type.FullName}'.",
+                endpointFailures);
+        }
     }
 
     /// <summary>
@@ -370,29 +411,21 @@ public sealed class Producer : IProducer
         Exception? failure = null;
         try
         {
-            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-            await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+            await ExecuteRetryingPublishAsync(async ct =>
             {
-                // Re-check disposed flag after winning the lock; see PublishAsync.
-                ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
-
                 var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send");
                 var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
-                await ExecuteWithConnectionRetryAsync(
-                    () => PublishWithTimeoutAsync(
-                        _producerConnection.Channel,
-                        string.Empty,
-                        endPoint,
-                        false,
-                        basicProperties,
-                        body,
-                        cancellationToken).AsTask(),
-                    cancellationToken).ConfigureAwait(false);
+                await PublishWithTimeoutAsync(
+                    _producerConnection.Channel,
+                    string.Empty,
+                    endPoint,
+                    false,
+                    basicProperties,
+                    body,
+                    ct).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
 
-                succeeded = true;
-            }
-            finally { _publishLock.Release(); }
+            succeeded = true;
         }
         catch (Exception ex)
         {
@@ -433,29 +466,21 @@ public sealed class Producer : IProducer
         Exception? failure = null;
         try
         {
-            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-            await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
+            await ExecuteRetryingPublishAsync(async ct =>
             {
-                // Re-check disposed flag after winning the lock; see PublishAsync.
-                ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
-
                 var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
                 var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
-                await ExecuteWithConnectionRetryAsync(
-                    () => PublishWithTimeoutAsync(
-                        _producerConnection.Channel,
-                        string.Empty,
-                        endPoint,
-                        false,
-                        basicProperties,
-                        packet,
-                        cancellationToken).AsTask(),
-                    cancellationToken).ConfigureAwait(false);
+                await PublishWithTimeoutAsync(
+                    _producerConnection.Channel,
+                    string.Empty,
+                    endPoint,
+                    false,
+                    basicProperties,
+                    packet,
+                    ct).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
 
-                succeeded = true;
-            }
-            finally { _publishLock.Release(); }
+            succeeded = true;
         }
         catch (Exception ex)
         {

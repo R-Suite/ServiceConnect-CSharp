@@ -60,10 +60,9 @@ internal sealed class ProducerConnection
 
     public bool HasAttemptedConnection => Volatile.Read(ref _hasAttemptedConnection) != 0;
 
-    // Test hooks consumed by Producer's pass-through properties. Setting these on
-    // Producer routes through to here so existing test code (`producer.ReconnectForTests = ...`)
+    // Test hook consumed by Producer's pass-through property. Setting this on Producer
+    // routes through to here so existing test code (`producer.CreateConnectionForTests = ...`)
     // is unchanged.
-    internal Func<CancellationToken, Task>? ReconnectForTests;
     internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests;
 
     public ProducerConnection(ITransportConfiguration transportConfiguration, ILogger logger)
@@ -134,8 +133,9 @@ internal sealed class ProducerConnection
 
     /// <summary>
     /// Marks the connection for reset on the next call to <see cref="EnsureConnectedAsync"/>.
-    /// Synchronous and idempotent. Used by Producer.PublishWithTimeoutAsync to avoid awaiting
-    /// ReconnectAsync while holding the publish lock.
+    /// Synchronous and idempotent. Used by Producer's publish-timeout and retry paths to
+    /// defer the slow teardown+recreate to the next prologue, where it runs under
+    /// <c>_connectionSemaphore</c> rather than <c>_publishLock</c>.
     /// </summary>
     internal void MarkResetRequired() => Interlocked.Exchange(ref _resetRequired, 1);
 
@@ -150,28 +150,29 @@ internal sealed class ProducerConnection
         // a reconnect path (reset-required) correctly flips the flag.
         Interlocked.Exchange(ref _hasAttemptedConnection, 1);
 
-        // Atomically consume the reset-required flag set by a prior publish timeout. The
-        // ReconnectAsync below holds _connectionSemaphore (NOT the producer's _publishLock),
-        // so concurrent publishers waiting on the publish lock are not blocked here. Only one
-        // caller succeeds at the Exchange — the rest see flag == 0 and proceed normally.
-        if (Interlocked.Exchange(ref _resetRequired, 0) == 1)
-        {
-            await ReconnectAsync(
-                new InvalidOperationException("Channel reset required after publish timeout"),
-                cancellationToken).ConfigureAwait(false);
-            // ReconnectAsync calls EnsureConnectedAsync internally on the no-test-hook path, so
-            // we are already healthy on return. Fall through for explicit safety in case the
-            // test-hook path replaces ReconnectAsync.
-        }
-
-        if (IsHealthy())
+        // Lock-free fast path: if no reset is pending and the channel is healthy, skip the
+        // semaphore entirely. Concurrent publishers all hit this path on the steady-state.
+        if (Volatile.Read(ref _resetRequired) == 0 && IsHealthy())
         {
             return;
         }
 
+        // Acquire the semaphore ONCE and hold it across teardown (if reset was required) AND
+        // create. Without this, a concurrent publisher's IsHealthy() peek could squeak through
+        // between teardown's release and create's re-acquire and observe the stale-but-still-
+        // open channel before the new one replaced it.
         await _connectionSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            // Atomically consume the reset flag inside the semaphore. The whole reset-and-recreate
+            // runs under the lock so concurrent peekers see either pre-reset or post-create state,
+            // never the in-between half-open window.
+            if (Interlocked.Exchange(ref _resetRequired, 0) == 1)
+            {
+                await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+                _declaredExchanges.Clear();
+            }
+
             if (IsHealthy())
             {
                 return;
@@ -214,27 +215,6 @@ internal sealed class ProducerConnection
 
         await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null, false, false, cancellationToken).ConfigureAwait(false);
         _declaredExchanges[exchangeName] = true;
-    }
-
-    /// <summary>
-    /// Tears down the current connection/channel and re-establishes them. Used after a
-    /// publish-time failure (transport error, channel error, publish timeout) to clear
-    /// any half-open state before retrying.
-    /// </summary>
-    public async Task ReconnectAsync(Exception ex, CancellationToken cancellationToken)
-    {
-        _logger.LogError(ex, "Error publishing message");
-
-        await DisposeConnectionAsync(cancellationToken).ConfigureAwait(false);
-        _declaredExchanges.Clear();
-
-        if (ReconnectForTests != null)
-        {
-            await ReconnectForTests(cancellationToken).ConfigureAwait(false);
-            return;
-        }
-
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -376,46 +356,6 @@ internal sealed class ProducerConnection
             await DisposeModelAsync(model).ConfigureAwait(false);
             await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
             throw;
-        }
-    }
-
-    private async Task DisposeConnectionAsync(CancellationToken cancellationToken)
-    {
-        var connectionLockAcquired = false;
-        try
-        {
-            // Bound the wait: a wedged in-flight (re)connect cannot stall this dispose.
-            // Token honours the publish path's cancellation; 30s ceiling keeps callers that
-            // pass a never-cancelled token from blocking indefinitely.
-            // See learn/operations/cancellation for the discipline.
-            connectionLockAcquired = await _connectionSemaphore
-                .WaitAsync(TimeSpan.FromSeconds(30), cancellationToken)
-                .ConfigureAwait(false);
-            if (!connectionLockAcquired)
-            {
-                _logger.LogWarning(
-                    "ProducerConnection.DisposeConnectionAsync timed out waiting for the connection semaphore; forcing teardown.");
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogDebug(
-                "ProducerConnection.DisposeConnectionAsync cancelled while waiting for the semaphore; forcing teardown.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "ProducerConnection.DisposeConnectionAsync semaphore-wait failed; forcing teardown");
-        }
-        finally
-        {
-            // Best-effort teardown ALWAYS runs, whether or not we held the lock — matches CloseAsync.
-            try { await TearDownChannelAndConnectionAsync().ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogWarning(ex, "ProducerConnection teardown after dispose failed"); }
-
-            if (connectionLockAcquired)
-            {
-                _connectionSemaphore.Release();
-            }
         }
     }
 
