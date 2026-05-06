@@ -16,7 +16,7 @@ public class AggregatorRegistryTests
             new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) }
         };
         var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
-        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
 
         Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
         Assert.Equal(typeof(ArgFoo), descriptor!.MessageType);
@@ -30,7 +30,7 @@ public class AggregatorRegistryTests
         var sp = new ServiceCollection().BuildServiceProvider();
         var registry = new AggregatorRegistry(
             [],
-            sp,
+            sp.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<AggregatorRegistry>.Instance);
 
         Assert.False(registry.TryGet(typeof(ArgFoo), out var descriptor));
@@ -45,7 +45,7 @@ public class AggregatorRegistryTests
             new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) }
         };
         var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
-        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
 
         Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
         Assert.Equal(42, descriptor!.BatchSize);
@@ -59,7 +59,7 @@ public class AggregatorRegistryTests
             new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) }
         };
         var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
-        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
 
         Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
         Assert.Equal(TimeSpan.FromSeconds(7), descriptor!.Timeout);
@@ -79,7 +79,7 @@ public class AggregatorRegistryTests
         var sp = services.BuildServiceProvider();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance));
+            new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance));
         Assert.Contains(nameof(ArgFoo), ex.Message);
     }
 
@@ -94,7 +94,7 @@ public class AggregatorRegistryTests
         var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
 
         // Same (MessageType, HandlerType) pair twice must not throw.
-        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
         Assert.True(registry.TryGet(typeof(ArgFoo), out _));
     }
 
@@ -106,7 +106,7 @@ public class AggregatorRegistryTests
             new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooMessageHandler) }
         };
         var sp = new ServiceCollection().BuildServiceProvider();
-        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
 
         Assert.False(registry.TryGet(typeof(ArgFoo), out _));
     }
@@ -119,7 +119,7 @@ public class AggregatorRegistryTests
             new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) }
         };
         var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
-        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
 
         Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
 
@@ -139,7 +139,7 @@ public class AggregatorRegistryTests
             new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) }
         };
         var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
-        var registry = new AggregatorRegistry(refs, sp, NullLogger<AggregatorRegistry>.Instance);
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
 
         Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
 

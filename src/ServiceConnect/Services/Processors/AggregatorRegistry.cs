@@ -15,14 +15,19 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
 
     internal AggregatorRegistry(
         IList<HandlerReference> handlerReferences,
-        IServiceProvider serviceProvider,
+        IServiceScopeFactory scopeFactory,
         ILogger<AggregatorRegistry> logger)
     {
         ArgumentNullException.ThrowIfNull(handlerReferences);
-        ArgumentNullException.ThrowIfNull(serviceProvider);
+        ArgumentNullException.ThrowIfNull(scopeFactory);
         ArgumentNullException.ThrowIfNull(logger);
 
         var builder = new Dictionary<Type, (AggregatorDescriptor Descriptor, Type HandlerType)>();
+
+        // Single short-lived scope: aggregator instances are only consulted for BatchSize/Timeout
+        // (configuration constants). Disposing the scope before the constructor returns prevents
+        // captive scoped dependencies and disposable aggregators being tracked by the root provider.
+        using var scope = scopeFactory.CreateScope();
         foreach (var href in handlerReferences)
         {
             var aggregatorBaseType = FindAggregatorBaseType(href.HandlerType, href.MessageType);
@@ -43,7 +48,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
                     $"Only one Aggregator<T> may be registered per message type; found '{existing.HandlerType.FullName}' and '{href.HandlerType.FullName}'.");
             }
 
-            var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, serviceProvider);
+            var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, scope.ServiceProvider);
             builder[href.MessageType] = (descriptor, href.HandlerType);
 
             if (logger.IsEnabled(LogLevel.Debug))

@@ -19,7 +19,7 @@ public class AggregatorProcessorFlushAfterDisposeTests
         var provider = services.BuildServiceProvider();
         var registry = new AggregatorRegistry(
             [],
-            provider,
+            provider.GetRequiredService<IServiceScopeFactory>(),
             NullLogger<AggregatorRegistry>.Instance);
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         var scopeAccessor = new ConsumeScopeAccessor();

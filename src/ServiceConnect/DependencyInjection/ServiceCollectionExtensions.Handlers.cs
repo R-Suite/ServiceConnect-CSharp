@@ -86,10 +86,13 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton<IHandlerRegistry>(sp =>
             sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>());
 
-        // Aggregator descriptor registry (eagerly built, materializes each aggregator once to capture BatchSize/Timeout)
+        // Aggregator descriptor registry (eagerly built, materializes each aggregator once to capture BatchSize/Timeout).
+        // Resolves via IServiceScopeFactory so transient/scoped aggregator dependencies are not
+        // held captive by the root provider for the host's lifetime — the temporary scope is
+        // disposed inside the registry constructor.
         services.TryAddSingleton<Services.Processors.AggregatorRegistry>(sp => new Services.Processors.AggregatorRegistry(
             sp.GetRequiredService<IList<HandlerReference>>(),
-            sp,
+            sp.GetRequiredService<IServiceScopeFactory>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.AggregatorRegistry>>()));
         services.AddSingleton<IHandlerRegistry>(sp =>
             sp.GetRequiredService<Services.Processors.AggregatorRegistry>());
