@@ -13,6 +13,7 @@ internal static class TimeoutHeaderPersistence
         HeaderKeys.TypeName,
         HeaderKeys.FullTypeName,
         HeaderKeys.MessageId,
+        HeaderKeys.CorrelationId,
         HeaderKeys.DestinationAddress,
         HeaderKeys.SourceAddress,
         HeaderKeys.RequestMessageId,
@@ -31,6 +32,8 @@ internal static class TimeoutHeaderPersistence
         HeaderKeys.DestinationMachine,
         HeaderKeys.Redelivered,
         HeaderKeys.ConsumerType,
+        HeaderKeys.RetryCount,
+        HeaderKeys.Priority,
         HeaderKeys.Language,
         HeaderKeys.Exception,
     ];
