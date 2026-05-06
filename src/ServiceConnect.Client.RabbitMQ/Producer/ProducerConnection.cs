@@ -70,7 +70,15 @@ internal sealed class ProducerConnection
         _hosts = transportConfiguration.Host.Split(',');
         _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, DefaultRetryCount, Convert.ToUInt16);
         _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, DefaultRetryTimeInSeconds, Convert.ToUInt16);
-        _publisherAcks = GetSetting(settings, RabbitMQSettingKeys.PublisherAcknowledgements, false, Convert.ToBoolean);
+        // Default flipped to true so callers get publisher-confirm gating out of the box.
+        // Two safety properties depend on it: PublishWithTimeoutAsync's timeout actually
+        // enforces against a stalled broker, and OutboundHeaderBuilder.BuildBasicProperties'
+        // aliasing invariant on the SendAsync(Type) fan-out (the broker ack gates the
+        // next iteration's re-stamping of baseHeaders) holds. Explicit opt-out via
+        // SetClientSetting("PublisherAcknowledgements", false) is still permitted, but the
+        // Producer constructor rejects the dangerous combination of acks-off + nonzero
+        // PublishTimeout at startup.
+        _publisherAcks = GetSetting(settings, RabbitMQSettingKeys.PublisherAcknowledgements, true, Convert.ToBoolean);
     }
 
     private static T GetSetting<T>(IReadOnlyDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)

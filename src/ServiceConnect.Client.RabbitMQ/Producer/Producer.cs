@@ -73,6 +73,25 @@ public sealed class Producer : IProducer
         _publishTimeout = GetSetting(settings, RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromSeconds(30), v => (TimeSpan)v);
         _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, (ushort)60, Convert.ToUInt16);
         _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, (ushort)10, Convert.ToUInt16);
+
+        // Reject the dangerous combination: explicit publisher-acks=false with a finite
+        // publish timeout is silent breakage. Without confirms, BasicPublishAsync returns
+        // as soon as the frame is on the wire — the linked CTS in PublishWithTimeoutAsync
+        // never fires for a stalled broker, so the configured timeout has no effect.
+        // Acks-on (the default) is the safe path; an explicit acks-off must accompany
+        // PublishTimeout=Zero or Timeout.InfiniteTimeSpan.
+        var publisherAcks = GetSetting(settings, RabbitMQSettingKeys.PublisherAcknowledgements, true, Convert.ToBoolean);
+        if (!publisherAcks && _publishTimeout > TimeSpan.Zero && _publishTimeout != Timeout.InfiniteTimeSpan)
+        {
+            throw new InvalidOperationException(
+                $"Conflicting RabbitMQ producer configuration: " +
+                $"{RabbitMQSettingKeys.PublisherAcknowledgements}=false but " +
+                $"{RabbitMQSettingKeys.PublishTimeout}={_publishTimeout.TotalSeconds:0.###}s. " +
+                "Without publisher acknowledgements, BasicPublishAsync returns once the frame is on the wire, " +
+                "so the publish timeout never fires for a stalled broker. " +
+                $"Either remove the {RabbitMQSettingKeys.PublisherAcknowledgements}=false override (the default, true, is safe), " +
+                $"or set {RabbitMQSettingKeys.PublishTimeout} to Timeout.InfiniteTimeSpan / TimeSpan.Zero.");
+        }
     }
 
     private static T GetSetting<T>(IReadOnlyDictionary<string, object> settings, string key, T defaultValue, Func<object, T> converter)
