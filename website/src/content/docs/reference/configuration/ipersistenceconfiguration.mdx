@@ -197,7 +197,7 @@ The MongoDB provider enforces several requirements at startup. Violating them th
 
 ### WriteConcern requirement
 
-`MongoDbProcessManagerFinder` requires the `IMongoClient` to be configured with an acknowledged write concern (`w:1` or higher). If the client's `WriteConcern` is `WriteConcern.Unacknowledged` (w:0), startup throws `InvalidOperationException`.
+`MongoDbProcessManagerFinder`, `MongoDbTimeoutStore`, and `MongoDbAggregatorPersistor` each require the `IMongoClient` to be configured with an acknowledged write concern (`w:1` or higher). If the client's `WriteConcern` is `WriteConcern.Unacknowledged` (w:0), construction throws `InvalidOperationException` — fail-fast at startup before any consumer host begins polling.
 
 ```csharp
 // Correct — acknowledged writes (default for most connection strings)
@@ -209,7 +209,7 @@ settings.WriteConcern = WriteConcern.Unacknowledged;
 var client = new MongoClient(settings);
 ```
 
-Unacknowledged writes disable the optimistic concurrency version checks that guard against lost saga updates. Rejecting w:0 at startup prevents silent data corruption.
+Unacknowledged writes disable the optimistic concurrency version checks that guard against lost saga updates, and silently no-op-succeed lock-aware delete/release operations in `MongoDbTimeoutStore` and `MongoDbAggregatorPersistor` — converting a stale-lease no-op into an apparent successful delete and allowing duplicate timeout dispatch or aggregate dispatch. Rejecting w:0 at startup prevents silent data corruption.
 
 ### Guid representation requirement
 

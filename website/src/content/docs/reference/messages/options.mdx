@@ -149,6 +149,10 @@ Gets the request timeout, in milliseconds.
 
 **Remarks.** Defaults to `DefaultTimeoutMs` (10,000) — the parameterless constructor seeds the field, so a `new RequestOptions()` value already carries the default. For single-reply requests, the call faults if no reply arrives before the deadline. For multi-requests, see `ExpectedReplyCount` for how timeout and count interact.
 
+<Aside type="caution" title="Don't pass default(RequestOptions)">
+  C# language semantics for `default(T)` on a struct skip the parameterless constructor, leaving `Timeout` at `0`. The request-reply path rejects this with `ArgumentOutOfRangeException` rather than silently expiring after 0 ms. Use `RequestOptions.Default` or `new RequestOptions()` instead.
+</Aside>
+
 ---
 
 ### `ExpectedReplyCount`
