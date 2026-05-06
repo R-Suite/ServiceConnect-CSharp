@@ -56,6 +56,7 @@ public static partial class ServiceCollectionExtensions
         ValidateTypesRegistered(services, pipeline.BeforeConsumingFilters, "Before-consuming filter");
         ValidateTypesRegistered(services, pipeline.AfterConsumingFilters, "After-consuming filter");
         ValidateTypesRegistered(services, pipeline.OutgoingFilters, "Outgoing filter");
+        ValidateTypesRegistered(services, pipeline.OnConsumedSuccessfullyFilters, "On-consumed-successfully filter");
     }
 
     private static void ValidateTypesRegistered(IServiceCollection services, IReadOnlyList<Type> types, string role)
