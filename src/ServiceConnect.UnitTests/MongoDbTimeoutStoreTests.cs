@@ -95,6 +95,7 @@ public class MongoDbTimeoutStoreTests
             .Returns(collection.Object);
 
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
 
         var store = new MongoDbTimeoutStore(
@@ -127,6 +128,7 @@ public class MongoDbTimeoutStoreTests
             .Returns(collection.Object);
 
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
 
         return new MongoDbTimeoutStore(
@@ -389,6 +391,7 @@ public class MongoDbTimeoutStoreTests
         // would either mean claims never expire (no recovery path for a
         // crashed worker) or every claim is reaped before dispatch finishes.
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(Mock.Of<IMongoDatabase>());
 
         Assert.Throws<ArgumentOutOfRangeException>(() => new MongoDbTimeoutStore(
@@ -435,6 +438,7 @@ public class MongoDbTimeoutStoreTests
         database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null)).Returns(collection.Object);
 
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
 
         var store = new MongoDbTimeoutStore(
@@ -465,6 +469,7 @@ public class MongoDbTimeoutStoreTests
         // either disable the per-poll cap (claiming the entire backlog at once)
         // or make the claim pass vacuous — defeating the purpose of the limit.
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(Mock.Of<IMongoDatabase>());
 
         Assert.Throws<ArgumentOutOfRangeException>(() => new MongoDbTimeoutStore(
@@ -511,6 +516,7 @@ public class MongoDbTimeoutStoreTests
         collection.SetupGet(c => c.Indexes).Returns(indexes.Object);
 
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
         // Make StartSessionAsync throw NotSupportedException so the store
         // falls back to the unsessioned path — keeps the test independent

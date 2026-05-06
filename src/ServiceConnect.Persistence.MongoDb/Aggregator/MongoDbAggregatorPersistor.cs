@@ -75,6 +75,19 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _timeProvider = timeProvider ?? TimeProvider.System;
 
+        // Aggregator state is correctness-sensitive: w:0 makes RemoveDataAsync's IsAcknowledged
+        // gate silently succeed, breaking the documented ConcurrencyException contract on
+        // stale-version updates and allowing duplicate aggregate dispatch. Reject loudly at
+        // startup, mirroring MongoDbProcessManagerFinder.
+        if (!mongoClient.Settings.WriteConcern.IsAcknowledged)
+        {
+            throw new InvalidOperationException(
+                "MongoDbAggregatorPersistor requires an acknowledged WriteConcern (w:1 or higher). " +
+                "WriteConcern.Unacknowledged (w:0) breaks the IAggregatorPersistor.RemoveDataAsync " +
+                "ConcurrencyException contract and allows duplicate aggregate dispatch. " +
+                "Configure mongoClient.Settings.WriteConcern to a value where IsAcknowledged is true.");
+        }
+
         try
         {
             var database = mongoClient.GetDatabase(options.DatabaseName);

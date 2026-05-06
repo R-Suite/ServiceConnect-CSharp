@@ -77,6 +77,9 @@ public class MongoDbAggregatorPersistorRemoveDataDistinctionTests
         var registry = new Mock<IMessageTypeRegistry>();
 
         mockClient
+            .SetupGet(c => c.Settings)
+            .Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
+        mockClient
             .Setup(c => c.GetDatabase(It.IsAny<string>(), It.IsAny<MongoDatabaseSettings>()))
             .Returns(mockDatabase.Object);
 

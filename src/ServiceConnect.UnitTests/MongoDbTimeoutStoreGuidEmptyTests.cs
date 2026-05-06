@@ -28,6 +28,7 @@ public class MongoDbTimeoutStoreGuidEmptyTests
         database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null)).Returns(collection.Object);
 
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
 
         return new MongoDbTimeoutStore(

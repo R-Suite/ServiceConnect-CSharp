@@ -96,6 +96,9 @@ public class MongoDbAggregatorPersistorIndexCacheTests
         var mockIndexManager = new Mock<IMongoIndexManager<MongoDbAggregatorPersistor.AggregatorDocument>>();
 
         mockClient
+            .SetupGet(c => c.Settings)
+            .Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
+        mockClient
             .Setup(c => c.GetDatabase(It.IsAny<string>(), It.IsAny<MongoDatabaseSettings>()))
             .Returns(mockDatabase.Object);
 

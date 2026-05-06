@@ -47,6 +47,7 @@ public class MongoDbTimeoutStoreLeaseFilterTests
             .Returns(collection.Object);
 
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
         // Deterministically take the unsessioned path; standalone/older servers don't support
         // sessions, and we don't need session plumbing to test filter predicates.

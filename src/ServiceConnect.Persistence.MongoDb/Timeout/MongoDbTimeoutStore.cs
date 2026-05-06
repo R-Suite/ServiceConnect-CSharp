@@ -63,6 +63,21 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
         _lockLeaseDuration = options.TimeoutLockLeaseDuration;
 
+        // Timeout dispatch is correctness-sensitive: w:0 makes RemoveDispatchedTimeoutAsync /
+        // ReleaseDispatchedTimeoutAsync return result.IsAcknowledged==false for every call,
+        // and the no-op-detection branches that gate on IsAcknowledged become silent
+        // successes — so a stale-lease no-op delete looks like a successful delete and the
+        // reaper hands the same row to another worker. Reject loudly at startup, mirroring
+        // MongoDbProcessManagerFinder.
+        if (!mongoClient.Settings.WriteConcern.IsAcknowledged)
+        {
+            throw new InvalidOperationException(
+                "MongoDbTimeoutStore requires an acknowledged WriteConcern (w:1 or higher). " +
+                "WriteConcern.Unacknowledged (w:0) makes lock-aware delete/release operations " +
+                "silently no-op-succeed, allowing duplicate timeout dispatch. " +
+                "Configure mongoClient.Settings.WriteConcern to a value where IsAcknowledged is true.");
+        }
+
         try
         {
             _mongoDatabase = mongoClient.GetDatabase(options.DatabaseName);

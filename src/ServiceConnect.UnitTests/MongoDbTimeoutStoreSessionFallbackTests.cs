@@ -69,6 +69,7 @@ public class MongoDbTimeoutStoreSessionFallbackTests
         database.Setup(d => d.GetCollection<TimeoutData>("Timeouts", null)).Returns(collection.Object);
 
         var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test", null)).Returns(database.Object);
         // Throw a non-NotSupportedException MongoException to verify the broadened fallback.
         client.Setup(c => c.StartSessionAsync(It.IsAny<ClientSessionOptions>(), It.IsAny<CancellationToken>()))

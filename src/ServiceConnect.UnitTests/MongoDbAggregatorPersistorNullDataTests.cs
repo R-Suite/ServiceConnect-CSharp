@@ -26,6 +26,7 @@ public class MongoDbAggregatorPersistorNullDataTests
         var database = new Mock<IMongoDatabase>();
         var collection = new Mock<IMongoCollection<MongoDbAggregatorPersistor.AggregatorDocument>>();
 
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
         client.Setup(c => c.GetDatabase("test-db", It.IsAny<MongoDatabaseSettings>()))
             .Returns(database.Object);
         database.Setup(d => d.GetCollection<MongoDbAggregatorPersistor.AggregatorDocument>(
