@@ -307,12 +307,18 @@ public sealed class Producer : IProducer
                 }
                 catch (OperationCanceledException ex)
                 {
-                    // Cancellation propagates directly — never wrapped, never aggregated.
-                    // endpointFailure is set so the finally's metric emit matches the
-                    // single-endpoint SendAsync(string) path (cancel-as-failure metric with
-                    // error.type=OperationCanceledException). Subsequent endpoints are not
-                    // attempted.
+                    // Cancellation aborts subsequent endpoints, but if prior endpoints already
+                    // failed in this fan-out, those failures must NOT be lost: aggregate them
+                    // with the OCE. With no prior failures, OCE propagates plain so caller-side
+                    // cancellation handlers see the canonical type.
                     endpointFailure = ex;
+                    if (endpointFailures is { Count: > 0 })
+                    {
+                        endpointFailures.Add(ex);
+                        throw new AggregateException(
+                            $"One or more endpoints failed during fan-out send for message type '{type.FullName}', and a later endpoint was cancelled.",
+                            endpointFailures);
+                    }
                     throw;
                 }
                 catch (Exception ex)

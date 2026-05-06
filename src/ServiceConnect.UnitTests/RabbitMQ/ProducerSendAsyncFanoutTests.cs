@@ -219,6 +219,42 @@ public sealed class ProducerSendAsyncFanoutTests
     }
 
     // -------------------------------------------------------------------------
+    // Test 5 — H1: prior failures + later cancellation aggregates both
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SendAsync_PriorEndpointFailure_ThenCancellation_AggregatesBoth()
+    {
+        // q1 fails (non-retriable TimeoutException — accumulated). q2 succeeds. q3 raises
+        // OCE. Caller must see an AggregateException whose inner exceptions include both
+        // q1's TimeoutException and q3's OperationCanceledException.
+        using var cts = new CancellationTokenSource();
+        var (producer, _) = BuildProducerWithChannel((_, rk, _, _, _, _) =>
+        {
+            switch (rk)
+            {
+                case "q1":
+                    throw new TimeoutException("q1: broker ack timed out");
+                case "q2":
+                    return ValueTask.CompletedTask;
+                case "q3":
+                    cts.Cancel();
+                    cts.Token.ThrowIfCancellationRequested();
+                    return ValueTask.CompletedTask; // unreachable
+                default:
+                    return ValueTask.CompletedTask;
+            }
+        });
+
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => producer.SendAsync(typeof(TestMessage), Body, Headers, cts.Token));
+
+        Assert.Equal(2, ex.InnerExceptions.Count);
+        Assert.Contains(ex.InnerExceptions, e => e is TimeoutException);
+        Assert.Contains(ex.InnerExceptions, e => e is OperationCanceledException);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
