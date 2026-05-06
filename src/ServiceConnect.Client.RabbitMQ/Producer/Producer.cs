@@ -485,9 +485,14 @@ public sealed class Producer : IProducer
             { "messaging.operation", "publish" },
             { "messaging.destination.name", resolvedDestination },
         };
-        if (failure != null)
+        // TimeoutException from PublishWithTimeoutAsync indicates the broker ack didn't arrive
+        // within the budget — the message MAY still have been delivered. The dedicated
+        // PublishConfirmTimeouts counter (emitted in PublishWithTimeoutAsync) is the
+        // authoritative signal; suppress error.type here so dashboards don't count
+        // confirm-timeouts as definite failures alongside the dedicated counter.
+        if (failure is { } nonTimeoutFailure and not TimeoutException)
         {
-            durationTags.Add("error.type", ExceptionTypeMapper.Map(failure));
+            durationTags.Add("error.type", ExceptionTypeMapper.Map(nonTimeoutFailure));
         }
         ServiceConnectMeter.RecordPublishDuration(elapsed, durationTags);
 

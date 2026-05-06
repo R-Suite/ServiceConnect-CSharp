@@ -117,5 +117,29 @@ public sealed class ProducerConfirmTimeoutMetricsTests
         return producer;
     }
 
+    [Fact]
+    public async Task PublishAsync_WhenBasicPublishHangs_DurationMetricOmitsErrorType()
+    {
+        // The dedicated publish_confirm.timeout counter is the authoritative signal for
+        // confirm-timeout publishes (the message may still have been delivered). The
+        // messaging.publish.duration metric must NOT also carry error.type=timeout — that
+        // would double-count the confirm-timeout as a definite failure on dashboards.
+        var exchangeName = ServiceConnect.Services.MessageTypeExchangeName.From(typeof(ConfirmTimeoutDurationProbeMessage));
+        using var collector = new MetricCollector("messaging.destination.name", exchangeName);
+
+        await using var producer = BuildProducerWithHangingChannel();
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            producer.PublishAsync(typeof(ConfirmTimeoutDurationProbeMessage), new byte[] { 1, 2, 3 }));
+
+        var duration = Assert.Single(collector.GetDoubleRecords(MetricNames.PublishDuration));
+        Assert.Equal("rabbitmq", duration.GetTag("messaging.system"));
+        Assert.Equal(exchangeName, duration.GetTag("messaging.destination.name"));
+        // error.type must be ABSENT for confirm-timeout — the dedicated PublishConfirmTimeouts
+        // counter is the authoritative failure signal.
+        Assert.Null(duration.GetTag("error.type"));
+    }
+
     private sealed class ConfirmTimeoutProbeMessage { }
+    private sealed class ConfirmTimeoutDurationProbeMessage { }
 }

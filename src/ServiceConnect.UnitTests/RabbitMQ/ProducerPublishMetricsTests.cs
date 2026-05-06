@@ -108,10 +108,14 @@ public sealed class ProducerPublishMetricsTests
                     It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
                     It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
                     It.IsAny<CancellationToken>()))
-                // TimeoutException is on Producer.IsRetriablePublishException's no-retry list, so
-                // the publish surfaces immediately rather than burning the retry budget. Maps to
-                // error.type="timeout" via ExceptionTypeMapper.
-                .ThrowsAsync(new TimeoutException("publish failed in test"));
+                // InvalidOperationException IS retriable per IsRetriablePublishException, but
+                // RetryCount=0 (set on the transport above) makes the publish surface on the
+                // first attempt regardless. Used in place of TimeoutException because TimeoutException
+                // is now treated as confirm-timeout-indeterminate by EmitPublishMetrics — the
+                // duration metric suppresses error.type for that case, breaking this test's
+                // "error.type populated on failure" assertion. InvalidOperationException keeps
+                // the assertion meaningful.
+                .ThrowsAsync(new InvalidOperationException("publish failed in test"));
         }
         else
         {
