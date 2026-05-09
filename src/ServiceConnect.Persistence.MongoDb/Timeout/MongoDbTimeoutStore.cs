@@ -18,6 +18,18 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     private readonly int _batchSize;
     private readonly TimeSpan _lockLeaseDuration;
 
+    // Per-instance index-creation cache. EnsureTimeoutIndexAsync is on every Insert /
+    // Get / Remove / Release / Reap path; without this flag, every dispatch round-trips
+    // a DropOneAsync (404 in steady state) plus a CreateManyAsync of three index specs.
+    // Mirrors the saga finder's _indexedCollections + semaphore pattern (and the
+    // aggregator's M40 fix). Volatile.Read/Write give ordered visibility for the flag
+    // without requiring Interlocked on the success path.
+    private int _indexed;
+    // _indexInitSemaphore is intentionally NOT Disposed: SemaphoreSlim.Dispose only
+    // releases the lazily-allocated WaitHandle, and we never call AvailableWaitHandle,
+    // so disposal is a functional no-op. Mirrors the saga finder precedent.
+    private readonly SemaphoreSlim _indexInitSemaphore = new(1, 1);
+
     private const string TimeoutsCollectionName = "Timeouts";
 
     static MongoDbTimeoutStore()
@@ -389,77 +401,86 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
 
     private async Task EnsureTimeoutIndexAsync(IMongoCollection<TimeoutData> collection, CancellationToken cancellationToken)
     {
-        // Every call hits MongoDB. createIndexes is idempotent server-side: if the
-        // collection already has indexes matching the key spec and options, MongoDB
-        // returns immediately without doing additional work. No in-process cache means
-        // that if an administrator drops and recreates the database while this process is
-        // running, the next write naturally recreates the indexes.
-        //
-        // Codes 85 (IndexOptionsConflict) and 86 (IndexKeySpecsConflict) arise when two
-        // processes race to create the same index and MongoDB detects the duplicate
-        // before the first creation has been fully committed. Both are swallowed so
-        // multi-process startup races do not produce spurious write failures.
-        //
-        // Note: TimeoutData.Id maps to the MongoDB _id field (driver convention).
-        // _id is always unique; creating an explicit unique index on it is rejected
-        // by MongoDB with "The field 'unique' is not valid for an _id index specification".
-        // The three indexes below are the only ones we need to create.
-        //
-        // Drop the legacy (Locked, Time) index from prior versions. The H31 due-query
-        // shape is `Time <= utcNow AND (Locked == false OR LockExpiresAt <= utcNow)`
-        // sorted by Time. A single compound (Time, Locked, LockExpiresAt) — and even
-        // a 2-key (Time, LockExpiresAt) — is rejected by MongoDB with code 171
-        // ("cannot index parallel arrays") because the C# driver serialises
-        // DateTimeOffset as a 2-element BSON array [DateTimeTicks, OffsetMinutes]
-        // and a compound index cannot span two array-typed fields. We therefore use:
-        //   - (Time, Locked): one DateTimeOffset + one bool, no parallel arrays;
-        //     covers the `Locked == false` branch with the Time-prefix sort.
-        //   - (LockedBy, Locked): scalar fields only; supports lookups by lock owner.
-        //   - (LockExpiresAt) single-field: covers the `LockExpiresAt <= utcNow`
-        //     branch (a single array-valued field is fine; only compounds spanning
-        //     two arrays are rejected).
-        // The migration is idempotent over IndexNotFound (code 27) so fresh
-        // databases and re-runs are no-ops.
+        // Per-instance cache: createIndexes is idempotent server-side, but the round
+        // trip on every Insert / Get / Remove / Release / Reap is wasted work and the
+        // DropOneAsync below 404s every steady-state call (polluting Mongo logs).
+        // Once the indexes are confirmed for this process, skip both round-trips.
+        // If an administrator drops indexes mid-process the cache will not self-heal;
+        // restart the process to re-run the migration. Saga finder (with its unique
+        // index on CorrelationId) makes the same trade-off.
+        if (Volatile.Read(ref _indexed) != 0)
+        {
+            return;
+        }
+
+        await _indexInitSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await collection.Indexes.DropOneAsync("Locked_1_Time_1", cancellationToken).ConfigureAwait(false);
+            // Re-check under the semaphore so a thread that was waiting while another
+            // thread completed creation does not issue redundant Drop / Create round-trips.
+            if (Volatile.Read(ref _indexed) != 0)
+            {
+                return;
+            }
+
+            // Drop the legacy (Locked, Time) index from prior versions. The H31 due-query
+            // shape is `Time <= utcNow AND (Locked == false OR LockExpiresAt <= utcNow)`
+            // sorted by Time. A single compound (Time, Locked, LockExpiresAt) — and even
+            // a 2-key (Time, LockExpiresAt) — is rejected by MongoDB with code 171
+            // ("cannot index parallel arrays") because the C# driver serialises
+            // DateTimeOffset as a 2-element BSON array [DateTimeTicks, OffsetMinutes]
+            // and a compound index cannot span two array-typed fields. The migration is
+            // idempotent over IndexNotFound (code 27) so fresh databases are no-ops.
+            try
+            {
+                await collection.Indexes.DropOneAsync("Locked_1_Time_1", cancellationToken).ConfigureAwait(false);
+            }
+            catch (MongoCommandException ex) when (ex.Code == 27)
+            {
+                // IndexNotFound — already dropped, or never existed.
+            }
+
+            try
+            {
+                // (Time, Locked) covers the Locked == false branch of the due filter
+                // with the Time-prefix sort. Time is array-valued (DateTimeOffset),
+                // Locked is scalar, so this compound has no parallel arrays.
+                var timeLockedIndexModel = new CreateIndexModel<TimeoutData>(
+                    Builders<TimeoutData>.IndexKeys
+                        .Ascending(x => x.Time)
+                        .Ascending(x => x.Locked));
+
+                var lockedByIndexModel = new CreateIndexModel<TimeoutData>(
+                    Builders<TimeoutData>.IndexKeys
+                        .Ascending(x => x.LockedBy)
+                        .Ascending(x => x.Locked));
+
+                // Single-field index on LockExpiresAt covers the LockExpiresAt <= utcNow
+                // branch of the OR. A single array-valued field is allowed; only
+                // compounds spanning two arrays trip MongoDB's parallel-arrays rule.
+                var lockExpiresAtIndexModel = new CreateIndexModel<TimeoutData>(
+                    Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
+
+                await collection.Indexes.CreateManyAsync(
+                    [timeLockedIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
+                    cancellationToken: cancellationToken
+                ).ConfigureAwait(false);
+            }
+            catch (MongoCommandException ex) when (ex.Code is 85 or 86)
+            {
+                // 85 IndexOptionsConflict / 86 IndexKeySpecsConflict — another process
+                // created the same index concurrently. Treat as success to avoid spurious
+                // first-insert failures in multi-process deployments.
+            }
+
+            // Flip the cache flag ONLY after Create succeeds (or benign 85/86 conflict).
+            // Any other exception (driver, network, auth) leaves _indexed == 0 so the
+            // next caller retries.
+            Volatile.Write(ref _indexed, 1);
         }
-        catch (MongoCommandException ex) when (ex.Code == 27)
+        finally
         {
-            // IndexNotFound — already dropped, or never existed.
-        }
-
-        try
-        {
-            // (Time, Locked) covers the Locked == false branch of the due filter
-            // with the Time-prefix sort. Time is array-valued (DateTimeOffset),
-            // Locked is scalar, so this compound has no parallel arrays.
-            var timeLockedIndexModel = new CreateIndexModel<TimeoutData>(
-                Builders<TimeoutData>.IndexKeys
-                    .Ascending(x => x.Time)
-                    .Ascending(x => x.Locked));
-
-            var lockedByIndexModel = new CreateIndexModel<TimeoutData>(
-                Builders<TimeoutData>.IndexKeys
-                    .Ascending(x => x.LockedBy)
-                    .Ascending(x => x.Locked));
-
-            // Single-field index on LockExpiresAt covers the LockExpiresAt <= utcNow
-            // branch of the OR. A single array-valued field is allowed; only
-            // compounds spanning two arrays trip MongoDB's parallel-arrays rule.
-            var lockExpiresAtIndexModel = new CreateIndexModel<TimeoutData>(
-                Builders<TimeoutData>.IndexKeys.Ascending(x => x.LockExpiresAt));
-
-            await collection.Indexes.CreateManyAsync(
-                [timeLockedIndexModel, lockedByIndexModel, lockExpiresAtIndexModel],
-                cancellationToken: cancellationToken
-            ).ConfigureAwait(false);
-        }
-        catch (MongoCommandException ex) when (ex.Code is 85 or 86)
-        {
-            // 85 IndexOptionsConflict / 86 IndexKeySpecsConflict — another process
-            // created the same index concurrently. Treat as success to avoid spurious
-            // first-insert failures in multi-process deployments.
+            _indexInitSemaphore.Release();
         }
     }
 }
