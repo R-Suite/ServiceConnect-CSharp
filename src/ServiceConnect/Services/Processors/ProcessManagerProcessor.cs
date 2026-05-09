@@ -115,6 +115,15 @@ internal sealed class ProcessManagerProcessor(
                 await descriptor.InvokeHandleAsync(handler, message, data, context, cancellationToken).ConfigureAwait(false);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cooperative shutdown: the dispatcher's cancellation token fired and the
+            // handler honoured it. Pre-fix this hit the generic catch and was logged at
+            // LogError ("Process-manager handler threw"), surfacing as a false alert on
+            // graceful shutdown. Rethrow without logging — the OCE propagates up to the
+            // dispatcher's cancellation-aware drain.
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Process-manager handler threw for {MessageType}; persistence skipped", messageType.Name);
