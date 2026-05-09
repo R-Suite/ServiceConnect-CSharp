@@ -57,7 +57,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal("orders publish", activity!.DisplayName);
         Assert.Equal("orders", activity.GetTagItem(MessagingDestination));
         Assert.Equal("rabbitmq", activity.GetTagItem(MessagingSystem));
-        Assert.Equal("publish", activity.GetTagItem(MessagingOperation));
+        Assert.Equal("publish", activity.GetTagItem(MessagingOperationType));
+        Assert.Equal("publish", activity.GetTagItem(MessagingOperationName));
         Assert.Equal("msg-1", activity.GetTagItem(MessageId));
     }
 
@@ -222,7 +223,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal("svc.inbox", activity.GetTagItem(MessagingDestination));
         Assert.Equal("msg-42", activity.GetTagItem(MessageId));
         Assert.Equal("rabbitmq", activity.GetTagItem(MessagingSystem));
-        Assert.Equal("receive", activity.GetTagItem(MessagingOperation));
+        Assert.Equal("receive", activity.GetTagItem(MessagingOperationType));
+        Assert.Equal("receive", activity.GetTagItem(MessagingOperationName));
         Assert.Equal(3, activity.GetTagItem(MessagingBodySize));
     }
 
@@ -340,10 +342,11 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
-        // The DisplayName carries "send" for per-destination tracing; the messaging.operation
+        // The DisplayName carries "send" for per-destination tracing; the messaging.operation.type
         // tag is "publish" per OTel semconv (producer-side regardless of point-to-point vs pub/sub).
         Assert.Equal("svc.queue send", activity!.DisplayName);
-        Assert.Equal("publish", activity.GetTagItem(MessagingOperation));
+        Assert.Equal("publish", activity.GetTagItem(MessagingOperationType));
+        Assert.Equal("publish", activity.GetTagItem(MessagingOperationName));
         Assert.Equal("svc.queue", activity.GetTagItem(MessagingDestination));
     }
 
@@ -617,8 +620,10 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
 
         Assert.NotNull(activity);
-        var operation = activity!.GetTagItem(MessagingOperation);
-        Assert.Equal("publish", operation);
+        Assert.Equal("publish", activity!.GetTagItem(MessagingOperationType));
+        Assert.Equal("publish", activity.GetTagItem(MessagingOperationName));
+        // Old attribute is GONE — OTel semconv update.
+        Assert.Null(activity.GetTagItem("messaging.operation"));
     }
 
     [Fact]
@@ -1196,4 +1201,55 @@ public sealed class ServiceConnectActivitySource_PropagationOnlyTests
             droppingListener.Dispose();
         }
     }
+
+    // ---------------- TelemetrySendMiddleware: anonymous destination on Publish ----------------
+
+    [Fact]
+    public async Task Publish_ViaSendMiddleware_StampsAnonymousDestination()
+    {
+        // Pre-fix the middleware stamped messaging.destination.name = MessageType.FullName.
+        // Post-fix it leaves Exchange empty so the span surfaces as anonymous, and only the
+        // routing-key tag is stamped (RabbitMQ-specific routing observability is preserved).
+        Activity? captured = null;
+        using var capture = new ActivityListener
+        {
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStarted = a => captured = a,
+        };
+        ActivitySource.AddActivityListener(capture);
+        try
+        {
+            var middleware = new TelemetrySendMiddleware(_options, _attrs);
+            var ctx = new SendContext
+            {
+                Message = new MiddlewareTestMessage(Guid.NewGuid()),
+                MessageType = typeof(MiddlewareTestMessage),
+                MessageBytes = ReadOnlyMemory<byte>.Empty,
+                Headers = new Dictionary<string, string>(),
+                EndPoint = null,
+                RoutingKey = "high-priority",
+                Operation = SendOperation.Publish,
+            };
+
+            await middleware.ProcessAsync(ctx, (_, _) => Task.CompletedTask, CancellationToken.None);
+
+            Assert.NotNull(captured);
+            Assert.Null(captured!.GetTagItem(MessagingDestination));  // no destination — anonymous.
+            Assert.Equal("true", captured.GetTagItem(MessagingDestinationAnonymous));
+            // Routing key is still preserved for RabbitMQ-specific routing observability.
+            Assert.Equal("high-priority", captured.GetTagItem(MessagingDestinationRoutingKey));
+            // New OTel pair.
+            Assert.Equal("publish", captured.GetTagItem(MessagingOperationType));
+            Assert.Equal("publish", captured.GetTagItem(MessagingOperationName));
+            // Old attribute is GONE.
+            Assert.Null(captured.GetTagItem("messaging.operation"));
+        }
+        finally
+        {
+            capture.Dispose();
+        }
+    }
+
+    private sealed class MiddlewareTestMessage(Guid correlationId) : Message(correlationId);
 }

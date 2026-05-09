@@ -487,10 +487,22 @@ public static class ServiceConnectActivitySource
 
         if (activity.IsAllDataRequested)
         {
+            // Map the implementation-specific operation name to the OTel-defined operation type.
+            // OTel defines "publish" | "receive" | "process". ServiceConnect's send-side spans
+            // (used by Send and Request operations) are still classified as "publish" per the
+            // existing convention at the call site (see Send method's operation="publish" pass).
+            // The "process" type is reserved for downstream processors and isn't emitted here.
+            var operationType = operation switch
+            {
+                "receive" => "receive",
+                _ => "publish",  // "publish", "send", "request" all map to OTel "publish"
+            };
+
             activity
                 .SetTag(MessagingAttributes.MessagingSystem, attributes.MessagingSystem)
                 .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
-                .SetTag(MessagingAttributes.MessagingOperation, operation);
+                .SetTag(MessagingAttributes.MessagingOperationType, operationType)
+                .SetTag(MessagingAttributes.MessagingOperationName, operation);
         }
 
         return activity;
