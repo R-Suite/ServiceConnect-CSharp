@@ -139,6 +139,14 @@ public sealed class MessageDispatcher(
             if (replyProcessor != null && hasResponseMessageId)
             {
                 var replyResult = await replyProcessor.ProcessAsync(messageBytes, type!, null, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
+
+                // Fire OnConsumedSuccessfully filters on both sub-paths (handled and untracked-reply).
+                // Pre-fix this branch returned Success=true without invoking the filter pipeline,
+                // silently under-counting reply messages for audit/telemetry filters that count
+                // successful consumes. Match the non-reply success path's filter semantics — the
+                // reply was successfully consumed in both cases (the dispatcher acks the broker).
+                await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+
                 if (replyResult == ProcessResult.Handled)
                 {
                     return new ConsumeEventResult { Success = true };

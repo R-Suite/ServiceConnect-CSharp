@@ -393,6 +393,46 @@ public class MessageDispatcherTests
     }
 
     [Fact]
+    public async Task Dispatch_ResponseMessage_Handled_InvokesOnConsumedSuccessfullyFilters()
+    {
+        // The reply-handled branch must invoke OnConsumedSuccessfully filters so audit and
+        // telemetry filters that count successful consumes see reply messages too — the
+        // non-reply success path already does this.
+        var replyId = Guid.NewGuid().ToString();
+        var headers = MakeHeaders(responseMessageId: replyId);
+
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        Assert.True(result.Success);
+        Assert.Equal(replyId, Assert.IsType<TestDispatcherReplyManager>(_replyManager).LastMessageId);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Dispatch_ResponseMessage_UntrackedReply_StillInvokesOnConsumedSuccessfullyFilters()
+    {
+        // The reply-discarded branch (no pending request matched) must still invoke the
+        // success-filter pipeline: the dispatcher acks the broker, so by the user-facing
+        // contract the message was successfully consumed.
+        var replyId = Guid.NewGuid().ToString();
+        var headers = MakeHeaders(responseMessageId: replyId);
+        Assert.IsType<TestDispatcherReplyManager>(_replyManager).ShouldHandleReplies = false;
+
+        var dispatcher = CreateDispatcher(new ServiceCollection().BuildServiceProvider());
+
+        var result = await dispatcher.DispatchAsync(new byte[] { 1, 2, 3 }, "FakeMessage1", headers);
+
+        Assert.True(result.Success);
+        _mockFilterPipeline.Verify(
+            f => f.ExecuteOnConsumedSuccessfullyFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task Dispatch_ResponseMessage_BlockedByBeforeConsumingFilter_DoesNotReachReplyManager()
     {
         var replyId = Guid.NewGuid().ToString();
