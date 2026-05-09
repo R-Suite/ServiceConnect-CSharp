@@ -1,6 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
+using System.Text.Json;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
@@ -25,7 +25,7 @@ public class StreamOutOfOrderTests(MessagingFixture fixture)
         var producerQueue = _fixture.GetUniqueQueueName("stream-ooo-producer");
 
         var originalMessage = new TestMessage(Guid.NewGuid()) { Content = "multi-chunk-stream" };
-        var serializedBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(originalMessage));
+        var serializedBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(originalMessage));
 
         // Split serialized bytes into 5 chunks
         var chunkSize = serializedBytes.Length / 5;

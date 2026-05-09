@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Nodes;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Client.RabbitMQ;
@@ -118,7 +118,7 @@ public class MessageRetryHandlerTests
             headers,
             new InvalidOperationException("invalid inbound message"));
 
-        var payload = JObject.Parse((string)headers[HeaderKeys.Exception]);
+        var payload = JsonNode.Parse((string)headers[HeaderKeys.Exception])!.AsObject();
         Assert.Equal(typeof(InvalidOperationException).FullName, (string?)payload["ExceptionType"]);
         Assert.Contains("invalid inbound message", (string?)payload["Message"] ?? "");
         Assert.Null(payload["StackTrace"]);
@@ -145,7 +145,7 @@ public class MessageRetryHandlerTests
         }
 
         Assert.True(headers.ContainsKey(HeaderKeys.Exception));
-        var payload = JObject.Parse((string)headers[HeaderKeys.Exception]);
+        var payload = JsonNode.Parse((string)headers[HeaderKeys.Exception])!.AsObject();
         Assert.Equal(typeof(InvalidOperationException).FullName, (string?)payload["ExceptionType"]);
         Assert.Contains("boom", (string?)payload["Message"] ?? "");
         Assert.Null(payload["StackTrace"]);

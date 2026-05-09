@@ -1,6 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
+using System.Text.Json;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
@@ -26,7 +26,7 @@ public class StreamingTests(MessagingFixture fixture)
 
         // Serialize a TestMessage so the StreamProcessor can deserialize the reassembled bytes
         var originalMessage = new TestMessage(Guid.NewGuid()) { Content = "streamed-content" };
-        var serializedBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(originalMessage));
+        var serializedBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(originalMessage));
 
         // Split serialized bytes into 3 chunks
         var chunkSize = serializedBytes.Length / 3;

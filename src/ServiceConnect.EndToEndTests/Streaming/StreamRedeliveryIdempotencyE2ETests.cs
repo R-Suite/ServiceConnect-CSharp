@@ -1,6 +1,6 @@
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
+using System.Text.Json;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Fixtures;
@@ -32,7 +32,7 @@ public class StreamRedeliveryIdempotencyE2ETests(MessagingFixture fixture)
         var firstResult = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var originalMessage = new TestMessage(Guid.NewGuid()) { Content = "redelivery-test" };
-        var serializedBytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(originalMessage));
+        var serializedBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(originalMessage));
 
         var handlerRefs = new List<HandlerReference>
         {
