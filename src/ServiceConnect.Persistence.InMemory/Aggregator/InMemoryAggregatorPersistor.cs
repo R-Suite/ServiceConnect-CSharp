@@ -81,34 +81,35 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Capture entry references under the lock. The spread into an array is an O(n)
-        // pointer copy that lets concurrent InsertDataAsync / RemoveDataAsync proceed
-        // while DeepClone (a JSON round-trip per entry) runs outside the lock below.
-        // Entry is a sealed record (immutable); the array holds shared references to
-        // the same Entry instances that were in the list at lock-release time.
-        Entry[] entriesCopy;
+        // Hold the lock through DeepClone to guarantee the source Entry.Data is not
+        // mutated mid-clone. A previous version released the lock before cloning,
+        // relying on the invariant "no aggregator-update path mutates Entry.Data in
+        // place" — fragile against future changes; risks serialising a torn object.
+        // The clone cost under the lock is acceptable: snapshots are infrequent
+        // relative to inserts, and the buffer's purpose is single-pass dispatch.
+        //
+        // The InMemory persistor cannot produce an unresolved entry: InsertDataAsync
+        // rejects null, every entry carries a typed IHasCorrelationId, and there is no
+        // deserialise step that could fail. UnresolvedCount is therefore always 0 here.
+        // The Mongo persistor reaches the unresolved branch when a stored document's
+        // CLR type is no longer registered or doesn't implement the interface; that
+        // branch is exercised by MongoDbAggregatorPersistor's tests.
         lock (_memoryCacheLock)
         {
             if (!_provider.TryGet<string, object>(name, out var sourceObj) || sourceObj is not List<Entry> source)
             {
                 return Task.FromResult<IAggregatorSnapshot>(AggregatorSnapshot.Empty);
             }
-            entriesCopy = [.. source];  // shallow copy of reference array; O(n) pointer copy
-        }
 
-        // The InMemory persistor cannot produce an unresolved entry: InsertDataAsync rejects null,
-        // every entry carries a typed IHasCorrelationId, and there is no deserialise step that
-        // could fail. UnresolvedCount is therefore always 0 here. The Mongo persistor reaches the
-        // unresolved branch when a stored document's CLR type is no longer registered or doesn't
-        // implement the interface; that branch is exercised by MongoDbAggregatorPersistor's tests.
-        var messages = new List<IHasCorrelationId>(entriesCopy.Length);
-        var ids = new List<Guid>(entriesCopy.Length);
-        foreach (var entry in entriesCopy)
-        {
-            messages.Add(DeepClone.Clone(entry.Data));
-            ids.Add(entry.Id);
+            var messages = new List<IHasCorrelationId>(source.Count);
+            var ids = new List<Guid>(source.Count);
+            foreach (var entry in source)
+            {
+                messages.Add(DeepClone.Clone(entry.Data));
+                ids.Add(entry.Id);
+            }
+            return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, UnresolvedCount: 0));
         }
-        return Task.FromResult<IAggregatorSnapshot>(new AggregatorSnapshot(messages, ids, UnresolvedCount: 0));
     }
 
     /// <summary>
