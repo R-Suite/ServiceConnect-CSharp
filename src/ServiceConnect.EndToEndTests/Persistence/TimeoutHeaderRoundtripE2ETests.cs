@@ -14,10 +14,11 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// End-to-end guard that custom headers carried on the initial process-manager message
-/// are captured, persisted alongside the timeout, and re-delivered on the scheduled
-/// TimeoutMessage. Header values that arrive from RabbitMQ as byte[] are re-emitted
-/// as "base64:..." so receivers can decode them back to the original UTF-8 content.
+/// End-to-end guard that custom string-typed headers carried on the initial process-manager
+/// message are captured, persisted alongside the timeout, and re-delivered on the scheduled
+/// TimeoutMessage. Inbound byte[] header values are eager-decoded to UTF-8 strings at the
+/// consume boundary, so all values reach CaptureForStorage as strings and BuildOutgoingHeaders
+/// re-emits them verbatim.
 /// </summary>
 [Collection(nameof(MessagingCollection))]
 public class TimeoutHeaderRoundtripE2ETests(MessagingFixture fixture)
@@ -93,8 +94,8 @@ public class TimeoutHeaderRoundtripE2ETests(MessagingFixture fixture)
             var bus = host.Services.GetRequiredService<IBus>();
 
             // Send initial message with custom headers carrying typed values as strings.
-            // RabbitMQ will deliver these back to the handler as byte[]; the timeout
-            // persistence layer will then re-encode them as "base64:..." strings.
+            // Inbound headers are eager-decoded byte[]→UTF-8 string at the consume boundary,
+            // so the timeout persistence layer re-emits them verbatim (no "base64:" prefix).
             var initial = new TestMessage(correlationId) { Content = "schedule-typed-timeout" };
             await bus.SendAsync(initial, new SendOptions
             {
@@ -105,8 +106,8 @@ public class TimeoutHeaderRoundtripE2ETests(MessagingFixture fixture)
                     ["X-Guid"] = originalGuid.ToString("D", CultureInfo.InvariantCulture),
                     ["X-DateTime"] = originalDateTime.ToString("O", CultureInfo.InvariantCulture),
                     ["X-DateTimeOffset"] = originalDateTimeOffset.ToString("O", CultureInfo.InvariantCulture),
-                    // byte[] round-trip: sent as base64 string; arrives as byte[] of that string;
-                    // re-emitted by BuildOutgoingHeaders as "base64:<base64 of those bytes>"
+                    // byte[] round-trip: sent as base64 string; eager-decoded to string at consume
+                    // boundary; re-emitted verbatim by BuildOutgoingHeaders (no "base64:" prefix)
                     ["X-Bytes"] = Convert.ToBase64String(originalBytes)
                 }
             });
@@ -138,20 +139,19 @@ public class TimeoutHeaderRoundtripE2ETests(MessagingFixture fixture)
             var parsedDto = DateTimeOffset.Parse(dtoRaw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             Assert.Equal(originalDateTimeOffset, parsedDto);
 
-            // Bytes header: must arrive as "base64:..." — strip prefix and decode.
-            // "base64:" is the binary header marker used by TimeoutHeaderPersistence.BuildOutgoingHeaders.
-            const string binaryHeaderPrefix = "base64:";
+            // Inbound headers are eager-decoded byte[]→UTF-8 string at the consume boundary
+            // (RabbitMqConsumerHost.CopyInboundHeaders / InboundMessageProcessor.ProcessAsync),
+            // so a string-typed AMQP header value reaches CaptureForStorage as a string and
+            // BuildOutgoingHeaders re-emits it verbatim — no "base64:" prefix transformation.
+            // The byte[]→"base64:" arm of BuildOutgoingHeaders is still reachable for
+            // programmatic byte[] sources (e.g. MongoDB BSON binary, direct API callers); see
+            // TimeoutHeaderPersistenceByteArrayRoundTripTests for the unit-level coverage.
             Assert.True(capturedHeaders.ContainsKey("X-Bytes"), "X-Bytes header missing");
             var bytesHeaderRaw = DecodeHeader(capturedHeaders["X-Bytes"]);
-            // The value was stored as byte[] (the UTF-8 of the base64 string we sent).
-            // BuildOutgoingHeaders re-encodes byte[] as "base64:<base64-of-those-bytes>".
-            Assert.StartsWith(binaryHeaderPrefix, bytesHeaderRaw, StringComparison.Ordinal);
-            var encodedBytesPayload = bytesHeaderRaw[binaryHeaderPrefix.Length..];
-            // The bytes stored were the UTF-8 encoding of the original base64 string we sent.
-            // Decode those bytes and then base64-decode them to get back originalBytes.
-            var storedBytes = Convert.FromBase64String(encodedBytesPayload);
-            var intermediate = Encoding.UTF8.GetString(storedBytes);
-            var roundTrippedBytes = Convert.FromBase64String(intermediate);
+            // The string we sent — Convert.ToBase64String(originalBytes) — survives verbatim.
+            // Decoding it via Convert.FromBase64String returns the original bytes.
+            Assert.Equal(Convert.ToBase64String(originalBytes), bytesHeaderRaw);
+            var roundTrippedBytes = Convert.FromBase64String(bytesHeaderRaw);
             Assert.Equal(originalBytes, roundTrippedBytes);
         }
         finally
