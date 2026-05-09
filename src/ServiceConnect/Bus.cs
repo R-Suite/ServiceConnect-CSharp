@@ -80,12 +80,18 @@ public sealed class Bus : IBus
     }
 
     /// <inheritdoc />
-    // IsConsuming is true only when (a) we have started consuming AND (b) the broker has not
-    // cancelled us. Broker-initiated basic.cancel (queue deleted, policy expired, mirror
-    // promoted) flips the consumer's IsCancelledByBroker flag, which short-circuits this
-    // getter to false so BusConsumingHealthCheck reports Unhealthy without needing its own
-    // broker-cancel logic.
-    public bool IsConsuming => _consuming && !(_consumer?.IsCancelledByBroker ?? false);
+    /// <remarks>
+    /// True only when (a) the bus has started consuming, (b) the broker has not
+    /// cancelled the consumer (basic.cancel: queue deleted, policy expired, mirror
+    /// promoted), and (c) the bus has not started disposing. The dispose check uses
+    /// _disposed (set under Interlocked.Exchange in DisposeAsync) which becomes
+    /// visible immediately at the moment dispose is initiated, without depending on
+    /// the subsequent _consuming = false write inside StopConsumingCoreAsync.
+    /// </remarks>
+    public bool IsConsuming =>
+        _consuming
+        && Volatile.Read(ref _disposed) == 0
+        && !(_consumer?.IsCancelledByBroker ?? false);
 
     /// <inheritdoc />
     public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message
