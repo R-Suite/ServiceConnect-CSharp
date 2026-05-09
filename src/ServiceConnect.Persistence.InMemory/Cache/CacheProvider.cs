@@ -14,6 +14,16 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
     private readonly ConcurrentDictionary<object, CacheItem> _cache = new();
     private readonly ConcurrentDictionary<object, SlidingDetails> _slidingTime = new();
     private readonly ConcurrentDictionary<object, ITimer> _timers = new();
+    // Per-key generation counter. Each Add for a key bumps it; the timer callback
+    // captures the value at registration and skips eviction if the captured value
+    // doesn't match the current generation — closing the re-Add-during-callback
+    // race where an in-flight TryPurgeItem could evict the new value via Remove(key).
+    // ITimer.Dispose does not wait for in-flight callbacks, so a callback that
+    // already read _slidingTime[key] before the new Add overwrote it would otherwise
+    // observe the old ExpireAt, return CanExpire==true, and remove the new value.
+    // ConcurrentDictionary's AddOrUpdate atomicity ensures the bump and the timer
+    // installation are observed together by stale callbacks via TryGetValue.
+    private readonly ConcurrentDictionary<object, long> _generations = new();
     // Serializes compound Add operations so the value swap, sliding window reset, and
     // timer replacement are observed together. Without it, a re-Add after the original
     // TryAdd retained the stale value but StartObserving installed a fresh timer —
@@ -305,16 +315,20 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
                 _slidingTime.TryRemove(key!, out _);
             }
 
-            StartObserving(key!, timeSpan);
+            // Bump the generation BEFORE installing the new timer. The timer callback
+            // captures this value; a stale callback from the prior generation will see
+            // a mismatch and skip eviction.
+            var generation = _generations.AddOrUpdate(key!, 1L, (_, prior) => prior + 1L);
+            StartObserving(key!, timeSpan, generation);
         }
     }
 
-    private void StartObserving<TKey>(TKey key, TimeSpan timeSpan)
+    private void StartObserving<TKey>(TKey key, TimeSpan timeSpan, long generation)
     {
         // Clamp to at least 1 ms to avoid a zero-delay timer firing before the caller returns.
         var delay = timeSpan.Ticks > 0 ? timeSpan : TimeSpan.FromMilliseconds(1);
 
-        var timer = _timeProvider.CreateTimer(_ => TryPurgeItem(key!), null, delay, Timeout.InfiniteTimeSpan);
+        var timer = _timeProvider.CreateTimer(_ => TryPurgeItem(key!, generation), null, delay, Timeout.InfiniteTimeSpan);
 
         // Swap in the new timer and dispose any previous one (re-observation after sliding check).
         _timers.AddOrUpdate(key!, timer, (_, existing) =>
@@ -324,8 +338,17 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
         });
     }
 
-    private void TryPurgeItem<TKey>(TKey key)
+    private void TryPurgeItem<TKey>(TKey key, long generation)
     {
+        // Fast-fail: if the generation has been bumped (a new Add happened for this key),
+        // this callback is stale and must NOT evict. ITimer.Dispose() doesn't wait for
+        // callbacks, so a stale TryPurgeItem can be running on a disposed timer; the
+        // generation check is the load-bearing guard against evicting the new value.
+        if (!_generations.TryGetValue(key!, out var current) || current != generation)
+        {
+            return;
+        }
+
         if (_slidingTime.TryGetValue(key!, out var details))
         {
             if (!details.CanExpire(out TimeSpan tryAfter))
@@ -336,7 +359,9 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
                     return;
                 }
 
-                StartObserving(key, tryAfter);
+                // Re-observation within the same Add cycle — keep the same generation so
+                // a future Add bump invalidates this re-installed callback as well.
+                StartObserving(key, tryAfter, generation);
                 return;
             }
         }
