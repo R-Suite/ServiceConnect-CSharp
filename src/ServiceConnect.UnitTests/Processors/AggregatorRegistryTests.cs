@@ -66,7 +66,7 @@ public class AggregatorRegistryTests
     }
 
     [Theory]
-    [InlineData(5, 0, 0)]              // BatchSize set, Timeout=Zero — the stranded-tail bug
+    [InlineData(5, 0, 0)]              // BatchSize set, Timeout=Zero — timer never scheduled, tail strands
     [InlineData(0, 1, 0)]              // BatchSize=0, positive Timeout — timer-only, no batch guard
     [InlineData(0, 0, 0)]              // both zero — no flush trigger at all
     [InlineData(-1, 1, 0)]             // negative BatchSize, positive Timeout
