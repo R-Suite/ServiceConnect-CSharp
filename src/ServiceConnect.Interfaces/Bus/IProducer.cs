@@ -79,6 +79,20 @@ public interface IProducer : IAsyncDisposable
     bool HasAttemptedConnection { get; }
 
     /// <summary>
+    /// Returns a single-snapshot read of <see cref="IsHealthy"/> and <see cref="HasAttemptedConnection"/>.
+    /// Health-check probes that need both values must use this method rather than reading the
+    /// two properties separately — the pre-snapshot two-read pair admits a race where a
+    /// publish-success transition lands between the reads and the probe sees stale state.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation reads the two properties in order and packs them into a
+    /// snapshot — preserving the existing two-read race for third-party producers. First-party
+    /// producers (RabbitMQ) override with a truly-atomic snapshot read.
+    /// </remarks>
+    ProducerHealthSnapshot GetHealthSnapshot()
+        => new(IsHealthy, HasAttemptedConnection);
+
+    /// <summary>
     /// Disconnects the producer from the broker.
     /// </summary>
     Task DisconnectAsync(CancellationToken cancellationToken = default);

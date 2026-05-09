@@ -34,12 +34,20 @@ public sealed class ProducerConnectionHealthCheck : IHealthCheck
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_producer.IsHealthy)
+        // Single-snapshot read: pre-fix the check read IsHealthy and HasAttemptedConnection
+        // separately. A publish-success transition between the reads (T2 sets both) could
+        // surface to a probe (T1) as IsHealthy=false (stale) + HasAttemptedConnection=true
+        // (fresh) — a false-negative Unhealthy. GetHealthSnapshot reads the pair atomically
+        // (or, for third-party producers using the default impl, at least produces a typed
+        // result that future maintainers can spot as the pair-read site).
+        var snapshot = _producer.GetHealthSnapshot();
+
+        if (snapshot.IsHealthy)
         {
             return Task.FromResult(HealthCheckResult.Healthy("Producer connection is open."));
         }
 
-        if (!_producer.HasAttemptedConnection)
+        if (!snapshot.HasAttemptedConnection)
         {
             // Producer connects lazily on the first publish/send. Until that happens,
             // "no connection" is the expected state, not a fault — readiness probes

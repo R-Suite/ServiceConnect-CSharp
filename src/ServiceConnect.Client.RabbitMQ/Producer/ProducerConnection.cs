@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
+using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Client.RabbitMQ;
@@ -130,6 +131,36 @@ internal sealed class ProducerConnection
     /// checking the flag alone would permanently suppress reconnect attempts.
     /// </summary>
     public bool IsHealthy() => _connected && (_model?.IsOpen ?? false);
+
+    /// <summary>
+    /// Returns an atomic snapshot of the producer's health-relevant state.
+    /// Reads <c>_hasAttemptedConnection</c> first; the per-connection invariant is that
+    /// <c>_isHealthy=true</c> implies <c>_hasAttemptedConnection=1</c> (set BEFORE the
+    /// connection-success branch in <see cref="EnsureConnectedAsync"/>), so observing
+    /// <c>_hasAttemptedConnection=0</c> here means a snapshot caller cannot also see
+    /// <c>IsHealthy=true</c>. Re-snapshot if the invariant is violated (i.e. the rare
+    /// case where a publish raced our two reads).
+    /// </summary>
+    public ProducerHealthSnapshot GetSnapshot()
+    {
+        // Read attempted FIRST. If attempted=0, then by the construction of
+        // EnsureConnectedAsync (which sets _hasAttemptedConnection=1 before _connected=true)
+        // we know IsHealthy()==false at the moment we read attempted=0; observing IsHealthy=true
+        // after that read can only happen if we re-read the snapshot, in which case the new
+        // attempted read will also be 1.
+        var attempted = Volatile.Read(ref _hasAttemptedConnection) != 0;
+        var healthy = IsHealthy();
+
+        // Re-snapshot to close the rare double-read race: if we observed attempted=false but
+        // healthy=true, that contradicts the invariant — the publish path must have set both
+        // between our two reads. Re-read attempted; the new value must be true.
+        if (healthy && !attempted)
+        {
+            attempted = Volatile.Read(ref _hasAttemptedConnection) != 0;
+        }
+
+        return new ProducerHealthSnapshot(IsHealthy: healthy, HasAttemptedConnection: attempted);
+    }
 
     /// <summary>
     /// Marks the connection for reset on the next call to <see cref="EnsureConnectedAsync"/>.

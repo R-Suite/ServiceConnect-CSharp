@@ -15,7 +15,11 @@ public class ProducerConnectionHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_ProducerHealthy_ReturnsHealthy()
     {
-        _producer.SetupGet(p => p.IsHealthy).Returns(true);
+        // Post-M5: the check reads the (IsHealthy, HasAttemptedConnection) pair as a single
+        // snapshot via GetHealthSnapshot. Set up the snapshot directly rather than the
+        // individual properties.
+        _producer.Setup(p => p.GetHealthSnapshot())
+            .Returns(new ProducerHealthSnapshot(IsHealthy: true, HasAttemptedConnection: true));
 
         var result = await CreateSut().CheckHealthAsync(new HealthCheckContext());
 
@@ -27,8 +31,8 @@ public class ProducerConnectionHealthCheckTests
     public async Task CheckHealthAsync_ProducerNotHealthy_ReturnsUnhealthy()
     {
         // HasAttemptedConnection = true: producer tried and failed, not just lazy.
-        _producer.SetupGet(p => p.IsHealthy).Returns(false);
-        _producer.SetupGet(p => p.HasAttemptedConnection).Returns(true);
+        _producer.Setup(p => p.GetHealthSnapshot())
+            .Returns(new ProducerHealthSnapshot(IsHealthy: false, HasAttemptedConnection: true));
 
         var ctx = new HealthCheckContext
         {
@@ -44,8 +48,8 @@ public class ProducerConnectionHealthCheckTests
     public async Task CheckHealthAsync_ProducerNotHealthy_HonoursDegradedFailureStatus()
     {
         // HasAttemptedConnection = true: producer tried and failed, not just lazy.
-        _producer.SetupGet(p => p.IsHealthy).Returns(false);
-        _producer.SetupGet(p => p.HasAttemptedConnection).Returns(true);
+        _producer.Setup(p => p.GetHealthSnapshot())
+            .Returns(new ProducerHealthSnapshot(IsHealthy: false, HasAttemptedConnection: true));
 
         var ctx = new HealthCheckContext
         {
@@ -60,8 +64,8 @@ public class ProducerConnectionHealthCheckTests
     public async Task CheckHealthAsync_ProducerNotHealthy_NoRegistration_DefaultsToUnhealthy()
     {
         // HasAttemptedConnection = true: producer tried and failed, not just lazy.
-        _producer.SetupGet(p => p.IsHealthy).Returns(false);
-        _producer.SetupGet(p => p.HasAttemptedConnection).Returns(true);
+        _producer.Setup(p => p.GetHealthSnapshot())
+            .Returns(new ProducerHealthSnapshot(IsHealthy: false, HasAttemptedConnection: true));
 
         // HealthCheckContext with null Registration — exercises the
         // `context.Registration?.FailureStatus ?? HealthStatus.Unhealthy` fallback path.

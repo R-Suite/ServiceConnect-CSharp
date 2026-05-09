@@ -8,12 +8,16 @@ namespace ServiceConnect.UnitTests.HealthChecks;
 
 public class ProducerLazyConnectTests
 {
+    // Post-M5: ProducerConnectionHealthCheck reads the (IsHealthy, HasAttemptedConnection)
+    // pair atomically via IProducer.GetHealthSnapshot. Mocks set up the snapshot directly
+    // so the test exercises the snapshot contract rather than the (now-unused) individual
+    // property reads.
+
     [Fact]
     public async Task NotYetAttempted_ReturnsHealthy()
     {
         var producer = Mock.Of<IProducer>(p =>
-            p.IsHealthy == false &&
-            p.HasAttemptedConnection == false);
+            p.GetHealthSnapshot() == new ProducerHealthSnapshot(false, false));
         var check = new ProducerConnectionHealthCheck(producer);
 
         var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
@@ -26,8 +30,7 @@ public class ProducerLazyConnectTests
     public async Task AttemptedAndDisconnected_ReturnsUnhealthy()
     {
         var producer = Mock.Of<IProducer>(p =>
-            p.IsHealthy == false &&
-            p.HasAttemptedConnection == true);
+            p.GetHealthSnapshot() == new ProducerHealthSnapshot(false, true));
         var check = new ProducerConnectionHealthCheck(producer);
 
         var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
@@ -39,8 +42,7 @@ public class ProducerLazyConnectTests
     public async Task Connected_ReturnsHealthy()
     {
         var producer = Mock.Of<IProducer>(p =>
-            p.IsHealthy == true &&
-            p.HasAttemptedConnection == true);
+            p.GetHealthSnapshot() == new ProducerHealthSnapshot(true, true));
         var check = new ProducerConnectionHealthCheck(producer);
 
         var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
