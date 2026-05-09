@@ -305,13 +305,89 @@ public class ServiceCollectionExtensionsTests
     }
 
     private static void InvokeRegisterHandlerType(IServiceCollection services, Type handlerType, Type messageType)
+        => InvokeRegisterHandlerType(services, handlerType, messageType, HandlerInterfaceKind.MessageHandler);
+
+    private static void InvokeRegisterHandlerType(
+        IServiceCollection services,
+        Type handlerType,
+        Type messageType,
+        HandlerInterfaceKind kind)
+    {
+        // Snapshot pre-existing service types so the user-pre-registration guard fires correctly.
+        var preExisting = services.Select(d => d.ServiceType).ToHashSet();
+        InvokeRegisterHandlerType(services, handlerType, messageType, kind, preExisting);
+    }
+
+    private static void InvokeRegisterHandlerType(
+        IServiceCollection services,
+        Type handlerType,
+        Type messageType,
+        HandlerInterfaceKind kind,
+        IReadOnlySet<Type>? preExistingServiceTypes)
     {
         var method = typeof(ServiceCollectionExtensions).GetMethod(
             "RegisterHandlerType",
             BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        var handlerRef = new HandlerReference { MessageType = messageType, HandlerType = handlerType };
-        method!.Invoke(null, [services, handlerRef]);
+        var handlerRef = new HandlerReference { MessageType = messageType, HandlerType = handlerType, InterfaceKind = kind };
+        method!.Invoke(null, [services, handlerRef, preExistingServiceTypes]);
+    }
+
+    // --- RB6 regression tests ---
+
+    [Fact]
+    public void RegisterHandlerType_DualInterfaceHandler_RegistersBothMessageHandlerAndProcessHandler()
+    {
+        // A class implementing both IMessageHandler<A> and IProcessHandler<TData, A> produces
+        // two HandlerReferences (one per interface kind). Both must be registered in DI.
+        var services = new ServiceCollection();
+        // Shared empty snapshot: both refs are scan-discovered in the same scan loop.
+        var snapshot = services.Select(d => d.ServiceType).ToHashSet();
+
+        InvokeRegisterHandlerType(services, typeof(DualInterfaceHandler), typeof(DualMsg), HandlerInterfaceKind.MessageHandler, snapshot);
+        InvokeRegisterHandlerType(services, typeof(DualInterfaceHandler), typeof(DualMsg), HandlerInterfaceKind.ProcessHandler, snapshot);
+
+        Assert.Contains(services, d => d.ServiceType == typeof(IMessageHandler<DualMsg>)
+            && d.ImplementationType == typeof(DualInterfaceHandler));
+        Assert.Contains(services, d => d.ServiceType == typeof(IProcessHandler<DualData, DualMsg>)
+            && d.ImplementationType == typeof(DualInterfaceHandler));
+    }
+
+    [Fact]
+    public void RegisterHandlerType_TwoDistinctHandlersForSameMessage_RegistersBoth()
+    {
+        // Two concrete classes that both implement IMessageHandler<MsgX> must each get
+        // their own descriptor. HandlerProcessor resolves via GetServices, so both must
+        // be present for both to be dispatched.
+        var services = new ServiceCollection();
+        // Shared empty snapshot: both handlers are scan-discovered in the same scan loop,
+        // so neither was pre-registered by the caller.
+        var snapshot = services.Select(d => d.ServiceType).ToHashSet();
+
+        InvokeRegisterHandlerType(services, typeof(MultiHandlerA), typeof(MultiMsg), HandlerInterfaceKind.MessageHandler, snapshot);
+        InvokeRegisterHandlerType(services, typeof(MultiHandlerB), typeof(MultiMsg), HandlerInterfaceKind.MessageHandler, snapshot);
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(IMessageHandler<MultiMsg>)).ToList();
+        Assert.Equal(2, descriptors.Count);
+        Assert.Contains(descriptors, d => d.ImplementationType == typeof(MultiHandlerA));
+        Assert.Contains(descriptors, d => d.ImplementationType == typeof(MultiHandlerB));
+    }
+
+    [Fact]
+    public void RegisterHandlerType_UserPreRegistration_SuppressesScanDiscoveredHandler()
+    {
+        // When the caller pre-registers a handler for IMessageHandler<MsgY>, a scan-discovered
+        // handler for the same message type must not be added. The user registration is authoritative.
+        var services = new ServiceCollection();
+        services.AddTransient<IMessageHandler<PreRegMsg>, PreRegUserHandler>();
+
+        // Snapshot taken after the user pre-registration and before the scan loop:
+        // IMessageHandler<PreRegMsg> is already present, so the scan-discovered handler must be suppressed.
+        InvokeRegisterHandlerType(services, typeof(PreRegOtherHandler), typeof(PreRegMsg), HandlerInterfaceKind.MessageHandler);
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(IMessageHandler<PreRegMsg>)).ToList();
+        Assert.Single(descriptors);
+        Assert.Equal(typeof(PreRegUserHandler), descriptors[0].ImplementationType);
     }
 
     [Fact]
@@ -539,4 +615,60 @@ file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReply
 
     public bool IsTrackedRequest(string messageId) =>
         throw new NotSupportedException();
+}
+
+// --- Fixture types for RB6 registration regression tests ---
+
+public sealed class DualMsg : Message
+{
+    public DualMsg() : base(Guid.NewGuid()) { }
+}
+
+public sealed class DualData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+}
+
+public sealed class DualInterfaceHandler
+    : IMessageHandler<DualMsg>, IProcessHandler<DualData, DualMsg>
+{
+    public Task HandleAsync(DualMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    public Task HandleAsync(DualMsg message, DualData data, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+public sealed class MultiMsg : Message
+{
+    public MultiMsg() : base(Guid.NewGuid()) { }
+}
+
+public sealed class MultiHandlerA : IMessageHandler<MultiMsg>
+{
+    public Task HandleAsync(MultiMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+public sealed class MultiHandlerB : IMessageHandler<MultiMsg>
+{
+    public Task HandleAsync(MultiMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+public sealed class PreRegMsg : Message
+{
+    public PreRegMsg() : base(Guid.NewGuid()) { }
+}
+
+public sealed class PreRegUserHandler : IMessageHandler<PreRegMsg>
+{
+    public Task HandleAsync(PreRegMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+public sealed class PreRegOtherHandler : IMessageHandler<PreRegMsg>
+{
+    public Task HandleAsync(PreRegMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }

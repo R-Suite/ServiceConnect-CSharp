@@ -84,7 +84,8 @@ public static class HandlerScanner
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
-                        MessageType = messageType
+                        MessageType = messageType,
+                        InterfaceKind = HandlerInterfaceKind.MessageHandler,
                     });
                 }
 
@@ -101,7 +102,8 @@ public static class HandlerScanner
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
-                        MessageType = messageType
+                        MessageType = messageType,
+                        InterfaceKind = HandlerInterfaceKind.ProcessHandler,
                     });
                 }
 
@@ -118,7 +120,8 @@ public static class HandlerScanner
                     handlerReferences.Add(new HandlerReference
                     {
                         HandlerType = type,
-                        MessageType = messageType
+                        MessageType = messageType,
+                        InterfaceKind = HandlerInterfaceKind.StreamHandler,
                     });
                 }
 
@@ -132,7 +135,8 @@ public static class HandlerScanner
                         handlerReferences.Add(new HandlerReference
                         {
                             HandlerType = type,
-                            MessageType = messageType
+                            MessageType = messageType,
+                            InterfaceKind = HandlerInterfaceKind.Aggregator,
                         });
                     }
                 }

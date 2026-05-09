@@ -39,9 +39,15 @@ public static partial class ServiceCollectionExtensions
     {
         RegisterHandlerRegistries(services);
 
+        // Snapshot the service types already present before the scan loop runs.
+        // RegisterHandlerType uses this to distinguish user pre-registrations
+        // (present in the snapshot) from scan-discovered handlers added by earlier
+        // iterations of this loop (not in the snapshot).
+        var preExistingServiceTypes = services.Select(d => d.ServiceType).ToHashSet();
+
         foreach (var handlerRef in handlerReferences)
         {
-            RegisterHandlerType(services, handlerRef);
+            RegisterHandlerType(services, handlerRef, preExistingServiceTypes);
         }
 
         services.TryAddSingleton<IList<HandlerReference>>(handlerReferences);
@@ -99,19 +105,34 @@ public static partial class ServiceCollectionExtensions
     }
 
     /// <remarks>
-    /// If the DI container already contains a descriptor for <c>IMessageHandler&lt;T&gt;</c>
-    /// (regardless of how it was registered — implementation type, instance, or factory),
-    /// the scanner skips adding scan-discovered handlers for <c>T</c>. User registrations are
-    /// authoritative; callers who want both a manually-registered handler and scan-discovered
-    /// handlers for the same message type must register all of them explicitly.
+    /// <para>
+    /// Each <see cref="HandlerReference"/> carries an <see cref="HandlerInterfaceKind"/> discriminator
+    /// that identifies which handler interface the reference was produced for. The registration
+    /// loop dispatches each reference to only the relevant <c>TryAddEnumerable</c> call, so a
+    /// class that implements both <c>IMessageHandler&lt;A&gt;</c> and <c>IProcessHandler&lt;TData,A&gt;</c>
+    /// produces two separate references and both interfaces are registered.
+    /// </para>
+    /// <para>
+    /// For <see cref="HandlerInterfaceKind.MessageHandler"/> references, user pre-registrations are
+    /// detected by checking <paramref name="preExistingServiceTypes"/> — a snapshot taken before the
+    /// scan loop starts. If <c>IMessageHandler&lt;T&gt;</c> appears in that snapshot, the user registered
+    /// it and the scan-discovered handler is suppressed. Descriptors added by earlier iterations of
+    /// the scan loop itself are NOT in the snapshot, so multiple scan-discovered implementations of
+    /// the same interface are all registered. <c>TryAddEnumerable</c> dedupes on
+    /// <c>(ServiceType, ImplementationType)</c> so re-adding the same pair in a later scan pass
+    /// is a safe no-op.
+    /// </para>
     /// </remarks>
-    private static void RegisterHandlerType(IServiceCollection services, HandlerReference handlerRef)
+    private static void RegisterHandlerType(
+        IServiceCollection services,
+        HandlerReference handlerRef,
+        IReadOnlySet<Type>? preExistingServiceTypes = null)
     {
         var handlerType = handlerRef.HandlerType;
 
-        // Handlers must never be singletons — the Context property and pooled IConsumeContext
-        // are mutated per-message and would race across concurrent dispatch on a shared instance.
-        // Transient is the safe default; we reject any caller who pre-registered the handler
+        // Handlers must never be singletons — handler instances carry per-message
+        // IConsumeContext state and would race across concurrent dispatches on a shared instance.
+        // Transient is the safe default; reject any caller who pre-registered the handler
         // as a singleton rather than silently co-existing two DI lifetimes.
         foreach (var descriptor in services.Where(d => d.ImplementationType == handlerType).ToArray())
         {
@@ -124,55 +145,75 @@ public static partial class ServiceCollectionExtensions
             }
         }
 
-        // TryAddEnumerable dedupes on (ServiceType, ImplementationType) regardless of
-        // lifetime, so a caller who pre-registered the handler as transient or scoped
-        // is honored instead of producing a second descriptor. HandlerProcessor resolves
-        // via GetServices(...), so a duplicate descriptor translates directly into the
-        // same message being dispatched to two separately-constructed handler instances.
-        //
-        // The stricter guard below also covers factory-registered singletons (where
-        // ImplementationType==null so TryAddEnumerable would not deduplicate): if ANY
-        // descriptor already answers the handler interface, the user's registration is
-        // authoritative and we skip the scan-registered transient entirely.
-        var messageHandlerInterface = handlerType.GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType
-                && i.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
-                && i.GetGenericArguments()[0] == handlerRef.MessageType);
-        if (messageHandlerInterface != null)
+        // Each branch handles exactly the interface kind recorded in the reference.
+        // TryAddEnumerable dedupes on (ServiceType, ImplementationType), so re-adding
+        // the same descriptor from a second scan pass is a safe no-op.
+        switch (handlerRef.InterfaceKind)
         {
-            if (services.Any(d => d.ServiceType == messageHandlerInterface))
+            case HandlerInterfaceKind.MessageHandler:
             {
-                return; // user-registered handler exists; respect their registration
+                var messageHandlerInterface = handlerType.GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType
+                        && i.GetGenericTypeDefinition() == typeof(IMessageHandler<>)
+                        && i.GetGenericArguments()[0] == handlerRef.MessageType);
+                if (messageHandlerInterface == null)
+                {
+                    return;
+                }
+
+                // If the service type was present before the scan loop started, the user
+                // pre-registered a handler. Respect that registration and suppress the
+                // scan-discovered one. Descriptors added by the scan loop itself are not
+                // in preExistingServiceTypes, so multiple scan-discovered handlers for the
+                // same interface all pass through; TryAddEnumerable deduplicates them by
+                // (ServiceType, ImplementationType).
+                if (preExistingServiceTypes?.Contains(messageHandlerInterface) == true)
+                {
+                    return;
+                }
+
+                services.TryAddEnumerable(ServiceDescriptor.Transient(messageHandlerInterface, handlerType));
+                break;
             }
 
-            services.TryAddEnumerable(ServiceDescriptor.Transient(messageHandlerInterface, handlerType));
-            return;
-        }
+            case HandlerInterfaceKind.ProcessHandler:
+            {
+                var processHandlerInterface = handlerType.GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType
+                        && i.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
+                        && i.GetGenericArguments()[1] == handlerRef.MessageType);
+                if (processHandlerInterface != null)
+                {
+                    services.TryAddEnumerable(ServiceDescriptor.Transient(processHandlerInterface, handlerType));
+                }
 
-        var processHandlerInterface = handlerType.GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType
-                && i.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
-                && i.GetGenericArguments()[1] == handlerRef.MessageType);
-        if (processHandlerInterface != null)
-        {
-            services.TryAddEnumerable(ServiceDescriptor.Transient(processHandlerInterface, handlerType));
-            return;
-        }
+                break;
+            }
 
-        var streamHandlerInterface = handlerType.GetInterfaces()
-            .FirstOrDefault(i => i.IsGenericType
-                && i.GetGenericTypeDefinition() == typeof(IStreamHandler<>)
-                && i.GetGenericArguments()[0] == handlerRef.MessageType);
-        if (streamHandlerInterface != null)
-        {
-            services.TryAddEnumerable(ServiceDescriptor.Transient(streamHandlerInterface, handlerType));
-            return;
-        }
+            case HandlerInterfaceKind.StreamHandler:
+            {
+                var streamHandlerInterface = handlerType.GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType
+                        && i.GetGenericTypeDefinition() == typeof(IStreamHandler<>)
+                        && i.GetGenericArguments()[0] == handlerRef.MessageType);
+                if (streamHandlerInterface != null)
+                {
+                    services.TryAddEnumerable(ServiceDescriptor.Transient(streamHandlerInterface, handlerType));
+                }
 
-        if (handlerType.BaseType is { IsGenericType: true } baseType
-            && baseType.GetGenericTypeDefinition() == typeof(Aggregator<>))
-        {
-            services.TryAddEnumerable(ServiceDescriptor.Transient(baseType, handlerType));
+                break;
+            }
+
+            case HandlerInterfaceKind.Aggregator:
+            {
+                if (handlerType.BaseType is { IsGenericType: true } baseType
+                    && baseType.GetGenericTypeDefinition() == typeof(Aggregator<>))
+                {
+                    services.TryAddEnumerable(ServiceDescriptor.Transient(baseType, handlerType));
+                }
+
+                break;
+            }
         }
     }
 }
