@@ -1348,6 +1348,7 @@ public class BusTests
             "producer" => null,
             "timeoutStore" => timeoutStore,
             "consumeContextAccessor" => accessor,
+            "busConfig" => null,
             _ => throw new InvalidOperationException($"Unexpected Bus constructor parameter '{parameter.Name}'.")
         }).ToArray();
 

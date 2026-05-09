@@ -29,6 +29,8 @@ public sealed class BusConfiguration : IBusConfiguration
     public bool DeadLetterUnhandledMessages { get; set; }
     /// <inheritdoc />
     public bool StrictReplyValidation { get; set; }
+    /// <inheritdoc />
+    public TimeSpan DisposeTimeout { get; set; } = TimeSpan.FromSeconds(30);
     /// <summary>
     /// Gets the transport configuration used to connect to the broker.
     /// </summary>

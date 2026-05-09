@@ -118,7 +118,8 @@ public static partial class ServiceCollectionExtensions
                 sp.GetService<IConsumer>(),
                 sp.GetService<IProducer>(),
                 timeoutStore: sp.GetService<ITimeoutStore>(),
-                consumeContextAccessor: sp.GetRequiredService<ConsumeContextAccessor>());
+                consumeContextAccessor: sp.GetRequiredService<ConsumeContextAccessor>(),
+                busConfig: sp.GetRequiredService<IBusConfiguration>());
             sp.GetRequiredService<BusAccessor>().Set(bus);
             return bus;
         });

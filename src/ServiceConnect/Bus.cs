@@ -27,6 +27,7 @@ public sealed class Bus : IBus
     private readonly ConsumeContextAccessor _consumeContextAccessor;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ConsumeScopeAccessor _scopeAccessor;
+    private readonly IBusConfiguration _busConfig;
     private readonly bool _hasOutgoingFilters;
 #if NET9_0_OR_GREATER
     private readonly System.Threading.Lock _stateLock = new();
@@ -55,7 +56,8 @@ public sealed class Bus : IBus
         IConsumer? consumer = null,
         IProducer? producer = null,
         ITimeoutStore? timeoutStore = null,
-        ConsumeContextAccessor? consumeContextAccessor = null)
+        ConsumeContextAccessor? consumeContextAccessor = null,
+        IBusConfiguration? busConfig = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -77,6 +79,9 @@ public sealed class Bus : IBus
         _producer = producer;
         _timeoutStore = timeoutStore;
         _consumeContextAccessor = consumeContextAccessor ?? new ConsumeContextAccessor();
+        // busConfig is optional for test call sites; production always supplies it via ServiceCollectionExtensions.
+        // When absent, fall back to the standard 30-second dispose timeout so the safety bound still applies.
+        _busConfig = busConfig ?? new Configuration.BusConfiguration();
     }
 
     /// <inheritdoc />
@@ -591,13 +596,37 @@ public sealed class Bus : IBus
     /// here would throw ObjectDisposedException and prevent clean shutdown.
     /// Public callers must use StopConsumingAsync instead, which adds the guard.
     /// </summary>
-    private async Task StopConsumingCoreAsync(CancellationToken cancellationToken = default)
+    /// <param name="cancellationToken">Token to cancel the semaphore wait.</param>
+    /// <param name="semaphoreWaitTimeout">
+    /// When supplied (DisposeAsync's path), the semaphore wait is bounded by this duration.
+    /// On timeout, teardown proceeds without the semaphore — the broker connection is about to
+    /// be torn down by DI's IServiceProvider disposal anyway, so proceeding is safe. When
+    /// absent (StopConsumingAsync's path), the wait blocks until cancellation.
+    /// </param>
+    private async Task StopConsumingCoreAsync(CancellationToken cancellationToken = default, TimeSpan? semaphoreWaitTimeout = null)
     {
         bool semaphoreAcquired = false;
         try
         {
-            await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            semaphoreAcquired = true;
+            // When a timeout is provided (DisposeAsync's path) and the wait does not complete in
+            // time, proceed with teardown WITHOUT the semaphore. A concurrent StartConsumingAsync
+            // may still be mid-handshake; this is acceptable in dispose because the broker
+            // connection is about to be torn down by DI's IServiceProvider disposal anyway.
+            if (semaphoreWaitTimeout is { } timeout)
+            {
+                semaphoreAcquired = await _lifecycleSemaphore.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+                if (!semaphoreAcquired)
+                {
+                    _logger.LogWarning(
+                        "Bus.StopConsumingCoreAsync timed out waiting for the lifecycle semaphore after {Timeout}; proceeding with teardown anyway.",
+                        timeout);
+                }
+            }
+            else
+            {
+                await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+                semaphoreAcquired = true;
+            }
 
             lock (_stateLock)
             {
@@ -649,9 +678,11 @@ public sealed class Bus : IBus
         // Stop consuming under the lifecycle semaphore. _consumer and _producer are DI singletons;
         // the host's IServiceProvider disposes them when the host shuts down — Bus.DisposeAsync
         // does not double-dispose them. _sendPipeline is owned by the Bus and is disposed here.
+        // Pass DisposeTimeout so a wedged StartConsumingAsync (broker partition mid-handshake)
+        // does not block container shutdown indefinitely.
         try
         {
-            await StopConsumingCoreAsync().ConfigureAwait(false);
+            await StopConsumingCoreAsync(semaphoreWaitTimeout: _busConfig.DisposeTimeout).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

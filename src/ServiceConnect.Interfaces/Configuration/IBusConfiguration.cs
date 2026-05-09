@@ -121,4 +121,12 @@ public interface IBusConfiguration
     /// the default value preserves existing trust decisions exactly.
     /// </remarks>
     bool StrictReplyValidation { get; set; }
+
+    /// <summary>
+    /// Maximum time <c>Bus.DisposeAsync</c> waits for the lifecycle semaphore before
+    /// proceeding with teardown anyway. A wedged <c>StartConsumingAsync</c> (e.g., broker
+    /// partition during handshake) would otherwise block the semaphore indefinitely and
+    /// hang container shutdown. Default: 30 seconds.
+    /// </summary>
+    TimeSpan DisposeTimeout { get; }
 }
