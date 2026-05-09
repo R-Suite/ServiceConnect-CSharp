@@ -33,7 +33,9 @@ public sealed class ProducerPublishMetricsTests
 
         var duration = Assert.Single(durationRecords);
         Assert.Equal("rabbitmq", duration.GetTag("messaging.system"));
-        Assert.Equal("publish", duration.GetTag("messaging.operation"));
+        Assert.Equal("publish", duration.GetTag("messaging.operation.type"));
+        Assert.Equal("publish", duration.GetTag("messaging.operation.name"));
+        Assert.Null(duration.GetTag("messaging.operation"));
         // PublishAsync(Type) destination is the per-type exchange name; non-empty proves
         // the destination was resolved before the metric emit.
         Assert.False(string.IsNullOrEmpty(duration.GetTag("messaging.destination.name")));
@@ -43,7 +45,9 @@ public sealed class ProducerPublishMetricsTests
         var published = Assert.Single(publishedRecords);
         Assert.Equal(1, published.Value);
         Assert.Equal("rabbitmq", published.GetTag("messaging.system"));
-        Assert.Equal("publish", published.GetTag("messaging.operation"));
+        Assert.Equal("publish", published.GetTag("messaging.operation.type"));
+        Assert.Equal("publish", published.GetTag("messaging.operation.name"));
+        Assert.Null(published.GetTag("messaging.operation"));
         Assert.Equal(duration.GetTag("messaging.destination.name"), published.GetTag("messaging.destination.name"));
     }
 
@@ -62,7 +66,9 @@ public sealed class ProducerPublishMetricsTests
 
         var duration = Assert.Single(durationRecords);
         Assert.Equal("rabbitmq", duration.GetTag("messaging.system"));
-        Assert.Equal("publish", duration.GetTag("messaging.operation"));
+        Assert.Equal("publish", duration.GetTag("messaging.operation.type"));
+        Assert.Equal("publish", duration.GetTag("messaging.operation.name"));
+        Assert.Null(duration.GetTag("messaging.operation"));
         // The destination resolved before the publish call — failure happens at BasicPublishAsync,
         // by which point GetExchangeName has already populated the exchange name.
         Assert.False(string.IsNullOrEmpty(duration.GetTag("messaging.destination.name")));

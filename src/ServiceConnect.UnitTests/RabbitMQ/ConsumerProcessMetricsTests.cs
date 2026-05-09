@@ -40,7 +40,9 @@ public sealed class ConsumerProcessMetricsTests
 
         var duration = Assert.Single(collector.GetDoubleRecords(MetricNames.ProcessDuration));
         Assert.Equal("rabbitmq", duration.GetTag("messaging.system"));
-        Assert.Equal("process", duration.GetTag("messaging.operation"));
+        Assert.Equal("process", duration.GetTag("messaging.operation.type"));
+        Assert.Equal("process", duration.GetTag("messaging.operation.name"));
+        Assert.Null(duration.GetTag("messaging.operation"));
         Assert.Equal(queueName, duration.GetTag("messaging.destination.name"));
         Assert.Null(duration.GetTag("error.type"));
         Assert.True(duration.Value >= 0);
@@ -74,7 +76,9 @@ public sealed class ConsumerProcessMetricsTests
         var durationRecords = collector.GetDoubleRecords(MetricNames.ProcessDuration);
         var duration = Assert.Single(durationRecords);
         Assert.Equal("rabbitmq", duration.GetTag("messaging.system"));
-        Assert.Equal("process", duration.GetTag("messaging.operation"));
+        Assert.Equal("process", duration.GetTag("messaging.operation.type"));
+        Assert.Equal("process", duration.GetTag("messaging.operation.name"));
+        Assert.Null(duration.GetTag("messaging.operation"));
         Assert.Equal(queueName, duration.GetTag("messaging.destination.name"));
         // error.type populated from ExceptionTypeMapper for the rethrown AlreadyClosedException.
         Assert.NotNull(duration.GetTag("error.type"));

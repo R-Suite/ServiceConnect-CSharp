@@ -157,7 +157,8 @@ internal sealed class RabbitMqDispatchPipeline(
         var processTags = new TagList
         {
             { "messaging.system", "rabbitmq" },
-            { "messaging.operation", "process" },
+            { "messaging.operation.type", "process" },
+            { "messaging.operation.name", "process" },
             { "messaging.destination.name", _consumerQueueName },
         };
         if (errorType is not null)
@@ -183,7 +184,8 @@ internal sealed class RabbitMqDispatchPipeline(
         var consumedTags = new TagList
         {
             { "messaging.system", "rabbitmq" },
-            { "messaging.operation", "process" },
+            { "messaging.operation.type", "process" },
+            { "messaging.operation.name", "process" },
             { "messaging.destination.name", _consumerQueueName },
             { "messaging.outcome", outcome },
         };

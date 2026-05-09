@@ -507,7 +507,8 @@ public sealed class Producer : IProducer
         var durationTags = new TagList
         {
             { "messaging.system", "rabbitmq" },
-            { "messaging.operation", "publish" },
+            { "messaging.operation.type", "publish" },
+            { "messaging.operation.name", "publish" },
             { "messaging.destination.name", resolvedDestination },
         };
         // TimeoutException from PublishWithTimeoutAsync indicates the broker ack didn't arrive
@@ -526,7 +527,8 @@ public sealed class Producer : IProducer
             var successTags = new TagList
             {
                 { "messaging.system", "rabbitmq" },
-                { "messaging.operation", "publish" },
+                { "messaging.operation.type", "publish" },
+                { "messaging.operation.name", "publish" },
                 { "messaging.destination.name", resolvedDestination },
             };
             ServiceConnectMeter.AddPublishedMessage(successTags);
