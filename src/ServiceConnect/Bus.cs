@@ -529,9 +529,20 @@ public sealed class Bus : IBus
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Idempotent on a disposed bus. The host's BusHostedService.StopAsync may run
+    /// AFTER the bus has been disposed by another shutdown path; throwing here
+    /// surfaced as a noisy ObjectDisposedException log on every shutdown. A disposed
+    /// bus is also a stopped bus (DisposeAsync calls StopConsumingCoreAsync), so the
+    /// idempotent contract is correct.
+    /// </remarks>
     public async Task StopConsumingAsync(CancellationToken cancellationToken = default)
     {
-        ThrowIfDisposed();
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
         await StopConsumingCoreAsync(cancellationToken).ConfigureAwait(false);
     }
 
