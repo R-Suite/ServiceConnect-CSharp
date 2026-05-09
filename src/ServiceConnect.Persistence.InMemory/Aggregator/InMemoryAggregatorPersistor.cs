@@ -210,6 +210,21 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     }
 
     /// <summary>
+    /// Returns the number of stored messages for the named stream whose CLR type is
+    /// currently resolvable.
+    /// </summary>
+    /// <remarks>
+    /// The InMemory persistor cannot produce unresolved entries: <see cref="InsertDataAsync"/>
+    /// rejects null and stores typed <see cref="IHasCorrelationId"/> instances directly, so
+    /// every record is resolved by definition. This is therefore a thin pass-through to
+    /// <see cref="CountAsync"/>. The Mongo persistor, which deserialises lazily on read,
+    /// uses a typed <c>$in</c> filter and is the regression backstop for unresolved-aware
+    /// gating.
+    /// </remarks>
+    public Task<int> CountResolvedAsync(string name, CancellationToken cancellationToken = default)
+        => CountAsync(name, cancellationToken);
+
+    /// <summary>
     /// Disposes the underlying <see cref="CacheProvider"/>, releasing any timers
     /// it owns. Without this, every DI rebuild leaks timer registrations.
     /// </summary>

@@ -69,7 +69,7 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => SnapshotOf(messages));
@@ -134,7 +134,7 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => SnapshotOf(messages));
@@ -190,7 +190,7 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => SnapshotOf(messages));
@@ -235,10 +235,13 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(3);
-        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AggregatorSnapshot([], [], UnresolvedCount: 2));
+        // Under the resolved-aware gate, an unresolved-only buffer reports
+        // CountResolvedAsync = 0; the gate does not fire, GetSnapshotAsync is never
+        // consulted, and (correctly) no dispatch or delete occurs. Pre-fix this scenario
+        // entered FlushAggregatorAsync and short-circuited on an empty ResolvedMessages
+        // list — same outward behaviour, but each message paid the lock + snapshot cost.
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
 
         var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
         var aggregator = new AggTestAggregator(tcs);
@@ -288,7 +291,7 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => SnapshotOf(messages, unresolved: 1));
@@ -335,7 +338,7 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns<string, CancellationToken>(async (_, ct) =>
@@ -465,7 +468,7 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
 
         // GetSnapshotAsync callback simulates a concurrent insert arriving between snapshot and remove.
@@ -920,7 +923,7 @@ public class AggregatorProcessorTests
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
         persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => SnapshotOf([probeMessage]));

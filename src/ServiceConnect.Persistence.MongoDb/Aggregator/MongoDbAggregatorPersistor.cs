@@ -337,6 +337,40 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         }
     }
 
+    /// <inheritdoc />
+    public async Task<int> CountResolvedAsync(string name, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
+            // Snapshot the registered type-name set and use it as a Mongo $in filter on
+            // DataTypeName. Documents whose CLR type can't currently be resolved are
+            // excluded from the gate so unresolved-only batches don't churn the flush
+            // path. The snapshot is point-in-time; a Register that runs after the
+            // snapshot but before the round-trip simply lands in the next gate eval.
+            var registeredTypes = _typeRegistry.AllRegisteredTypeNames();
+            if (registeredTypes.Count == 0)
+            {
+                // No types registered means nothing can resolve — skip the round-trip.
+                return 0;
+            }
+
+            var filter = Builders<AggregatorDocument>.Filter.And(
+                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                Builders<AggregatorDocument>.Filter.In(x => x.DataTypeName, registeredTypes));
+            var count = await _collection.CountDocumentsAsync(filter, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return count > int.MaxValue ? int.MaxValue : (int)count;
+        }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to count resolved aggregator data for '{name}'.", ex);
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException($"Failed to count resolved aggregator data for '{name}'.", ex);
+        }
+    }
+
     /// <summary>
     /// Ensures indexes on Name and the compound (Name, DataBson.CorrelationId) exist.
     /// A per-instance flag short-circuits subsequent calls after the first success or benign

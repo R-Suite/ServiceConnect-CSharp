@@ -81,6 +81,16 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
         Volatile.Write(ref _types, null);
     }
 
+    /// <inheritdoc />
+    public IReadOnlyCollection<string> AllRegisteredTypeNames()
+    {
+        // _registeredTypes.Keys snapshots under ConcurrentDictionary's enumerator semantics,
+        // which is point-in-time consistent. Materialise to a list so the returned collection
+        // is fully detached from later Register calls — callers that pass this to a Mongo
+        // $in filter rely on a stable count.
+        return [.. _registeredTypes.Keys];
+    }
+
     private void AddOrReject(string key, Type type)
     {
         var existing = _registeredTypes.GetOrAdd(key, type);

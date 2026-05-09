@@ -70,7 +70,14 @@ internal sealed class AggregatorProcessor(
 
         await persistor.InsertDataAsync(withCorrId, descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
 
-        var count = await persistor.CountAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
+        // Use CountResolvedAsync so unresolved-only batches don't trigger empty flushes.
+        // Pre-fix the gate consulted CountAsync (total rows) and an unresolved-only batch
+        // would fire the gate on every message — flush returned no-op (ResolvedMessages.Count
+        // == 0) but each iteration still acquired the per-aggregator semaphore and made a
+        // GetSnapshotAsync round-trip. CountResolvedAsync is the cheap shape on first-party
+        // persistors; the interface default delegates to GetSnapshotAsync for back-compat
+        // with third-party implementations.
+        var count = await persistor.CountResolvedAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
         if (descriptor.BatchSize > 0 && count >= descriptor.BatchSize)
         {
             // Register in _activeFlushes BEFORE reading _disposeCts.Token. A concurrent

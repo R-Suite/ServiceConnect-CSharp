@@ -65,4 +65,27 @@ public interface IAggregatorPersistor
     /// <param name="cancellationToken">A token that cancels the operation.</param>
     /// <returns>The number of stored records.</returns>
     Task<int> CountAsync(string name, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Counts persisted messages whose CLR type is currently resolvable. Unlike
+    /// <see cref="CountAsync"/> (which returns total rows including those whose CLR type
+    /// could not be resolved e.g. after a type rename), this method drives the
+    /// batch-size flush gate so unresolved-only batches do not trigger flushes that
+    /// produce no work.
+    /// </summary>
+    /// <remarks>
+    /// The default implementation delegates to <see cref="GetSnapshotAsync"/> and
+    /// returns <c>ResolvedMessages.Count</c>. First-party persistors override this with
+    /// a cheap typed query (e.g. Mongo: <c>$in</c> on registered type names; InMemory:
+    /// pass-through to <see cref="CountAsync"/> because every stored record is a
+    /// deserialised <see cref="IHasCorrelationId"/> and therefore always resolved).
+    /// </remarks>
+    /// <param name="name">The logical aggregator name.</param>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The number of stored records whose CLR type is currently resolvable.</returns>
+    async Task<int> CountResolvedAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var snapshot = await GetSnapshotAsync(name, cancellationToken).ConfigureAwait(false);
+        return snapshot.ResolvedMessages.Count;
+    }
 }
