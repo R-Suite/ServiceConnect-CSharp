@@ -297,6 +297,16 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <b>Retry contract on cancellation.</b> If <see cref="OperationCanceledException"/>
+    /// is thrown, the server-side state is undefined: cancellation may have fired before
+    /// or after the server committed the update. A caller that retries without re-reading
+    /// state may wedge the saga — if the server has actually committed, the caller's
+    /// stale <c>Version</c> will mismatch on the retry's concurrency filter and surface
+    /// a spurious <see cref="ConcurrencyException"/>. Callers MUST call
+    /// <see cref="FindDataAsync"/> first on retry to refresh the version, then rebuild
+    /// the write record around the current server state.
+    /// </remarks>
     public async Task UpdateDataAsync<T>(IPersistenceData<T> persistenceData, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -308,8 +318,19 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
         // Build a separate write record so the caller's versionData is not mutated
         // by the bump until we see a confirmed success. Any failure path (including
         // OperationCanceledException, TaskCanceledException, or an unexpected
-        // exception type) therefore leaves the caller's Version intact — a retry
-        // re-sees the same current version and the concurrency filter still matches.
+        // exception type) therefore leaves the caller's Version intact.
+        //
+        // RETRY CONTRACT: a cancelled update has TWO possible server-side states —
+        //   (a) cancellation fired BEFORE the server committed the ReplaceOne.
+        //       The caller's Version still matches the server; a retry succeeds.
+        //   (b) cancellation fired AFTER server commit but BEFORE the client
+        //       received ack. The server is now at Version N+1; the caller still
+        //       believes Version N; a retry's filter (Version == N) MISSES and
+        //       throws ConcurrencyException, even though the write succeeded.
+        // Callers that catch OperationCanceledException and intend to retry MUST
+        // call FindDataAsync first to re-read the current version and rebuild
+        // their write record. This contract is documented in the public xmldoc on
+        // UpdateDataAsync above.
         var writeRecord = new MongoDbData<T>
         {
             Id = versionData.Id,
