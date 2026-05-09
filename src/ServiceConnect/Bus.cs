@@ -505,18 +505,30 @@ public sealed class Bus : IBus
             _logger.LogInformation("Bus starting to consume on queue {QueueName} for {Count} message types.",
                 _queueConfig.QueueName, messageTypeNames.Count);
 
-            // ConsumerEventHandler passes IDictionary<string,object>; DispatchAsync accepts
-            // IReadOnlyDictionary<string,object>. The transport always supplies Dictionary<,>
-            // (which implements both) so the as-cast succeeds on the hot path; the fallback
-            // copy handles any non-Dictionary<,> transport implementation.
-            await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames,
-                (msg, type, hdrs, ct) => _dispatcher.DispatchAsync(msg, type,
-                    hdrs as IReadOnlyDictionary<string, object>
-                        ?? new Dictionary<string, object>(hdrs, StringComparer.Ordinal),
-                    ct),
-                cancellationToken).ConfigureAwait(false);
-
+            // Flip _consuming = true BEFORE the await so health checks during the StartConsumingAsync
+            // window see Healthy. Pre-fix the flag was set after the await — broker dispatch could
+            // arrive in the gap, and IsConsuming returned false during a perfectly-fine startup,
+            // surfacing as spurious health-check Unhealthy. Wrap the await in try/catch to roll
+            // the flag back on failure (the broker isn't actually consuming).
             lock (_stateLock) { _consuming = true; }
+            try
+            {
+                // ConsumerEventHandler passes IDictionary<string,object>; DispatchAsync accepts
+                // IReadOnlyDictionary<string,object>. The transport always supplies Dictionary<,>
+                // (which implements both) so the as-cast succeeds on the hot path; the fallback
+                // copy handles any non-Dictionary<,> transport implementation.
+                await localConsumer.StartConsumingAsync(_queueConfig.QueueName, messageTypeNames,
+                    (msg, type, hdrs, ct) => _dispatcher.DispatchAsync(msg, type,
+                        hdrs as IReadOnlyDictionary<string, object>
+                            ?? new Dictionary<string, object>(hdrs, StringComparer.Ordinal),
+                        ct),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                lock (_stateLock) { _consuming = false; }
+                throw;
+            }
         }
         finally
         {
