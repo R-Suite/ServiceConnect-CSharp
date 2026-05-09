@@ -492,6 +492,16 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         var shutdownPublishCts = _shutdownPublishCts;
         _ = CancelHelperPublishesAtDeadlineAsync(shutdownPublishCts, deadline);
 
+        // Unsubscribe the consumer-tag recovery handler BEFORE BasicCancelAsync. A recovery
+        // event firing concurrently with the cancel could otherwise swap _consumerTag while
+        // BasicCancelAsync is using it, targeting a stale tag. The remaining connection-level
+        // unsubscribes (channel/connection shutdown, blocked/unblocked) stay near the end of
+        // dispose where they were — those don't read host state during teardown.
+        if (_subscribedUnderlyingConnection is not null)
+        {
+            _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
+        }
+
         if (_model != null && _consumerTag != null)
         {
             try
@@ -574,7 +584,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             subscribedConn.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
             subscribedConn.ConnectionBlockedAsync -= OnConnectionBlockedAsync;
             subscribedConn.ConnectionUnblockedAsync -= OnConnectionUnblockedAsync;
-            subscribedConn.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
+            // ConsumerTagChangeAfterRecoveryAsync was already unsubscribed earlier in dispose
+            // to prevent recovery-during-cancel swaps; only the connection-level shutdown
+            // handlers are unsubscribed here.
             _subscribedUnderlyingConnection = null;
         }
 
