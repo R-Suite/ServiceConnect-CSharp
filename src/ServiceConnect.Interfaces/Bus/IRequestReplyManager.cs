@@ -41,6 +41,24 @@ public interface IRequestReplyManager
     /// <param name="options">Request routing and timeout options.</param>
     /// <param name="cancellationToken">A token that cancels the request.</param>
     /// <returns>The replies collected before completion.</returns>
+    /// <remarks>
+    /// <b>Under-delivery semantics (v8 behaviour change).</b> When
+    /// <see cref="RequestOptions.ExpectedReplyCount"/> is a positive integer N, this call
+    /// expects exactly N replies. If fewer than N arrive before
+    /// <see cref="RequestOptions.Timeout"/> expires, the task throws
+    /// <see cref="RequestTimeoutException"/>; the partials received before the timeout
+    /// fired are exposed on <see cref="RequestTimeoutException.PartialReplies"/>. When
+    /// <c>ExpectedReplyCount</c> is zero, negative, or null, no under-delivery check
+    /// applies — the call returns every reply received during the window. Callers
+    /// relying on the pre-v8 silent-partial-return contract must catch
+    /// <see cref="RequestTimeoutException"/> and read
+    /// <see cref="RequestTimeoutException.PartialReplies"/>.
+    /// </remarks>
+    /// <exception cref="RequestTimeoutException">
+    /// Thrown when <see cref="RequestOptions.ExpectedReplyCount"/> is positive and fewer
+    /// replies than requested arrived before <see cref="RequestOptions.Timeout"/> fired.
+    /// The partials are accessible via <see cref="RequestTimeoutException.PartialReplies"/>.
+    /// </exception>
     /// <exception cref="RequestSendCancelledException">
     /// Thrown when the outbound send pipeline cancelled before the request reached the broker.
     /// Distinct from a timeout (<see cref="RequestTimeoutException"/>) and from caller-token

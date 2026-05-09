@@ -65,6 +65,20 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Sends a request and waits for multiple replies from all respondents.
     /// </summary>
+    /// <remarks>
+    /// <b>Under-delivery semantics (v8 behaviour change).</b> When
+    /// <see cref="RequestOptions.ExpectedReplyCount"/> is a positive integer N, this call
+    /// expects exactly N replies. If fewer than N arrive before
+    /// <see cref="RequestOptions.Timeout"/> expires, the task throws
+    /// <see cref="Exceptions.RequestTimeoutException"/>; the partials received before the
+    /// timeout fired are exposed on
+    /// <see cref="Exceptions.RequestTimeoutException.PartialReplies"/> so callers that want
+    /// to recover them can. When <c>ExpectedReplyCount</c> is zero, negative, or null, no
+    /// under-delivery check applies — the call returns every reply received during the
+    /// window (the pre-v8 behaviour on every code path). Callers relying on the old
+    /// silent-partial-return contract must catch <see cref="Exceptions.RequestTimeoutException"/>
+    /// and read <see cref="Exceptions.RequestTimeoutException.PartialReplies"/>.
+    /// </remarks>
     Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
         where TRequest : Message where TReply : Message;
 

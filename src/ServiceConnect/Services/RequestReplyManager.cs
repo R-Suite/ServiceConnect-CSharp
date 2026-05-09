@@ -128,9 +128,27 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The internal cancellation registration is asynchronously disposed when the request
     /// completes (success, timeout, or cancellation), matching the <c>await using</c> pattern
     /// used in this implementation.
+    /// </para>
+    /// <para>
+    /// <b>Under-delivery semantics (v8 behaviour change).</b> When
+    /// <see cref="RequestOptions.ExpectedReplyCount"/> is a positive integer N, the call
+    /// expects exactly N replies. If fewer than N arrive before
+    /// <see cref="RequestOptions.Timeout"/> expires, the task throws
+    /// <see cref="RequestTimeoutException"/>; the partial replies received before the
+    /// timeout are exposed on <see cref="RequestTimeoutException.PartialReplies"/> for
+    /// callers that want to recover them. When <c>ExpectedReplyCount</c> is zero,
+    /// negative, or null, no under-delivery check applies — the call returns every
+    /// reply received during the window (the pre-v8 semantics on every code path).
+    /// </para>
+    /// <para>
+    /// Caller-token cancellation continues to surface as
+    /// <see cref="OperationCanceledException"/>. Outbound-pipeline cancel-before-delivery
+    /// continues to surface as <see cref="RequestSendCancelledException"/>.
+    /// </para>
     /// </remarks>
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
         TRequest message,
@@ -181,11 +199,43 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 if (cancellationToken.IsCancellationRequested)
                 {
                     tcs.TrySetCanceled(cancellationToken);
+                    return;
                 }
-                else
+
+                // Parity with PublishRequestAsync's timeout path: a caller specifying a
+                // positive ExpectedReplyCount expects *exactly* that many replies. Under-
+                // delivery is a real timeout, not "got something". Throw RequestTimeoutException
+                // and surface the partials via PartialReplies so callers who want to recover
+                // them can. Pre-v8 this path silently called TrySetResult(null!) and the
+                // caller saw the partial list with no indication anything went wrong.
+                if (expectedCount > 0 && !state.HasReceivedAllExpectedReplies)
                 {
-                    tcs.TrySetResult(null!); // timeout returns what we have
+                    object[] partials;
+                    lock (responses)
+                    {
+                        // Snapshot under the same lock the reply path appends under so the
+                        // exception's PartialReplies is a stable copy — concurrent late
+                        // replies (rejected at the Close gate above anyway) cannot mutate
+                        // it after the throw.
+                        partials = new object[responses.Count];
+                        for (var i = 0; i < responses.Count; i++)
+                        {
+                            partials[i] = responses[i]!;
+                        }
+                    }
+
+                    tcs.TrySetException(new RequestTimeoutException(
+                        messageId,
+                        TimeSpan.FromMilliseconds(options.Timeout),
+                        partials));
+                    return;
                 }
+
+                // No explicit expectation (zero / negative / null ExpectedReplyCount) — the
+                // caller asked for "everything that comes back in the window". Returning
+                // what we have is the documented semantics; pre-fix this was the
+                // unconditional path.
+                tcs.TrySetResult(null!);
             });
         }).ConfigureAwait(false);
 
