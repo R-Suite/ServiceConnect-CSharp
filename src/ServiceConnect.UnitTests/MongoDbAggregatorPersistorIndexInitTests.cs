@@ -14,6 +14,7 @@ namespace ServiceConnect.UnitTests;
 /// each call CreateManyAsync. Post-fix: only one wins the semaphore; the others
 /// re-check _indexed inside the lock and short-circuit.
 /// </summary>
+[Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorIndexInitTests
 {
     [Fact]

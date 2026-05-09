@@ -14,6 +14,7 @@ namespace ServiceConnect.UnitTests;
 /// $in query against the registered type-name set, so the AggregatorProcessor's
 /// batch-size flush gate is not triggered by unresolved-only batches.
 /// </summary>
+[Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorCountResolvedTests
 {
     static MongoDbAggregatorPersistorCountResolvedTests()

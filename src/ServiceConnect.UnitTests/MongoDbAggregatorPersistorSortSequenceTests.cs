@@ -12,6 +12,7 @@ namespace ServiceConnect.UnitTests;
 /// <summary>
 /// Verifies the sort shape and monotonic InsertSequence behaviour introduced in M36.
 /// </summary>
+[Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorSortSequenceTests
 {
     [Fact]

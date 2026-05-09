@@ -21,6 +21,7 @@ namespace ServiceConnect.UnitTests.Persistence;
 /// Instead, they lock in the observable invariant: the flag is only set after successful completion,
 /// which implies the short-circuit cannot hide a previous throw from a later caller.
 /// </summary>
+[Collection("Mongo Bson serial")]
 public class GuidSerializerRegistrationTests
 {
     private const string FlagFieldName = "_guidSerializerRegistered";

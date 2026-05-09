@@ -19,6 +19,7 @@ namespace ServiceConnect.UnitTests;
 // RHS in Expression.Convert(.. , declaredPropertyType); these tests pin the
 // equivalent wrapping into MongoDb's expression-tree shape so future drift is
 // caught at the structural level.
+[Collection("Mongo Bson serial")]
 public class MongoDbProcessManagerFinderExpressionTests
 {
     static MongoDbProcessManagerFinderExpressionTests()

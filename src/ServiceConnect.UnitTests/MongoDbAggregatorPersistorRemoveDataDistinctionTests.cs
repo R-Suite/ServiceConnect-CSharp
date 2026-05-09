@@ -14,6 +14,7 @@ namespace ServiceConnect.UnitTests;
 /// (KeyNotFoundException) and a name that exists but the supplied CorrelationId
 /// wasn't matched (ConcurrencyException with row count in the message).
 /// </summary>
+[Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorRemoveDataDistinctionTests
 {
     [Fact]

@@ -10,7 +10,7 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests;
 
-[Collection("MongoClientFactory")]
+[Collection("Mongo Bson serial")]
 public class MongoClientFactoryCertCacheTests
 {
     [Fact]

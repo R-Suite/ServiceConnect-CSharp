@@ -6,7 +6,7 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests;
 
-[Collection("MongoClientFactory")]
+[Collection("Mongo Bson serial")]
 public class MongoClientFactoryTests : IDisposable
 {
     private const string Passphrase = "testpass";

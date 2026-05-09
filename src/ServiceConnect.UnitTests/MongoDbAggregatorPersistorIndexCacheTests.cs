@@ -14,6 +14,7 @@ namespace ServiceConnect.UnitTests;
 /// CreateManyAsync call the flag is set and subsequent operations skip the round-trip entirely.
 /// Non-benign errors leave the flag unset so the next caller retries index creation.
 /// </summary>
+[Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorIndexCacheTests
 {
     [Fact]

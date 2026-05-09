@@ -13,6 +13,7 @@ namespace ServiceConnect.UnitTests;
 /// CreateManyAsync round-trips. Mirrors MongoDbAggregatorPersistorIndexCacheTests
 /// (M40) and the saga finder's _indexedCollections semantics.
 /// </summary>
+[Collection("Mongo Bson serial")]
 public class MongoDbTimeoutStoreIndexCacheTests
 {
     [Fact]

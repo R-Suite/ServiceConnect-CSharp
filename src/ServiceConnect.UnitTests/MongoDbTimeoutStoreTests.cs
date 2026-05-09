@@ -16,6 +16,7 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests;
 
+[Collection("Mongo Bson serial")]
 public class MongoDbTimeoutStoreTests
 {
     static MongoDbTimeoutStoreTests()
