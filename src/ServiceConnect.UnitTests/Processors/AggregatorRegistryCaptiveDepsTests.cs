@@ -56,4 +56,33 @@ public class AggregatorRegistryCaptiveDepsTests
         Assert.True(registry.TryGet(typeof(TestMessage), out var descriptor));
         Assert.Equal(5, descriptor!.BatchSize);
     }
+
+    public sealed class AsyncOnlyDisposableAggregator : Aggregator<TestMessage>, IAsyncDisposable
+    {
+        public AsyncOnlyDisposableAggregator() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public override int BatchSize() => 1;
+        public override TimeSpan Timeout() => TimeSpan.FromSeconds(1);
+        public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public void Constructor_RejectsIAsyncDisposableOnlyAggregator_WithClearMessage()
+    {
+        var services = new ServiceCollection();
+        services.AddTransient<Aggregator<TestMessage>, AsyncOnlyDisposableAggregator>();
+        var rootProvider = services.BuildServiceProvider(validateScopes: true);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { HandlerType = typeof(AsyncOnlyDisposableAggregator), MessageType = typeof(TestMessage) },
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => new AggregatorRegistry(
+            handlerRefs,
+            rootProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<AggregatorRegistry>.Instance));
+        Assert.Contains("IAsyncDisposable", ex.Message);
+        Assert.Contains("IDisposable", ex.Message);
+    }
 }

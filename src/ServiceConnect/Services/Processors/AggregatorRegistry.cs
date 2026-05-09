@@ -48,6 +48,22 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
                     $"Only one Aggregator<T> may be registered per message type; found '{existing.HandlerType.FullName}' and '{href.HandlerType.FullName}'.");
             }
 
+            // Synchronous `using var scope = scopeFactory.CreateScope()` calls IServiceScope.Dispose,
+            // which throws `InvalidOperationException("AsyncDisposableServiceNotSupported")` from MS.DI
+            // for any tracked service that implements IAsyncDisposable only (not also IDisposable).
+            // Check the concrete handler type before resolving so the guard fires before any scope
+            // disposal interleaves with the exception path.
+            if (typeof(IAsyncDisposable).IsAssignableFrom(href.HandlerType) &&
+                !typeof(IDisposable).IsAssignableFrom(href.HandlerType))
+            {
+                throw new InvalidOperationException(
+                    $"Aggregator '{aggregatorBaseType.FullName}' implements IAsyncDisposable but not IDisposable. " +
+                    "AggregatorRegistry uses synchronous scope disposal at construction (the aggregator instance is " +
+                    "only consulted for BatchSize/Timeout configuration), which is incompatible with IAsyncDisposable-only " +
+                    "lifetimes. Either implement IDisposable alongside IAsyncDisposable, or refactor the aggregator's " +
+                    "shutdown logic to avoid IAsyncDisposable.");
+            }
+
             var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, scope.ServiceProvider);
             builder[href.MessageType] = (descriptor, href.HandlerType);
 
