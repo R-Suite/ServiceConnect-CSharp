@@ -3,6 +3,7 @@ using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces.Configuration;
 using Xunit;
@@ -84,6 +85,92 @@ public sealed class ConnectionDisposeAsyncRaceTests
             .ToList();
         Assert.Empty(semaphoreOdes);
         Assert.Empty(disposeExceptions);
+    }
+
+    [Fact]
+    public async Task CreateChannelAsync_RaceLosesToDispose_ThrowsObjectDisposedExceptionNotInvalidOperation()
+    {
+        // Sequence the race deterministically using the lifecycle-attach hook.
+        //
+        // Exact race reproduced:
+        //   1. Thread A: CreateChannelAsync → ConnectAsync acquires _connectionLock.
+        //   2. CreateConnectionCoreAsync: _disposed check passes (still 0), _connection assigned,
+        //      _lifecycle.Attach() is called — this is the hook we exploit.
+        //   3. The Attach hook fires DisposeAsync on Thread B. DisposeAsync sets _disposed=1
+        //      immediately (Interlocked.Exchange needs no lock), then blocks waiting for the lock.
+        //   4. Thread A: ConnectAsync releases _connectionLock.
+        //   5. Thread B (DisposeAsync): acquires lock, nulls _connection, releases lock.
+        //      (Or Thread A's continuation runs first — either way _disposed=1.)
+        //   6. Thread A: post-ConnectAsync re-check (the new fix) sees _disposed=1 → ODE("Connection").
+        //      Without the fix: conn = Volatile.Read(ref _connection) → could be null → IOE,
+        //      or conn = fakeConnection (captured before step 5) → mock's CreateChannelAsync
+        //      throws ODE("IConnection") — wrong ObjectName, test fails either way.
+        //
+        // The test asserts ODE with ObjectName="Connection". With the fix the re-check throws
+        // exactly that. Without the fix the thread-racing outcome produces either IOE or
+        // ODE("IConnection") depending on scheduling — both fail the assertion.
+        var transport = new Mock<ITransportConfiguration>();
+        transport.SetupGet(t => t.Host).Returns("localhost");
+        transport.SetupGet(t => t.ClientSettings).Returns(new Dictionary<string, object>());
+
+        var connection = new Connection(transport.Object, "test-queue", NullLogger.Instance);
+
+        // Tight dispose-lock timeout so DisposeAsync gives up quickly if it can't acquire the lock.
+        var timeoutField = typeof(Connection).GetField("_disposeLockTimeout",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        timeoutField!.SetValue(connection, TimeSpan.FromMilliseconds(200));
+
+        // Gate: the SetupAdd callback signals this when DisposeAsync has set _disposed=1.
+        // Thread A (inside _connectionLock) waits on this before returning from Attach so that
+        // _disposed=1 is guaranteed visible at the post-ConnectAsync re-check in CreateChannelAsync.
+        var disposedSetSignal = new SemaphoreSlim(0, 1);
+
+        var fakeConnection = new Mock<IConnection>();
+        fakeConnection.SetupGet(c => c.IsOpen).Returns(false);
+
+        // Without the fix, if Thread A reaches conn.CreateChannelAsync before DisposeAsync
+        // nulls _connection, the mock needs to surface a wrong-name ODE so the assertion fails.
+        fakeConnection
+            .Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ObjectDisposedException(nameof(IConnection)));
+
+        // When _lifecycle.Attach subscribes to RecoverySucceededAsync, CreateConnectionCoreAsync
+        // has already passed its own _disposed check and assigned _connection. We fire DisposeAsync
+        // on a pool thread so it sets _disposed=1 (which needs no lock). We then wait in the
+        // callback until _disposed=1 is confirmed, so Thread A sees _disposed=1 at the re-check.
+        fakeConnection.SetupAdd(c => c.RecoverySucceededAsync += It.IsAny<AsyncEventHandler<AsyncEventArgs>>())
+            .Callback(() =>
+            {
+                // Fire DisposeAsync on a pool thread. Its very first statement is
+                // Interlocked.Exchange(ref _disposed, 1) — no lock required.
+                _ = Task.Run(async () =>
+                {
+                    await connection.DisposeAsync().ConfigureAwait(false);
+                    disposedSetSignal.Release();
+                });
+
+                // Spin until _disposed=1 is visible on Thread A. DisposeAsync sets _disposed
+                // before it tries to acquire the lock, so it's safe to spin here while
+                // Thread A holds _connectionLock.
+                var disposedField = typeof(Connection).GetField("_disposed",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var deadline = DateTime.UtcNow.AddSeconds(3);
+                while ((int)disposedField.GetValue(connection)! == 0 && DateTime.UtcNow < deadline)
+                {
+                    Thread.SpinWait(100);
+                }
+            });
+
+        connection.CreateConnectionForTests = (_, _, _, _) => Task.FromResult(fakeConnection.Object);
+
+        var createChannelTask = Task.Run(() => connection.CreateChannelAsync());
+
+        // Wait for DisposeAsync to finish (it acquires the lock after ConnectAsync releases it).
+        var signalled = await disposedSetSignal.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(signalled, "DisposeAsync did not set _disposed=1 within 5s; synchronization broken.");
+
+        var ex = await Assert.ThrowsAnyAsync<ObjectDisposedException>(() => createChannelTask);
+        Assert.Equal(nameof(Connection), ex.ObjectName);
     }
 
     [Fact]

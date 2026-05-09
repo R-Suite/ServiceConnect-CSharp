@@ -126,6 +126,16 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         if (conn == null)
         {
             await ConnectAsync(cancellationToken).ConfigureAwait(false);
+            // Re-check _disposed after the await: a concurrent DisposeAsync could have set
+            // _disposed=1 and nulled _connection between ConnectAsync's lock release and our
+            // re-read below. Throwing ObjectDisposedException here surfaces the canonical
+            // signal rather than letting the null-coalesce produce a misleading
+            // InvalidOperationException("Connection was not initialized.").
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                throw new ObjectDisposedException(nameof(Connection));
+            }
+
             conn = Volatile.Read(ref _connection)
                 ?? throw new InvalidOperationException("Connection was not initialized.");
         }
