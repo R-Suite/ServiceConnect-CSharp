@@ -46,14 +46,37 @@ internal static class DeepClone
     public static T Clone<T>(T value) where T : notnull
     {
         var runtimeType = value.GetType();
-        // Serialize to a BsonDocument using the runtime type so all concrete-type
-        // properties (including explicit-interface auto-properties) are captured.
-        var bson = value.ToBsonDocument(runtimeType);
-        // Deserialize using the same runtime type. BSON's _t discriminator handles
-        // any nested polymorphic values.
-        var clone = BsonSerializer.Deserialize(bson, runtimeType)
-            ?? throw new InvalidOperationException(
+        // Wrap the value in a synthetic single-field document. BSON refuses to write
+        // a collection (arrays, List<>, Dictionary<,> serialised as KVP arrays) at
+        // the document root — root must be {} not []. Header values legitimately
+        // arrive as List<byte> / string[] etc., so we always wrap; non-collection
+        // roots are unaffected. The serializer is looked up by runtime type so
+        // explicit-interface auto-properties and nested polymorphism (via the
+        // _t discriminator) round-trip correctly.
+        var serializer = BsonSerializer.LookupSerializer(runtimeType);
+        var wrapper = new BsonDocument();
+        using (var writer = new BsonDocumentWriter(wrapper))
+        {
+            writer.WriteStartDocument();
+            writer.WriteName("v");
+            var ctx = BsonSerializationContext.CreateRoot(writer);
+            serializer.Serialize(ctx, value);
+            writer.WriteEndDocument();
+        }
+        object? clone;
+        using (var reader = new BsonDocumentReader(wrapper))
+        {
+            reader.ReadStartDocument();
+            reader.ReadName();
+            var ctx = BsonDeserializationContext.CreateRoot(reader);
+            clone = serializer.Deserialize(ctx);
+            reader.ReadEndDocument();
+        }
+        if (clone is null)
+        {
+            throw new InvalidOperationException(
                 $"Deep clone of {runtimeType.FullName} returned null.");
+        }
         return (T)clone;
     }
 }

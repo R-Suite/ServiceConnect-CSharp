@@ -34,6 +34,31 @@ public class DeepCloneTests
     }
 
     [Fact]
+    public void Clone_RootIsCollection_RoundTripsViaWrapper()
+    {
+        // BSON refuses to write arrays / collections at the document root. Header values
+        // on TimeoutData legitimately arrive as List<byte> / string[] / Dictionary<,>;
+        // the wrapper-document strategy lets these round-trip without callers having to
+        // know about the BSON limitation.
+        var list = new List<byte> { 1, 2, 3 };
+        var listClone = DeepClone.Clone(list);
+        Assert.NotSame(list, listClone);
+        Assert.Equal(new byte[] { 1, 2, 3 }, listClone);
+
+        var array = new[] { "a", "b", "c" };
+        var arrayClone = DeepClone.Clone(array);
+        Assert.NotSame(array, arrayClone);
+        Assert.Equal(array, arrayClone);
+
+        var dict = new Dictionary<string, int> { ["one"] = 1, ["two"] = 2 };
+        var dictClone = DeepClone.Clone(dict);
+        Assert.NotSame(dict, dictClone);
+        Assert.Equal(2, dictClone.Count);
+        Assert.Equal(1, dictClone["one"]);
+        Assert.Equal(2, dictClone["two"]);
+    }
+
+    [Fact]
     public void Clone_PreservesExplicitInterfaceAutoProperty()
     {
         // M39 regression: explicit-interface auto-properties round-trip with default(Guid)
