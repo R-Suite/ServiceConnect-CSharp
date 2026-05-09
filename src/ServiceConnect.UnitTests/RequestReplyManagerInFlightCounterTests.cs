@@ -108,10 +108,14 @@ public sealed class RequestReplyManagerInFlightCounterTests
 
         manager = new RequestReplyManager(serializer.Object, pipeline.Object);
 
-        // Timeout 1 ms — the awaited PublishRequestAsync will time out before we feed
-        // the late reply. ExpectedReplyCount is unset so a 0-reply timeout completes
-        // successfully with no exception.
-        var options = new RequestOptions { Timeout = 1 };
+        // The awaited PublishRequestAsync must time out AFTER the send pipeline has
+        // completed; a too-tight timeout (e.g. 1 ms) loses the race under suite load
+        // and PublishRequestAsync throws RequestTimeoutException via the send-not-
+        // completed branch (line 380-384 of RequestReplyManager). 50 ms is short
+        // enough to keep the test fast but long enough that the synchronous mock
+        // pipeline always wins.
+        // ExpectedReplyCount is unset so a 0-reply timeout completes successfully.
+        var options = new RequestOptions { Timeout = 50 };
         var publishTask = manager.PublishRequestAsync<FakeMessage1, FakeMessage1>(
             new FakeMessage1(Guid.NewGuid()),
             new Dictionary<string, string>(),
