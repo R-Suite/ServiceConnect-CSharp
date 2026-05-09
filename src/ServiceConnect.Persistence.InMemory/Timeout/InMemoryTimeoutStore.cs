@@ -12,17 +12,26 @@ namespace ServiceConnect.Persistence.InMemory;
 /// lost on restart. Use a durable <see cref="ServiceConnect.Interfaces.ITimeoutStore"/>
 /// implementation (e.g. the MongoDB timeout store) for production.
 /// </remarks>
-public sealed class InMemoryTimeoutStore : ITimeoutStore
+public sealed class InMemoryTimeoutStore : ITimeoutStore, IDisposable
 {
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;
     private readonly TimeSpan _lockLeaseDuration;
 
+    // True when this store created its own _state in the public ctor; false when an
+    // external state was supplied via the internal ctor (e.g. shared by a sibling
+    // InMemoryProcessManagerFinder). Dispose only tears down the state when owned.
+    private readonly bool _ownsState;
+    private int _disposed;
+
     /// <summary>
     /// Initializes a new <see cref="InMemoryTimeoutStore"/> instance with the supplied options.
     /// </summary>
     public InMemoryTimeoutStore(InMemoryPersistenceOptions options, TimeProvider? timeProvider = null)
-        : this(options, new InMemoryPersistenceState(timeProvider), timeProvider) { }
+        : this(options, new InMemoryPersistenceState(timeProvider), timeProvider)
+    {
+        _ownsState = true;
+    }
 
     internal InMemoryTimeoutStore(
         InMemoryPersistenceOptions options,
@@ -40,6 +49,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         _state = state ?? throw new ArgumentNullException(nameof(state));
         _timeProvider = timeProvider ?? TimeProvider.System;
         _lockLeaseDuration = options.LockLeaseDuration;
+        _ownsState = false;
     }
 
     /// <summary>
@@ -159,6 +169,24 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
             // persistor uses on Insert/Get for the same reason.
             _ => DeepClone.Clone(value),
         };
+    }
+
+    /// <summary>
+    /// Disposes the owned <see cref="InMemoryPersistenceState"/> if this store created
+    /// it (public ctor path). Externally-supplied state (internal ctor path) is left
+    /// alone — its lifetime belongs to the supplier.
+    /// </summary>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        if (_ownsState)
+        {
+            _state.Dispose();
+        }
     }
 
     /// <inheritdoc />
