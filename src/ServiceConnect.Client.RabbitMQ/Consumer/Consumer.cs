@@ -86,21 +86,21 @@ public sealed class Consumer : IConsumer
     /// <param name="cancellationToken">A token used to cancel startup or consumption initialization.</param>
     public async Task StartConsumingAsync(string queueName, IReadOnlyList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default)
     {
+        // Reject a zero or negative ConsumerCount before acquiring start state. When this
+        // consumer is constructed directly (bypassing the builder), the builder's validator
+        // does not run, so the guard here is the last line of defence against a
+        // misconfiguration that would silently skip the client-construction loop and leave
+        // the bus consuming nothing.
+        if (_busConfiguration.ConsumerCount < 1)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.ConsumerCount must be at least 1 (got {_busConfiguration.ConsumerCount}).");
+        }
+
         if (Interlocked.CompareExchange(ref _started, 1, 0) != 0)
         {
             throw new InvalidOperationException(
                 "Consumer is already consuming. Call DisposeAsync before starting again.");
-        }
-
-        // Reject a zero or negative ConsumerCount before any setup work. When this consumer
-        // is constructed directly (bypassing the builder), the builder's validator does not
-        // run, so the guard here is the last line of defence against a misconfiguration that
-        // would silently skip the client-construction loop and leave the bus consuming nothing.
-        if (_busConfiguration.ConsumerCount < 1)
-        {
-            Interlocked.Exchange(ref _started, 0);
-            throw new InvalidOperationException(
-                $"BusConfiguration.ConsumerCount must be at least 1 (got {_busConfiguration.ConsumerCount}).");
         }
 
         try

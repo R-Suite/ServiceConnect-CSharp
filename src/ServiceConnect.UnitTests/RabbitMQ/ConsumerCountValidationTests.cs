@@ -30,7 +30,7 @@ public sealed class ConsumerCountValidationTests
         var bus = new Mock<IBusConfiguration>();
         bus.SetupGet(b => b.ConsumerCount).Returns(consumerCount);
 
-        // Provide a connection stub so StartConsumingAsync doesn't fail before the guard.
+        // Stub passed to ctor; the guard fires before any I/O so wiring is unused.
         var connection = new Mock<IServiceConnectConnection>();
 
         return new Consumer(transport.Object, queue.Object, bus.Object,
