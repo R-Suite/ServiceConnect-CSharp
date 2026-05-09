@@ -180,6 +180,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
 
         Volatile.Write(ref _shutdownTimedOut, 0);
+        // Reset the dispose-CAS flag so a Prepare→Dispose→Prepare→Dispose cycle runs the
+        // full teardown on each Dispose. Without this, the second Dispose short-circuits at
+        // the CAS at the top of DisposeAsync and skips BasicCancelAsync, channel close, and
+        // CTS disposal — leaking handlers and channels on each cycle. Pairs with the CTS
+        // rotations below so all dispose-time state is fresh per restart.
+        Interlocked.Exchange(ref _disposeStarted, 0);
         // Dispose any CTS replaced here — on first call these are the field-initialised instances,
         // on restart they are the prior cycle's CTSes. Leaving them undisposed leaks one per
         // start-stop-start cycle.
