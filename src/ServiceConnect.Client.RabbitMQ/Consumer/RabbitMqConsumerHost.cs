@@ -601,25 +601,35 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
     private async Task CancelHelperPublishesAtDeadlineAsync(CancellationTokenSource shutdownPublishCts, DateTimeOffset deadline)
     {
-        var remaining = deadline - _timeProvider.GetUtcNow();
-        if (remaining <= TimeSpan.Zero)
-        {
-            await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
-            return;
-        }
-
         try
         {
-            await Task.Delay(remaining, _timeProvider, shutdownPublishCts.Token).ConfigureAwait(false);
-            await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
+            var remaining = deadline - _timeProvider.GetUtcNow();
+            if (remaining <= TimeSpan.Zero)
+            {
+                await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
+                return;
+            }
+
+            try
+            {
+                await Task.Delay(remaining, _timeProvider, shutdownPublishCts.Token).ConfigureAwait(false);
+                await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (shutdownPublishCts.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
         }
-        catch (OperationCanceledException) when (shutdownPublishCts.IsCancellationRequested)
+        catch (Exception ex)
         {
-            return;
-        }
-        catch (ObjectDisposedException)
-        {
-            return;
+            // Fire-and-forget helper: any other failure (e.g. _timeProvider fault, late CTS
+            // disposal in production code paths the inner catches don't cover) must not become
+            // an unobserved Task. Log at Debug because dispose is already on a best-effort path.
+            _logger.LogDebug(ex, "CancelHelperPublishesAtDeadlineAsync best-effort recovery faulted");
         }
     }
 
