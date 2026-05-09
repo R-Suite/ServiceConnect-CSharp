@@ -65,6 +65,46 @@ public class AggregatorRegistryTests
         Assert.Equal(TimeSpan.FromSeconds(7), descriptor!.Timeout);
     }
 
+    [Theory]
+    [InlineData(5, 0, 0)]              // BatchSize set, Timeout=Zero — the stranded-tail bug
+    [InlineData(0, 1, 0)]              // BatchSize=0, positive Timeout — timer-only, no batch guard
+    [InlineData(0, 0, 0)]              // both zero — no flush trigger at all
+    [InlineData(-1, 1, 0)]             // negative BatchSize, positive Timeout
+    [InlineData(5, -1, 0)]             // positive BatchSize, negative Timeout (Timeout.InfiniteTimeSpan-like)
+    public void Construction_ThrowsInvalidOperation_WhenConfigurationCannotFlush(
+        int batchSize, int timeoutSeconds, int timeoutMilliseconds)
+    {
+        var timeout = TimeSpan.FromSeconds(timeoutSeconds) + TimeSpan.FromMilliseconds(timeoutMilliseconds);
+        var refs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ArgBar), HandlerType = typeof(ArgBarAggregator) }
+        };
+
+        var services = new ServiceCollection();
+        services.AddTransient<Aggregator<ArgBar>>(_ => new ArgBarAggregator(batchSize, timeout));
+        var sp = services.BuildServiceProvider();
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance));
+    }
+
+    [Fact]
+    public void Construction_DoesNotThrow_WhenBothBatchSizeAndTimeoutArePositive()
+    {
+        var refs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ArgBar), HandlerType = typeof(ArgBarAggregator) }
+        };
+
+        var services = new ServiceCollection();
+        services.AddTransient<Aggregator<ArgBar>>(_ => new ArgBarAggregator(5, TimeSpan.FromSeconds(1)));
+        var sp = services.BuildServiceProvider();
+
+        // Must not throw.
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
+        Assert.True(registry.TryGet(typeof(ArgBar), out _));
+    }
+
     [Fact]
     public void Construction_ThrowsOnDuplicateMessageType()
     {
@@ -183,4 +223,14 @@ file class ArgSecondFooAggregator : Aggregator<ArgFoo>
 file class ArgFooMessageHandler : IMessageHandler<ArgFoo>
 {
     public Task HandleAsync(ArgFoo message, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+file class ArgBar(Guid c) : Message(c);
+
+file class ArgBarAggregator(int batchSize, TimeSpan timeout) : Aggregator<ArgBar>
+{
+    public override int BatchSize() => batchSize;
+    public override TimeSpan Timeout() => timeout;
+    public override Task ExecuteAsync(IList<ArgBar> messages, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
 }

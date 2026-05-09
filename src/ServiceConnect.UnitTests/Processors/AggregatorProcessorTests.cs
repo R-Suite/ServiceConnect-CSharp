@@ -1052,6 +1052,7 @@ file class AggTestAggregator(TaskCompletionSource<IList<AggTestMessage>> tcs) : 
     private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
+    public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
 
     public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
@@ -1066,6 +1067,7 @@ file class OrderRecordingAggregator(List<string> order, TaskCompletionSource<ILi
     private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
+    public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
 
     public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
@@ -1079,7 +1081,7 @@ file class AggTestTimedAggregator(TaskCompletionSource<IList<AggTestMessage>> tc
 {
     private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
 
-    public override int BatchSize() => 0;
+    public override int BatchSize() => 10000;
     public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(200);
 
     public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
@@ -1094,7 +1096,7 @@ file sealed class PostDisposeProbeMessage(Guid correlationId) : Message(correlat
 file sealed class PostDisposeProbeAggregator : Aggregator<PostDisposeProbeMessage>
 {
     public override int BatchSize() => 1;
-    public override TimeSpan Timeout() => TimeSpan.Zero;
+    public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
     public override Task ExecuteAsync(IList<PostDisposeProbeMessage> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
@@ -1106,7 +1108,7 @@ file sealed class ScopeProbeAggregator : Aggregator<ScopeProbeAggMessage>
     private int _hits;
     public int Hits => Volatile.Read(ref _hits);
     public override int BatchSize() => 1;
-    public override TimeSpan Timeout() => TimeSpan.Zero;
+    public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
     public override Task ExecuteAsync(IList<ScopeProbeAggMessage> messages, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _hits);
@@ -1132,6 +1134,7 @@ file sealed class EcCaptureProbeAggregator : Aggregator<EcCaptureProbeMessage>
 file sealed class ThrowingAggregator : Aggregator<AggTestMessage>
 {
     public override int BatchSize() => 3;
+    public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
     public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("handler failure — batch must remain for retry");
 }

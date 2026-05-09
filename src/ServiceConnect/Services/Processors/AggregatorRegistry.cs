@@ -119,12 +119,16 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         var batchSize = (int)aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.BatchSize))!.Invoke(aggregator, null)!;
         var timeout = (TimeSpan)aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.Timeout))!.Invoke(aggregator, null)!;
 
-        // Dual-zero means messages would aggregate forever with no flush trigger.
-        if (batchSize <= 0 && timeout <= TimeSpan.Zero)
+        // Both BatchSize and Timeout must be positive. If BatchSize > 0 but Timeout is zero,
+        // the processor never schedules a timer; when the count stays below BatchSize the
+        // buffered tail is never flushed. If BatchSize is 0 or negative there is no count-based
+        // flush trigger either. Requiring both guarantees at least one flush path is always active.
+        if (batchSize <= 0 || timeout <= TimeSpan.Zero)
         {
             throw new InvalidOperationException(
                 $"Aggregator '{aggregatorBaseType.FullName}' has BatchSize={batchSize} and Timeout={timeout}. " +
-                "At least one of BatchSize (>0) or Timeout (>TimeSpan.Zero) must be configured, otherwise messages would buffer indefinitely without being flushed.");
+                "Both BatchSize (>0) and Timeout (>TimeSpan.Zero) must be configured; without both, " +
+                "messages can be buffered with no flush path to deliver them.");
         }
 
         return new AggregatorDescriptor(
