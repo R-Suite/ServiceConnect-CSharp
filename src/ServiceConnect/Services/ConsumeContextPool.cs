@@ -106,6 +106,14 @@ internal sealed class ConsumeContextPool
         // _rentToken and EnsureActive(snapshot) throws rather than returning another
         // handler's data.
         private long _rentToken;
+        // Idempotency guard for Release: 0 = active (held by caller), 1 = pooled.
+        // Release CAS-flips 1 only on the active->pooled transition; a defensive
+        // double-Release CAS-flips 0->1 the first call (pushes to pool), then sees
+        // the field is already 1 and no-ops the second call. Without this guard a
+        // double-Release would push the same instance into _pool twice and two
+        // concurrent Rent calls would hand the same underlying instance to two
+        // handlers — a use-after-rent corruption.
+        private int _pooled;
 
         // Unsafe accessors — callers MUST call EnsureActive(_token) before using these.
         internal IBus BusUnsafe { get; private set; } = null!;
@@ -150,6 +158,11 @@ internal sealed class ConsumeContextPool
             CancellationToken cancellationToken)
         {
             var token = Interlocked.Increment(ref _rentToken);
+            // The rent-token bump above is the single happens-before edge between the
+            // previous Release and this Initialize; flipping _pooled back to 0 here
+            // re-arms the idempotency guard so a future Release can transition
+            // active->pooled exactly once.
+            Volatile.Write(ref _pooled, 0);
             BusUnsafe = bus;
             _queueConfig = queueConfig;
             _busConfig = busConfig;
@@ -215,7 +228,16 @@ internal sealed class ConsumeContextPool
             // Invalidate the outstanding RentalHandle view held by consumers before
             // handing the context back to the pool.
             Interlocked.Increment(ref _rentToken);
-            _owner.Return(this);
+
+            // Idempotency guard: only the first Release call after Initialize transitions
+            // _pooled from 0 to 1; a defensive double-Release CAS-fails the second call
+            // and skips the Return. Without this guard the same instance would be added
+            // to _pool twice and two concurrent Rent calls would hand it out to two
+            // handlers (use-after-rent corruption).
+            if (Interlocked.Exchange(ref _pooled, 1) == 0)
+            {
+                _owner.Return(this);
+            }
         }
     }
 }
