@@ -1,6 +1,8 @@
 using System;
 using System.Buffers;
 using System.Text;
+using System.Text.Json;
+using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Services;
 using ServiceConnect.UnitTests.Fakes.Messages;
@@ -117,6 +119,96 @@ public class SystemTextJsonMessageSerializerTests
         var typed = Assert.IsType<FakeMessage1>(result);
         Assert.Equal(original.Username, typed.Username);
         Assert.Equal(original.CorrelationId, typed.CorrelationId);
+    }
+
+    [Fact]
+    public void Deserialize_ReadOnlySequence_RejectsPayloadExceedingConfiguredMaxDepth()
+    {
+        // Build a JSON payload nested 50 levels deep — well above the configured cap of 32.
+        // Wrap it in a single-segment ReadOnlySequence so we hit the streaming overload.
+        // Pre-fix, the sequence overload silently accepted this because it constructed the
+        // Utf8JsonReader with state:default (MaxDepth=64) instead of the configured cap.
+        var deepPayload = BuildDeepObject(50);
+        var bytes = Encoding.UTF8.GetBytes(deepPayload);
+        var sequence = new ReadOnlySequence<byte>(bytes);
+
+        var serializer = new SystemTextJsonMessageSerializer();
+        var ex = Assert.Throws<SerializationException>(() => serializer.Deserialize(in sequence, typeof(NestedMessage)));
+
+        // Inner exception is a JsonException for depth-cap violation.
+        Assert.IsType<JsonException>(ex.InnerException);
+    }
+
+    [Fact]
+    public void Deserialize_ReadOnlySequence_AcceptsPayloadWithinConfiguredMaxDepth()
+    {
+        // Sanity check that depths within the cap still round-trip on the sequence overload.
+        var shallowPayload = BuildDeepObject(10);
+        var bytes = Encoding.UTF8.GetBytes(shallowPayload);
+        var sequence = new ReadOnlySequence<byte>(bytes);
+
+        var serializer = new SystemTextJsonMessageSerializer();
+        var result = serializer.Deserialize(in sequence, typeof(NestedMessage));
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void Deserialize_ReadOnlySequence_EnforcesDepthCapAtBoundary()
+    {
+        // The serializer pins MaxDepth=32 in its ctor for wire-compat with v7's Newtonsoft
+        // behaviour. Pre-fix, the sequence overload silently used JsonReaderState's hidden
+        // default of 64 — payloads at depth 33–64 were accepted on the streaming hot path
+        // but rejected on the byte-span path. Pin the boundary precisely: depth 33 must be
+        // rejected by the sequence overload now that it threads _options.MaxDepth through
+        // the JsonReaderState.
+        var depth33 = BuildDeepObject(33);
+        var bytes = Encoding.UTF8.GetBytes(depth33);
+        var sequence = new ReadOnlySequence<byte>(bytes);
+
+        var serializer = new SystemTextJsonMessageSerializer();
+        var ex = Assert.Throws<SerializationException>(() => serializer.Deserialize(in sequence, typeof(NestedMessage)));
+        Assert.IsType<JsonException>(ex.InnerException);
+    }
+
+    [Fact]
+    public void Deserialize_Span_RejectsPayloadExceedingConfiguredMaxDepth()
+    {
+        // Parity check — the byte-span overload already enforced the configured cap by
+        // threading _options through JsonSerializer.Deserialize. Both overloads must
+        // reject the same payload.
+        var deepPayload = BuildDeepObject(50);
+        var bytes = Encoding.UTF8.GetBytes(deepPayload);
+
+        var serializer = new SystemTextJsonMessageSerializer();
+        var ex = Assert.Throws<SerializationException>(() =>
+            serializer.Deserialize((ReadOnlyMemory<byte>)bytes.AsMemory(), typeof(NestedMessage)));
+        Assert.IsType<JsonException>(ex.InnerException);
+    }
+
+    private static string BuildDeepObject(int depth)
+    {
+        // Produces {"Inner":{"Inner":{...{"Inner":null}}}} — `depth` levels of the "Inner"
+        // property chain, terminated by a null value.
+        var sb = new StringBuilder();
+        for (var i = 0; i < depth; i++)
+        {
+            sb.Append("{\"Inner\":");
+        }
+
+        sb.Append("null");
+        for (var i = 0; i < depth; i++)
+        {
+            sb.Append('}');
+        }
+
+        return sb.ToString();
+    }
+
+    private sealed class NestedMessage : Message
+    {
+        public NestedMessage() : base(Guid.NewGuid()) { }
+
+        public NestedMessage? Inner { get; set; }
     }
 
     private sealed class ByteSegment : ReadOnlySequenceSegment<byte>

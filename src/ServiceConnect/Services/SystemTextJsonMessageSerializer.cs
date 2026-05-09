@@ -111,7 +111,21 @@ public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
     {
         try
         {
-            var reader = new Utf8JsonReader(data, isFinalBlock: true, state: default);
+            // The state-default ctor uses JsonReaderState's internal MaxDepth=64, NOT the
+            // serializer's configured MaxDepth. A 35-deep payload would be rejected by the
+            // span overload (which threads _options through JsonSerializer.Deserialize) but
+            // accepted by this sequence overload — defeating the depth cap on the consume
+            // hot path. Construct the state with MaxDepth from _options so both overloads
+            // enforce the same boundary.
+            var readerOptions = new JsonReaderOptions
+            {
+                MaxDepth = _options.MaxDepth,
+                // CommentHandling and AllowTrailingCommas remain at their defaults — STJ's
+                // JsonSerializerOptions does not expose them as a unified setting. The wire
+                // format does not include comments or trailing commas (asserted by the
+                // serialization-compat corpus), so this matches the span overload's behaviour.
+            };
+            var reader = new Utf8JsonReader(data, isFinalBlock: true, state: new JsonReaderState(readerOptions));
             return JsonSerializer.Deserialize(ref reader, type, _options)
                 ?? throw new SerializationException(
                     $"Deserialization returned null for type {type.Name}", type);
