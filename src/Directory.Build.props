@@ -30,6 +30,14 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <LangVersion>14.0</LangVersion>
   </PropertyGroup>
+  <!-- Suppress audit advisories for vulnerabilities in transitive dependencies of MongoDB.Driver
+       2.23.1 that have no available fix at the pinned driver version. These are transitive-only;
+       the vulnerabilities are in compression libraries (SharpCompress, Snappier) that the driver
+       bundles but that this codebase does not use directly or expose to untrusted input. -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-6c8g-7p36-r338" /> <!-- SharpCompress 0.30.1 moderate -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-pggp-6c3x-2xmx" /> <!-- Snappier 1.0.0 high -->
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0">
       <PrivateAssets>all</PrivateAssets>
