@@ -109,7 +109,7 @@ public class ConsumerTests
     }
 
     [Fact]
-    public async Task StartConsumingAsync_WhenHostStartupFails_RegistersHostBeforeStartForDisposeToReach()
+    public async Task StartConsumingAsync_WhenHostStartupFails_EagerlyDisposesPartialHostsAndClearsClients()
     {
         var shutdownArgs = new ShutdownEventArgs(ShutdownInitiator.Library, 406, "PRECONDITION_FAILED", cause: null, cancellationToken: CancellationToken.None);
 
@@ -135,10 +135,9 @@ public class ConsumerTests
 
         var connection = new Mock<IServiceConnectConnection>();
         // First call — Consumer's setup channel — succeeds. Second call — host's
-        // consumer channel inside RabbitMqConsumerHost.StartConsumingAsync — throws.
-        // The host must be registered in _clients before StartConsumingAsync runs
-        // so a mid-startup failure still leaves it trackable for shutdown/disposal
-        // rather than leaking the partially-initialised instance.
+        // consumer channel inside RabbitMqConsumerHost.PrepareAsync — throws.
+        // The catch block must eagerly dispose any partially-built host and drain
+        // _clients so the caller can retry without calling DisposeAsync first.
         connection.SetupSequence(c => c.CreateChannelAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(setupChannel.Object)
             .ThrowsAsync(new OperationInterruptedException(shutdownArgs));
@@ -157,10 +156,17 @@ public class ConsumerTests
         await Assert.ThrowsAsync<OperationInterruptedException>(() =>
             consumer.StartConsumingAsync("q", ["MessageType"], (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true })));
 
+        // The catch block disposes partial hosts eagerly and drains _clients, so
+        // _clients is empty after a failure — no DisposeAsync call required to recover.
         var clientsField = typeof(Consumer).GetField("_clients", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(clientsField);
         var clients = (System.Collections.ICollection)clientsField!.GetValue(consumer)!;
-        Assert.Single(clients);
+        Assert.Empty(clients);
+
+        // _started must be reset to 0 so a subsequent StartConsumingAsync can retry.
+        var startedField = typeof(Consumer).GetField("_started", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(startedField);
+        Assert.Equal(0, (int)startedField!.GetValue(consumer)!);
     }
 
     [Fact]

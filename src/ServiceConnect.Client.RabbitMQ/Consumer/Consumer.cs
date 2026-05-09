@@ -92,107 +92,137 @@ public sealed class Consumer : IConsumer
                 "Consumer is already consuming. Call DisposeAsync before starting again.");
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (_connection is null)
-        {
-            _connection = new Connection(_transportConfiguration, queueName, _logger);
-            _ownsConnection = true;
-        }
-        IChannel? setupChannel = null;
         try
         {
-            setupChannel = await _connection.CreateChannelAsync(cancellationToken).ConfigureAwait(false);
-            _model = setupChannel;
+            cancellationToken.ThrowIfCancellationRequested();
 
-            // Mark as initial setup for re-throwing on first topology setup.
-            const bool isInitialSetup = true;
-
-            // Configure exchanges
-            foreach (string messageType in messageTypes)
+            if (_connection is null)
             {
-                await _topologyProvisioner.ConfigureDeclareExchangeAsync(_model, messageType, ExchangeType.Fanout, isInitialSetup, cancellationToken).ConfigureAwait(false);
+                _connection = new Connection(_transportConfiguration, queueName, _logger);
+                _ownsConnection = true;
+            }
+            IChannel? setupChannel = null;
+            try
+            {
+                setupChannel = await _connection.CreateChannelAsync(cancellationToken).ConfigureAwait(false);
+                _model = setupChannel;
+
+                // Mark as initial setup for re-throwing on first topology setup.
+                const bool isInitialSetup = true;
+
+                // Configure exchanges
+                foreach (string messageType in messageTypes)
+                {
+                    await _topologyProvisioner.ConfigureDeclareExchangeAsync(_model, messageType, ExchangeType.Fanout, isInitialSetup, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Configure queue
+                await _topologyProvisioner.ConfigureDeclareQueueAsync(
+                    _model,
+                    queueName,
+                    _durable,
+                    _exclusive,
+                    _autoDelete,
+                    _queueArguments,
+                    isInitialSetup,
+                    cancellationToken).ConfigureAwait(false);
+
+                // Purge all messages on queue
+                if (_queueConfiguration.PurgeQueueOnStartup)
+                {
+                    _logger.LogDebug("Purging queue");
+                    await _model.QueuePurgeAsync(queueName, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Configure retry queue (but only if retries are expected)
+                if (_transportConfiguration.MaxRetries > 0)
+                {
+                    await _topologyProvisioner.ConfigureRetryTopologyAsync(
+                        _model, queueName, _durable, _autoDelete, _retryDelay,
+                        _retryQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
+                }
+
+                // Use the provisioner for utility queue setup.
+                string errorExchangeName = _queueConfiguration.ErrorQueueName;
+                await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, errorExchangeName, _utilityQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
+
+                // Configure Audit Queue/Exchange
+                if (_queueConfiguration.AuditingEnabled)
+                {
+                    string auditQueueName = _queueConfiguration.AuditQueueName;
+                    await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, auditQueueName, _utilityQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                // Always close the setup channel once topology provisioning completes or fails.
+                if (setupChannel is { IsOpen: true })
+                {
+                    await setupChannel.CloseAsync().ConfigureAwait(false);
+                }
+
+                setupChannel?.Dispose();
+                if (ReferenceEquals(_model, setupChannel))
+                {
+                    _model = null;
+                }
             }
 
-            // Configure queue
-            await _topologyProvisioner.ConfigureDeclareQueueAsync(
-                _model,
-                queueName,
-                _durable,
-                _exclusive,
-                _autoDelete,
-                _queueArguments,
-                isInitialSetup,
-                cancellationToken).ConfigureAwait(false);
+            int clientCount = _busConfiguration.ConsumerCount;
 
-            // Purge all messages on queue
-            if (_queueConfiguration.PurgeQueueOnStartup)
+            for (int i = 0; i < clientCount; i++)
             {
-                _logger.LogDebug("Purging queue");
-                await _model.QueuePurgeAsync(queueName, cancellationToken).ConfigureAwait(false);
-            }
-
-            // Configure retry queue (but only if retries are expected)
-            if (_transportConfiguration.MaxRetries > 0)
-            {
-                await _topologyProvisioner.ConfigureRetryTopologyAsync(
-                    _model, queueName, _durable, _autoDelete, _retryDelay,
-                    _retryQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
-            }
-
-            // Use the provisioner for utility queue setup.
-            string errorExchangeName = _queueConfiguration.ErrorQueueName;
-            await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, errorExchangeName, _utilityQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
-
-            // Configure Audit Queue/Exchange
-            if (_queueConfiguration.AuditingEnabled)
-            {
-                string auditQueueName = _queueConfiguration.AuditQueueName;
-                await _topologyProvisioner.ConfigureDeclareUtilityQueueAsync(_model, auditQueueName, _utilityQueueArguments, isInitialSetup, cancellationToken).ConfigureAwait(false);
+                var retryHandler = new MessageRetryHandler(
+                    _transportConfiguration.MaxRetries, _queueConfiguration.ErrorQueueName, _queueConfiguration.QueueName, _logger);
+                var auditPublisher = new MessageAuditPublisher(_queueConfiguration);
+                var admissionGate = new RabbitMqAdmissionGate(_queueConfiguration.QueueName);
+                RabbitMqConsumerHost client = new(
+                    _connection,
+                    _transportConfiguration,
+                    _queueConfiguration,
+                    _busConfiguration,
+                    retryHandler,
+                    admissionGate,
+                    auditPublisher,
+                    _logger);
+                // Register the host before starting so a failure in PrepareAsync or
+                // ConsumeMessageTypeAsync on a later iteration does not leak already-started
+                // hosts. DisposeAsync iterates _clients and tolerates half-started hosts.
+                _clients.Add(client);
+                await client.PrepareAsync(eventHandler, queueName, cancellationToken: cancellationToken).ConfigureAwait(false);
+                foreach (string messageType in messageTypes)
+                {
+                    await client.ConsumeMessageTypeAsync(messageType, cancellationToken).ConfigureAwait(false);
+                }
+                await client.BeginConsumingAsync(cancellationToken).ConfigureAwait(false);
             }
         }
-        finally
+        catch
         {
-            // Always close the setup channel once topology provisioning completes or fails.
-            if (setupChannel is { IsOpen: true })
+            // Reset _started so a subsequent StartConsumingAsync can retry; without this, a
+            // failure mid-setup leaves the consumer in a half-built "already consuming" state
+            // requiring an explicit DisposeAsync to recover. Best-effort dispose any hosts that
+            // were added to _clients before the failure (the for-loop adds each host before
+            // BeginConsumingAsync; a later iteration's failure leaks earlier ones).
+            Interlocked.Exchange(ref _started, 0);
+            while (_clients.TryTake(out var partial))
             {
-                await setupChannel.CloseAsync().ConfigureAwait(false);
+                try { await partial.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception disposeEx) { _logger.LogWarning(disposeEx, "Error disposing partial host during StartConsumingAsync failure recovery"); }
             }
-
-            setupChannel?.Dispose();
-            if (ReferenceEquals(_model, setupChannel))
+            // If this startup created the connection (the consumer was constructed without
+            // one) and the startup failed, dispose the connection too. The catch otherwise
+            // leaves the owned connection live with no path to release it short of an
+            // explicit DisposeAsync — the caller's "retry the start" expectation should
+            // not require a manual DisposeAsync between attempts.
+            if (_ownsConnection && _connection != null)
             {
-                _model = null;
+                try { await _connection.DisposeAsync().ConfigureAwait(false); }
+                catch (Exception connEx) { _logger.LogWarning(connEx, "Error disposing owned connection during StartConsumingAsync failure recovery"); }
+                _connection = null;
+                _ownsConnection = false;
             }
-        }
-
-        int clientCount = _busConfiguration.ConsumerCount;
-
-        for (int i = 0; i < clientCount; i++)
-        {
-            var retryHandler = new MessageRetryHandler(
-                _transportConfiguration.MaxRetries, _queueConfiguration.ErrorQueueName, _queueConfiguration.QueueName, _logger);
-            var auditPublisher = new MessageAuditPublisher(_queueConfiguration);
-            var admissionGate = new RabbitMqAdmissionGate(_queueConfiguration.QueueName);
-            RabbitMqConsumerHost client = new(
-                _connection,
-                _transportConfiguration,
-                _queueConfiguration,
-                _busConfiguration,
-                retryHandler,
-                admissionGate,
-                auditPublisher,
-                _logger);
-            // Register the host before starting so a failure in PrepareAsync or
-            // ConsumeMessageTypeAsync on a later iteration does not leak already-started
-            // hosts. DisposeAsync iterates _clients and tolerates half-started hosts.
-            _clients.Add(client);
-            await client.PrepareAsync(eventHandler, queueName, cancellationToken: cancellationToken).ConfigureAwait(false);
-            foreach (string messageType in messageTypes)
-            {
-                await client.ConsumeMessageTypeAsync(messageType, cancellationToken).ConfigureAwait(false);
-            }
-            await client.BeginConsumingAsync(cancellationToken).ConfigureAwait(false);
+            throw;
         }
     }
 
