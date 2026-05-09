@@ -33,6 +33,19 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
                 continue;
             }
 
+            // The dispatch walk in HandlerProcessor stops at typeof(Message) and typeof(object),
+            // so a handler registered for either base type would silently never be invoked.
+            // Fail fast here so the misconfiguration surfaces at startup rather than at runtime.
+            // Use IFilter / IMessageProcessingMiddleware for catch-all message interception.
+            if (href.MessageType == typeof(Message) || href.MessageType == typeof(object))
+            {
+                var baseTypeName = href.MessageType == typeof(Message) ? "IMessageHandler<Message>" : "IMessageHandler<object>";
+                throw new InvalidOperationException(
+                    $"Handler '{href.HandlerType.FullName}' implements {baseTypeName}, which is the catch-all base type. " +
+                    $"The dispatch walk stops before reaching {href.MessageType.Name}, so this handler would never be invoked. " +
+                    $"Use IFilter or IMessageProcessingMiddleware for catch-all message interception.");
+            }
+
             // Duplicates are legitimate — multiple handler classes for one message type are allowed.
             // Only one descriptor per message type (it describes the interface, not the instances).
             // Overwrite a previous null (from a non-message-handler ref for the same type).

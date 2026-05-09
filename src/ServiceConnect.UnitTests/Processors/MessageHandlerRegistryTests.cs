@@ -111,6 +111,24 @@ public class MessageHandlerRegistryTests
         Assert.False(registry.TryGetOrBuild(typeof(Message), out _));
     }
 
+    [Fact]
+    public void Construction_Throws_WhenHandlerImplementsIMessageHandlerOfMessage()
+    {
+        // IMessageHandler<Message> is the catch-all base type. The dispatch walk in
+        // HandlerProcessor stops at typeof(Message), so registering such a handler
+        // succeeds silently but the handler is never invoked. Reject at registry build.
+        var refs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(Message), HandlerType = typeof(MhrCatchAllMessageHandler) }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new MessageHandlerRegistry(refs, NullLogger<MessageHandlerRegistry>.Instance));
+
+        Assert.Contains(typeof(MhrCatchAllMessageHandler).FullName!, ex.Message, StringComparison.Ordinal);
+        Assert.Contains("IMessageHandler<Message>", ex.Message, StringComparison.Ordinal);
+    }
+
     private static MessageHandlerRegistry BuildRegistry()
     {
         var refs = new List<HandlerReference>
@@ -150,6 +168,11 @@ file class MhrProcessHandler : IProcessHandler<MhrBarData, MhrFooMsg>
 file class MhrStreamHandler : IStreamHandler<MhrFooMsg>
 {
     public Task ExecuteAsync(MhrFooMsg message, IMessageBusReadStream stream, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+file class MhrCatchAllMessageHandler : IMessageHandler<Message>
+{
+    public Task HandleAsync(Message message, IConsumeContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class MhrFakeConsumeContext : IConsumeContext
