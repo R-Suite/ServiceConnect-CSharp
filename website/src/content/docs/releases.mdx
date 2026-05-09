@@ -326,6 +326,14 @@ Inbound middleware and filters are now resolved per-message from a scoped `IServ
 
 A pass over the RabbitMQ producer's outbound path and the retry-queue declaration. None of these are wire-breaking; they fix observable behaviour, improve diagnostics, or remove surprises latent in earlier point releases.
 
+**Behaviour changes — upgrading operators must read these**
+
+- **`PublisherAcknowledgements` now defaults to `true`.** Pre-v7.x the default was `false` (fire-and-forget sends). The new default means every publish waits for a broker ack before returning. Throughput-sensitive operators who relied on the old default should benchmark with the new default before deploying; if needed, set `PublisherAcknowledgements = false` explicitly. Note: `PublisherAcknowledgements=false` combined with a finite `PublishTimeout` is now a configuration error — the `Producer` constructor rejects this combination at startup.
+
+- **`IProducer.SendAsync(Type)` fan-out now surfaces an `AggregateException` when prior endpoint failures preceded a cancellation.** Previously, `OperationCanceledException` always propagated directly regardless of whether earlier endpoints had already failed. Now, if one or more endpoints fail before a subsequent cancellation, callers see `AggregateException` whose `InnerExceptions` include both the prior endpoint failures and the `OperationCanceledException`. Plain `OperationCanceledException` still propagates when the cancellation occurs before any endpoint failure.
+
+- **`messaging.publish.duration` does not add `error.type=timeout` for `TimeoutException`.** A publish-confirm timeout means the broker acknowledgement did not arrive within the configured window — delivery may still succeed. The `error.type` tag is deliberately suppressed for this case to avoid misleading "publish failed" signals in duration-based dashboards. Use the `messaging.serviceconnect.publish.confirm_timeouts` counter as the authoritative signal for confirm-timeouts. All other failure types continue to carry `error.type` as documented.
+
 **Per-delivery `MessageId` for multi-endpoint Send.** Every endpoint resolved by `AddQueueMapping` (or supplied through `SendOptions.EndPoints`) now receives a delivery with a distinct `MessageId` and `TimeSent`. Correlate cross-endpoint deliveries via `CorrelationId`, which remains constant across the fan-out.
 
 **Retry DLX always durable.** The retry dead-letter exchange is now always declared with `autoDelete: false`, regardless of the consumer queue's auto-delete setting. Without this invariant, messages dwelling in the retry queue would be silently dropped after the consumer disconnected. Pre-existing topologies are unaffected on next provisioning.

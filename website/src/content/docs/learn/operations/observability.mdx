@@ -173,6 +173,8 @@ Tags follow the [OpenTelemetry messaging-metrics conventions](https://openteleme
 
 The `error.type` tag is added on failure paths via an allow-list mapper (`OperationCanceledException → cancelled`, `TimeoutException → timeout`, fallback to the exception type's short name). Exception messages are never used as tags — they're unbounded cardinality.
 
+**Carve-out for `messaging.publish.duration`:** `TimeoutException` does NOT add `error.type=timeout` on this metric. A publish-confirm timeout means the broker acknowledgement did not arrive within the configured window, but delivery may still have succeeded — adding `error.type` here would produce misleading "publish error" signals in duration-based dashboards. Use the `messaging.serviceconnect.publish.confirm_timeouts` counter as the authoritative signal for confirm-timeouts. All other failure types carry `error.type` as normal on this metric.
+
 ### Cardinality
 
 Typical deployments — 5-20 queues, 5-20 exchanges, ~5 outcome / error categories — yield ~400-500 active series per metric upper-bound. Operators with very high queue counts (1000+) should consider this when sizing their TSDB.

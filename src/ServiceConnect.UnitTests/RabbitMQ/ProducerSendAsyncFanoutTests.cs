@@ -219,7 +219,7 @@ public sealed class ProducerSendAsyncFanoutTests
     }
 
     // -------------------------------------------------------------------------
-    // Test 5 — H1: prior failures + later cancellation aggregates both
+    // Test 5 — prior failures + later cancellation aggregates both
     // -------------------------------------------------------------------------
 
     [Fact]

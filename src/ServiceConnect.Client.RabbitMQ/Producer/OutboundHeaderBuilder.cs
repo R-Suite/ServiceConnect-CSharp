@@ -104,7 +104,7 @@ internal sealed class OutboundHeaderBuilder(
     /// <remarks>
     /// The fan-out <c>SendAsync(Type)</c> path re-stamps <c>DestinationAddress</c>,
     /// <c>MessageId</c>, and <c>TimeSent</c> on a single <c>baseHeaders</c> dict between iterations.
-    /// Safety relies on publisher confirms (the default since Phase 2; the
+    /// Safety relies on publisher confirms (the default; the
     /// <c>PublisherAcknowledgements=false + PublishTimeout&gt;0</c> combo is rejected by the
     /// <see cref="Producer"/> constructor): the prior await on <c>PublishWithTimeoutAsync</c>
     /// returns only after the broker ack, by which time the wire frame is serialised and
