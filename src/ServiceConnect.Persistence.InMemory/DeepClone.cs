@@ -1,64 +1,57 @@
-using Newtonsoft.Json;
+using MongoDB.Bson;
+using MongoDB.Bson.IO;
+using MongoDB.Bson.Serialization;
 
 namespace ServiceConnect.Persistence.InMemory;
 
 /// <summary>
-/// Round-trip JSON clone used by the in-memory persistors to isolate callers from
+/// Round-trip BSON clone used by the in-memory persistors to isolate callers from
 /// stored state. Without this, Insert stores the caller's reference and Get returns
 /// the stored reference — any subsequent mutation on either side silently corrupts
-/// the other. Serializer-based clone is the only approach that handles nested
-/// collections and records without per-type plumbing.
+/// the other.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Security boundary.</b> This implementation uses
-/// <see cref="Newtonsoft.Json.TypeNameHandling.Auto"/> to round-trip polymorphic
-/// CLR types (e.g. <c>List&lt;Animal&gt;</c> carrying <c>Dog</c> instances,
-/// or <c>Dictionary&lt;string, object&gt;</c> headers). <c>TypeNameHandling.Auto</c>
-/// is a known deserialization-gadget surface — feeding untrusted JSON through it
-/// could load arbitrary types via the <c>$type</c> field.
+/// <b>Why BSON, not System.Text.Json or Newtonsoft.Json.</b> The in-memory persistors
+/// must round-trip arbitrary saga / aggregator types including ones with explicit-
+/// interface auto-properties (<c>Guid IFoo.FooId { get; set; }</c>). Both
+/// System.Text.Json and Newtonsoft.Json only serialise properties reachable on the
+/// concrete type by short name and silently drop explicit-interface backing fields,
+/// causing the in-memory store to produce <c>default(Guid)</c> for those properties
+/// while the Mongo store (which uses <see cref="BsonClassMap"/>) preserves them —
+/// a silent test-vs-prod divergence. BSON's <see cref="BsonClassMap"/> auto-discovers
+/// explicit-interface auto-properties and closes that gap.
 /// </para>
 /// <para>
-/// <b>Use only for in-process trusted data.</b> Do not extend this helper to
-/// deserialise external input, configuration, network payloads, or any value
-/// originating outside the current process. The current uses (saga state,
-/// aggregator entries, timeout headers) all originate from in-process callers
-/// and never leave the AppDomain between serialise and deserialise.
+/// <b>Polymorphism.</b> Nested base/interface-typed properties holding derived
+/// values round-trip correctly via the BSON <c>_t</c> discriminator (the same path
+/// the Mongo persistors already use).
 /// </para>
 /// <para>
-/// <b>Explicit-interface auto-properties.</b> Newtonsoft.Json only serialises
-/// properties reachable on the concrete type by short name. An auto-property
-/// declared as an explicit-interface implementation
-/// (e.g. <c>Guid IFoo.FooId { get; set; }</c>) is invisible to the serialiser
-/// and will round-trip as <c>default</c>. Saga and aggregator types that need
-/// explicit-interface properties to survive cloning must back them with a
-/// public property (e.g. <c>public Guid FooIdValue { get; set; }</c> with
-/// <c>Guid IFoo.FooId =&gt; FooIdValue;</c>).
+/// <b>Security boundary.</b> BSON deserialisation can construct CLR types via
+/// <c>_t</c>, the same hazard class as Newtonsoft's <c>$type</c>. The output of
+/// this clone NEVER leaves the AppDomain — input is always trusted in-process
+/// state. Do not extend this helper to deserialise external input, configuration,
+/// or network payloads.
 /// </para>
 /// </remarks>
 internal static class DeepClone
 {
-    private static readonly JsonSerializerSettings Settings = new()
-    {
-        ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-        // TypeNameHandling.Auto writes $type metadata only when the runtime type differs
-        // from the declared type — necessary so polymorphic payloads inside collections
-        // (List<Animal> containing Dog, base-typed reference fields) round-trip with
-        // subclass data intact. Deserialization-gadget concerns don't apply here: JSON
-        // produced by this clone never leaves the process; serializer and deserializer
-        // run in the same AppDomain, same moment.
-        TypeNameHandling = TypeNameHandling.Auto,
-        TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
-        // Preserve DateTimeKind across round-trip so timestamps don't drift when an
-        // in-memory saga is stored/retrieved across time zones in tests.
-        DateTimeZoneHandling = DateTimeZoneHandling.RoundtripKind,
-    };
-
+    /// <summary>
+    /// Round-trips <paramref name="value"/> through BSON to produce a deep clone.
+    /// The BSON path captures all properties reachable via <see cref="BsonClassMap"/>
+    /// — including explicit-interface auto-properties — and round-trips polymorphic
+    /// nested values via the <c>_t</c> discriminator.
+    /// </summary>
     public static T Clone<T>(T value) where T : notnull
     {
         var runtimeType = value.GetType();
-        var json = JsonConvert.SerializeObject(value, runtimeType, Settings);
-        var clone = JsonConvert.DeserializeObject(json, runtimeType, Settings)
+        // Serialize to a BsonDocument using the runtime type so all concrete-type
+        // properties (including explicit-interface auto-properties) are captured.
+        var bson = value.ToBsonDocument(runtimeType);
+        // Deserialize using the same runtime type. BSON's _t discriminator handles
+        // any nested polymorphic values.
+        var clone = BsonSerializer.Deserialize(bson, runtimeType)
             ?? throw new InvalidOperationException(
                 $"Deep clone of {runtimeType.FullName} returned null.");
         return (T)clone;

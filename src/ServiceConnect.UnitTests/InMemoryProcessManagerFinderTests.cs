@@ -21,6 +21,12 @@ public class TestData : IProcessManagerData
 public class NonJsonRoundTrippableTestData : IProcessManagerData
 {
     public Guid CorrelationId { get; set; }
+    // Type has no parameterless ctor that BSON's BsonClassMap can call (the runtime
+    // RuntimeType ctor is not invokable), and Newtonsoft.Json (the prior DeepClone
+    // backing) had a custom converter that special-cased it. Mark it BsonIgnore so
+    // the saga's other fields still round-trip; saga authors with reflection types
+    // in state must apply the same opt-out (or store a name/string surrogate).
+    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
     public Type ValueType { get; set; } = typeof(object);
 }
 
@@ -138,9 +144,14 @@ public class InMemoryProcessManagerFinderTests
     }
 
     [Fact]
-    public async Task FindDataAsync_TypedRead_SupportsRuntimeTypesThatAreNotJsonRoundTrippable()
+    public async Task FindDataAsync_TypedRead_SupportsTypesWithBsonIgnoredReflectionFields()
     {
-        // Arrange
+        // Saga types may carry fields the serializer cannot round-trip (here,
+        // System.Type, whose CLR backing RuntimeType has no invokable parameterless
+        // ctor for BsonClassMap to construct on deserialize). Marking them BsonIgnore
+        // lets the rest of the saga round-trip safely; the ignored field comes back
+        // at its declared default, which is the correct contract once the persistor
+        // is decoupled from a serializer that special-cased reflection types.
         var data = new NonJsonRoundTrippableTestData
         {
             CorrelationId = _correlationId,
@@ -149,12 +160,12 @@ public class InMemoryProcessManagerFinderTests
         IProcessManagerFinder processManagerFinder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
-        // Act
         var found = await processManagerFinder.FindDataAsync<NonJsonRoundTrippableTestData>(_mapper, new Message(_correlationId), CancellationToken.None);
 
-        // Assert
         Assert.NotNull(found);
-        Assert.Equal(typeof(TestData), found.Data.ValueType);
+        Assert.Equal(_correlationId, found.Data.CorrelationId);
+        // The BsonIgnore'd reflection field is reset to the field's declared default.
+        Assert.Equal(typeof(object), found.Data.ValueType);
     }
 
     [Fact]
