@@ -88,6 +88,15 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             // Caller's own token fired. Drop the pending entry and let the bare OCE
             // propagate so existing handlers continue to observe a vanilla cancellation.
             _pendingRequests.TryRemove(messageId, out _);
+            // Defensive: install the unobserved-fault observer mirror of the linkedCts catch.
+            // The registration callback may have already (or will momentarily) fault the TCS
+            // with RequestTimeoutException if the caller-CT and linked-CTS fire near-simultaneously.
+            // Today's TrySetCanceled semantics make UnobservedTaskException unreachable on this
+            // path — defensive belt-and-braces against a future change to the registration callback.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw;
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
@@ -112,6 +121,13 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         catch
         {
             _pendingRequests.TryRemove(messageId, out _);
+            // Genuinely exposed when the send pipeline throws non-OCE (e.g. IOException from
+            // a transport disconnect). The registration callback may fault the TCS with
+            // RequestTimeoutException; observe to suppress UnobservedTaskException.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw;
         }
 
@@ -258,6 +274,15 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _pendingRequests.TryRemove(messageId, out _);
+            // Defensive: install the unobserved-fault observer mirror of the linkedCts catch.
+            // The registration callback may have already (or will momentarily) fault the TCS
+            // with RequestTimeoutException if the caller-CT and linked-CTS fire near-simultaneously.
+            // Today's TrySetCanceled semantics make UnobservedTaskException unreachable on this
+            // path — defensive belt-and-braces against a future change to the registration callback.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw;
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
@@ -282,6 +307,13 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         catch
         {
             _pendingRequests.TryRemove(messageId, out _);
+            // Genuinely exposed when the send pipeline throws non-OCE (e.g. IOException from
+            // a transport disconnect). The registration callback may fault the TCS with
+            // RequestTimeoutException; observe to suppress UnobservedTaskException.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw;
         }
 
@@ -383,6 +415,15 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _pendingRequests.TryRemove(messageId, out _);
+            // Defensive: install the unobserved-fault observer mirror of the linkedCts catch.
+            // The registration callback may have already (or will momentarily) fault the TCS
+            // with RequestTimeoutException if the caller-CT and linked-CTS fire near-simultaneously.
+            // Today's TrySetCanceled semantics make UnobservedTaskException unreachable on this
+            // path — defensive belt-and-braces against a future change to the registration callback.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw;
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
@@ -407,6 +448,13 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         catch
         {
             _pendingRequests.TryRemove(messageId, out _);
+            // Genuinely exposed when the publish pipeline throws non-OCE (e.g. IOException
+            // from a transport disconnect). The registration callback may fault the TCS with
+            // RequestTimeoutException; observe to suppress UnobservedTaskException.
+            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             throw;
         }
 
@@ -452,8 +500,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         // types via crafted reply messages.
         if (!state.TryHandleReply(
             replyType => _serializer.Deserialize(messageBytes, replyType),
-            out var requestCompleted,
-            out var completionWork))
+            out var requestCompleted))
         {
             return false;
         }
@@ -463,10 +510,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             _pendingRequests.TryRemove(requestId, out _);
         }
 
-        // TaskCompletionSource continuations may run inline on the calling thread; running
-        // them outside the state lock keeps a slow continuation from blocking another
-        // request's reply path that lands on the same state.
-        completionWork?.Invoke();
+        // U2: TCS completion now runs under the state-lock inside TryHandleReply so a
+        // caller-CT firing immediately after _closed=true cannot lose its registration's
+        // TrySetCanceled to a queued out-of-lock TrySetResult. Continuations may still
+        // run inline on the lock-holding thread; the lock is per-RequestState so a slow
+        // continuation pins one request's reply path, not the whole reply dispatcher.
         return true;
     }
 
@@ -562,16 +610,22 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         /// or <see langword="false"/> when rejected (state already closed or budget exhausted).
         /// The user-supplied <see cref="OnReply"/> callback runs under the state lock so
         /// concurrent replies cannot re-enter it.
-        /// <paramref name="completionWork"/> contains TCS continuations (TrySetResult / TrySetException);
-        /// the caller invokes it outside the lock so a slow continuation does not pin the
-        /// reply dispatch thread.
+        /// <para>
+        /// U2: TCS completion (<c>TrySetResult</c> / <c>TrySetException</c>) runs UNDER
+        /// the state lock so the close-vs-complete sequence is atomic with the caller-CT
+        /// registration's <c>_closed</c> read. Pre-fix this was queued as a
+        /// <c>completionWork</c> action invoked outside the lock; a caller-CT firing in
+        /// the gap had its registration callback no-op (because <c>_closed=true</c> was
+        /// already set), and the caller awaited success despite the cancellation.
+        /// Cost: TCS continuations may run inline on the lock-holding thread — the lock
+        /// is per-<see cref="RequestState"/> so a slow continuation pins one request's
+        /// reply path, not the whole reply dispatcher.
+        /// </para>
         /// </summary>
         internal bool TryHandleReply(
             Func<Type, object> deserialize,
-            out bool requestCompleted,
-            out Action? completionWork)
+            out bool requestCompleted)
         {
-            completionWork = null;
             requestCompleted = false;
 
             lock (_stateLock)
@@ -609,7 +663,9 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 {
                     _closed = true;
                     requestCompleted = true;
-                    completionWork = () => Tcs.TrySetException(ex);
+                    // U2: TrySetException runs UNDER the lock so the caller-CT registration's
+                    // state.Close() — which checks _closed — observes a consistent state.
+                    Tcs.TrySetException(ex);
                     return true;
                 }
 
@@ -623,7 +679,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     {
                         _closed = true;
                         requestCompleted = true;
-                        completionWork = () => Tcs.TrySetException(ex);
+                        Tcs.TrySetException(ex);
                         return true;
                     }
 
@@ -631,14 +687,19 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     {
                         _closed = true;
                         requestCompleted = true;
-                        completionWork = () => Tcs.TrySetResult(null!);
+                        // U2: TrySetResult under the lock. Pre-fix this was queued in
+                        // completionWork to run outside the lock, opening a window where a
+                        // caller-CT firing after _closed=true and before the TrySetResult
+                        // call would have its registration callback no-op (state.Close
+                        // early-returns on _closed) — caller awaited success despite cancel.
+                        Tcs.TrySetResult(null!);
                     }
                 }
                 else
                 {
                     _closed = true;
                     requestCompleted = true;
-                    completionWork = () => Tcs.TrySetResult(reply);
+                    Tcs.TrySetResult(reply);
                 }
 
                 return true;
