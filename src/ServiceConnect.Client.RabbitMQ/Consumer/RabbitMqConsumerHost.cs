@@ -628,6 +628,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         var remaining = deadline - _timeProvider.GetUtcNow();
         if (remaining <= TimeSpan.Zero)
         {
+            // Even with no remaining budget, attach the observation continuation: the
+            // operation may still complete or fault later (e.g. AlreadyClosedException
+            // from the subsequent channel close). Same reason as the timeout-wins branch.
+            ObserveAbandonedRpc(operation);
             return false;
         }
 
@@ -635,12 +639,33 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 #pragma warning disable VSTHRD003 // operation is a Task passed by the caller; this helper bounds its wait against a deadline.
         if (await Task.WhenAny(operation, timeoutTask).ConfigureAwait(false) != operation)
         {
+            // The deadline won. The RPC may complete or fault later (e.g. AlreadyClosedException
+            // from the subsequent channel close). Attach a benign continuation so the
+            // post-deadline fault is observed rather than firing TaskScheduler.UnobservedTaskException.
+            ObserveAbandonedRpc(operation);
             return false;
         }
 
         await operation.ConfigureAwait(false);
 #pragma warning restore VSTHRD003
         return true;
+    }
+
+    private void ObserveAbandonedRpc(Task operation)
+    {
+        // Continuation runs only if the operation faults; logs at Debug because an aborted
+        // post-deadline RPC is expected during dispose, not an error.
+        _ = operation.ContinueWith(
+            t =>
+            {
+                if (t.Exception is { } ex)
+                {
+                    _logger.LogDebug(ex, "Post-deadline shutdown RPC aborted (expected on channel close)");
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private async Task CloseChannelAsync(DateTimeOffset deadline)
