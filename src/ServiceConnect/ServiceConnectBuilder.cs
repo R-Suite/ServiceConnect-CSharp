@@ -135,7 +135,20 @@ public sealed class ServiceConnectBuilder
     public ServiceConnectBuilder ConfigureBus(Action<IBusConfiguration> configure)
     {
         configure(BusConfig);
+        ValidateBus(BusConfig);
         return this;
+    }
+
+    // Guard against silently-broken bus configuration at startup. A ConsumerCount below 1
+    // causes the client-construction loop in Consumer.StartConsumingAsync to be skipped
+    // entirely, leaving the bus reporting IsConsuming=true while dispatching nothing.
+    private static void ValidateBus(IBusConfiguration bus)
+    {
+        if (bus.ConsumerCount < 1)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.ConsumerCount must be at least 1 (got {bus.ConsumerCount}).");
+        }
     }
 
     /// <summary>

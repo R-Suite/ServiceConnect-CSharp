@@ -118,4 +118,29 @@ public class ServiceConnectBuilderTests
 
         Assert.Same(builder, result);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ConfigureBus_ConsumerCountLessThanOne_ThrowsInvalidOperationException(int count)
+    {
+        var builder = new ServiceConnectBuilder();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => builder.ConfigureBus(b => b.ConsumerCount = count));
+
+        Assert.Contains("BusConfiguration.ConsumerCount", ex.Message);
+        Assert.Contains(count.ToString(), ex.Message);
+    }
+
+    [Fact]
+    public void ConfigureBus_ConsumerCountOne_DoesNotThrow()
+    {
+        var builder = new ServiceConnectBuilder();
+
+        // 1 is the minimum valid value; no exception expected.
+        builder.ConfigureBus(b => b.ConsumerCount = 1);
+
+        Assert.Equal(1, builder.BusConfig.ConsumerCount);
+    }
 }
