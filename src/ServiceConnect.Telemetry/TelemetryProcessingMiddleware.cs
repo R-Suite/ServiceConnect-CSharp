@@ -35,10 +35,14 @@ internal sealed class TelemetryProcessingMiddleware(
             {
                 Message = envelope.Body.ToArray(),
                 Type = messageType.FullName ?? string.Empty,
-                // IMessageProcessingMiddleware passes headers as IDictionary; cast to
-                // IReadOnlyDictionary since ConsumeEventArgs enforces read-only at the
-                // consumer boundary. The underlying object is always a Dictionary<string,object>.
-                Headers = (IReadOnlyDictionary<string, object>)headers,
+                // IMessageProcessingMiddleware's contract types `headers` as IDictionary<string,object>;
+                // the in-tree RabbitMQ transport always supplies a Dictionary<,> (which also implements
+                // IReadOnlyDictionary<,>), but third-party transports may supply an IDictionary impl that
+                // doesn't — a downcast would throw InvalidCastException mid-pipeline. Defensive copy
+                // bounded to consume-telemetry-enabled probes: the ConsumeEventArgs surface needs
+                // IReadOnlyDictionary<,>, so we materialise one. Cost is one Dictionary alloc with the
+                // 5-15 typical ServiceConnect headers.
+                Headers = new Dictionary<string, object>(headers, StringComparer.Ordinal),
             };
             activity = ServiceConnectActivitySource.Consume(args, _options, _attributes);
         }
