@@ -32,6 +32,12 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     // Non-benign errors leave the flag at 0 so the next caller retries.
     private int _indexed;
 
+    // Serialises the first-call path so that N concurrent cold-start callers do not each
+    // fire CreateManyAsync. The outer Volatile.Read fast path avoids the semaphore on every
+    // subsequent call; the semaphore is only contested on cold start. Mirrors the lock used
+    // in MongoDbProcessManagerFinder._indexedCollections.
+    private readonly SemaphoreSlim _indexInitSemaphore = new(1, 1);
+
     // Mongo returns these codes when concurrent index creation detects that an index with
     // the same keys (86) or options (85) already exists. Either way the index is present,
     // so the ensure call has succeeded as far as the caller is concerned.
@@ -344,36 +350,53 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             return;
         }
 
+        await _indexInitSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // Single-field index on Name supports GetDataAsync, RemoveAllAsync, CountAsync
-            var nameIndex = new CreateIndexModel<AggregatorDocument>(
-                Builders<AggregatorDocument>.IndexKeys.Ascending(x => x.Name));
+            // Re-check inside the semaphore: a concurrent first-caller may have already
+            // completed the create. This pattern mirrors MongoDbProcessManagerFinder's
+            // _indexedCollections lock — both prevent N concurrent cold-starts each
+            // firing CreateManyAsync, even though Mongo's idempotency makes it benign.
+            if (Volatile.Read(ref _indexed) != 0)
+            {
+                return;
+            }
 
-            // Compound index on (Name, InsertedAtTicks, InsertSequence) covers the sort
-            // path in GetSnapshotAsync so MongoDB can satisfy the query with an index scan.
-            var nameInsertOrderIndex = new CreateIndexModel<AggregatorDocument>(
-                Builders<AggregatorDocument>.IndexKeys
-                    .Ascending(x => x.Name)
-                    .Ascending(x => x.InsertedAtTicks)
-                    .Ascending(x => x.InsertSequence));
+            try
+            {
+                // Single-field index on Name supports GetDataAsync, RemoveAllAsync, CountAsync
+                var nameIndex = new CreateIndexModel<AggregatorDocument>(
+                    Builders<AggregatorDocument>.IndexKeys.Ascending(x => x.Name));
 
-            // Compound index on (Name, DataBson.CorrelationId) supports RemoveDataAsync.
-            var nameCorrelationIndex = new CreateIndexModel<AggregatorDocument>(
-                Builders<AggregatorDocument>.IndexKeys
-                    .Ascending(x => x.Name)
-                    .Ascending("DataBson.CorrelationId"));
+                // Compound index on (Name, InsertedAtTicks, InsertSequence) covers the sort
+                // path in GetSnapshotAsync so MongoDB can satisfy the query with an index scan.
+                var nameInsertOrderIndex = new CreateIndexModel<AggregatorDocument>(
+                    Builders<AggregatorDocument>.IndexKeys
+                        .Ascending(x => x.Name)
+                        .Ascending(x => x.InsertedAtTicks)
+                        .Ascending(x => x.InsertSequence));
 
-            await _collection.Indexes.CreateManyAsync(
-                [nameIndex, nameInsertOrderIndex, nameCorrelationIndex], cancellationToken).ConfigureAwait(false);
+                // Compound index on (Name, DataBson.CorrelationId) supports RemoveDataAsync.
+                var nameCorrelationIndex = new CreateIndexModel<AggregatorDocument>(
+                    Builders<AggregatorDocument>.IndexKeys
+                        .Ascending(x => x.Name)
+                        .Ascending("DataBson.CorrelationId"));
+
+                await _collection.Indexes.CreateManyAsync(
+                    [nameIndex, nameInsertOrderIndex, nameCorrelationIndex], cancellationToken).ConfigureAwait(false);
+            }
+            catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
+            {
+                // Another process / thread created the same index concurrently. Their work is ours;
+                // the indexes are present regardless of which side succeeded.
+            }
+
+            Volatile.Write(ref _indexed, 1);
         }
-        catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
+        finally
         {
-            // Another process / thread created the same index concurrently. Their work is ours;
-            // the indexes are present regardless of which side succeeded.
+            _indexInitSemaphore.Release();
         }
-
-        Volatile.Write(ref _indexed, 1);
     }
 
     /// <summary>
