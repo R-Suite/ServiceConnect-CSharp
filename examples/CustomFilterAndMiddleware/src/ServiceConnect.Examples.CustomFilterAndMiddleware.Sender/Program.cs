@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ServiceConnect;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.Examples.CustomFilterAndMiddleware.Contracts;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;

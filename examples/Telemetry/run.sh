@@ -43,12 +43,24 @@ wait_for_success() {
 }
 
 start_passive() {
-  dotnet run --project "$1" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$1" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
 > "$OUTPUT_LOG"
+
+# Pre-build all three projects sequentially. Two parallel `dotnet run` invocations
+# each trigger an implicit restore + build that contend on the shared output
+# directory and exhaust the build cgroup memory. Building once up front lets the
+# subsequent `dotnet run --no-build` calls just exec the cached binaries.
+for proj in \
+  "$SCRIPT_DIR/src/ServiceConnect.Examples.Telemetry.BillingSubscriber/ServiceConnect.Examples.Telemetry.BillingSubscriber.csproj" \
+  "$SCRIPT_DIR/src/ServiceConnect.Examples.Telemetry.AnalyticsSubscriber/ServiceConnect.Examples.Telemetry.AnalyticsSubscriber.csproj" \
+  "$SCRIPT_DIR/src/ServiceConnect.Examples.Telemetry.Publisher/ServiceConnect.Examples.Telemetry.Publisher.csproj"; do
+  dotnet build "$proj" -m:1 --nologo --verbosity quiet >> "$OUTPUT_LOG" 2>&1
+done
+
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.Telemetry.BillingSubscriber/ServiceConnect.Examples.Telemetry.BillingSubscriber.csproj"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.Telemetry.AnalyticsSubscriber/ServiceConnect.Examples.Telemetry.AnalyticsSubscriber.csproj"
 
@@ -60,7 +72,7 @@ if ! wait_for_ready; then
   exit 1
 fi
 
-dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Telemetry.Publisher/ServiceConnect.Examples.Telemetry.Publisher.csproj" >> "$OUTPUT_LOG" 2>&1 &
+dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Telemetry.Publisher/ServiceConnect.Examples.Telemetry.Publisher.csproj" >> "$OUTPUT_LOG" 2>&1 &
 PUBLISHER_PID=$!
 PIDS+=("$PUBLISHER_PID")
 wait "$PUBLISHER_PID"

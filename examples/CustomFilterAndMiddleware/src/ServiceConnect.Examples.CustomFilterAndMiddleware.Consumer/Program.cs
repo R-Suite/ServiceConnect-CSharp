@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ServiceConnect;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer;
 using ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer.Filters;
 using ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer.Middleware;

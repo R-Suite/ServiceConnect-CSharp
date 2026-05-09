@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
 using ServiceConnect.Examples.Support.Configuration;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Persistence.MongoDb;
