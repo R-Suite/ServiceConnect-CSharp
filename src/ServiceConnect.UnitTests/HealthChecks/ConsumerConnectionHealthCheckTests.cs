@@ -63,4 +63,24 @@ public class ConsumerConnectionHealthCheckTests
 
         Assert.Equal(HealthStatus.Unhealthy, result.Status);
     }
+
+    [Fact]
+    public async Task CheckHealthAsync_ConnectedAndBrokerCancelled_ReturnsUnhealthy()
+    {
+        // IsConnected=true but IsCancelledByBroker=true: the AMQP TCP connection is up
+        // but the consumer registration has been torn down by the broker (queue deleted,
+        // policy expired, mirror promoted). The check must report Unhealthy so that
+        // readiness probes remove the pod from the load balancer.
+        _consumer.SetupGet(c => c.IsConnected).Returns(true);
+        _consumer.SetupGet(c => c.IsCancelledByBroker).Returns(true);
+
+        var ctx = new HealthCheckContext
+        {
+            Registration = new HealthCheckRegistration("x", _ => CreateSut(), HealthStatus.Unhealthy, null),
+        };
+        var result = await CreateSut().CheckHealthAsync(ctx);
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Contains("broker cancelled", result.Description, StringComparison.OrdinalIgnoreCase);
+    }
 }

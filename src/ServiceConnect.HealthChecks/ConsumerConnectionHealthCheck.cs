@@ -4,10 +4,12 @@ using ServiceConnect.Interfaces;
 namespace ServiceConnect.HealthChecks;
 
 /// <summary>
-/// Reports Healthy when <see cref="IConsumer.IsConnected"/> is <see langword="true"/>, OR when
-/// the consumer has been observed Healthy within the configured recovery-grace window AND the
-/// consumer has not been broker-cancelled. Recovery grace ensures a momentary disconnect
-/// (auto-recovery, network blip) does not crash-loop pods wired on liveness probes.
+/// Reports Unhealthy when the broker has cancelled the consumer; otherwise Healthy when
+/// <see cref="IConsumer.IsConnected"/> is <see langword="true"/>; otherwise grace window
+/// applies (Healthy if within the window since the last observed-Healthy probe, Unhealthy
+/// once the window expires or if the consumer has never been observed Healthy).
+/// Recovery grace ensures a momentary disconnect (auto-recovery, network blip) does not
+/// crash-loop pods wired on liveness probes.
 /// O(1), allocation-light, side-effect-free — does not perform broker I/O.
 /// </summary>
 /// <remarks>
@@ -63,17 +65,22 @@ public sealed class ConsumerConnectionHealthCheck : IHealthCheck
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_consumer.IsConnected)
-        {
-            Volatile.Write(ref _lastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
-            return Task.FromResult(HealthCheckResult.Healthy("Consumer connection is open."));
-        }
-
+        // Broker-cancelled is a permanent failure — bypass grace and the IsConnected
+        // check. basic.cancel (queue deleted, policy expired, mirror promoted) tears down
+        // the consumer registration but leaves the AMQP TCP connection up, so IsConnected
+        // can remain true while deliveries have stopped. Checking broker-cancel first
+        // ensures readiness probes remove the pod from the load balancer immediately.
         if (_consumer.IsCancelledByBroker)
         {
             var brokerFailureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy;
             return Task.FromResult(new HealthCheckResult(brokerFailureStatus,
                 "Consumer connection is closed (broker cancelled the consumer)."));
+        }
+
+        if (_consumer.IsConnected)
+        {
+            Volatile.Write(ref _lastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
+            return Task.FromResult(HealthCheckResult.Healthy("Consumer connection is open."));
         }
 
         var lastHealthy = Volatile.Read(ref _lastHealthyTicks);
