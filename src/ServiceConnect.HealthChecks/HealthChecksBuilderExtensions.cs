@@ -62,21 +62,18 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(busFactory);
-        // Pre-fix this method captured a `cached` field via closure and used
-        // LazyInitializer.EnsureInitialized to construct the check once per registration.
-        // The closure outlives the IServiceProvider that resolved the original IBus, so a
-        // host that rebuilds its provider (test rigs, hot-reload, multi-tenant patterns) saw
-        // probes against the OLD disposed bus from a stale check instance.
-        //
-        // Resolve fresh from the supplied sp on every probe. The IBus singleton is itself
-        // cached by IServiceProvider; the only repeat alloc is the BusConsumingHealthCheck
-        // wrapper, which is ~24 bytes — trivial relative to the rest of the probe path.
-        // The check consults IBus.IsCancelledByBroker for the permanent-failure bypass,
-        // so the parameterless ctor short-circuits broker basic.cancel events without
-        // needing the IConsumer plumbed through.
+        // Cache the wrapper per IServiceProvider via ConditionalWeakTable. The earlier
+        // pre-fix used LazyInitializer.EnsureInitialized which captured a closure-cached
+        // instance that outlived the resolving IServiceProvider — rebuilt providers
+        // probed an OLD disposed bus from a stale check. The per-SP cache here both
+        // (a) honours M6's rebuild contract (rebuilt SP becomes GC-eligible and gets a
+        // fresh check on next probe) AND (b) preserves M4's recovery-grace state
+        // (instance-scoped _lastHealthyTicks is stable across probes against the same SP).
+        var cache = new PerProviderCache<BusConsumingHealthCheck>(
+            sp => new BusConsumingHealthCheck(busFactory(sp)));
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => new BusConsumingHealthCheck(busFactory(sp)),
+            cache.Resolve,
             failureStatus,
             tags,
             timeout));
@@ -102,13 +99,16 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(busFactory);
+        // Per-SP cache so M4's _lastHealthyTicks accumulates across probes; M6's
+        // rebuild contract preserved via ConditionalWeakTable's GC semantics.
+        var cache = new PerProviderCache<BusConsumingHealthCheck>(sp => new BusConsumingHealthCheck(
+            busFactory(sp),
+            consumerFactory?.Invoke(sp),
+            recoveryGraceWindow,
+            timeProvider ?? TimeProvider.System));
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => new BusConsumingHealthCheck(
-                busFactory(sp),
-                consumerFactory?.Invoke(sp),
-                recoveryGraceWindow,
-                timeProvider ?? TimeProvider.System),
+            cache.Resolve,
             failureStatus,
             tags,
             timeout));
@@ -163,10 +163,12 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(consumerFactory);
-        // See the AddServiceConnectBus overload for the pre-fix closure-cache rationale.
+        // Per-SP cache; see PerProviderCache xmldoc for the M4+M6 composition rationale.
+        var cache = new PerProviderCache<ConsumerConnectionHealthCheck>(
+            sp => new ConsumerConnectionHealthCheck(consumerFactory(sp)));
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => new ConsumerConnectionHealthCheck(consumerFactory(sp)),
+            cache.Resolve,
             failureStatus,
             tags,
             timeout));
@@ -189,12 +191,14 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(consumerFactory);
+        // Per-SP cache so M4's _lastHealthyTicks accumulates across probes.
+        var cache = new PerProviderCache<ConsumerConnectionHealthCheck>(sp => new ConsumerConnectionHealthCheck(
+            consumerFactory(sp),
+            recoveryGraceWindow,
+            timeProvider ?? TimeProvider.System));
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => new ConsumerConnectionHealthCheck(
-                consumerFactory(sp),
-                recoveryGraceWindow,
-                timeProvider ?? TimeProvider.System),
+            cache.Resolve,
             failureStatus,
             tags,
             timeout));
@@ -259,10 +263,13 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(producerFactory);
-        // See the AddServiceConnectBus overload for the pre-fix closure-cache rationale.
+        // Producer check has no instance state today (no grace window) but caching
+        // for symmetry: rebuilt SP gets a fresh check; per-SP probes share one wrapper.
+        var cache = new PerProviderCache<ProducerConnectionHealthCheck>(
+            sp => new ProducerConnectionHealthCheck(producerFactory(sp)));
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => new ProducerConnectionHealthCheck(producerFactory(sp)),
+            cache.Resolve,
             failureStatus,
             tags,
             timeout));
