@@ -71,6 +71,9 @@ public static class HealthChecksBuilderExtensions
         // Resolve fresh from the supplied sp on every probe. The IBus singleton is itself
         // cached by IServiceProvider; the only repeat alloc is the BusConsumingHealthCheck
         // wrapper, which is ~24 bytes — trivial relative to the rest of the probe path.
+        // The check consults IBus.IsCancelledByBroker for the permanent-failure bypass,
+        // so the parameterless ctor short-circuits broker basic.cancel events without
+        // needing the IConsumer plumbed through.
         return builder.Add(new HealthCheckRegistration(
             name,
             sp => new BusConsumingHealthCheck(busFactory(sp)),

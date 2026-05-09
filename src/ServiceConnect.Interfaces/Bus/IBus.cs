@@ -137,6 +137,15 @@ public interface IBus : IAsyncDisposable
     bool IsConsuming { get; }
 
     /// <summary>
+    /// Gets whether the broker has cancelled the consumer (basic.cancel: queue deleted,
+    /// policy expired, mirror promoted). Mirrors <see cref="IConsumer.IsCancelledByBroker"/>
+    /// at the bus level so callers (e.g. <c>BusConsumingHealthCheck</c>) can distinguish a
+    /// permanent broker-side failure from a transient connection flap. Default
+    /// implementation returns <see langword="false"/>; framework-supplied buses override.
+    /// </summary>
+    bool IsCancelledByBroker => false;
+
+    /// <summary>
     /// Schedules a <see cref="TimeoutMessage"/> to be delivered to the current queue
     /// after the specified delay. The message's <c>CorrelationId</c> will equal
     /// <paramref name="correlationId"/>, which is the standard key for Process

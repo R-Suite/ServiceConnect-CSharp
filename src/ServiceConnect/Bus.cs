@@ -99,6 +99,9 @@ public sealed class Bus : IBus
         && !(_consumer?.IsCancelledByBroker ?? false);
 
     /// <inheritdoc />
+    public bool IsCancelledByBroker => _consumer?.IsCancelledByBroker ?? false;
+
+    /// <inheritdoc />
     public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();

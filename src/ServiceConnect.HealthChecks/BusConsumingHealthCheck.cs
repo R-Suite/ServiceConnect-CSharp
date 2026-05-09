@@ -87,8 +87,12 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
             return Task.FromResult(HealthCheckResult.Healthy("Bus is consuming."));
         }
 
-        // Broker-cancelled is a permanent failure — bypass grace.
-        if (_consumer is { IsCancelledByBroker: true })
+        // Broker-cancelled is a permanent failure — bypass grace. Prefer the explicit
+        // IConsumer signal when supplied; otherwise consult IBus.IsCancelledByBroker so
+        // the parameterless-ctor path also short-circuits on broker basic.cancel events
+        // (queue deleted, policy expired, mirror promoted) without waiting out the grace
+        // window. Both signals reduce to the same underlying IConsumer.IsCancelledByBroker.
+        if (_consumer is { IsCancelledByBroker: true } || _bus.IsCancelledByBroker)
         {
             var brokerFailureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy;
             return Task.FromResult(new HealthCheckResult(brokerFailureStatus,
