@@ -210,14 +210,14 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                     : await collection.FindAsync(ownedFilter, readBackOptions, cancellationToken).ConfigureAwait(false);
                 await cursor.ForEachAsync(due.Add, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (Exception)
             {
-                // OCE between the claim succeeding and the read-back orphans the lease: it
-                // is held by a sessionId no caller will use. Best-effort release inside the
-                // catch lets the next poll see the rows immediately rather than waiting on
-                // the reaper / lease-expiry. Use CancellationToken.None — the cancelling
-                // token must not preempt cleanup. Swallow any failure here; reaper /
-                // lease-expiry is the ultimate recovery.
+                // Any failure between successful claim and successful read-back orphans the
+                // lease — held by a sessionId no caller will use. Best-effort release lets the
+                // next poll see the rows immediately rather than waiting on the reaper /
+                // lease-expiry. Release uses CancellationToken.None — the cancelling token (or
+                // a transient MongoException) must not preempt cleanup. Swallow any failure
+                // here; reaper / lease-expiry is the ultimate recovery.
                 if (leaseClaimed)
                 {
                     try
@@ -232,7 +232,7 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Best-effort lease release after cancellation failed for session {SessionId}; reaper will reclaim.", sessionId);
+                        _logger.LogWarning(ex, "Best-effort lease release after error failed for session {SessionId}; reaper will reclaim.", sessionId);
                     }
                 }
                 throw;
