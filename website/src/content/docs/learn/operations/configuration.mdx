@@ -73,8 +73,8 @@ Anything RabbitMQ-specific that isn't on the interface — connection timeout, h
 ```csharp
 transport.SetClientSetting("Port", 5671);
 transport.SetClientSetting("RequestedHeartbeat", TimeSpan.FromSeconds(30));
-transport.SetClientSetting("PublisherAcknowledgements", true);
-transport.SetClientSetting("PublishTimeout", TimeSpan.FromSeconds(30));
+// PublisherAcknowledgements defaults to true; PublishTimeout to 30s.
+// See the reference for opting out (rare; rejected if combined with a finite timeout).
 ```
 
 The keys are passed through to the RabbitMQ client; see that client's documentation for the full list.

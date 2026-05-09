@@ -232,10 +232,13 @@ Maximum time the RabbitMQ producer waits for a broker acknowledgement when publi
 ### `PublisherAcknowledgements` (RabbitMQ client setting)
 
 ```csharp
+// Default: true — explicit override is rarely needed.
 transport.SetClientSetting(RabbitMQSettingKeys.PublisherAcknowledgements, true);
 ```
 
-Enables RabbitMQ publisher confirms for outbound publishes. When enabled the producer waits for a broker ack before completing the publish, bounded by [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting).
+Enables RabbitMQ publisher confirms for outbound publishes. **Default: `true`.** When enabled the producer waits for a broker ack before completing the publish, bounded by [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting).
+
+**Remarks.** Two safety properties depend on confirms being enabled: [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting) only enforces against a stalled broker when the producer awaits the ack, and the fan-out `SendAsync(Type)` path's between-iteration header re-stamping is gated by the broker ack so that RabbitMQ.Client cannot read the alias dict after the next iteration mutates it. Setting this explicitly to `false` *and* configuring a finite `PublishTimeout` is rejected at producer construction with `InvalidOperationException` — the combination silently disables the timeout, so misconfiguration fails fast at startup. Either keep the default, or pair an explicit `false` with `PublishTimeout = Timeout.InfiniteTimeSpan` / `TimeSpan.Zero`.
 
 ---
 
