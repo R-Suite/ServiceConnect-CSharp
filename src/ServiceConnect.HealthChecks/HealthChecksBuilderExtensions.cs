@@ -1,4 +1,3 @@
-using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ServiceConnect.Interfaces;
@@ -50,9 +49,8 @@ public static class HealthChecksBuilderExtensions
     /// <summary>
     /// Registers a bus-consuming health check resolving the bus via a factory function.
     /// Use this for non-DI-resolved buses or for custom keyed-services patterns.
-    /// The instance returned by the factory is cached after the first probe call
-    /// so that each registered check maps to exactly one check object regardless of
-    /// how many concurrent health-check calls are in flight.
+    /// The factory runs on every probe; the underlying <see cref="IBus"/> singleton
+    /// is cached by the supplied <see cref="IServiceProvider"/>.
     /// </summary>
     public static IHealthChecksBuilder AddServiceConnectBus(
         this IHealthChecksBuilder builder,
@@ -64,11 +62,18 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(busFactory);
-        BusConsumingHealthCheck? cached = null;
+        // Pre-fix this method captured a `cached` field via closure and used
+        // LazyInitializer.EnsureInitialized to construct the check once per registration.
+        // The closure outlives the IServiceProvider that resolved the original IBus, so a
+        // host that rebuilds its provider (test rigs, hot-reload, multi-tenant patterns) saw
+        // probes against the OLD disposed bus from a stale check instance.
+        //
+        // Resolve fresh from the supplied sp on every probe. The IBus singleton is itself
+        // cached by IServiceProvider; the only repeat alloc is the BusConsumingHealthCheck
+        // wrapper, which is ~24 bytes — trivial relative to the rest of the probe path.
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => LazyInitializer.EnsureInitialized(ref cached,
-                () => new BusConsumingHealthCheck(busFactory(sp))),
+            sp => new BusConsumingHealthCheck(busFactory(sp)),
             failureStatus,
             tags,
             timeout));
@@ -110,7 +115,8 @@ public static class HealthChecksBuilderExtensions
     /// <summary>
     /// Registers a consumer-connection health check resolving the consumer via a factory function.
     /// Use this for non-DI-resolved consumers or for custom keyed-services patterns.
-    /// The instance returned by the factory is cached after the first probe call.
+    /// The factory runs on every probe; the underlying <see cref="IConsumer"/> singleton
+    /// is cached by the supplied <see cref="IServiceProvider"/>.
     /// </summary>
     public static IHealthChecksBuilder AddServiceConnectConsumer(
         this IHealthChecksBuilder builder,
@@ -122,11 +128,10 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(consumerFactory);
-        ConsumerConnectionHealthCheck? cached = null;
+        // See the AddServiceConnectBus overload for the pre-fix closure-cache rationale.
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => LazyInitializer.EnsureInitialized(ref cached,
-                () => new ConsumerConnectionHealthCheck(consumerFactory(sp))),
+            sp => new ConsumerConnectionHealthCheck(consumerFactory(sp)),
             failureStatus,
             tags,
             timeout));
@@ -173,7 +178,8 @@ public static class HealthChecksBuilderExtensions
     /// <summary>
     /// Registers a producer-connection health check resolving the producer via a factory function.
     /// Use this for non-DI-resolved producers or for custom keyed-services patterns.
-    /// The instance returned by the factory is cached after the first probe call.
+    /// The factory runs on every probe; the underlying <see cref="IProducer"/> singleton
+    /// is cached by the supplied <see cref="IServiceProvider"/>.
     /// </summary>
     /// <remarks>
     /// The producer connects lazily on the first publish/send call. Hosts that
@@ -190,11 +196,10 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(producerFactory);
-        ProducerConnectionHealthCheck? cached = null;
+        // See the AddServiceConnectBus overload for the pre-fix closure-cache rationale.
         return builder.Add(new HealthCheckRegistration(
             name,
-            sp => LazyInitializer.EnsureInitialized(ref cached,
-                () => new ProducerConnectionHealthCheck(producerFactory(sp))),
+            sp => new ProducerConnectionHealthCheck(producerFactory(sp)),
             failureStatus,
             tags,
             timeout));

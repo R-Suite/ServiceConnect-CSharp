@@ -8,13 +8,22 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests.HealthChecks;
 
+/// <summary>
+/// Post-M6: the registration factory no longer caches a closure-captured check instance
+/// (the closure outlived the IServiceProvider, so a rebuilt provider would probe a stale
+/// check wrapping a disposed dependency). Each probe builds a fresh wrapper around the
+/// IBus/IConsumer/IProducer resolved from the supplied IServiceProvider — which itself
+/// caches the singleton, so the underlying transport object is shared across probes
+/// against the same provider.
+/// </summary>
 public class HealthCheckRegistrationCachingTests
 {
     [Fact]
-    public void AddServiceConnectBus_TwoProbesShareTheSameInstance()
+    public void AddServiceConnectBus_TwoProbes_ReturnFreshWrappersOverSameBus()
     {
+        var bus = Mock.Of<IBus>(b => b.IsConsuming == true);
         var services = new ServiceCollection();
-        services.AddSingleton(Mock.Of<IBus>(b => b.IsConsuming == true));
+        services.AddSingleton(bus);
         services.AddHealthChecks().AddServiceConnectBus("test");
 
         var sp = services.BuildServiceProvider();
@@ -24,14 +33,18 @@ public class HealthCheckRegistrationCachingTests
         var first = registration.Factory(sp);
         var second = registration.Factory(sp);
 
-        Assert.Same(first, second);
+        // Fresh wrapper per probe — the cache is the IServiceProvider, not us.
+        Assert.NotSame(first, second);
+        Assert.IsType<BusConsumingHealthCheck>(first);
+        Assert.IsType<BusConsumingHealthCheck>(second);
     }
 
     [Fact]
-    public void AddServiceConnectConsumer_TwoProbesShareTheSameInstance()
+    public void AddServiceConnectConsumer_TwoProbes_ReturnFreshWrappersOverSameConsumer()
     {
+        var consumer = Mock.Of<IConsumer>(c => c.IsConnected == true);
         var services = new ServiceCollection();
-        services.AddSingleton(Mock.Of<IConsumer>(c => c.IsConnected == true));
+        services.AddSingleton(consumer);
         services.AddHealthChecks().AddServiceConnectConsumer("test");
 
         var sp = services.BuildServiceProvider();
@@ -41,14 +54,18 @@ public class HealthCheckRegistrationCachingTests
         var first = registration.Factory(sp);
         var second = registration.Factory(sp);
 
-        Assert.Same(first, second);
+        Assert.NotSame(first, second);
+        Assert.IsType<ConsumerConnectionHealthCheck>(first);
+        Assert.IsType<ConsumerConnectionHealthCheck>(second);
     }
 
     [Fact]
-    public void AddServiceConnectProducer_TwoProbesShareTheSameInstance()
+    public void AddServiceConnectProducer_TwoProbes_ReturnFreshWrappersOverSameProducer()
     {
+        var producer = Mock.Of<IProducer>(p =>
+            p.GetHealthSnapshot() == new ProducerHealthSnapshot(true, true));
         var services = new ServiceCollection();
-        services.AddSingleton(Mock.Of<IProducer>(p => p.IsHealthy == true));
+        services.AddSingleton(producer);
         services.AddHealthChecks().AddServiceConnectProducer("test");
 
         var sp = services.BuildServiceProvider();
@@ -58,6 +75,8 @@ public class HealthCheckRegistrationCachingTests
         var first = registration.Factory(sp);
         var second = registration.Factory(sp);
 
-        Assert.Same(first, second);
+        Assert.NotSame(first, second);
+        Assert.IsType<ProducerConnectionHealthCheck>(first);
+        Assert.IsType<ProducerConnectionHealthCheck>(second);
     }
 }
