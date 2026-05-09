@@ -81,12 +81,12 @@ public sealed class RabbitMqConsumerHostShutdownDeadlineTests
         resultTask.GetAwaiter().GetResult();
 #pragma warning restore VSTHRD002
 
-        // Fault the rpc. Post-fix, ObserveAbandonedRpc's ExecuteSynchronously continuation
-        // runs inline here and accesses t.Exception → the task is marked "observed".
+        // Fault the rpc. ObserveAbandonedRpc's ExecuteSynchronously continuation runs
+        // inline here and accesses t.Exception, marking the task "observed".
         rpcTcs.TrySetException(new InvalidOperationException("simulated post-deadline RPC abort (channel close)"));
 
         // rpcTcs and rpcTask go out of scope here. The task holds the continuation tree
-        // registered by ObserveAbandonedRpc (post-fix) but has no external strong references.
+        // registered by ObserveAbandonedRpc but has no external strong references.
     }
 
     private static RabbitMqConsumerHost BuildHost()

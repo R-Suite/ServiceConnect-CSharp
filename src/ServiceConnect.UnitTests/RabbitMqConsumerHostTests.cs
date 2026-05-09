@@ -960,7 +960,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_WhenAuditPublishThrows_MessageIsAcked_AndHandlerNotRedelivered()
     {
-        // C4: after the handler succeeds, an audit-publish failure must not fail delivery —
+        // After the handler succeeds, an audit-publish failure must not fail delivery —
         // audit is observability, not part of the business transaction. The original message
         // must be ack'd and the handler must not run a second time.
         var (conn, channel, publishChannel) = MockConnection();

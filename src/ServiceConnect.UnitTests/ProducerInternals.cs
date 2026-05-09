@@ -5,11 +5,11 @@ using ServiceConnect.Client.RabbitMQ;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Reflection helpers for the Producer test suite. Producer's internal state was split
-/// across Producer and the nested ProducerConnection collaborator in Phase 4; lookups
-/// fall back to the connection collaborator so existing tests that reflect on the old
-/// flat layout (e.g. <c>_model</c>, <c>_connected</c>, <c>_declaredExchanges</c>) still
-/// resolve to the right object without touching every call site.
+/// Reflection helpers for the Producer test suite. Producer's internal state is split
+/// across Producer and the nested ProducerConnection collaborator; lookups fall back to
+/// the connection collaborator so tests that reflect on the older flat layout
+/// (e.g. <c>_model</c>, <c>_connected</c>, <c>_declaredExchanges</c>) still resolve to
+/// the right object without touching every call site.
 /// </summary>
 internal static class ProducerInternals
 {

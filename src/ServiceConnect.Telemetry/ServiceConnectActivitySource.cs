@@ -52,14 +52,14 @@ public static class ServiceConnectActivitySource
 
         if (activity is null)
         {
-            // L13: single inject. No activity → propagate ambient context for downstream linking.
+            // Single inject. No activity → propagate ambient context for downstream linking.
             InjectTraceContext(Activity.Current, eventArgs.Headers);
             return null;
         }
 
         try
         {
-            // L13: single inject. Activity non-null → propagate the new span's context.
+            // Single inject. Activity non-null → propagate the new span's context.
             InjectTraceContext(activity, eventArgs.Headers);
 
             if (activity.IsAllDataRequested)
@@ -226,14 +226,14 @@ public static class ServiceConnectActivitySource
 
         if (activity is null)
         {
-            // L13: single inject. No activity → propagate ambient context for downstream linking.
+            // Single inject. No activity → propagate ambient context for downstream linking.
             InjectTraceContext(Activity.Current, eventArgs.Headers);
             return null;
         }
 
         try
         {
-            // L13: single inject. Activity non-null → propagate the new span's context.
+            // Single inject. Activity non-null → propagate the new span's context.
             InjectTraceContext(activity, eventArgs.Headers);
 
             if (activity.IsAllDataRequested)

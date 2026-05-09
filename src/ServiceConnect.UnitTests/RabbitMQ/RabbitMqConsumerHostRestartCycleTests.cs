@@ -20,9 +20,9 @@ public sealed class RabbitMqConsumerHostRestartCycleTests
     [Fact]
     public async Task PrepareAsync_AfterPriorDispose_ResetsDisposeStartedFlag()
     {
-        // Drive Prepare → Dispose, then read _disposeStarted via reflection — pre-fix this is 1
-        // (DisposeAsync's CAS-set), post-fix the next PrepareAsync resets to 0 so a subsequent
-        // DisposeAsync can run the full teardown rather than CAS-short-circuiting.
+        // Drive Prepare → Dispose, then read _disposeStarted via reflection. After the first
+        // DisposeAsync the flag is 1 (its CAS-set); the next PrepareAsync must reset it to 0
+        // so a subsequent DisposeAsync runs the full teardown rather than CAS-short-circuiting.
         var host = BuildHost();
 
         await host.PrepareAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "restart-q");

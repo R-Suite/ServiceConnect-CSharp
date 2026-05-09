@@ -94,7 +94,7 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
         Assert.Equal("ok", resolved.Body);
     }
 
-    // ── M31: BsonException must be wrapped in PersistenceException ─────────────
+    // ── BsonException must be wrapped in PersistenceException ─────────────────
 
     [Fact]
     public async Task InsertDataAsync_BsonSerializationException_WrappedInPersistenceException()

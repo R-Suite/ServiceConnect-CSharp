@@ -22,8 +22,8 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
     // Get / Remove / Release / Reap path; without this flag, every dispatch round-trips
     // a DropOneAsync (404 in steady state) plus a CreateManyAsync of three index specs.
     // Mirrors the saga finder's _indexedCollections + semaphore pattern (and the
-    // aggregator's M40 fix). Volatile.Read/Write give ordered visibility for the flag
-    // without requiring Interlocked on the success path.
+    // aggregator's index init guard). Volatile.Read/Write give ordered visibility for
+    // the flag without requiring Interlocked on the success path.
     private int _indexed;
     // _indexInitSemaphore is intentionally NOT Disposed: SemaphoreSlim.Dispose only
     // releases the lazily-allocated WaitHandle, and we never call AvailableWaitHandle,
@@ -423,8 +423,8 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 return;
             }
 
-            // Drop the legacy (Locked, Time) index from prior versions. The H31 due-query
-            // shape is `Time <= utcNow AND (Locked == false OR LockExpiresAt <= utcNow)`
+            // Drop the legacy (Locked, Time) index from prior versions. The current
+            // due-query shape is `Time <= utcNow AND (Locked == false OR LockExpiresAt <= utcNow)`
             // sorted by Time. A single compound (Time, Locked, LockExpiresAt) — and even
             // a 2-key (Time, LockExpiresAt) — is rejected by MongoDB with code 171
             // ("cannot index parallel arrays") because the C# driver serialises

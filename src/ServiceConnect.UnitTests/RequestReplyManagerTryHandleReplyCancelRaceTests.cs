@@ -30,9 +30,9 @@ public sealed class RequestReplyManagerTryHandleReplyCancelRaceTests
 {
     /// <summary>
     /// Outcome must be exactly one of: success (reply observed), cancelled (caller-CT
-    /// observed). The pre-fix bug allowed a third outcome: success-observed AND the
-    /// caller's token reports IsCancellationRequested without the await ever surfacing
-    /// the cancellation. Run the race many times to make the window observable.
+    /// observed). The third outcome guarded against is the silent drop: success-observed
+    /// AND the caller's token reports IsCancellationRequested without the await ever
+    /// surfacing the cancellation. Run the race many times to make the window observable.
     /// </summary>
     [Fact]
     public async Task SendRequestAsync_ReplyAndCancelRace_NeverSilentlySwallowsCancel()
@@ -91,18 +91,17 @@ public sealed class RequestReplyManagerTryHandleReplyCancelRaceTests
                 observedException = ex;
             }
 
-            // Exactly one of: success or cancel (any OCE subtype). The pre-fix bug
-            // allowed the await to return a reply WITH the caller-CT already cancelled
-            // — that's the silent-drop being guarded against. Either outcome is fine on
-            // its own; the bug only manifests as "got a reply AND the registered cancel
-            // did not surface anywhere".
+            // Exactly one of: success or cancel (any OCE subtype). The silent-drop being
+            // guarded against is the await returning a reply WITH the caller-CT already
+            // cancelled. Either outcome alone is fine; the failure mode is "got a reply
+            // AND the registered cancel did not surface anywhere".
             if (observedException is null)
             {
                 Assert.NotNull(observedReply);
-                // Reply legitimately won the lock — registration's state.Close
-                // observed _closed=true post-fix because TrySetResult ran under the
-                // lock; the cancel callback's TrySetCanceled is a no-op against an
-                // already-completed TCS. This is the documented success path.
+                // Reply legitimately won the lock — registration's state.Close observed
+                // _closed=true because TrySetResult ran under the lock; the cancel
+                // callback's TrySetCanceled is a no-op against an already-completed TCS.
+                // This is the documented success path.
             }
             else
             {
@@ -114,11 +113,10 @@ public sealed class RequestReplyManagerTryHandleReplyCancelRaceTests
 
     /// <summary>
     /// Single-threaded determinism: cancel the caller-CT EXACTLY between TryProcessReply
-    /// flipping _closed=true and the completion-of-the-TCS. Pre-fix this was a real gap
-    /// (the queued completionWork action ran outside the lock); post-fix the gap is
-    /// closed and a cancel-after-process either no-ops (TCS already completed) or never
-    /// reaches its callback (state.Close sees _closed=true). The reply wins, the await
-    /// returns the reply.
+    /// flipping _closed=true and the completion-of-the-TCS. The completion runs under the
+    /// per-state lock alongside the _closed flip, so a cancel-after-process either no-ops
+    /// (TCS already completed) or never reaches its callback (state.Close sees
+    /// _closed=true). The reply wins, the await returns the reply.
     /// </summary>
     [Fact]
     public async Task SendRequestAsync_CancelImmediatelyAfterReply_ReplyWinsCleanly()

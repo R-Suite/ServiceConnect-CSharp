@@ -7,11 +7,11 @@ namespace ServiceConnect.Configuration;
 /// persistent ServiceConnect storage.
 /// </summary>
 /// <remarks>
-/// As of v8 (Phase 5), <see cref="ConnectionString"/> defaults to <see cref="string.Empty"/>;
-/// callers must explicitly configure it. The pre-v8 default (<c>"mongodb://localhost/"</c>)
-/// silently targeted localhost when misconfigured — production deployments shipping with the
-/// default value were a real accident-mode. Legacy callers that depended on the default must
-/// update their <c>ConfigurePersistence(c =&gt; c.ConnectionString = "...")</c> wiring.
+/// <see cref="ConnectionString"/> defaults to <see cref="string.Empty"/>; callers must
+/// explicitly configure it. The previous default (<c>"mongodb://localhost/"</c>) silently
+/// targeted localhost when misconfigured — production deployments shipping with the default
+/// value were a real accident-mode. Legacy callers that depended on the default must update
+/// their <c>ConfigurePersistence(c =&gt; c.ConnectionString = "...")</c> wiring.
 /// </remarks>
 public sealed class PersistenceConfiguration : IPersistenceConfiguration
 {

@@ -243,12 +243,13 @@ public class ProducerDisposeTests
         // Regression guard: when DisposeAsync flips _disposed while a publisher's retry loop
         // is mid-Task.Delay (the lock is released between attempts), the next attempt's
         // EnsureConnectedAsync throws ObjectDisposedException. That exception MUST surface
-        // immediately. Pre-fix, the catch-when at the bottom of ExecuteRetryingPublishAsync
-        // treated ObjectDisposedException as retriable and burned the full retryCount *
-        // retrySeconds budget (default 60 * 10s = 10 min) against a permanently dead instance.
+        // immediately. Treating ObjectDisposedException as retriable would burn the full
+        // retryCount * retrySeconds budget (default 60 * 10s = 10 min) against a permanently
+        // dead instance.
         //
-        // Test parameters: retryCount=60, retrySeconds=1 — pre-fix would take up to ~60s,
-        // post-fix returns within one Task.Delay window (~1s) plus dispose teardown.
+        // Test parameters: retryCount=60, retrySeconds=1 — without the explicit disposed
+        // catch arm this could take up to ~60s; with it the call returns within one
+        // Task.Delay window (~1s) plus dispose teardown.
         var producer = CreateProducerWithRetrySettings(retryCount: 60, retrySeconds: 1);
 
         // Pre-seed a healthy mock channel so the first publisher iteration's
@@ -307,10 +308,10 @@ public class ProducerDisposeTests
 
         // Tolerance: one full retrySeconds=1s for the inter-attempt Task.Delay window the
         // publisher may already be inside, plus generous headroom for scheduler jitter under
-        // the cgroup CPU quota. Pre-fix this would be ~60s. Anything < 5s proves the disposed
-        // catch fired and short-circuited the retry loop.
+        // the cgroup CPU quota. Without the disposed-catch short-circuit this would be ~60s;
+        // anything < 5s proves the disposed catch fired and short-circuited the retry loop.
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5),
-            $"Publish task took {sw.Elapsed} after dispose; pre-fix this was ~60s. " +
+            $"Publish task took {sw.Elapsed} after dispose; without the disposed catch this would be ~60s. " +
             "ObjectDisposedException must short-circuit the retry loop, not be treated as retriable.");
 
         // The surfaced exception is ObjectDisposedException — directly from EnsureConnectedAsync's

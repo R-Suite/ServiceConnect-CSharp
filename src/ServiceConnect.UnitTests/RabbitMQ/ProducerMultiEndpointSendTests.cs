@@ -80,7 +80,7 @@ public sealed class ProducerMultiEndpointSendTests
 
         Assert.Equal(3, captured.Count);
 
-        // C11 invariant: each delivery carries a distinct on-wire identity.
+        // Invariant: each delivery carries a distinct on-wire identity.
         Assert.Equal(3, captured.Select(c => c.MessageId).Distinct(StringComparer.Ordinal).Count());
 
         // TimeSent is re-stamped per iteration; the clock advances inside each publish callback,

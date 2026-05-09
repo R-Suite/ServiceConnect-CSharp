@@ -11,8 +11,8 @@ public class InMemoryAggregatorPersistorLockHoldTests
     {
         // Lock-hold property is hard to test directly without driving real concurrency.
         // The behavioural test verifies (a) snapshots return cloned data (not the same
-        // reference as stored), and (b) the post-fix structure still produces correct
-        // snapshots end-to-end.
+        // reference as stored), and (b) the snapshot path still produces correct output
+        // end-to-end with cloning inside the lock.
         var persistor = new InMemoryAggregatorPersistor();
         var data = new TestAggregatorMessage { CorrelationId = Guid.NewGuid(), Payload = "x" };
         await persistor.InsertDataAsync(data, "test");

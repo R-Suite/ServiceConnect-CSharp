@@ -148,7 +148,7 @@ internal sealed class AggregatorProcessor(
         // to either (a) include our entry — DisposeAsync awaits it — or (b) take its snapshot
         // AFTER we observe _disposed and bail.
         //
-        // The pre-fix order (read _disposed, then TryAdd) had a window where DisposeAsync
+        // The reverse order (read _disposed, then TryAdd) had a window where DisposeAsync
         // could set _disposed=1 between our read and the snapshot; the snapshot would miss
         // our entry; DisposeAsync would dispose _disposeCts; and RunFlushAsync's defensive
         // catch (ObjectDisposedException) softened the failure to quiet cancellation.

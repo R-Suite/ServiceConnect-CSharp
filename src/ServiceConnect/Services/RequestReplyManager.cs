@@ -249,8 +249,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
                 // No explicit expectation (zero / negative / null ExpectedReplyCount) — the
                 // caller asked for "everything that comes back in the window". Returning
-                // what we have is the documented semantics; pre-fix this was the
-                // unconditional path.
+                // what we have is the documented semantics.
                 tcs.TrySetResult(null!);
             });
         }).ConfigureAwait(false);
@@ -510,8 +509,8 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             _pendingRequests.TryRemove(requestId, out _);
         }
 
-        // U2: TCS completion now runs under the state-lock inside TryHandleReply so a
-        // caller-CT firing immediately after _closed=true cannot lose its registration's
+        // TCS completion runs under the state-lock inside TryHandleReply so a caller-CT
+        // firing immediately after _closed=true cannot lose its registration's
         // TrySetCanceled to a queued out-of-lock TrySetResult. Continuations may still
         // run inline on the lock-holding thread; the lock is per-RequestState so a slow
         // continuation pins one request's reply path, not the whole reply dispatcher.
@@ -611,12 +610,12 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         /// The user-supplied <see cref="OnReply"/> callback runs under the state lock so
         /// concurrent replies cannot re-enter it.
         /// <para>
-        /// U2: TCS completion (<c>TrySetResult</c> / <c>TrySetException</c>) runs UNDER
-        /// the state lock so the close-vs-complete sequence is atomic with the caller-CT
-        /// registration's <c>_closed</c> read. Pre-fix this was queued as a
-        /// <c>completionWork</c> action invoked outside the lock; a caller-CT firing in
-        /// the gap had its registration callback no-op (because <c>_closed=true</c> was
-        /// already set), and the caller awaited success despite the cancellation.
+        /// TCS completion (<c>TrySetResult</c> / <c>TrySetException</c>) runs UNDER the
+        /// state lock so the close-vs-complete sequence is atomic with the caller-CT
+        /// registration's <c>_closed</c> read. If completion ran outside the lock, a
+        /// caller-CT firing between <c>_closed=true</c> and the TCS completion call would
+        /// have its registration callback no-op (state.Close early-returns on
+        /// <c>_closed</c>) — the caller would await success despite the cancellation.
         /// Cost: TCS continuations may run inline on the lock-holding thread — the lock
         /// is per-<see cref="RequestState"/> so a slow continuation pins one request's
         /// reply path, not the whole reply dispatcher.
@@ -663,7 +662,7 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 {
                     _closed = true;
                     requestCompleted = true;
-                    // U2: TrySetException runs UNDER the lock so the caller-CT registration's
+                    // TrySetException runs UNDER the lock so the caller-CT registration's
                     // state.Close() — which checks _closed — observes a consistent state.
                     Tcs.TrySetException(ex);
                     return true;
@@ -687,11 +686,11 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                     {
                         _closed = true;
                         requestCompleted = true;
-                        // U2: TrySetResult under the lock. Pre-fix this was queued in
-                        // completionWork to run outside the lock, opening a window where a
-                        // caller-CT firing after _closed=true and before the TrySetResult
-                        // call would have its registration callback no-op (state.Close
-                        // early-returns on _closed) — caller awaited success despite cancel.
+                        // TrySetResult under the lock. If this ran outside the lock there
+                        // would be a window where a caller-CT firing after _closed=true and
+                        // before the TrySetResult call would have its registration callback
+                        // no-op (state.Close early-returns on _closed) — the caller would
+                        // await success despite the cancellation.
                         Tcs.TrySetResult(null!);
                     }
                 }

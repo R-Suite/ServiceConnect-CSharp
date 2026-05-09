@@ -9,14 +9,14 @@ using Xunit;
 namespace ServiceConnect.UnitTests.HealthChecks;
 
 /// <summary>
-/// Post-M4+M6: the registration factory caches the wrapper per IServiceProvider via a
+/// The registration factory caches the wrapper per IServiceProvider via a
 /// ConditionalWeakTable. Two probes against the SAME provider get the SAME wrapper —
-/// preserving M4's recovery-grace state (instance-scoped <c>_lastHealthyTicks</c>) across
-/// probes — while M6's IServiceProvider-rebuild contract is preserved by the table's
-/// GC semantics: a rebuilt provider becomes unreachable, the cached wrapper is GC-eligible,
-/// and the next probe against the new provider allocates a fresh wrapper. The pre-M6 fix
-/// used a closure-captured cache that survived the SP rebuild; this composes M4's stable
-/// state with M6's rebuild-aware contract via per-SP caching.
+/// preserving the wrapper's recovery-grace state (instance-scoped
+/// <c>_lastHealthyTicks</c>) across probes. The IServiceProvider-rebuild contract
+/// is preserved by the table's GC semantics: a rebuilt provider becomes unreachable,
+/// the cached wrapper is GC-eligible, and the next probe against the new provider
+/// allocates a fresh wrapper. A closure-captured cache would survive the SP rebuild
+/// and break that contract; per-SP caching composes both invariants.
 /// </summary>
 public class HealthCheckRegistrationCachingTests
 {
@@ -35,7 +35,7 @@ public class HealthCheckRegistrationCachingTests
         var first = registration.Factory(sp);
         var second = registration.Factory(sp);
 
-        // Same wrapper across probes against the same SP — M4 grace state stable.
+        // Same wrapper across probes against the same SP — recovery-grace state stable.
         Assert.Same(first, second);
         Assert.IsType<BusConsumingHealthCheck>(first);
     }

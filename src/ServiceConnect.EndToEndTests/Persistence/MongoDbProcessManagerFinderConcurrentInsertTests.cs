@@ -6,7 +6,7 @@ using Xunit;
 
 namespace ServiceConnect.EndToEndTests;
 
-// H25 — startup-time index creation closes the cross-process race window where
+// Startup-time index creation closes the cross-process race window where
 // two cold-started processes could both insert a saga row with the same
 // CorrelationId before either one ran the lazy EnsureCorrelationIdIndexAsync
 // fallback. With the unique index in place before the first insert, exactly one

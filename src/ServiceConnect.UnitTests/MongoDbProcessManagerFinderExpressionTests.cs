@@ -8,16 +8,15 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests;
 
-// H10 — Expression.Convert for property-hierarchy queries.
+// Expression.Convert for property-hierarchy queries.
 //
-// The dynamic predicate built by MongoDbProcessManagerFinder.FindDataAsync used
-// Expression.Constant(value, value.GetType()) on the RHS — i.e., the runtime
-// type of the message value. When the saga-side property is declared as a
-// wider/different type (long vs message-side int, Nullable<T> vs T, interface
-// vs concrete), the resulting BSON filter renders against the runtime type and
-// silently misses the stored documents. The InMemory finder already wraps the
-// RHS in Expression.Convert(.. , declaredPropertyType); these tests pin the
-// equivalent wrapping into MongoDb's expression-tree shape so future drift is
+// A dynamic predicate that uses Expression.Constant(value, value.GetType()) on the
+// RHS — i.e., the runtime type of the message value — silently misses stored documents
+// whenever the saga-side property is declared as a wider/different type (long vs
+// message-side int, Nullable<T> vs T, interface vs concrete): the resulting BSON
+// filter renders against the runtime type rather than the declared type. The InMemory
+// finder wraps the RHS in Expression.Convert(.. , declaredPropertyType); these tests
+// pin the equivalent wrapping into MongoDb's expression-tree shape so future drift is
 // caught at the structural level.
 [Collection("Mongo Bson serial")]
 public class MongoDbProcessManagerFinderExpressionTests

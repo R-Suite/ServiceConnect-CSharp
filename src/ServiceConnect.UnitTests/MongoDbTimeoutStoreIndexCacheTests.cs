@@ -11,7 +11,7 @@ namespace ServiceConnect.UnitTests;
 /// Verifies the per-instance index cache: after a successful first call, further
 /// Insert / Get / Remove / Release / Reap operations skip both DropOneAsync and
 /// CreateManyAsync round-trips. Mirrors MongoDbAggregatorPersistorIndexCacheTests
-/// (M40) and the saga finder's _indexedCollections semantics.
+/// and the saga finder's _indexedCollections semantics.
 /// </summary>
 [Collection("Mongo Bson serial")]
 public class MongoDbTimeoutStoreIndexCacheTests

@@ -27,13 +27,13 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task TimeoutStore_AfterDbDrop_DoesNotRecreateIndexes_ByDesign()
     {
-        // H14 (Phase 4): EnsureTimeoutIndexAsync caches a per-instance _indexed flag
-        // after first success, mirroring the saga finder and aggregator persistor. If
-        // an admin drops the database while the process is still running, the cached
-        // store will not re-create the indexes on the next insert — operators must
+        // EnsureTimeoutIndexAsync caches a per-instance _indexed flag after first
+        // success, mirroring the saga finder and aggregator persistor. If an admin
+        // drops the database while the process is still running, the cached store
+        // will not re-create the indexes on the next insert — operators must
         // recycle the store (process restart) to recover. The trade-off vs the
-        // per-message DropOneAsync + CreateManyAsync round-trip is documented; this
-        // test pins the new contract so a future regression is caught.
+        // per-message DropOneAsync + CreateManyAsync round-trip is documented;
+        // this test pins the contract so a future regression is caught.
         var dbName = _fixture.GetUniqueDatabaseName("idxrecovery_to");
         var options = new MongoDbPersistenceOptions
         {
@@ -59,7 +59,7 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         await client.DropDatabaseAsync(dbName);
 
         // Second write on the same store instance: the cache flag short-circuits the
-        // ensure path, so the indexes are NOT recreated. Pins the H14 contract.
+        // ensure path, so the indexes are NOT recreated. Pins that contract.
         await store.InsertTimeoutAsync(new TimeoutData
         {
             Id = Guid.NewGuid(),
@@ -76,12 +76,12 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
     [Trait("Category", "Docker")]
     public async Task AggregatorPersistor_AfterDbDrop_DoesNotRecreateIndexes_ByDesign()
     {
-        // M38 (Phase 9): EnsureIndexesAsync caches a per-instance _indexed flag after
-        // first success. If an admin drops the database while the process is still
-        // running, the cached persistor will not re-create the indexes on the next
-        // insert — operators must recycle the persistor (process restart) to recover.
-        // The trade-off vs the per-message round-trip pre-Phase-9 is documented; this
-        // test pins the new contract so a future regression is caught.
+        // EnsureIndexesAsync caches a per-instance _indexed flag after first
+        // success. If an admin drops the database while the process is still
+        // running, the cached persistor will not re-create the indexes on the
+        // next insert — operators must recycle the persistor (process restart)
+        // to recover. The trade-off vs a per-message round-trip is documented;
+        // this test pins the contract so a future regression is caught.
         var dbName = _fixture.GetUniqueDatabaseName("idxrecovery_agg");
         var options = new MongoDbPersistenceOptions
         {

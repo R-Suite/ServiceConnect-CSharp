@@ -10,7 +10,8 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Verifies the sort shape and monotonic InsertSequence behaviour introduced in M36.
+/// Verifies the sort shape and monotonic InsertSequence behaviour: snapshots are sorted
+/// by Time then InsertSequence so equal-Time inserts stay in arrival order.
 /// </summary>
 [Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorSortSequenceTests

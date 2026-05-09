@@ -13,11 +13,11 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Verifies M13: when a reply-shaped message (ResponseMessageId header present) arrives at a
-/// bus that has no ReplyProcessor / IRequestReplyManager registered, the dispatcher must
-/// ack-and-drop rather than routing the payload to the regular handler matching its CLR type.
-/// A regular handler running against a reply payload would receive data correlated to a
-/// different request — a genuine correctness gap.
+/// Pins the contract that when a reply-shaped message (ResponseMessageId header
+/// present) arrives at a bus with no ReplyProcessor / IRequestReplyManager registered,
+/// the dispatcher must ack-and-drop rather than routing the payload to the regular
+/// handler matching its CLR type. A regular handler running against a reply payload
+/// would receive data correlated to a different request — a genuine correctness gap.
 /// </summary>
 public sealed class MessageDispatcherReplyWithoutManagerTests
 {

@@ -11,8 +11,8 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Locks in the post-H21 contract: OutboundHeaderBuilder is the sole authoritative stamper
-/// of MessageType on the wire.  The value is the operation name ("Publish"|"Send"|"ByteStream"),
+/// Pins the contract that OutboundHeaderBuilder is the sole authoritative stamper of
+/// MessageType on the wire.  The value is the operation name ("Publish"|"Send"|"ByteStream"),
 /// not a CLR type name.  Type identity is carried by TypeName / FullTypeName.
 /// </summary>
 public sealed class OutboundHeaderBuilderOperationNameTests
@@ -40,8 +40,8 @@ public sealed class OutboundHeaderBuilderOperationNameTests
     {
         var headers = CreateBuilder().BuildHeaders(typeof(string), null, "queue", operation);
 
-        // Post-H21 contract: MessageType is the operation name on the wire.
-        // Bus's FullName stamp is gone; this builder is now the sole stamper.
+        // Contract: MessageType is the operation name on the wire. The builder is
+        // the sole stamper; Bus does not write MessageType into the envelope.
         Assert.Equal(operation, headers[HeaderKeys.MessageType]);
         Assert.Equal(typeof(string).FullName, headers[HeaderKeys.TypeName]);
         Assert.Equal(typeof(string).AssemblyQualifiedName, headers[HeaderKeys.FullTypeName]);

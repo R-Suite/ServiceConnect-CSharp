@@ -10,7 +10,7 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// M37: RemoveDataAsync must distinguish between a name that has never existed
+/// RemoveDataAsync must distinguish between a name that has never existed
 /// (KeyNotFoundException) and a name that exists but the supplied CorrelationId
 /// wasn't matched (ConcurrencyException with row count in the message).
 /// </summary>

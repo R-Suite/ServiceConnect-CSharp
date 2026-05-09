@@ -265,10 +265,10 @@ public class MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
         Assert.Equal(1, count);
     }
 
-    // H26 (Phase 9): MongoDbProcessManagerFinder rejects WriteConcern.Unacknowledged at
-    // construction. Saga state is correctness-sensitive; w:0 silently loses concurrent
-    // updates and wedges sagas on the next real conflict because the version field
-    // advances. Operators must use w:1 or higher.
+    // MongoDbProcessManagerFinder rejects WriteConcern.Unacknowledged at construction.
+    // Saga state is correctness-sensitive; w:0 silently loses concurrent updates and
+    // wedges sagas on the next real conflict because the version field advances.
+    // Operators must use w:1 or higher.
     [Fact]
     [Trait("Category", "Docker")]
     public void Constructor_WithW0_ThrowsInvalidOperationException()

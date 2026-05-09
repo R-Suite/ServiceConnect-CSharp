@@ -29,9 +29,9 @@ public sealed class TelemetryProcessingMiddlewareHeadersCastTests : IDisposable
 
     /// <summary>
     /// A deliberately-degenerate <see cref="IDictionary{TKey,TValue}"/> impl that does NOT also
-    /// implement <see cref="IReadOnlyDictionary{TKey,TValue}"/>. The pre-fix middleware downcast
-    /// <c>(IReadOnlyDictionary&lt;string,object&gt;)</c> would throw <see cref="InvalidCastException"/>
-    /// on this; the post-fix defensive copy succeeds.
+    /// implement <see cref="IReadOnlyDictionary{TKey,TValue}"/>. A naive
+    /// <c>(IReadOnlyDictionary&lt;string,object&gt;)</c> downcast would throw
+    /// <see cref="InvalidCastException"/> on this; the middleware's defensive copy succeeds.
     /// </summary>
     private sealed class WriteOnlyDictionaryAdapter : IDictionary<string, object>
     {

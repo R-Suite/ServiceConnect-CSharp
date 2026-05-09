@@ -72,9 +72,9 @@ public class ProducerHealthSnapshotRaceTests
 
     /// <summary>
     /// Sanity: third-party IProducer impls that don't override GetHealthSnapshot get
-    /// the default impl which reads IsHealthy+HasAttemptedConnection as a pair. The
-    /// default impl preserves the pre-fix race for those impls; first-party (RabbitMQ)
-    /// producers override.
+    /// the default impl which reads IsHealthy+HasAttemptedConnection as two separate
+    /// reads — those impls retain the torn-read race; first-party (RabbitMQ) producers
+    /// override to return an atomic snapshot.
     /// </summary>
     [Fact]
     public void IProducerDefaultImplementation_DerivesSnapshotFromTwoReads()

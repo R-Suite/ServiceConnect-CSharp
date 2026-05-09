@@ -9,7 +9,7 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests.RabbitMq;
 
 /// <summary>
-/// Verifies the C12 contract: the retry DLX is declared with autoDelete:false and therefore
+/// Verifies the contract that the retry DLX is declared with autoDelete:false and therefore
 /// survives the auto-deletion of the main consumer queue. This matters because the retry queue
 /// dead-letters messages back through the DLX after their TTL expires — if the DLX had been
 /// deleted when the main queue dropped, the re-declared main queue could not be (re-)bound to it,
@@ -44,7 +44,7 @@ public sealed class RetryTopologyAutoDeleteE2ETests(MessagingFixture fixture)
         var retryDlxName = queueName + RetryDlxSuffix;
         var provisioner = new RabbitMqTopologyProvisioner(NullLogger.Instance);
 
-        // Phase 1: declare the main queue with autoDelete:true, attach a consumer (autoDelete
+        // Setup: declare the main queue with autoDelete:true, attach a consumer (autoDelete
         // fires when the last consumer disconnects), provision the retry topology, and publish
         // into the retry queue. ConfigureRetryTopologyAsync hard-codes autoDelete:false on the
         // DLX regardless of the autoDelete argument — that is the invariant under test.
@@ -108,7 +108,7 @@ public sealed class RetryTopologyAutoDeleteE2ETests(MessagingFixture fixture)
             }
         }
 
-        // Phase 2: re-declare the main queue and re-bind it to the retry DLX BEFORE the retry
+        // Recovery: re-declare the main queue and re-bind it to the retry DLX BEFORE the retry
         // queue's TTL fires. This is the realistic "consumer restart" scenario: the new consumer
         // process re-declares its queue and re-provisions topology on startup. The binding must
         // exist at the moment the TTL fires so the dead-lettered message can route through.

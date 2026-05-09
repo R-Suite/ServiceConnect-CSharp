@@ -10,7 +10,7 @@ using Xunit;
 namespace ServiceConnect.EndToEndTests;
 
 /// <summary>
-/// M37: Round-trip tests confirming that RemoveDataAsync distinguishes a missing
+/// Round-trip tests confirming that RemoveDataAsync distinguishes a missing
 /// Name bucket (KeyNotFoundException) from a present Name bucket where the
 /// CorrelationId is unmatched (ConcurrencyException with row count).
 /// </summary>

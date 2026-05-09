@@ -215,9 +215,9 @@ public sealed class ProcessManagerTimeoutService(
         }
         catch (Exception ex)
         {
-            // PollOnceAsync now catches its own exceptions (M22 fix) so reaching here
-            // implies the timer itself faulted. Log and exit; the host's StopAsync
-            // observes the task completion.
+            // PollOnceAsync catches its own exceptions, so reaching here implies the
+            // timer itself faulted. Log and exit; the host's StopAsync observes the
+            // task completion.
             logger.LogError(ex, "ProcessManagerTimeoutService poll loop terminated unexpectedly.");
         }
     }

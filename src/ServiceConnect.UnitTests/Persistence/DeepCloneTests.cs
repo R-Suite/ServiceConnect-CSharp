@@ -61,9 +61,9 @@ public class DeepCloneTests
     [Fact]
     public void Clone_PreservesExplicitInterfaceAutoProperty()
     {
-        // M39 regression: explicit-interface auto-properties round-trip with default(Guid)
+        // Regression: explicit-interface auto-properties round-trip with default(Guid)
         // under Newtonsoft.Json (which only saw public properties by short name). BSON's
-        // BsonClassMap discovers them.
+        // BsonClassMap discovers them, so DeepClone (BSON-backed) preserves the value.
         var original = new HasExplicitInterfaceAutoProp { ExplicitFooId = Guid.Parse("11111111-2222-3333-4444-555555555555") };
 
         var clone = DeepClone.Clone(original);

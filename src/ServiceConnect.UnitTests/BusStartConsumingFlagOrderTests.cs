@@ -13,10 +13,10 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Pins the ordering fix for <see cref="Bus.StartConsumingAsync"/>: <c>_consuming</c>
+/// Pins the ordering contract for <see cref="Bus.StartConsumingAsync"/>: <c>_consuming</c>
 /// must be set to <c>true</c> BEFORE the broker's StartConsumingAsync await completes,
-/// so that health probes during the startup window report Healthy instead of the
-/// spurious Unhealthy that the pre-fix ordering produced.
+/// so that health probes during the startup window report Healthy. Setting the flag
+/// only after the await would yield a spurious Unhealthy window.
 /// </summary>
 public class BusStartConsumingFlagOrderTests
 {

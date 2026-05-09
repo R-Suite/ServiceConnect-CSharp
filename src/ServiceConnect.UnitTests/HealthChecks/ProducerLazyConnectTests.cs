@@ -8,9 +8,9 @@ namespace ServiceConnect.UnitTests.HealthChecks;
 
 public class ProducerLazyConnectTests
 {
-    // Post-M5: ProducerConnectionHealthCheck reads the (IsHealthy, HasAttemptedConnection)
-    // pair atomically via IProducer.GetHealthSnapshot. Mocks set up the snapshot directly
-    // so the test exercises the snapshot contract rather than the (now-unused) individual
+    // ProducerConnectionHealthCheck reads the (IsHealthy, HasAttemptedConnection) pair
+    // atomically via IProducer.GetHealthSnapshot. Mocks set up the snapshot directly so
+    // the test exercises the snapshot contract rather than the (unused) individual
     // property reads.
 
     [Fact]

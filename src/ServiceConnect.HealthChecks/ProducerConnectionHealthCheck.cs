@@ -34,11 +34,11 @@ public sealed class ProducerConnectionHealthCheck : IHealthCheck
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Single-snapshot read: pre-fix the check read IsHealthy and HasAttemptedConnection
-        // separately. A publish-success transition between the reads (T2 sets both) could
-        // surface to a probe (T1) as IsHealthy=false (stale) + HasAttemptedConnection=true
-        // (fresh) — a false-negative Unhealthy. GetHealthSnapshot reads the pair atomically
-        // (or, for third-party producers using the default impl, at least produces a typed
+        // Single-snapshot read: reading IsHealthy and HasAttemptedConnection separately
+        // would let a publish-success transition between the reads (T2 sets both) surface
+        // to a probe (T1) as IsHealthy=false (stale) + HasAttemptedConnection=true (fresh)
+        // — a false-negative Unhealthy. GetHealthSnapshot reads the pair atomically (or,
+        // for third-party producers using the default impl, at least produces a typed
         // result that future maintainers can spot as the pair-read site).
         var snapshot = _producer.GetHealthSnapshot();
 

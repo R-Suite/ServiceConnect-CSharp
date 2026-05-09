@@ -292,8 +292,9 @@ public class MessageBusWriteStreamTests
         // First close attempt fails.
         await Assert.ThrowsAsync<InvalidOperationException>(() => stream.CloseAsync());
 
-        // Second close attempt succeeds — pre-fix this would short-circuit at the
-        // _closedFlag CAS without sending the close packet.
+        // Second close attempt succeeds. Setting _closedFlag only after a successful
+        // send means the retry can still emit the close packet; a CAS-set on entry would
+        // short-circuit here and silently drop the close packet on the wire.
         await stream.CloseAsync();
 
         Assert.Equal(2, attempts);

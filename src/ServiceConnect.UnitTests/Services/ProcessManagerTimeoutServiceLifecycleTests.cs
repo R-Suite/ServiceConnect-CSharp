@@ -14,9 +14,9 @@ public class ProcessManagerTimeoutServiceLifecycleTests
     [Fact]
     public async Task StartAsync_StartupTokenCancelledAfterReturn_DoesNotKillPollLoop()
     {
-        // M21: pre-fix the loop's _cts was linked to the startup token; cancelling that
-        // token after StartAsync returned silently killed the loop. Post-fix the loop
-        // uses an independent _stoppingCts cancelled only by StopAsync.
+        // The loop's _stoppingCts must be independent of the startup token: cancelling
+        // the startup token after StartAsync returns must not stop polling. Linking the
+        // two would silently kill the loop once the host startup window closed.
         using var startupCts = new CancellationTokenSource();
         var fakeTime = new FakeTimeProvider();
         var (svc, finder) = BuildService(fakeTime);
@@ -40,7 +40,7 @@ public class ProcessManagerTimeoutServiceLifecycleTests
     [Fact]
     public async Task PollOnceAsync_NonShutdownOceFromTimeoutStore_LogsWarning()
     {
-        // M22: an OCE thrown by a non-loop CT (e.g., timeout-store internal cancellation)
+        // An OCE thrown by a non-loop CT (e.g., timeout-store internal cancellation)
         // must surface as a Warning log, not silently terminate the loop.
         var loggerMock = new Mock<ILogger<ProcessManagerTimeoutService>>();
         var fakeTime = new FakeTimeProvider();
@@ -70,7 +70,7 @@ public class ProcessManagerTimeoutServiceLifecycleTests
     [Fact]
     public async Task PollLoop_FakeTimeProviderDrivesPolls()
     {
-        // M23: PeriodicTimer must use the injected TimeProvider so FakeTimeProvider can drive ticks.
+        // PeriodicTimer must use the injected TimeProvider so FakeTimeProvider can drive ticks.
         var fakeTime = new FakeTimeProvider();
         var (svc, finder) = BuildService(fakeTime);
 

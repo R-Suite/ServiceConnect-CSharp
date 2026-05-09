@@ -15,7 +15,7 @@ public class ProducerConnectionHealthCheckTests
     [Fact]
     public async Task CheckHealthAsync_ProducerHealthy_ReturnsHealthy()
     {
-        // Post-M5: the check reads the (IsHealthy, HasAttemptedConnection) pair as a single
+        // The check reads the (IsHealthy, HasAttemptedConnection) pair as a single
         // snapshot via GetHealthSnapshot. Set up the snapshot directly rather than the
         // individual properties.
         _producer.Setup(p => p.GetHealthSnapshot())

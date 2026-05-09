@@ -16,8 +16,8 @@ public class AggregatorProcessorUnresolvedGateTests
     {
         // Persistor reports CountAsync = 10 but CountResolvedAsync = 0 (all records have
         // unresolved CLR types). The processor must NOT acquire the _flushLocks semaphore
-        // or call GetSnapshotAsync — pre-fix it would do both every message because the
-        // gate read CountAsync (which includes unresolved).
+        // or call GetSnapshotAsync: the batch-size gate must read CountResolvedAsync, so
+        // an all-unresolved bucket never trips the flush path.
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);

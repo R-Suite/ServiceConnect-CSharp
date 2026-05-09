@@ -274,12 +274,12 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
             }
             catch (ConcurrencyException)
             {
-                // M37 (Phase 9): rows for Name still exist but not for this CorrelationId.
+                // Rows for Name still exist but not for this CorrelationId.
                 Interlocked.Increment(ref conflicts);
             }
             catch (KeyNotFoundException)
             {
-                // M37 (Phase 9): the last row for Name was already removed by another contender.
+                // The last row for Name was already removed by another contender.
                 // From the caller's perspective this is the same race outcome — counted as a conflict.
                 Interlocked.Increment(ref conflicts);
             }

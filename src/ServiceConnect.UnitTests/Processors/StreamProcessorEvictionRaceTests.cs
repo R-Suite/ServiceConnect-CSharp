@@ -72,8 +72,9 @@ public class StreamProcessorEvictionRaceTests
         var clearMethod = activeStreams.GetType().GetMethod("Clear")!;
         clearMethod.Invoke(activeStreams, null);
 
-        // Send the second packet — pre-fix this would Write bytes to streamBefore
-        // even though it's no longer indexed. Post-fix it bails on the touch CAS.
+        // Send the second packet. The processor must bail at the touch CAS rather than
+        // writing bytes to streamBefore — that stream is no longer indexed, so any write
+        // would be lost or land in an evicted-but-still-reachable stream.
         var secondHeaders = new Dictionary<string, object>
         {
             [HeaderKeys.MessageType] = HeaderKeys.ByteStream,

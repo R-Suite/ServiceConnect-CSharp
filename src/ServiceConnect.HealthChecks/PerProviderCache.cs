@@ -9,11 +9,12 @@ namespace ServiceConnect.HealthChecks;
 /// instance is GC-eligible — the next probe against the new SP allocates a fresh one.
 /// </summary>
 /// <remarks>
-/// This composes M4 (recovery-grace window state lives on the check instance) with M6
-/// (rebuilt IServiceProvider gets a fresh check). M6's literal "fresh wrapper per probe"
-/// implementation defeated M4's grace window because each probe allocated a new check
-/// with a zero-initialised <c>_lastHealthyTicks</c>. Caching per-SP gives M4 stable
-/// state across probes while still honouring M6's rebuild contract.
+/// This composes the recovery-grace window (state lives on the check instance) with the
+/// rebuilt-IServiceProvider contract (a rebuilt SP gets a fresh check). A literal "fresh
+/// wrapper per probe" implementation would defeat the grace window because each probe
+/// would allocate a new check with a zero-initialised <c>_lastHealthyTicks</c>. Caching
+/// per-SP gives the check stable state across probes while still allowing rebuilt SPs
+/// to allocate a new check on first use.
 /// </remarks>
 internal sealed class PerProviderCache<T>(Func<IServiceProvider, T> factory) where T : class
 {

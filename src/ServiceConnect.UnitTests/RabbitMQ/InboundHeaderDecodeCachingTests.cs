@@ -8,9 +8,9 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Locks in the Group F item 3 invariant: inbound copy loops eagerly decode byte[] header
-/// values to string so downstream HeaderDecoder.Decode calls hit the string fast-path
-/// instead of re-running Encoding.UTF8.GetString on every read.
+/// Pins the inbound-copy invariant: byte[] header values are eagerly decoded to string
+/// so downstream HeaderDecoder.Decode calls hit the string fast-path instead of re-running
+/// Encoding.UTF8.GetString on every read.
 /// </summary>
 public sealed class InboundHeaderDecodeCachingTests
 {

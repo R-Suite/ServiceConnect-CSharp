@@ -16,10 +16,10 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// Verifies H21: Bus no longer stamps MessageType on the outgoing Envelope.
-/// MessageType is the operation name ("Publish"|"Send"|"ByteStream") and is
-/// stamped exclusively by OutboundHeaderBuilder. Type identity is carried by
-/// TypeName (FullName) and FullTypeName (AQN).
+/// Pins the contract that Bus does not stamp MessageType on the outgoing Envelope.
+/// MessageType is the operation name ("Publish"|"Send"|"ByteStream") and is stamped
+/// exclusively by OutboundHeaderBuilder. Type identity is carried by TypeName (FullName)
+/// and FullTypeName (AQN).
 /// </summary>
 public sealed class BusEnvelopeMessageTypeTests
 {
@@ -70,8 +70,8 @@ public sealed class BusEnvelopeMessageTypeTests
             _scopeAccessor);
 
     /// <summary>
-    /// Post-H21: the envelope handed to outgoing filters must NOT contain MessageType.
-    /// (Bus used to stamp envelope.Headers["MessageType"] = type.FullName; that stamp is dead.)
+    /// The envelope handed to outgoing filters must NOT contain MessageType. Bus does
+    /// not stamp it; OutboundHeaderBuilder stamps the operation name on the wire.
     /// </summary>
     [Fact]
     public async Task PublishAsync_EnvelopeDoesNotContainMessageTypeKey()
@@ -95,7 +95,7 @@ public sealed class BusEnvelopeMessageTypeTests
     }
 
     /// <summary>
-    /// Post-H21: same guarantee holds on the SendAsync path.
+    /// Same guarantee holds on the SendAsync path: Bus does not stamp MessageType.
     /// </summary>
     [Fact]
     public async Task SendAsync_EnvelopeDoesNotContainMessageTypeKey()

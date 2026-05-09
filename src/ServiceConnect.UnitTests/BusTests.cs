@@ -1041,9 +1041,9 @@ public class BusTests
     [Fact]
     public async Task SendAsync_CallerSuppliesMessageType_FlowsThroughToProducer()
     {
-        // Post-H21: MessageType is no longer Bus-reserved; the caller-supplied value is
-        // forwarded so OutboundHeaderBuilder (the authoritative stamper) can overwrite it
-        // with the correct operation name on the wire.
+        // MessageType is not Bus-reserved; the caller-supplied value is forwarded so
+        // OutboundHeaderBuilder (the authoritative stamper) can overwrite it with the
+        // correct operation name on the wire.
         var options = new SendOptions
         {
             Headers = new Dictionary<string, string>
@@ -1101,9 +1101,9 @@ public class BusTests
     [Fact]
     public async Task SendAsync_CallerSuppliesMessageType_NoWarningLogged()
     {
-        // Post-H21: MessageType is not in the Bus's reserved set, so no warning is emitted
-        // when a caller supplies it in options.Headers.  The producer is the authoritative
-        // stamper and will overwrite it with the operation name on the wire.
+        // MessageType is not in the Bus's reserved set, so no warning is emitted when a
+        // caller supplies it in options.Headers.  The producer is the authoritative stamper
+        // and will overwrite it with the operation name on the wire.
         var options = new SendOptions
         {
             Headers = new Dictionary<string, string>

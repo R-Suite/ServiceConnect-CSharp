@@ -14,10 +14,10 @@ namespace ServiceConnect.UnitTests;
 
 /// <summary>
 /// Regression-guards: duplicate replies are rejected at the manager boundary, and
-/// replies arriving after timeout-driven Close are rejected. C10's
-/// <c>_inFlightReplies</c> underflow is structurally eliminated by removing the
-/// counter; these tests guard the user-visible invariant (no extra OnReply, no
-/// exception) rather than the internal counter.
+/// replies arriving after timeout-driven Close are rejected. The legacy
+/// <c>_inFlightReplies</c> counter (and its underflow risk) was structurally eliminated
+/// by removing the counter; these tests guard the user-visible invariant (no extra
+/// OnReply, no exception) rather than the internal counter.
 ///
 /// Both facts exercise the <c>_pendingRequests.TryGetValue</c> early-return in
 /// <c>TryProcessReply</c>: once a request completes or times out the entry is removed,

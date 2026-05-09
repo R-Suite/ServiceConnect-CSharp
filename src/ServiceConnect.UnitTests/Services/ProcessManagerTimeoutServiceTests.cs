@@ -449,13 +449,13 @@ public class ProcessManagerTimeoutServiceTests
     [Fact]
     public async Task PollOnce_RemoveDispatchedThrowsForeignOCE_DoesNotPropagateAndDoesNotRelease()
     {
-        // M22: a foreign OCE (one that does not share the loop cancellation token) thrown by
-        // RemoveDispatchedTimeoutAsync must NOT propagate out of PollOnceAsync — the pre-fix
-        // behaviour bubbled it up and PollLoop's catch broke without logging, silently ending
-        // the polling task. Post-fix the foreign OCE is caught by the per-timeout
+        // A foreign OCE (one that does not share the loop cancellation token) thrown by
+        // RemoveDispatchedTimeoutAsync must NOT propagate out of PollOnceAsync. Bubbling
+        // it up would let PollLoop's catch break without logging, silently ending the
+        // polling task. The foreign OCE is caught by the per-timeout
         // `when (ex is not OperationCanceledException)` filter (so Release isn't attempted —
-        // the inner catch only handles non-OCE failures), then by the outer
-        // foreign-OCE catch in PollOnceAsync which logs a warning and returns cleanly.
+        // the inner catch only handles non-OCE failures), then by the outer foreign-OCE
+        // catch in PollOnceAsync which logs a warning and returns cleanly.
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
 
         var timeoutId = Guid.NewGuid();
@@ -544,10 +544,11 @@ public class ProcessManagerTimeoutServiceTests
     [Fact]
     public async Task PollOnce_ReleaseDispatchedThrowsForeignOCE_DoesNotPropagate()
     {
-        // M22: same as the Remove counterpart but on the Release path (SendAsync fails, then
-        // ReleaseDispatchedTimeoutAsync throws a foreign OCE during error recovery). Pre-fix
-        // the OCE escaped to PollLoop's break-without-logging branch; post-fix the outer
-        // foreign-OCE catch in PollOnceAsync logs a warning and returns cleanly.
+        // Same contract as the Remove counterpart but on the Release path: SendAsync
+        // fails, then ReleaseDispatchedTimeoutAsync throws a foreign OCE during error
+        // recovery. Letting that OCE escape would hit PollLoop's break-without-logging
+        // branch; the outer foreign-OCE catch in PollOnceAsync logs a warning and
+        // returns cleanly.
         _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
 
         var timeoutId = Guid.NewGuid();

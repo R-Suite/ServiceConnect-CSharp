@@ -11,9 +11,9 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests;
 
-// Covers H11. The legacy fallback inside IsTrustedRequestReplyEnvelope trusts header
-// fields that any external producer aware of our queue name can fabricate. Strict mode
-// disables that fallback; the tracked-request path remains the strong primary check.
+// The legacy fallback inside IsTrustedRequestReplyEnvelope trusts header fields that
+// any external producer aware of our queue name can fabricate. Strict mode disables
+// that fallback; the tracked-request path remains the strong primary check.
 public class ConsumeContextStrictReplyValidationTests
 {
     private readonly Mock<IBus> _mockBus = new();

@@ -99,8 +99,8 @@ public sealed class ConsumerStartupFailureRecoveryTests
         await Assert.ThrowsAnyAsync<Exception>(() =>
             consumer.StartConsumingAsync("startup-failure-q", ["TestMessage"], (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true })));
 
-        // Second attempt: now the topology succeeds; this would have failed pre-fix
-        // with "already consuming".
+        // Second attempt: now the topology succeeds. If _started had been left set after
+        // the first failure, this call would have thrown "already consuming".
         await consumer.StartConsumingAsync("startup-failure-q", ["TestMessage"], (_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }));
 
         await consumer.DisposeAsync();

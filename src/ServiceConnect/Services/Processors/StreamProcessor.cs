@@ -147,7 +147,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             }
         }
 
-        // Touch BEFORE Write: pre-fix Write-then-touch let EvictStaleStreams TryRemove
+        // Touch BEFORE Write: a Write-then-touch order would let EvictStaleStreams TryRemove
         // race between Stream.Write and the CAS, leaving packet bytes committed to a
         // now-orphaned MessageBusReadStream with no lookup path. Touch first, bail if
         // evicted, Write only on a freshly-touched entry.

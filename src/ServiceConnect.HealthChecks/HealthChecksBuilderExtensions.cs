@@ -62,13 +62,13 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(busFactory);
-        // Cache the wrapper per IServiceProvider via ConditionalWeakTable. The earlier
-        // pre-fix used LazyInitializer.EnsureInitialized which captured a closure-cached
-        // instance that outlived the resolving IServiceProvider — rebuilt providers
-        // probed an OLD disposed bus from a stale check. The per-SP cache here both
-        // (a) honours M6's rebuild contract (rebuilt SP becomes GC-eligible and gets a
-        // fresh check on next probe) AND (b) preserves M4's recovery-grace state
-        // (instance-scoped _lastHealthyTicks is stable across probes against the same SP).
+        // Cache the wrapper per IServiceProvider via ConditionalWeakTable. A naive
+        // LazyInitializer.EnsureInitialized would capture a closure-cached instance that
+        // outlives the resolving IServiceProvider, so rebuilt providers would probe an
+        // old disposed bus from a stale check. The per-SP cache here both (a) lets a
+        // rebuilt SP become GC-eligible and get a fresh check on next probe, and
+        // (b) preserves the recovery-grace state (instance-scoped _lastHealthyTicks is
+        // stable across probes against the same SP).
         var cache = new PerProviderCache<BusConsumingHealthCheck>(
             sp => new BusConsumingHealthCheck(busFactory(sp)));
         return builder.Add(new HealthCheckRegistration(
@@ -99,8 +99,8 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(busFactory);
-        // Per-SP cache so M4's _lastHealthyTicks accumulates across probes; M6's
-        // rebuild contract preserved via ConditionalWeakTable's GC semantics.
+        // Per-SP cache so the recovery-grace _lastHealthyTicks accumulates across probes;
+        // the SP-rebuild contract is preserved via ConditionalWeakTable's GC semantics.
         var cache = new PerProviderCache<BusConsumingHealthCheck>(sp => new BusConsumingHealthCheck(
             busFactory(sp),
             consumerFactory?.Invoke(sp),
@@ -163,7 +163,7 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(consumerFactory);
-        // Per-SP cache; see PerProviderCache xmldoc for the M4+M6 composition rationale.
+        // Per-SP cache; see PerProviderCache xmldoc for the rebuild-vs-grace composition rationale.
         var cache = new PerProviderCache<ConsumerConnectionHealthCheck>(
             sp => new ConsumerConnectionHealthCheck(consumerFactory(sp)));
         return builder.Add(new HealthCheckRegistration(
@@ -191,7 +191,7 @@ public static class HealthChecksBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(consumerFactory);
-        // Per-SP cache so M4's _lastHealthyTicks accumulates across probes.
+        // Per-SP cache so the recovery-grace _lastHealthyTicks accumulates across probes.
         var cache = new PerProviderCache<ConsumerConnectionHealthCheck>(sp => new ConsumerConnectionHealthCheck(
             consumerFactory(sp),
             recoveryGraceWindow,

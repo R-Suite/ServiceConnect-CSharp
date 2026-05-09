@@ -1070,7 +1070,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         }
     }
 
-    // ---------------- C1: Sanitiser-bypass via exception.stacktrace ----------------
+    // ---------------- Sanitiser-bypass via exception.stacktrace ----------------
 
     [Fact]
     public void SetError_WithSanitiser_StacktraceTagDoesNotContainRawMessage()
@@ -1082,7 +1082,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         };
         ActivitySource.AddActivityListener(listener);
 
-        using var source = new ActivitySource("ServiceConnectActivitySourceTests-C1");
+        using var source = new ActivitySource("ServiceConnectActivitySourceTests-Sanitiser");
         using var activity = source.StartActivity("op");
         Assert.NotNull(activity);
 
