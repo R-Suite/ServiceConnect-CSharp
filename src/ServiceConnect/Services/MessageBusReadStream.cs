@@ -18,6 +18,12 @@ public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStr
     // Track received packet count with an atomic counter so IsComplete() is O(1).
     private int _receivedCount;
 
+    // Test-observability hooks. Used by StreamProcessor regression tests to confirm
+    // bytes did or did not land in this read stream after a Write. Not part of the
+    // public API surface — InternalsVisibleTo gates access.
+    internal long TotalBytesWritten => Interlocked.Read(ref _totalBytesWritten);
+    internal int ReceivedPacketCount => Volatile.Read(ref _receivedCount);
+
     /// <inheritdoc />
     public string SequenceId { get; } = sequenceId ?? throw new ArgumentNullException(nameof(sequenceId));
     // -1 = unset. Writes are CAS-from-(-1) so a later (potentially duplicate) close

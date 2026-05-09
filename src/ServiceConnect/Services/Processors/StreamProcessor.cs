@@ -127,8 +127,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         // If two threads race for the same absent sequenceId, both increment the counter;
         // the loser of GetOrAdd decrements its bump. No rejected state ever appears in the
         // dictionary — the counter gate fires before any insertion is attempted.
-        ActiveStreamState state;
-        if (!_activeStreams.TryGetValue(sequenceId, out var existing))
+        if (!_activeStreams.TryGetValue(sequenceId, out _))
         {
             var newCount = Interlocked.Increment(ref _streamCount);
             if (newCount > MaxActiveStreams)
@@ -146,38 +145,42 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                 // roll back our slot reservation since we didn't materialise a new entry.
                 Interlocked.Decrement(ref _streamCount);
             }
-            state = actual;
-        }
-        else
-        {
-            state = existing;
         }
 
+        // Touch BEFORE Write: pre-fix Write-then-touch let EvictStaleStreams TryRemove
+        // race between Stream.Write and the CAS, leaving packet bytes committed to a
+        // now-orphaned MessageBusReadStream with no lookup path. Touch first, bail if
+        // evicted, Write only on a freshly-touched entry.
+        ActiveStreamState state;
         try
         {
-            state.Stream.Write(messageBytes, packetNumber);
-
             // Touch: replace the dict entry with a new ActiveStreamState carrying a fresh
-            // LastSeenUtc. The eviction sweep's TryRemove(KVP) compares records by
-            // structural equality; mutating LastSeenUtc in place would leave the record
-            // structurally equal and defeat that check, which is why we replace the entry
-            // instead. The CAS loop retries on contention with another touch / dispatch path.
-            ActiveStreamState refreshed;
+            // LastSeenUtc. EvictStaleStreams' TryRemove(KVP) compares records by structural
+            // equality; mutating LastSeenUtc in place would leave the record structurally
+            // equal and defeat that check, which is why we replace the entry instead.
             while (true)
             {
                 if (!_activeStreams.TryGetValue(sequenceId, out var current))
                 {
-                    // Eviction or completion-dispatch removed the entry between our
-                    // GetOrAdd and now. Treat as an idempotent ack.
+                    // Eviction or completion-dispatch removed the entry between admission
+                    // and our touch. Idempotent ack — broker redelivery re-admits a fresh
+                    // entry on the next packet. Critically, no Stream.Write yet, so no
+                    // bytes are committed to an orphaned MessageBusReadStream.
                     return HandledTask;
                 }
-                refreshed = current with { LastSeenUtc = _timeProvider.GetUtcNow() };
+                var refreshed = current with { LastSeenUtc = _timeProvider.GetUtcNow() };
                 if (_activeStreams.TryUpdate(sequenceId, refreshed, current))
                 {
                     state = refreshed;
                     break;
                 }
             }
+
+            // Write commits packet bytes only after we hold a touched entry. A late
+            // eviction between this CAS and the Write is bounded — bytes still land in
+            // a stream instance that was indexed at touch time, and the eviction sweep's
+            // next pass skips this entry because LastSeenUtc was just refreshed.
+            state.Stream.Write(messageBytes, packetNumber);
 
             if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
             {
