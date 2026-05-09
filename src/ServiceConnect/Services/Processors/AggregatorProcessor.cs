@@ -118,6 +118,15 @@ internal sealed class AggregatorProcessor(
         Timer newTimer;
         lock (_resetTimerLock)
         {
+            // Re-check _disposed under the same lock that DisposeAsync's timer cleanup
+            // takes. Without this check a ProcessAsync that passed the entry guard at
+            // ProcessAsync line 41 can land here after DisposeAsync cleared _timers and
+            // install a fresh Timer that nobody disposes (bounded leak per aggregator-name).
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                return;
+            }
+
             _timers.TryGetValue(descriptor.AggregatorName, out previous);
             newTimer = new Timer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan);
             _timers[descriptor.AggregatorName] = newTimer;
@@ -324,12 +333,17 @@ internal sealed class AggregatorProcessor(
             }
         }
 
-        foreach (var kvp in _timers)
+        // Sequence the timer cleanup against ResetTimer via _resetTimerLock so a Timer
+        // installed in the disposal window does not leak past the foreach.
+        lock (_resetTimerLock)
         {
-            kvp.Value.Dispose();
-        }
+            foreach (var kvp in _timers)
+            {
+                kvp.Value.Dispose();
+            }
 
-        _timers.Clear();
+            _timers.Clear();
+        }
 
         foreach (var kvp in _flushLocks)
         {
