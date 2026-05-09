@@ -33,10 +33,8 @@ public static class HandlerScanner
             try { types = assembly.GetTypes(); }
             catch (ReflectionTypeLoadException ex)
             {
-                // Partial scan — loaded types are still usable, but this is a strong signal that
-                // the consumer's intent doesn't match what's on disk (missing reference, version
-                // drift, etc.). Surfacing a Warning here lets a misconfigured deploy fail loudly
-                // instead of dropping handlers silently until a message arrives with no handler.
+                // Partial scan — loaded types are still usable. Warn so a misconfigured deploy
+                // doesn't silently drop handlers until a message arrives with no handler.
                 types = ex.Types.Where(t => t != null).ToArray()!;
                 logger.LogWarning(
                     ex,
@@ -46,6 +44,24 @@ public static class HandlerScanner
                     ex.Types.Length,
                     string.Join(" | ", (ex.LoaderExceptions ?? [])
                         .Where(e => e is not null).Select(e => e!.Message)));
+            }
+            catch (Exception ex) when (ex is FileNotFoundException
+                                       or FileLoadException
+                                       or BadImageFormatException
+                                       or TypeLoadException)
+            {
+                // GetTypes() can throw any of these for assemblies in the AppDomain that aren't
+                // properly resolvable: missing reference, version drift, mismatched native bitness,
+                // or a type whose dependent assembly is broken. Pre-fix, only ReflectionTypeLoadException
+                // was caught — one of the other four shapes aborted the entire scan and the host
+                // failed to start with no handlers registered. Skip the offending assembly with a
+                // warning instead.
+                logger.LogWarning(
+                    ex,
+                    "Assembly {AssemblyName} threw {ExceptionType} during handler scan; skipping assembly.",
+                    assembly.FullName ?? "<unknown>",
+                    ex.GetType().Name);
+                types = [];
             }
 
             foreach (var type in types)
