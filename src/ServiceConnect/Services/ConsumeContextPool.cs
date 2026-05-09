@@ -186,6 +186,7 @@ internal sealed class ConsumeContextPool
                 _headers,
                 _queueConfig,
                 _replyStatusRequestReplyManager,
+                _busConfig,
                 requestMessageId,
                 sourceAddress);
 

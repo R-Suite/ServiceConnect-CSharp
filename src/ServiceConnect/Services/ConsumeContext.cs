@@ -123,7 +123,7 @@ public sealed class ConsumeContext : IConsumeContext
         }
 
         var requestMessageId = GetDecodedHeader(Headers, HeaderKeys.RequestMessageId);
-        var isTrustedRequestReply = IsTrustedRequestReplyEnvelope(Headers, _queueConfig, _replyStatusRequestReplyManager, requestMessageId, sourceAddress);
+        var isTrustedRequestReply = IsTrustedRequestReplyEnvelope(Headers, _queueConfig, _replyStatusRequestReplyManager, _busConfig, requestMessageId, sourceAddress);
 
         if (_busConfig.ValidateReplyDestinations && !isTrustedRequestReply && !IsKnownQueue(sourceAddress, _queueConfig))
         {
@@ -176,10 +176,46 @@ public sealed class ConsumeContext : IConsumeContext
         return false;
     }
 
+    /// <summary>
+    /// Determines whether the inbound envelope should be trusted as a legitimate request
+    /// the local bus may safely reply to, bypassing the
+    /// <see cref="IBusConfiguration.ValidateReplyDestinations"/> queue allow-list.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two paths grant trust:
+    /// </para>
+    /// <list type="number">
+    ///   <item><description>
+    ///     <b>Tracked request</b> — the local <see cref="IReplyStatusRequestReplyManager"/>
+    ///     records the <c>RequestMessageId</c>, proving WE originated the request. This
+    ///     path is always honoured.
+    ///   </description></item>
+    ///   <item><description>
+    ///     <b>Heuristic fallback</b> — the headers look like a request envelope (non-empty
+    ///     <c>RequestMessageId</c>, no <c>ResponseMessageId</c>, non-empty
+    ///     <c>SourceAddress</c> and <c>MessageId</c>, <c>DestinationAddress</c> equals our
+    ///     queue). This preserves cross-bus request-reply where the originator is a
+    ///     different bus instance whose <c>RequestMessageId</c> we cannot have tracked.
+    ///     Every header here can be crafted by any external producer that knows our queue
+    ///     name, so a hostile peer can redirect our reply by spoofing them. The fallback
+    ///     is gated on <see cref="IBusConfiguration.StrictReplyValidation"/>: when that
+    ///     flag is <c>true</c> the fallback is disabled and only the tracked-request path
+    ///     above is trusted.
+    ///   </description></item>
+    /// </list>
+    /// <para>
+    /// Default <see cref="IBusConfiguration.StrictReplyValidation"/> is <c>false</c>, so
+    /// existing behaviour is preserved exactly. Set the flag to <c>true</c> to remove the
+    /// crafted-envelope attack surface in deployments that don't depend on cross-bus
+    /// request-reply.
+    /// </para>
+    /// </remarks>
     internal static bool IsTrustedRequestReplyEnvelope(
         IReadOnlyDictionary<string, object> headers,
         IQueueConfiguration queueConfig,
         IReplyStatusRequestReplyManager? replyStatusRequestReplyManager,
+        IBusConfiguration busConfig,
         string? requestMessageId = null,
         string? sourceAddress = null)
     {
@@ -192,6 +228,16 @@ public sealed class ConsumeContext : IConsumeContext
         if (replyStatusRequestReplyManager?.IsTrackedRequest(requestMessageId) == true)
         {
             return true;
+        }
+
+        // Strict mode disables the heuristic fallback — only locally-tracked requests are
+        // trusted. The fallback below relies on headers (RequestMessageId, SourceAddress,
+        // MessageId, DestinationAddress) that can all be set by any external producer that
+        // knows our queue name; trusting them is necessary for cross-bus request-reply but
+        // exposes a redirect-our-reply attack surface. See IBusConfiguration.
+        if (busConfig.StrictReplyValidation)
+        {
+            return false;
         }
 
         sourceAddress ??= GetDecodedHeader(headers, HeaderKeys.SourceAddress);

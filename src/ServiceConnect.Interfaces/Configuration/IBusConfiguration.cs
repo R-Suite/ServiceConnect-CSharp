@@ -97,4 +97,28 @@ public interface IBusConfiguration
     /// handler-less message should be treated as a terminal failure for operator visibility.
     /// </summary>
     bool DeadLetterUnhandledMessages { get; set; }
+
+    /// <summary>
+    /// When <c>true</c>, the heuristic fallback inside
+    /// <c>ConsumeContext.IsTrustedRequestReplyEnvelope</c> is disabled — only requests
+    /// tracked by the local request-reply manager are trusted to bypass
+    /// <see cref="ValidateReplyDestinations"/>. Defaults to <c>false</c>, which
+    /// preserves the legacy behaviour: any inbound message with a non-empty
+    /// <c>RequestMessageId</c>, a <c>SourceAddress</c>, a <c>MessageId</c>, no
+    /// <c>ResponseMessageId</c>, and <c>DestinationAddress == this queue</c> is also
+    /// trusted as a request envelope. That fallback enables cross-bus request-reply (the
+    /// request originated on a different bus instance and the local
+    /// <c>IReplyStatusRequestReplyManager</c> doesn't know it), but the headers it relies
+    /// on can be crafted by any external producer that knows our queue name — so a hostile
+    /// peer could redirect our reply by spoofing them.
+    /// </summary>
+    /// <remarks>
+    /// Set to <c>true</c> when (a) the service does not participate in cross-bus
+    /// request-reply, or (b) the operator explicitly verifies that all upstream callers
+    /// route through a tracked <c>RequestReplyManager</c>. Otherwise leave at the default
+    /// to preserve backward compatibility — strict mode will reject legitimate cross-bus
+    /// request-reply traffic that legacy callers rely on. The flag is non-breaking because
+    /// the default value preserves existing trust decisions exactly.
+    /// </remarks>
+    bool StrictReplyValidation { get; set; }
 }
