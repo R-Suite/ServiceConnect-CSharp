@@ -25,8 +25,15 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task TimeoutStore_AfterDbDrop_RecreatesIndexesOnNextInsert()
+    public async Task TimeoutStore_AfterDbDrop_DoesNotRecreateIndexes_ByDesign()
     {
+        // H14 (Phase 4): EnsureTimeoutIndexAsync caches a per-instance _indexed flag
+        // after first success, mirroring the saga finder and aggregator persistor. If
+        // an admin drops the database while the process is still running, the cached
+        // store will not re-create the indexes on the next insert — operators must
+        // recycle the store (process restart) to recover. The trade-off vs the
+        // per-message DropOneAsync + CreateManyAsync round-trip is documented; this
+        // test pins the new contract so a future regression is caught.
         var dbName = _fixture.GetUniqueDatabaseName("idxrecovery_to");
         var options = new MongoDbPersistenceOptions
         {
@@ -37,7 +44,8 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         var store = new MongoDbTimeoutStore(
             client, options, NullLogger<MongoDbTimeoutStore>.Instance, new FakeTimeProvider(DateTimeOffset.UtcNow));
 
-        // First write: causes EnsureTimeoutIndexAsync to create the indexes.
+        // First write: causes EnsureTimeoutIndexAsync to create the indexes and
+        // flip _indexed=1.
         await store.InsertTimeoutAsync(new TimeoutData
         {
             Id = Guid.NewGuid(),
@@ -50,8 +58,8 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         // Simulate an admin dropping the database while the process is still running.
         await client.DropDatabaseAsync(dbName);
 
-        // Second write on the same store instance: without a cache flag the ensure path
-        // runs again, hitting Mongo unconditionally and recreating the indexes.
+        // Second write on the same store instance: the cache flag short-circuits the
+        // ensure path, so the indexes are NOT recreated. Pins the H14 contract.
         await store.InsertTimeoutAsync(new TimeoutData
         {
             Id = Guid.NewGuid(),
@@ -59,9 +67,9 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         });
 
         var secondIndexes = await ListIndexNamesAsync(client, dbName, "Timeouts");
-        Assert.Contains("Time_1_Locked_1", secondIndexes);
-        Assert.Contains("LockedBy_1_Locked_1", secondIndexes);
-        Assert.Contains("LockExpiresAt_1", secondIndexes);
+        Assert.DoesNotContain("Time_1_Locked_1", secondIndexes);
+        Assert.DoesNotContain("LockedBy_1_Locked_1", secondIndexes);
+        Assert.DoesNotContain("LockExpiresAt_1", secondIndexes);
     }
 
     [Fact]
