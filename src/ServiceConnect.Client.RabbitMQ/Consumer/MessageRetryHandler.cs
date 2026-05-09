@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
+using System.Text.Json;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Diagnostics;
@@ -133,7 +133,7 @@ internal sealed class MessageRetryHandler(
     {
         if (ex != null)
         {
-            HeaderHelpers.SetHeader(headers, HeaderKeys.Exception, JsonConvert.SerializeObject(new
+            HeaderHelpers.SetHeader(headers, HeaderKeys.Exception, JsonSerializer.Serialize(new
             {
                 TimeStamp = _timeProvider.GetUtcNow().UtcDateTime,
                 ExceptionType = ex.GetType().FullName,
