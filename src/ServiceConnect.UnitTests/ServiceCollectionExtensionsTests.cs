@@ -333,7 +333,7 @@ public class ServiceCollectionExtensionsTests
         method!.Invoke(null, [services, handlerRef, preExistingServiceTypes]);
     }
 
-    // --- RB6 regression tests ---
+    // --- Multi-registration regression tests ---
 
     [Fact]
     public void RegisterHandlerType_DualInterfaceHandler_RegistersBothMessageHandlerAndProcessHandler()
@@ -617,7 +617,7 @@ file sealed class FullOverrideRequestReplyManager : IRequestReplyManager, IReply
         throw new NotSupportedException();
 }
 
-// --- Fixture types for RB6 registration regression tests ---
+// --- Fixture types for multi-registration tests ---
 
 public sealed class DualMsg : Message
 {
