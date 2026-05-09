@@ -55,6 +55,8 @@ Sends a message to a specific endpoint or to the queue resolved from the configu
 
 <Aside type="note" title="Multi-endpoint Send">
   When `Send` resolves to multiple endpoints — either via [`SendOptions.EndPoints`](../../messages/options/#endpoints) or because [`AddQueueMapping`](../../configuration/iqueueconfiguration/#addqueuemapping) registered several queues for the message type — each delivery is an independent on-wire message with a distinct `MessageId` and `TimeSent`. Use `CorrelationId` to correlate deliveries that originated from the same logical bus operation; it remains constant across the fan-out.
+
+  Failure semantics: see the [`IProducer.SendAsync` (auto-routed) failure-semantics block](../../extension-points/transport/iproducer/#sendasync-auto-routed) — per-endpoint failure aggregates into `AggregateException`, cancellation aggregates with prior failures (or propagates plain if no prior failures exist).
 </Aside>
 
 ---

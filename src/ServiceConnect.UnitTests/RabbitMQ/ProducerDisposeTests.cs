@@ -221,16 +221,16 @@ public class ProducerDisposeTests
         await publishLock.WaitAsync(); // hold the lock; publisher will queue behind us
 
         // Kick off PublishAsync — it passes EnsureConnectedAsync (since _connected = true
-        // and _disposedInt = 0) and then blocks on _publishLock.WaitAsync.
+        // and _disposed = 0) and then blocks on _publishLock.WaitAsync.
         var publishTask = producer.PublishAsync(typeof(TestPayload), new byte[] { 1, 2, 3 });
 
-        // Run DisposeAsync — sets _disposedInt = 1, waits for the lock with the short
+        // Run DisposeAsync — sets _disposed = 1, waits for the lock with the short
         // test timeout, gives up, tears down channel/connection, releases nothing
         // (publishLockAcquired = false), exits.
         await producer.DisposeAsync();
 
         // Now release the lock the test was holding — the publisher acquires it,
-        // observes _disposedInt = 1, and must throw ObjectDisposedException rather
+        // observes _disposed = 1, and must throw ObjectDisposedException rather
         // than NRE on null _model.
         publishLock.Release();
 
@@ -240,7 +240,7 @@ public class ProducerDisposeTests
     [Fact]
     public async Task PublishAsync_WhenDisposedMidRetry_AbortsPromptlyInsteadOfBurningRetryBudget()
     {
-        // Regression guard: when DisposeAsync flips _disposedInt while a publisher's retry loop
+        // Regression guard: when DisposeAsync flips _disposed while a publisher's retry loop
         // is mid-Task.Delay (the lock is released between attempts), the next attempt's
         // EnsureConnectedAsync throws ObjectDisposedException. That exception MUST surface
         // immediately. Pre-fix, the catch-when at the bottom of ExecuteRetryingPublishAsync
@@ -294,7 +294,7 @@ public class ProducerDisposeTests
         // Small buffer so the publisher is definitely inside Task.Delay rather than mid-throw.
         await Task.Delay(100);
 
-        // Dispose: flips _disposedInt. The next iteration's EnsureConnectedAsync (which runs
+        // Dispose: flips _disposed. The next iteration's EnsureConnectedAsync (which runs
         // OUTSIDE _publishLock) will throw ObjectDisposedException from its disposed pre-check.
         // Note: DisposeAsync also runs concurrently with whatever Task.Delay the publisher is
         // still in; that delay shares the publisher's caller token, which is the publish task's

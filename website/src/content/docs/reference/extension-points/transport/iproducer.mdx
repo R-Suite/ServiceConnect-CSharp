@@ -81,6 +81,12 @@ Sends `message` to the destination queue (or queues) mapped for `type`. The tran
 - `headers` — optional string-valued transport headers.
 - `cancellationToken` — cancels the in-progress send.
 
+**Failure semantics (multi-mapping fan-out).** When the queue mapping for `type` resolves to **multiple** endpoints, each endpoint is published to in turn:
+
+- **Per-endpoint failure does not abort the loop.** A non-cancellation failure on one endpoint is collected, and the loop continues to the remaining endpoints. After the loop completes, all collected failures surface as a single `AggregateException` whose inner exceptions are the individual per-endpoint failures.
+- **Cancellation aborts the remaining endpoints.** If `cancellationToken` fires (or an awaited operation throws `OperationCanceledException`) on a given endpoint, the loop does not attempt subsequent endpoints. If any prior endpoint already failed, the cancellation is aggregated with those failures into a single `AggregateException` (so prior failures are not lost). If no prior endpoint failed, the `OperationCanceledException` propagates plain — callers' standard cancellation handlers see the canonical type.
+- **Single-endpoint mappings retain plain-exception semantics.** When the type maps to exactly one endpoint, this overload behaves identically to the explicit-endpoint overload below: failures and cancellation propagate plain, never wrapped.
+
 ---
 
 ### `SendAsync` (explicit endpoint)

@@ -81,6 +81,15 @@ The keys are passed through to the RabbitMQ client; see that client's documentat
 
 - **`PublishTimeout`** (default **30 seconds**) — time to wait for a broker publisher-confirm before failing a publish. Prevents a half-open connection from blocking a producer indefinitely. `TimeoutException` on this path is *not* retried.
 
+### Producer concurrency invariants
+
+Adapter authors studying the bundled RabbitMQ producer as reference will see two synchronisation primitives with distinct, non-overlapping responsibilities:
+
+- **`_publishLock`** (a `SemaphoreSlim(1, 1)` on `Producer`) gates the actual publish step: building the `BasicProperties`, the `BasicPublishAsync` call, and the publisher-confirms wait. Each retry attempt acquires the lock, performs one publish, releases the lock. The lock is **never** held across `EnsureConnectedAsync`, the inter-attempt delay, or any reconnect — those run outside, so a slow reconnect cannot block other publishers.
+- **`_connectionSemaphore`** (a `SemaphoreSlim(1, 1)` on `ProducerConnection`) gates the connection lifecycle: build, teardown, dispose. It is held for the duration of `EnsureConnectedAsync`'s reset-and-recreate path so that a concurrent peeker cannot observe a half-open window between teardown and reconnect.
+
+Custom transports do not need to mirror this layout exactly — the goal is correctness against the contracts the bus expects (publish completes only after broker durability; dispose terminates promptly; concurrent publishers do not deadlock on a slow reconnect). The two-semaphore split is one way to satisfy those contracts cleanly.
+
 ## Queues
 
 `ConfigureQueues` sets the queue names the bus uses and any explicit message-to-queue routing.

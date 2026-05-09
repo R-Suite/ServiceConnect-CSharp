@@ -28,7 +28,7 @@ public sealed class Producer : IProducer
     private readonly TimeSpan _publishTimeout;
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
-    private int _disposedInt;
+    private int _disposed;
 
     /// <summary>Overrides the dispose lock-wait timeout for unit tests.</summary>
     internal TimeSpan? DisposeTimeoutForTests;
@@ -102,7 +102,7 @@ public sealed class Producer : IProducer
 
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
-        ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+        ObjectDisposedException.ThrowIf(_disposed != 0, this);
         await _producerConnection.EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -130,9 +130,9 @@ public sealed class Producer : IProducer
                 await _publishLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    // Re-check after acquiring the lock — DisposeAsync may have set _disposedInt
+                    // Re-check after acquiring the lock — DisposeAsync may have set _disposed
                     // and torn down the channel while we were waiting.
-                    ObjectDisposedException.ThrowIf(_disposedInt != 0, this);
+                    ObjectDisposedException.ThrowIf(_disposed != 0, this);
                     await lockedAction(cancellationToken).ConfigureAwait(false);
                     return;
                 }
@@ -156,7 +156,7 @@ public sealed class Producer : IProducer
             catch (ObjectDisposedException)
             {
                 // The producer was disposed mid-loop: EnsureConnectedAsync (or the post-lock
-                // disposed re-check) sees _disposedInt flipped and throws. Retrying would burn
+                // disposed re-check) sees _disposed flipped and throws. Retrying would burn
                 // the full retryCount * retrySeconds budget against a permanently dead instance
                 // (default 60 * 10s = 10 min). Pre-restructure this could not happen because
                 // _publishLock spanned every retry attempt; now the lock is released between
@@ -550,7 +550,7 @@ public sealed class Producer : IProducer
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposedInt, 1) != 0)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
         }
