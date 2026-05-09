@@ -129,6 +129,7 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IBusConfiguration>(),
                 sp.GetRequiredService<Lazy<IBus>>(),
                 sp.GetService<ITimeoutStore>(),
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ProcessManagerTimeoutService>>()));
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ProcessManagerTimeoutService>>(),
+                sp.GetService<TimeProvider>()));
     }
 }

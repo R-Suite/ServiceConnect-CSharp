@@ -21,7 +21,12 @@ public sealed class ProcessManagerTimeoutService(
     // next poll reclaim the timeout rather than risk a duplicate send after the lease expires.
     private static readonly TimeSpan LeaseSafetyMargin = TimeSpan.FromSeconds(2);
 
-    private CancellationTokenSource? _cts;
+    // Cancellation source independent of the IHostedService startup token. StartAsync's
+    // cancellationToken parameter is for cancelling host startup, not for cancelling the
+    // long-running poll loop afterwards. Mirror the standard BackgroundService pattern:
+    // the startup CT is observed once; long-running work uses _stoppingCts which is
+    // cancelled by StopAsync.
+    private CancellationTokenSource? _stoppingCts;
     private Task? _pollingTask;
     private readonly Lazy<IBus> _bus = bus ?? throw new ArgumentNullException(nameof(bus));
     private readonly ITimeoutStore? _finder = finder;
@@ -45,6 +50,8 @@ public sealed class ProcessManagerTimeoutService(
             return Task.CompletedTask;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         var configured = config.ProcessManagerTimeoutPollInterval;
         var interval = configured <= TimeSpan.Zero ? DefaultPollInterval : configured;
         if (configured <= TimeSpan.Zero)
@@ -52,8 +59,8 @@ public sealed class ProcessManagerTimeoutService(
             logger.LogWarning("ProcessManagerTimeoutPollInterval {Configured} is not positive; falling back to {Fallback}.", configured, DefaultPollInterval);
         }
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _pollingTask = PollLoop(interval, _cts.Token);
+        _stoppingCts = new CancellationTokenSource();
+        _pollingTask = PollLoop(interval, _stoppingCts.Token);
         logger.LogInformation("Process manager timeout polling started.");
         return Task.CompletedTask;
     }
@@ -64,21 +71,24 @@ public sealed class ProcessManagerTimeoutService(
     /// <param name="cancellationToken">A token used to cancel host shutdown.</param>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        var cts = Interlocked.Exchange(ref _cts, null);
-        if (cts != null)
+        var cts = Interlocked.Exchange(ref _stoppingCts, null);
+        if (cts == null)
         {
-            await cts.CancelAsync().ConfigureAwait(false);
-            if (_pollingTask != null)
-            {
-#pragma warning disable VSTHRD003 // _pollingTask was started by StartAsync on this instance.
-                try { await _pollingTask.ConfigureAwait(false); }
-                catch (OperationCanceledException) { }
-#pragma warning restore VSTHRD003
-            }
-
-            cts.Dispose();
+            return; // never started or already stopped
         }
 
+        try { await cts.CancelAsync().ConfigureAwait(false); }
+        catch (ObjectDisposedException) { }
+
+        if (_pollingTask != null)
+        {
+#pragma warning disable VSTHRD003 // _pollingTask was started by StartAsync on this instance.
+            try { await _pollingTask.WaitAsync(cancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+#pragma warning restore VSTHRD003
+        }
+
+        cts.Dispose();
         _pollingTask = null;
     }
 
@@ -167,7 +177,20 @@ public sealed class ProcessManagerTimeoutService(
                 }
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The shutdown CT cancelled us; clean exit. Pre-fix the catch was
+            // `when (ex is not OperationCanceledException)`, which let any non-loop OCE
+            // escape silently (e.g., a Bus.SendAsync's internal cancellation that doesn't
+            // share our token). Distinguish: this branch handles the legitimate shutdown
+            // OCE; the next branch handles any other OCE.
+            return;
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning(ex, "Unexpected OperationCanceledException polling for process manager timeouts (not the shutdown token).");
+        }
+        catch (Exception ex)
         {
             logger.LogError(ex, "Error polling for process manager timeouts");
         }
@@ -175,27 +198,40 @@ public sealed class ProcessManagerTimeoutService(
 
     private async Task PollLoop(TimeSpan interval, CancellationToken cancellationToken)
     {
-        using var timer = new PeriodicTimer(interval);
-        while (!cancellationToken.IsCancellationRequested)
+        // Use the TimeProvider-aware PeriodicTimer overload so tests with FakeTimeProvider
+        // can drive the loop. Pre-fix `new PeriodicTimer(interval)` ignored the injected
+        // _timeProvider — only TimeProvider.System could fire the timer.
+        using var timer = new PeriodicTimer(interval, _timeProvider);
+        try
         {
-            try
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false);
                 await PollOnceAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) { break; }
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutdown — clean exit.
+        }
+        catch (Exception ex)
+        {
+            // PollOnceAsync now catches its own exceptions (M22 fix) so reaching here
+            // implies the timer itself faulted. Log and exit; the host's StopAsync
+            // observes the task completion.
+            logger.LogError(ex, "ProcessManagerTimeoutService poll loop terminated unexpectedly.");
         }
     }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        // Mirror StopAsync: Interlocked.Exchange claims exclusive ownership of _cts so a racing
-        // StopAsync+DisposeAsync pair can't both call Dispose on the same CTS.
-        var cts = Interlocked.Exchange(ref _cts, null);
+        // Mirror StopAsync: Interlocked.Exchange claims exclusive ownership of _stoppingCts so
+        // a racing StopAsync+DisposeAsync pair can't both call Dispose on the same CTS.
+        var cts = Interlocked.Exchange(ref _stoppingCts, null);
         if (cts != null)
         {
-            await cts.CancelAsync().ConfigureAwait(false);
+            try { await cts.CancelAsync().ConfigureAwait(false); }
+            catch (ObjectDisposedException) { }
         }
         if (_pollingTask != null)
         {
