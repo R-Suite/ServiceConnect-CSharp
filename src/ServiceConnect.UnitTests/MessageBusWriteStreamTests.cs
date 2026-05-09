@@ -265,6 +265,78 @@ public class MessageBusWriteStreamTests
     }
 
     [Fact]
+    public async Task CloseAsync_RetriesAfterTransientSendFailure()
+    {
+        // Pre-fix CloseAsync set _closedFlag=1 on entry and a SendBytesAsync throw left
+        // the flag set with no close packet shipped — retry short-circuited. Post-fix
+        // the flag is set only after SendBytesAsync returns; a transient failure leaves
+        // _closedFlag=0 so the retry can complete the close.
+        var attempts = 0;
+        var producer = new Mock<IProducer>();
+        producer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(), It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                attempts++;
+                if (attempts == 1)
+                {
+                    throw new InvalidOperationException("transient");
+                }
+                return Task.CompletedTask;
+            });
+
+        var stream = new MessageBusWriteStream(producer.Object, "dest", typeof(FakeStreamMsg));
+
+        // First close attempt fails.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => stream.CloseAsync());
+
+        // Second close attempt succeeds — pre-fix this would short-circuit at the
+        // _closedFlag CAS without sending the close packet.
+        await stream.CloseAsync();
+
+        Assert.Equal(2, attempts);
+    }
+
+    [Fact]
+    public async Task WriteAsync_AfterFailedCloseAttempt_StillRejected()
+    {
+        // _closeStarted is set on first CloseAsync entry and never reset. Even if the
+        // close itself failed, WriteAsync must reject — a stream that began closing
+        // cannot un-close. This mirrors the fault-flag's permanence.
+        var producer = new Mock<IProducer>();
+        producer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transient"));
+
+        var stream = new MessageBusWriteStream(producer.Object, "dest", typeof(FakeStreamMsg));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => stream.CloseAsync());
+
+        // Subsequent Write must reject even though _closedFlag is still 0.
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => stream.WriteAsync(new byte[] { 1 }));
+    }
+
+    [Fact]
+    public async Task CloseAsync_SuccessfulSecondCallIsIdempotent()
+    {
+        // After a successful close, a second CloseAsync call is a no-op (no second
+        // close packet shipped).
+        var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
+        await stream.WriteAsync(new byte[] { 1 });
+
+        await stream.CloseAsync();
+        await stream.CloseAsync();
+
+        // One close packet, not two.
+        var closes = _sends.Where(s => s.Headers!.ContainsKey(HeaderKeys.LastPacketNumber)).ToList();
+        Assert.Single(closes);
+    }
+
+    [Fact]
     public async Task CloseAsync_CancelledDuringDrain_ThrowsOperationCanceledException()
     {
         // A producer whose SendBytesAsync never completes simulates a stalled in-flight write.
