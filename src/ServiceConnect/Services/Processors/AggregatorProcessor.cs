@@ -136,23 +136,31 @@ internal sealed class AggregatorProcessor(
 
     private void OnTimerFired(AggregatorDescriptor descriptor)
     {
-        // Fast path: dispose has started. Short-circuit so the callback doesn't re-add to
-        // _activeFlushes or re-create a SemaphoreSlim in _flushLocks that DisposeAsync already
-        // cleared — such a lock would be unreachable and never disposed (bounded leak).
-        if (Volatile.Read(ref _disposed) != 0)
-        {
-            return;
-        }
-
-        // Fire and forget from timer callback — log any errors.
-        // Use _disposeCts.Token so timer-fired flushes cancel on dispose.
+        // Register the TaskCompletionSource in _activeFlushes BEFORE consulting _disposed
+        // so that DisposeAsync's snapshot at _activeFlushes.Values.ToArray() is guaranteed
+        // to either (a) include our entry — DisposeAsync awaits it — or (b) take its snapshot
+        // AFTER we observe _disposed and bail.
         //
-        // Register a TaskCompletionSource in _activeFlushes BEFORE starting the flush
-        // so that DisposeAsync's snapshot always includes it.
+        // The pre-fix order (read _disposed, then TryAdd) had a window where DisposeAsync
+        // could set _disposed=1 between our read and the snapshot; the snapshot would miss
+        // our entry; DisposeAsync would dispose _disposeCts; and RunFlushAsync's defensive
+        // catch (ObjectDisposedException) softened the failure to quiet cancellation.
         var id = Interlocked.Increment(ref _flushId);
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _activeFlushes.TryAdd(id, tcs.Task);
 
+        // Re-check after registration. If DisposeAsync's Exchange(_disposed,1) ran before
+        // our TryAdd, our entry was missed by the drain snapshot — complete the tcs as
+        // cancelled and remove it so we don't leak the registration past dispose.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            tcs.TrySetCanceled();
+            _activeFlushes.TryRemove(id, out _);
+            return;
+        }
+
+        // Fire and forget from timer callback — log any errors.
+        // Use _disposeCts.Token via the same shutdown-race-tolerant read in RunFlushAsync.
         _ = RunFlushAsync(id, tcs, descriptor);
     }
 
