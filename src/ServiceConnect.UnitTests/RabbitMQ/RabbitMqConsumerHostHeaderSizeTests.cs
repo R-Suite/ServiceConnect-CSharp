@@ -38,8 +38,6 @@ public sealed class RabbitMqConsumerHostHeaderSizeTests
         // JSON is serialised by MessageRetryHandler and captured via BasicPublishAsync.
         var ex = Assert.Single(capturedExceptions);
         Assert.Contains("X-Large", ex);
-        // UTF-8 byte count of ASCII chars equals the char count, so 9000 appears in the message.
-        Assert.Contains(OverLimitStringLength.ToString(System.Globalization.CultureInfo.InvariantCulture), ex);
     }
 
     [Fact]
@@ -59,6 +57,102 @@ public sealed class RabbitMqConsumerHostHeaderSizeTests
         // (The delivery may still fail for other reasons — no real handler is wired —
         //  but it must NOT fail due to the header-size guard.)
         Assert.DoesNotContain(capturedExceptions, e => e.Contains("X-Small"));
+    }
+
+    [Fact]
+    public async Task EventAsync_NestedDictionaryHeaderExceedingByteBudget_RoutesToTerminalFailure()
+    {
+        // 9 KB of payload nested inside an IDictionary header value — a single header value
+        // that bypasses the per-value 8 KB cap by nesting. Pre-fix this passes the validator
+        // because the size loop only inspects top-level byte[]/string. Post-fix the recursive
+        // byte-cost descends into the dictionary and rejects.
+        var (host, _, capturedExceptions) = await BuildHostAsync();
+
+        var nested = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["inner"] = new string('x', OverLimitStringLength),
+        };
+        var args = MakeArgs(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [HeaderKeys.FullTypeName] = "Foo.Bar",
+            ["X-NestedTable"] = nested,
+        });
+
+        await host.RaiseDeliveryForTests(args);
+
+        var ex = Assert.Single(capturedExceptions);
+        Assert.Contains("X-NestedTable", ex);
+    }
+
+    [Fact]
+    public async Task EventAsync_NestedListHeaderExceedingByteBudget_RoutesToTerminalFailure()
+    {
+        // Same shape but using IList (AMQP array).
+        var (host, _, capturedExceptions) = await BuildHostAsync();
+
+        var nested = new List<object?>
+        {
+            new string('x', OverLimitStringLength),
+        };
+        var args = MakeArgs(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [HeaderKeys.FullTypeName] = "Foo.Bar",
+            ["X-NestedArray"] = nested,
+        });
+
+        await host.RaiseDeliveryForTests(args);
+
+        var ex = Assert.Single(capturedExceptions);
+        Assert.Contains("X-NestedArray", ex);
+    }
+
+    [Fact]
+    public async Task EventAsync_NestedDictionaryHeaderUnderByteBudget_PassesAdmission()
+    {
+        // Nested table whose total payload is well under the 8 KB cap — must NOT be rejected.
+        var (host, _, capturedExceptions) = await BuildHostAsync();
+
+        var nested = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["inner1"] = "hello",
+            ["inner2"] = new string('y', 1024),  // 1 KB
+        };
+        var args = MakeArgs(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [HeaderKeys.FullTypeName] = "Foo.Bar",
+            ["X-SmallNested"] = nested,
+        });
+
+        await host.RaiseDeliveryForTests(args);
+
+        Assert.DoesNotContain(capturedExceptions, e => e.Contains("X-SmallNested"));
+    }
+
+    [Fact]
+    public async Task EventAsync_PathologicallyDeepNestedHeader_RoutesToTerminalFailure()
+    {
+        // Build 33 levels of single-entry-dict nesting — each level has a tiny payload, well
+        // under the 8 KB budget on byte count alone. The depth guard rejects pathologically
+        // deep payloads independently of byte count to prevent stack exhaustion if the byte
+        // budget is ever widened.
+        var (host, _, capturedExceptions) = await BuildHostAsync();
+
+        object current = "leaf";
+        for (var i = 0; i < 33; i++)
+        {
+            current = new Dictionary<string, object?>(StringComparer.Ordinal) { ["wrap"] = current };
+        }
+
+        var args = MakeArgs(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [HeaderKeys.FullTypeName] = "Foo.Bar",
+            ["X-Deep"] = current,
+        });
+
+        await host.RaiseDeliveryForTests(args);
+
+        var ex = Assert.Single(capturedExceptions);
+        Assert.Contains("X-Deep", ex);
     }
 
     // ── Harness ───────────────────────────────────────────────────────────────

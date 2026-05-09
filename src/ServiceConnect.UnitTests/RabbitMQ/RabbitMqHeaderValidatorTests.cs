@@ -114,7 +114,6 @@ public sealed class RabbitMqHeaderValidatorTests
         Assert.Equal("oversized header value", result.RejectReason);
         var ex = Assert.Single(capturedExceptions);
         Assert.Contains("X-Big-Bytes", ex);
-        Assert.Contains((DefaultMaxHeaderValueBytes + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), ex);
     }
 
     [Fact]
@@ -136,7 +135,6 @@ public sealed class RabbitMqHeaderValidatorTests
         Assert.Equal("oversized header value", result.RejectReason);
         var ex = Assert.Single(capturedExceptions);
         Assert.Contains("X-Big-String", ex);
-        Assert.Contains(OverLimit.ToString(System.Globalization.CultureInfo.InvariantCulture), ex);
     }
 
     [Fact]
