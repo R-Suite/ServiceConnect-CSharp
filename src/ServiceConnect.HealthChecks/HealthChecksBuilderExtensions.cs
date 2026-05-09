@@ -79,6 +79,38 @@ public static class HealthChecksBuilderExtensions
             timeout));
     }
 
+    /// <summary>
+    /// Registers a bus-consuming health check with a configurable recovery-grace window and
+    /// optional <see cref="TimeProvider"/>. Use this overload when the host needs deterministic
+    /// time control (tests with FakeTimeProvider) or a non-default grace window. An optional
+    /// consumer factory threads the broker-cancelled short-circuit through, so a permanent
+    /// broker-cancellation flips Unhealthy without waiting out the grace window.
+    /// </summary>
+    public static IHealthChecksBuilder AddServiceConnectBus(
+        this IHealthChecksBuilder builder,
+        string name,
+        Func<IServiceProvider, IBus> busFactory,
+        TimeSpan recoveryGraceWindow,
+        TimeProvider? timeProvider = null,
+        Func<IServiceProvider, IConsumer?>? consumerFactory = null,
+        HealthStatus failureStatus = HealthStatus.Unhealthy,
+        IEnumerable<string>? tags = null,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(busFactory);
+        return builder.Add(new HealthCheckRegistration(
+            name,
+            sp => new BusConsumingHealthCheck(
+                busFactory(sp),
+                consumerFactory?.Invoke(sp),
+                recoveryGraceWindow,
+                timeProvider ?? TimeProvider.System),
+            failureStatus,
+            tags,
+            timeout));
+    }
+
     // ── Consumer ────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -132,6 +164,34 @@ public static class HealthChecksBuilderExtensions
         return builder.Add(new HealthCheckRegistration(
             name,
             sp => new ConsumerConnectionHealthCheck(consumerFactory(sp)),
+            failureStatus,
+            tags,
+            timeout));
+    }
+
+    /// <summary>
+    /// Registers a consumer-connection health check with a configurable recovery-grace window
+    /// and optional <see cref="TimeProvider"/>. Use this overload when the host needs
+    /// deterministic time control (tests with FakeTimeProvider) or a non-default grace window.
+    /// </summary>
+    public static IHealthChecksBuilder AddServiceConnectConsumer(
+        this IHealthChecksBuilder builder,
+        string name,
+        Func<IServiceProvider, IConsumer> consumerFactory,
+        TimeSpan recoveryGraceWindow,
+        TimeProvider? timeProvider = null,
+        HealthStatus failureStatus = HealthStatus.Unhealthy,
+        IEnumerable<string>? tags = null,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(consumerFactory);
+        return builder.Add(new HealthCheckRegistration(
+            name,
+            sp => new ConsumerConnectionHealthCheck(
+                consumerFactory(sp),
+                recoveryGraceWindow,
+                timeProvider ?? TimeProvider.System),
             failureStatus,
             tags,
             timeout));
