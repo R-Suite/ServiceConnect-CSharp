@@ -489,7 +489,32 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 
 **Documentation**
 
-- `DeepClone` now documents its security boundary (`TypeNameHandling.Auto` is in-process-trusted-data-only; do not extend to external JSON) and Newtonsoft's explicit-interface auto-property gap (saga types using such properties must back them with a public property).
+- `DeepClone` now documents its security boundary (BSON's `_t` discriminator is in-process-trusted-data-only — do not extend the helper to deserialise external input). See **Phase 4 — Persistence correctness + Newtonsoft.Json removal** below for the rewrite.
+
+### Phase 4 — Persistence correctness + Newtonsoft.Json removal
+
+**Bug fixes**
+
+- **`MessageRetryHandler` exception-header serialisation switched to `System.Text.Json`.** `Newtonsoft.Json` is removed from `ServiceConnect.Client.RabbitMQ`'s package references. The exception envelope shape (`{ TimeStamp, ExceptionType, Message }`) is unchanged on the wire.
+- **`InMemoryTimeoutStore` disposes its owned `InMemoryPersistenceState`.** The store now implements `IDisposable`. The owning ctor disposes the state it created; the internal test-seam ctor (caller-provided state) does not — caller owns lifetime.
+- **`InMemoryAggregatorPersistor.GetSnapshotAsync` clones inside the lock.** A previous version released `_memoryCacheLock` before `DeepClone.Clone` ran, relying on the invariant "no aggregator-update path mutates `Entry.Data` in place" — fragile against future changes; risked serialising a torn object. Cloning under the lock guarantees per-entry consistency.
+- **`CacheProvider` sliding-eviction generation-guard.** A stale timer callback whose `Add` raced with a concurrent re-Add could evict the new value. Each `Add` now bumps a per-key generation counter; the timer's eviction path fast-fails on a generation mismatch.
+- **`MongoDbAggregatorPersistor.EnsureIndexesAsync` is single-flight.** Concurrent first-write inserts no longer fan out N parallel `CreateManyAsync` calls. `Volatile.Read(ref _indexed)` fast-path + `SemaphoreSlim`-protected first call + double-check; on success `Volatile.Write(ref _indexed, 1)` flips the cache; benign `IndexOptionsConflict (85) / IndexKeySpecsConflict (86)` exceptions are swallowed for cross-process coexistence.
+- **`MongoDbTimeoutStore.GetTimeoutsBatchAsync` read-back `FindAsync` sorts by `(Time, Id)`.** The candidate sort and the read-back sort now match. Pre-fix the read-back returned rows in unspecified order, masking the candidate-sort tie-breaker (Group D Mongo timeout-store fixes) and risking starvation under concurrent batch claims.
+- **`MongoDbTimeoutStore` orphan-lease cleanup widens from `OperationCanceledException` to any error.** A transient `MongoException` between successful claim (`UpdateManyAsync`) and read-back (`FindAsync`) previously propagated as `PersistenceException` while leaving rows locked under `sessionId` until `LockExpiresAt` or the reaper ran. Best-effort cleanup now triggers on any failure between claim and read-back.
+- **`MongoDbTimeoutStore.EnsureTimeoutIndexAsync` cached per-instance.** Pre-fix every `Insert`/`Get`/`Remove`/`Release`/`Reap` round-tripped `DropOneAsync("Locked_1_Time_1")` (404'ing every steady-state call) plus `CreateManyAsync` of three index specs. The cache mirrors the saga finder and aggregator persistor patterns; on success `Volatile.Write(ref _indexed, 1)`. Concurrent multi-process index creation across replicas is benign (`MongoCommandException` codes 85/86 are swallowed).
+- **Production `DeepClone` switches from `Newtonsoft.Json` to `MongoDB.Bson` round-trip.** Removes the security-flagged `TypeNameHandling.Auto` deserialisation-gadget surface from `ServiceConnect.Persistence.InMemory`. BSON's `_t` discriminator preserves polymorphism for nested values; the helper wraps the root value in a synthetic single-field document so collection-typed roots (`List<>`, arrays, `Dictionary<,>` — legitimate header values on `TimeoutData`) round-trip without hitting BSON's "root must be `{}` not `[]`" constraint.
+- **Explicit-interface auto-properties round-trip correctly through the in-memory store.** A saga or aggregator data type with a property declared as an explicit-interface impl (`Guid IFoo.FooId { get; set; }`) was invisible to `Newtonsoft.Json` (which only saw public short-name properties) and round-tripped as `default(Guid)`. BSON's `BsonClassMap` auto-discovers explicit-interface auto-properties, eliminating the silent test-vs-prod divergence between the in-memory and Mongo stores.
+
+**Documentation / contract clarifications (non-breaking)**
+
+- **`MongoDbProcessManagerFinder.UpdateDataAsync` cancellation retry contract.** xmldoc now states: a caller catching `OperationCanceledException` and intending to retry MUST call `FindDataAsync` first to refresh the version before rebuilding the write record. Pre-fix the inline comment claimed a cancelled update always left the caller's `Version` matching the server, but a cancellation that fires AFTER server-commit but BEFORE client-ack leaves the server at `Version N+1` while the caller still believes `N` — the retry's filter misses and surfaces a spurious `ConcurrencyException` for what was actually a successful write. The fix is documentation-only; behaviour is unchanged.
+
+**Behaviour changes**
+
+- **`Newtonsoft.Json` removed from production packages.** `ServiceConnect.Client.RabbitMQ` and `ServiceConnect.Persistence.InMemory` no longer reference `Newtonsoft.Json`. `MongoDB.Bson 2.23.1` is now a direct dependency on `ServiceConnect.Persistence.InMemory` (it was already transitive via `ServiceConnect.Persistence.MongoDb`).
+- **`InMemoryTimeoutStore` is now `IDisposable`.** Direct callers (tests, custom hosts that bypass DI) should `using` the store or call `Dispose()` to release the owned `InMemoryPersistenceState` (timer registrations, kernel lock handles). DI consumers via `UseInMemoryPersistence()` see no change — the container handles disposal.
+- **`MongoDbTimeoutStore` indexes no longer self-heal after admin-drop.** Once `_indexed=1` (set after first successful `CreateManyAsync`), an admin dropping the database while the process is running requires a process restart to re-create the indexes. Mirrors the `MongoDbAggregatorPersistor` cache contract (Group F). The trade-off vs the per-message round-trip is documented; pin tests guard against future regression.
 
 ### Processor cleanups (Aggregator, Stream, Handler, ProcessManagerTimeout)
 
