@@ -60,12 +60,13 @@ public sealed class MessageDispatcherUnresolvedTypeTests
     }
 
     [Fact]
-    public async Task DispatchAsync_UnresolvedType_WithResponseId_ButNoReplyProcessor_ReturnsNotHandled()
+    public async Task DispatchAsync_UnresolvedType_WithResponseId_ButNoReplyProcessor_AcksAndDrops()
     {
         // Site 2: !typeResolvedFromRegistry, hasResponseMessageId=true, but no ReplyProcessor
-        // in the processor list (replyProcessor is null). The gate at line 128 is skipped
-        // because replyProcessor is null, so we fall through to the second unresolved-type check.
-        // Same rationale: terminal condition, route as not-handled rather than Success=false.
+        // in the processor list (replyProcessor is null). The reply-shape guard fires first
+        // (replyProcessor == null && hasResponseMessageId) and ack-and-drops — the payload was
+        // correlated to a request and must not be dispatched to a regular handler or treated as
+        // a not-handled message. Success=true, NotHandled=false.
         var dispatcher = BuildDispatcher(replyManager: null, includeReplyProcessor: false);
 
         var headers = new Dictionary<string, object>(StringComparer.Ordinal)
@@ -81,7 +82,7 @@ public sealed class MessageDispatcherUnresolvedTypeTests
             CancellationToken.None);
 
         Assert.True(result.Success);
-        Assert.True(result.NotHandled);
+        Assert.False(result.NotHandled);
     }
 
     private MessageDispatcher BuildDispatcher(

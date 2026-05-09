@@ -94,26 +94,10 @@ public sealed class MessageDispatcher(
                 return new ConsumeEventResult { Success = true };
             }
 
-            ReplyProcessor? replyProcessor = null;
-
-            foreach (var proc in _processors)
+            var (replyProcessor, preDeserHandled) = await RunPreDeserializationProcessorsAsync(messageBytes, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
+            if (preDeserHandled)
             {
-                if (proc is ReplyProcessor typedReplyProcessor)
-                {
-                    replyProcessor = typedReplyProcessor;
-                    continue;
-                }
-
-                if (!proc.RunBeforeDeserialization)
-                {
-                    continue;
-                }
-
-                var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
-                if (preResult == ProcessResult.Handled)
-                {
-                    return new ConsumeEventResult { Success = true };
-                }
+                return new ConsumeEventResult { Success = true };
             }
 
             Type? type = null;
@@ -160,6 +144,23 @@ public sealed class MessageDispatcher(
                 _logger.LogDebug(
                     "Discarding reply for untracked correlation '{CorrelationId}' (likely timed out or duplicate)",
                     replyCorrelationId);
+                return new ConsumeEventResult { Success = true };
+            }
+
+            // Reply-shaped message but no ReplyProcessor in the pipeline (custom DI
+            // configuration that doesn't register IRequestReplyManager / ReplyProcessor).
+            // Do NOT dispatch through the regular handler — the payload was correlated to
+            // a request, not a self-contained message; a regular handler running against it
+            // would receive a payload it didn't expect. Log at Warning (this is a
+            // misconfiguration — replies arriving at a bus with no request-reply manager
+            // is operationally suspicious) and ack-and-drop.
+            if (replyProcessor == null && hasResponseMessageId)
+            {
+                _logger.LogWarning(
+                    "Reply received (ResponseMessageId={ResponseMessageId}) but no ReplyProcessor / IRequestReplyManager is registered on this bus. " +
+                    "The reply cannot be correlated and the regular handler must NOT run against a reply payload. " +
+                    "Acking and dropping.",
+                    HeaderDecoder.Decode(headers[HeaderKeys.ResponseMessageId]) ?? "<unknown>");
                 return new ConsumeEventResult { Success = true };
             }
 
@@ -231,6 +232,37 @@ public sealed class MessageDispatcher(
                 }
             }
         }
+    }
+
+    // Iterates all processors. Pre-deserialization processors run immediately; ReplyProcessor
+    // is pulled out and returned as a typed reference for the dispatch routing logic. Returns
+    // (replyProcessor, true) when a pre-deserialization processor signals Handled so the caller
+    // can short-circuit without entering the rest of the dispatch path.
+    private async Task<(ReplyProcessor? ReplyProcessor, bool Handled)> RunPreDeserializationProcessorsAsync(
+        ReadOnlyMemory<byte> messageBytes, IDictionary<string, object> headers, Envelope envelope, CancellationToken cancellationToken)
+    {
+        ReplyProcessor? replyProcessor = null;
+        foreach (var proc in _processors)
+        {
+            if (proc is ReplyProcessor typedReplyProcessor)
+            {
+                replyProcessor = typedReplyProcessor;
+                continue;
+            }
+
+            if (!proc.RunBeforeDeserialization)
+            {
+                continue;
+            }
+
+            var preResult = await proc.ProcessAsync(messageBytes, typeof(Message), null, headers, envelope, cancellationToken).ConfigureAwait(false);
+            if (preResult == ProcessResult.Handled)
+            {
+                return (replyProcessor, true);
+            }
+        }
+
+        return (replyProcessor, false);
     }
 
     private async Task<ConsumeEventResult> RunProcessors(ReadOnlyMemory<byte> mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
