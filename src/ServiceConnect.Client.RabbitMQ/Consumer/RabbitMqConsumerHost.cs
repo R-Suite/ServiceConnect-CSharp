@@ -242,9 +242,15 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             throw new InvalidOperationException("PrepareAsync must be called before BeginConsumingAsync.");
         }
 
+        // Subscribe to the consumer-tag recovery event BEFORE BasicConsumeAsync. RabbitMQ.Client
+        // auto-recovery may fire between the BasicConsumeAsync return and a later subscribe call,
+        // changing the broker-assigned tag without us knowing. Subscribing first means tag
+        // changes are observed live by the handler. The handler matches on TagBefore == _consumerTag,
+        // so the very-first invocation (where _consumerTag is still null) is a safe no-op.
+        SubscribeToConsumerTagRecovery();
+
         _consumerTag = await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer, cancellationToken).ConfigureAwait(false);
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
-        SubscribeToConsumerTagRecovery();
     }
 
     /// <summary>
