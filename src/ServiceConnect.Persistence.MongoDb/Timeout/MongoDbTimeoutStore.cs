@@ -198,9 +198,16 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
                                 & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true)
                                 & Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
+                // Sort by (Time, Id) — same shape as the candidate-id pass — so dispatch
+                // order within a batch matches Time order. Without this, MongoDB's natural
+                // cursor order does not respect insertion-time semantics.
+                var readBackSort = Builders<TimeoutData>.Sort
+                    .Ascending(x => x.Time)
+                    .Ascending(x => x.Id);
+                var readBackOptions = new FindOptions<TimeoutData> { Sort = readBackSort };
                 using var cursor = session is not null
-                    ? await collection.FindAsync(session, ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false)
-                    : await collection.FindAsync(ownedFilter, cancellationToken: cancellationToken).ConfigureAwait(false);
+                    ? await collection.FindAsync(session, ownedFilter, readBackOptions, cancellationToken).ConfigureAwait(false)
+                    : await collection.FindAsync(ownedFilter, readBackOptions, cancellationToken).ConfigureAwait(false);
                 await cursor.ForEachAsync(due.Add, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
