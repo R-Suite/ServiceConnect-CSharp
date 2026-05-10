@@ -42,6 +42,14 @@ internal sealed class ProducerConnection
     private ConnectionFactory? _connectionFactory;
     private volatile IChannel? _model;
     private volatile IConnection? _connection;
+    // ConcurrencyLimiter is the bound on outstanding publisher confirms passed into
+    // RabbitMQ.Client's CreateChannelOptions. The driver does not own user-supplied
+    // limiters, so each reconnect previously allocated a fresh limiter and abandoned
+    // the previous one (still rooted internally by the closed channel for as long as
+    // the channel object lived). Holding the reference here lets TearDown dispose it
+    // and CreateConnectionAsync defensively dispose any predecessor before installing
+    // its replacement.
+    private RateLimiter? _publisherRateLimiter;
     private volatile bool _connected;
 
     // Set by Producer.PublishWithTimeoutAsync when a publish times out (broker confirm did not
@@ -339,12 +347,23 @@ internal sealed class ProducerConnection
                 // the upstream tracker would otherwise grow without bound. QueueLimit=int.MaxValue
                 // makes overflow back-pressure (queue, then publish) rather than throw.
                 var permitLimit = ResolveMaxOutstandingPublishConfirms(_transportConfiguration);
+                // Defensive: a previous reconnect's limiter must be disposed before the
+                // new one is installed. TearDownChannelAndConnectionAsync disposes it on
+                // every reset, so this is normally null on the create-from-scratch path;
+                // the swap is here for the case where CreateConnectionAsync is reached
+                // without an intervening TearDown.
+                var prior = Interlocked.Exchange(ref _publisherRateLimiter, null);
+                if (prior is not null)
+                {
+                    await prior.DisposeAsync().ConfigureAwait(false);
+                }
                 var rateLimiter = new ConcurrencyLimiter(new ConcurrencyLimiterOptions
                 {
                     PermitLimit = permitLimit,
                     QueueLimit = int.MaxValue,
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 });
+                _publisherRateLimiter = rateLimiter;
                 // publisherConfirmationsEnabled is also load-bearing for
                 // OutboundHeaderBuilder.BuildBasicProperties' aliasing-safety invariant in the
                 // SendAsync(Type) fan-out: the broker ack gates the next iteration's
@@ -371,8 +390,14 @@ internal sealed class ProducerConnection
             {
                 var orphanModel = Interlocked.Exchange(ref _model, null);
                 var orphanConnection = Interlocked.Exchange(ref _connection, null);
+                var orphanLimiter = Interlocked.Exchange(ref _publisherRateLimiter, null);
                 await DisposeModelAsync(orphanModel).ConfigureAwait(false);
                 await DisposeConnectionInstanceAsync(orphanConnection).ConfigureAwait(false);
+                if (orphanLimiter is not null)
+                {
+                    try { await orphanLimiter.DisposeAsync().ConfigureAwait(false); }
+                    catch (ObjectDisposedException) { }
+                }
                 _connected = false;
                 // Null the locals so the outer catch's redundant dispose path is a no-op —
                 // the helpers are null-guarded and we have already disposed the references.
@@ -386,6 +411,16 @@ internal sealed class ProducerConnection
         {
             await DisposeModelAsync(model).ConfigureAwait(false);
             await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
+            // CreateChannelAsync may have thrown after _publisherRateLimiter was assigned;
+            // dispose to avoid leaking on the failed-create path. Use Exchange so a
+            // subsequent successful retry can install a fresh limiter without observing
+            // a stale field.
+            var limiter = Interlocked.Exchange(ref _publisherRateLimiter, null);
+            if (limiter is not null)
+            {
+                try { await limiter.DisposeAsync().ConfigureAwait(false); }
+                catch (ObjectDisposedException) { }
+            }
             throw;
         }
     }
@@ -394,9 +429,24 @@ internal sealed class ProducerConnection
     {
         var model = Interlocked.Exchange(ref _model, null);
         var connection = Interlocked.Exchange(ref _connection, null);
+        var rateLimiter = Interlocked.Exchange(ref _publisherRateLimiter, null);
 
         await DisposeModelAsync(model).ConfigureAwait(false);
         await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
+        // Dispose the rate limiter AFTER the channel is gone: any publish in flight
+        // has already errored out on the closed channel, so no caller is still
+        // waiting on a permit when the limiter dispose invalidates outstanding
+        // leases. Disposal is best-effort — a transient ObjectDisposedException
+        // from a torn-down concurrent caller is the documented limiter shutdown
+        // behaviour and must not propagate out of teardown.
+        if (rateLimiter is not null)
+        {
+            try
+            {
+                await rateLimiter.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException) { }
+        }
         _connected = false;
     }
 
