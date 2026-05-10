@@ -198,6 +198,61 @@ public class MessageBusWriteStreamTests
     }
 
     [Fact]
+    public async Task CloseAsync_FaultDuringDrain_DoesNotShipClosePacket()
+    {
+        // Race: WriteAsync passes _closeStarted, increments _packetNumber, awaits SendBytesAsync.
+        // CloseAsync starts concurrently — _faulted=0, falls through, enters the drain loop.
+        // SendBytesAsync then throws (set _faulted=1 → finally decrements _inFlightWrites).
+        // Drain exits cleanly, but _packetNumber now reflects a slot whose packet never shipped.
+        // Without re-checking _faulted after the drain, CloseAsync would emit a close packet
+        // declaring LastPacketNumber for the unreachable slot, leaving the reader unable to
+        // satisfy IsComplete.
+        var sendStarted = new TaskCompletionSource();
+        var faultSend = new TaskCompletionSource();
+
+        var producer = new Mock<IProducer>();
+        producer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(), It.IsAny<CancellationToken>()))
+            .Returns(async () =>
+            {
+                sendStarted.TrySetResult();
+                await faultSend.Task.ConfigureAwait(false);
+                throw new InvalidOperationException("transport down");
+            });
+
+        var stream = new MessageBusWriteStream(producer.Object, "dest", typeof(FakeStreamMsg));
+
+        var writeTask = stream.WriteAsync(new byte[] { 1, 2, 3 }).AsTask();
+
+        // Wait until the write has reserved its slot and is parked in SendBytesAsync.
+        await sendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // CloseAsync now enters the drain (since _inFlightWrites == 1).
+        var closeTask = stream.CloseAsync();
+
+        // Give CloseAsync a chance to advance into the drain loop before we trigger the fault.
+        // A short delay is sufficient — the drain spins on _inFlightWrites and yields via
+        // SpinOnce, so the close call observes _faulted=0 and reaches the drain quickly.
+        await Task.Delay(50);
+
+        // Fault the in-flight send. WriteAsync's catch sets _faulted=1; finally decrements
+        // _inFlightWrites to 0. The drain exits and CloseAsync re-checks the fault flag.
+        faultSend.SetResult();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => writeTask.WaitAsync(TimeSpan.FromSeconds(5)));
+        await closeTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Exactly one SendBytesAsync — the failed data packet. No close packet must ship,
+        // because its LastPacketNumber would point at the stranded slot.
+        producer.Verify(p => p.SendBytesAsync(
+                It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task WriteAsync_CancelledToken_ThrowsOperationCanceledException()
     {
         var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));

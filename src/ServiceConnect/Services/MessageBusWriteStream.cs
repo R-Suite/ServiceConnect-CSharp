@@ -215,6 +215,20 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
                 }
             }
 
+            // Re-check the fault flag after the drain. A WriteAsync that started before
+            // _closeStarted=1 reserves its packet number via Interlocked.Increment before
+            // the SendBytesAsync await; a failure during that await sets _faulted=1 and
+            // the outer finally decrements _inFlightWrites. The drain exits cleanly, but
+            // _packetNumber now reflects a slot whose packet was never sent. Shipping a
+            // close packet with that LastPacketNumber leaves the reader unable to ever
+            // satisfy IsComplete (the missing slot is unreachable). Treat post-drain fault
+            // the same as pre-drain fault: mark closed and return without sending.
+            if (Volatile.Read(ref _faulted) == 1)
+            {
+                Volatile.Write(ref _closedFlag, 1);
+                return;
+            }
+
             // _packetNumber was post-incremented on each WriteAsync, so after N data
             // packets (indices 0..N-1) its value is N. The close packet reuses that value
             // as its own index, and LastPacketNumber equals the count. The reader's
