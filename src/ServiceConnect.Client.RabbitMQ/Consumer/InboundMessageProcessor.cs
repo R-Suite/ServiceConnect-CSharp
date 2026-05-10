@@ -140,21 +140,50 @@ internal sealed class InboundMessageProcessor(
             }
             catch (Exception retryEx)
             {
+                // Retry-queue publish failed with a non-transport exception (typically
+                // PublishException on mandatory:true unroutable, or a topology drift). Try
+                // the error exchange as a fallback before giving up — the retry queue may
+                // be misconfigured/deleted but the error exchange is independent topology,
+                // so a recoverable destination is more useful than ack-and-drop. Only if
+                // the fallback ALSO fails do we surface the drop counter and ack to break
+                // the loop; that final ack-and-drop is the last-resort to prevent unbounded
+                // redelivery on a permanently-broken topology.
                 _logger.LogError(retryEx,
-                    "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
+                    "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; attempting error-exchange fallback before drop.",
                     args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
-                // Surface the drop on a dedicated counter so operators can alert on the
-                // ack-and-drop branch separately from logged errors. error.type goes through
-                // the allow-list mapper to keep cardinality bounded.
-                ServiceConnectMeter.AddRetryDrop(new TagList
+                try
                 {
-                    { "messaging.system", "rabbitmq" },
-                    { "messaging.destination.name", _queueConfiguration.QueueName },
-                    { "error.type", ExceptionTypeMapper.Map(retryEx) },
-                });
-                // Intentionally swallow: includes PublishException (mandatory:true, retry queue gone).
-                // Acking now prevents the broker from redelivering into the same failed path; letting
-                // this propagate would nack with requeue:true and hot-loop on a poison message.
+                    await _retryHandler.HandleTerminalFailureAsync(
+                        publishChannel,
+                        args,
+                        headers,
+                        retryEx,
+                        shutdownToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
+                {
+                    throw;
+                }
+                catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
+                {
+                    throw;
+                }
+                catch (Exception fallbackEx)
+                {
+                    _logger.LogError(fallbackEx,
+                        "Error-exchange fallback also failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
+                        args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
+                    ServiceConnectMeter.AddRetryDrop(new TagList
+                    {
+                        { "messaging.system", "rabbitmq" },
+                        { "messaging.destination.name", _queueConfiguration.QueueName },
+                        { "error.type", ExceptionTypeMapper.Map(fallbackEx) },
+                    });
+                }
             }
         }
         else if (result.NotHandled && _deadLetterUnhandledMessages && !_errorsDisabled)
@@ -164,8 +193,6 @@ internal sealed class InboundMessageProcessor(
                 return false;
             }
 
-            // Route via the terminal-failure path (error exchange) — a message with no
-            // handler is not a retryable condition, so bypass the retry queue.
             if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var typeNameRaw) || typeNameRaw is null)
             {
                 headers.TryGetValue(HeaderKeys.TypeName, out typeNameRaw);
@@ -184,21 +211,14 @@ internal sealed class InboundMessageProcessor(
             }
             catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
             {
-                // Shutdown grace window expired mid-publish — propagate so the outer finally
-                // leaves the message unacked for broker redelivery after reconnection.
                 throw;
             }
             catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
             {
-                // Transport-class failure — rethrow so the outer finally nacks-with-requeue
-                // and the broker redelivers after reconnect.
-                // See learn/operations/cancellation.
                 throw;
             }
             catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
             {
-                // Transport-class failure — rethrow so the outer finally nacks-with-requeue
-                // and the broker redelivers after reconnect.
                 throw;
             }
             catch (Exception terminalEx)
@@ -206,13 +226,15 @@ internal sealed class InboundMessageProcessor(
                 _logger.LogError(terminalEx,
                     "Terminal-failure publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
                     args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
-                // Intentionally swallow — same rationale as the HandleFailureAsync catch above.
-                // Includes PublishException (mandatory:true, error exchange gone); acking
-                // prevents unbounded redelivery of a message with no viable error destination.
             }
         }
-        else if (!_errorsDisabled)
+        else
         {
+            // Audit is orthogonal to _errorsDisabled — disabling the error/retry/DLQ topology
+            // must not also disable audit, which is gated separately by
+            // IQueueConfiguration.AuditingEnabled inside MessageAuditPublisher. The previous
+            // chain combined the two and silently acked successful messages whenever errors
+            // were disabled, losing observability without any operator signal.
             if (_shutdownTimedOut())
             {
                 return false;
