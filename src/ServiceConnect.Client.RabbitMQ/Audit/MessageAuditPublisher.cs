@@ -62,12 +62,30 @@ internal sealed class MessageAuditPublisher
         }
 
         var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
-        await channel.BasicPublishAsync(
-            _queueConfiguration.AuditQueueName,
-            string.Empty, // audit direct-exchange binds with empty routing key; AuditRoutingKey is ignored
-            mandatory: false,
-            props,
-            args.Body,
-            cancellationToken).ConfigureAwait(false);
+        // Audit is best-effort: the message has already been processed successfully, so a
+        // failure to publish the audit copy must not propagate back into the consumer pipeline
+        // (which would nack-with-requeue and re-run the handler against an idempotent surface).
+        // A broker quota or partition affecting only the audit queue would otherwise fail every
+        // successfully-handled delivery.
+        try
+        {
+            await channel.BasicPublishAsync(
+                _queueConfiguration.AuditQueueName,
+                string.Empty, // audit direct-exchange binds with empty routing key; AuditRoutingKey is ignored
+                mandatory: false,
+                props,
+                args.Body,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Audit publish failed for message {MessageType}; original delivery is acked normally.",
+                messageType ?? "<unknown>");
+        }
     }
 }
