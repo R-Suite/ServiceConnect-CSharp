@@ -391,8 +391,13 @@ public class ProcessManagerProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_HandlerThrows_InsertDataAsyncNotCalled()
+    public async Task ProcessAsync_HandlerThrows_PersistsPartialStateBeforeRethrow()
     {
+        // When the handler mutates `data` and then throws (e.g., a nested bus.Send
+        // failure), the mutation must persist so the redelivery path resumes from the
+        // mutated state rather than re-running the handler against the previously
+        // committed snapshot. The original exception still propagates after the
+        // best-effort persist.
         var (services, _, mockFinder) = CreateBaseServices();
         var handler = new PmThrowingHandler();
         services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
@@ -418,15 +423,58 @@ public class ProcessManagerProcessorTests
             processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage), msg,
                 new Dictionary<string, object>(), new Envelope()));
 
+        // For a new saga (FindData==null), the partial-state persist takes the Insert
+        // path so the redelivery sees a row instead of starting fresh.
         mockFinder.Verify(f => f.InsertDataAsync(
-            It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()), Times.Once);
         mockFinder.Verify(f => f.UpdateDataAsync(
             It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ProcessAsync_WhenHandlerMutatesAndThrows_DoesNotLeakMutationIntoInMemoryStore()
+    public async Task ProcessAsync_HandlerThrowsButPersistAlsoFails_RethrowsOriginalHandlerException()
     {
+        // The catch is best-effort: a persist failure in the throwing path must not mask
+        // the original handler exception. The persist failure is logged at Error.
+        var (services, _, mockFinder) = CreateBaseServices();
+        var handler = new PmThrowingHandler();
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmThrowingHandler)
+        });
+
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
+            It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IPersistenceData<PmTestData>?)null);
+        mockFinder.Setup(f => f.InsertDataAsync(It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new TimeoutException("transient store failure"));
+
+        var provider = services.BuildServiceProvider();
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage),
+                new PmTestMessage(Guid.NewGuid()) { Content = "boom" },
+                new Dictionary<string, object>(), new Envelope()));
+
+        // The handler's InvalidOperationException must propagate, not the TimeoutException
+        // from the failed best-effort persist.
+        Assert.Equal("handler failure", thrown.Message);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WhenHandlerMutatesAndThrows_PersistsMutationToInMemoryStore()
+    {
+        // Save-on-throw contract: mutations made by the handler before the throw are
+        // persisted (best-effort) so the redelivery path resumes from the mutated
+        // state. Without this, a handler that mutates `data.Counter++` then throws
+        // would have the mutation discarded; on redelivery the handler runs against
+        // the previously-committed Counter and the mutation is silently lost.
         var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var existing = new PmMutableData { CorrelationId = Guid.NewGuid(), Counter = 5 };
         await finder.InsertDataAsync(existing, CancellationToken.None);
@@ -455,7 +503,9 @@ public class ProcessManagerProcessorTests
         var reloaded = await finder.FindDataAsync<PmMutableData>(mapper, new PmMutableMessage(existing.CorrelationId), CancellationToken.None);
 
         Assert.NotNull(reloaded);
-        Assert.Equal(5, reloaded!.Data.Counter);
+        // Handler ran Counter++ before throwing; the mutation must be visible after
+        // the rethrow so redelivery resumes from the mutated state.
+        Assert.Equal(6, reloaded!.Data.Counter);
     }
 
     [Fact]

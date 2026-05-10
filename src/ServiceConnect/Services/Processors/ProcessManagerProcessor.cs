@@ -186,32 +186,68 @@ internal sealed class ProcessManagerProcessor(
             busConfig,
             trustQuery,
             cancellationToken);
+        bool handlerThrew = false;
         try
         {
-            using (_consumeContextAccessor.Push(context.Headers))
+            try
             {
-                await descriptor.InvokeHandleAsync(handler, message, data, context, cancellationToken).ConfigureAwait(false);
+                using (_consumeContextAccessor.Push(context.Headers))
+                {
+                    await descriptor.InvokeHandleAsync(handler, message, data, context, cancellationToken).ConfigureAwait(false);
+                }
             }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Cooperative shutdown: the dispatcher's cancellation token fired and the
-            // handler honoured it. Pre-fix this hit the generic catch and was logged at
-            // LogError ("Process-manager handler threw"), surfacing as a false alert on
-            // graceful shutdown. Rethrow without logging — the OCE propagates up to the
-            // dispatcher's cancellation-aware drain.
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Process-manager handler threw for {MessageType}; persistence skipped", messageType.Name);
-            throw;
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Cooperative shutdown: the dispatcher's cancellation token fired and the
+                // handler honoured it. Don't try to persist on cancel — the cancellation
+                // token would also abort the persist call, and the redelivery on resumption
+                // will re-run the handler from the previously-persisted state.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Process-manager handler threw for {MessageType}; persisting partial saga state before rethrow", messageType.Name);
+                handlerThrew = true;
+                try
+                {
+                    await PersistAsync(finder, descriptor, persistenceData, data, isNew, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Cancellation during the best-effort persist; suppress and let the
+                    // original handler exception propagate. Mutation may not be durable;
+                    // the redelivery path still recovers — it just re-runs from stale state.
+                }
+                catch (Exception persistEx)
+                {
+                    logger.LogError(persistEx,
+                        "Best-effort persist after handler failure also failed for {MessageType}; original exception will be rethrown",
+                        messageType.Name);
+                }
+                throw;
+            }
         }
         finally
         {
             context.Release();
         }
 
+        // Success path: handler returned cleanly. Persist normally; the catch above already
+        // handled the failure path so this only runs when handlerThrew is false.
+        if (!handlerThrew)
+        {
+            await PersistAsync(finder, descriptor, persistenceData, data, isNew, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task PersistAsync(
+        IProcessManagerFinder finder,
+        ProcessManagerDescriptor descriptor,
+        object? persistenceData,
+        object data,
+        bool isNew,
+        CancellationToken cancellationToken)
+    {
         if (isNew)
         {
             await finder.InsertDataAsync((IProcessManagerData)data, cancellationToken).ConfigureAwait(false);
