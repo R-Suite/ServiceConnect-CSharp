@@ -197,6 +197,45 @@ public sealed class BusSendToManyAsyncFanoutTests
     }
 
     // -------------------------------------------------------------------------
+    // Test 4b — prior failure followed by cancellation: the OCE is wrapped in an
+    //           AggregateException together with the prior endpoint failures so the
+    //           caller can inspect both. (Cancellation on the first iteration with
+    //           no prior failures still throws the raw OCE — see test 4.)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SendToManyAsync_PriorFailureThenCancellation_ThrowsAggregateContainingBoth()
+    {
+        using var cts = new CancellationTokenSource();
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        _mockSendPipeline
+            .Setup(x => x.ExecuteSendMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
+            .Callback<SendContext, CancellationToken>((ctx, _) =>
+            {
+                if (ctx.EndPoint == "q1")
+                {
+                    throw new InvalidOperationException("q1 delivery failed");
+                }
+                if (ctx.EndPoint == "q2")
+                {
+                    cts.Cancel();
+                    cts.Token.ThrowIfCancellationRequested();
+                }
+            })
+            .Returns(Task.CompletedTask);
+
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => _bus.SendToManyAsync(message, ["q1", "q2", "q3"], cancellationToken: cts.Token));
+
+        Assert.Equal(2, ex.InnerExceptions.Count);
+        // OCE is first so callers that walk InnerExceptions can detect cancellation.
+        Assert.IsAssignableFrom<OperationCanceledException>(ex.InnerExceptions[0]);
+        Assert.IsType<InvalidOperationException>(ex.InnerExceptions[1]);
+        Assert.Equal("q1 delivery failed", ex.InnerExceptions[1].Message);
+    }
+
+    // -------------------------------------------------------------------------
     // Test 5 — header-copy isolation: per-iteration shallow copy prevents
     //          one endpoint's middleware mutations from leaking into the next
     // -------------------------------------------------------------------------

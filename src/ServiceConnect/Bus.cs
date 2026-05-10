@@ -237,8 +237,20 @@ public sealed class Bus : IBus
             {
                 await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException oce)
             {
+                // Cancellation mid-fan-out must surface the OCE (callers expect to detect cancellation),
+                // but any failures already accumulated for prior endpoints would otherwise be silently
+                // dropped. Wrap them with the OCE so the caller sees both: AggregateException's
+                // InnerExceptions enumeration starts with the OCE for OCE-shape detection upstream.
+                if (endpointFailures is { Count: > 0 })
+                {
+                    var combined = new List<Exception>(endpointFailures.Count + 1) { oce };
+                    combined.AddRange(endpointFailures);
+                    throw new AggregateException(
+                        $"SendToManyAsync of message type '{typeof(T).FullName}' was cancelled after one or more endpoint failures.",
+                        combined);
+                }
                 throw;
             }
             catch (Exception ex)
