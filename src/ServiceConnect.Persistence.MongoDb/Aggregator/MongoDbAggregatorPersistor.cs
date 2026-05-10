@@ -43,6 +43,14 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     // so the ensure call has succeeded as far as the caller is concerned.
     private static readonly HashSet<int> BenignIndexCodes = [85, 86];
 
+    // Lease window for a GetSnapshot/RemoveSnapshot pair. A worker that crashes mid-flush
+    // holds the rows for at most this long before another worker may reclaim them; the
+    // next GetSnapshotAsync's filter accepts rows whose LockExpiresAt has elapsed. Five
+    // minutes is the same horizon MongoDbTimeoutStore uses for its row leases — long
+    // enough that a slow but live flush will not be interrupted, short enough that a
+    // crashed worker's rows are recoverable in the same operational window.
+    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
+
     static MongoDbAggregatorPersistor()
     {
         // Ensure the canonical Guid serializer is registered before any direct-ctor
@@ -157,7 +165,34 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         try
         {
             await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
-            var filter = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
+
+            // Atomically claim every unlocked or stale-lease row for this aggregator by
+            // setting LockedBy and LockExpiresAt to this call's session id and lease
+            // deadline. A clustered second worker running the same UpdateMany sees no
+            // matching rows and claims nothing — the read-back below then returns empty
+            // and that worker's flush is a no-op. The filter accepts pre-migration rows
+            // (LockedBy missing/null) and stale leases (LockExpiresAt <= utcNow) so a
+            // crashed worker's claims are reclaimable without a separate reaper.
+            var sessionId = Guid.NewGuid();
+            var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
+            var leaseDeadline = utcNow + LeaseDuration;
+            var claimFilter = Builders<AggregatorDocument>.Filter.And(
+                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                Builders<AggregatorDocument>.Filter.Or(
+                    Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, null),
+                    Builders<AggregatorDocument>.Filter.Lte(x => x.LockExpiresAt, utcNow)));
+            var claimUpdate = Builders<AggregatorDocument>.Update
+                .Set(x => x.LockedBy, sessionId)
+                .Set(x => x.LockExpiresAt, leaseDeadline);
+            await _collection.UpdateManyAsync(claimFilter, claimUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            // Read back exactly the rows this session just claimed. The LockExpiresAt > utcNow
+            // guard rejects rows whose lease expired between the claim and read in pathological
+            // clock-jump cases.
+            var filter = Builders<AggregatorDocument>.Filter.And(
+                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, sessionId),
+                Builders<AggregatorDocument>.Filter.Gt(x => x.LockExpiresAt, utcNow));
             // Sort by InsertedAtTicks (insertion-order), then InsertSequence (per-process
             // monotonic counter for same-tick ties), then Id as a final stable tie-break
             // for cross-process ties. Without an explicit sort MongoDB returns documents
@@ -209,7 +244,13 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 }
             }
 
-            return new AggregatorSnapshot(messages, ids, unresolved);
+            return new LeasedAggregatorSnapshot
+            {
+                ResolvedMessages = messages,
+                ResolvedIds = ids,
+                UnresolvedCount = unresolved,
+                LeaseSessionId = sessionId,
+            };
         }
         catch (BsonException ex)
         {
@@ -297,11 +338,20 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         try
         {
             await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
-            // Delete only the specific documents captured in the snapshot, keyed by (Name, Id).
-            // Concurrent inserts and unresolved-type records have different ids and are preserved.
-            var filter = Builders<AggregatorDocument>.Filter.And(
+            // Delete only the specific documents captured in the snapshot, keyed by
+            // (Name, Id, LockedBy=sessionId). The session-id constraint defends against
+            // a row whose lease has rotated to another worker between snapshot and
+            // delete: deleting it here would clobber the new owner's claim. Snapshots
+            // produced by GetSnapshotAsync always carry a session id; defensively
+            // accept snapshots without one (e.g. constructed manually by a third party)
+            // by falling back to the unconstrained delete.
+            FilterDefinition<AggregatorDocument> filter = Builders<AggregatorDocument>.Filter.And(
                 Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
                 Builders<AggregatorDocument>.Filter.In(x => x.Id, snapshot.ResolvedIds));
+            if (snapshot is LeasedAggregatorSnapshot leased)
+            {
+                filter &= Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, leased.LeaseSessionId);
+            }
             await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
         }
         catch (BsonException ex)
@@ -453,5 +503,30 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         // InsertedAtTicks's introduction in a prior phase. New inserts populate via
         // Interlocked.Increment(ref _insertSequence).
         public long InsertSequence { get; set; }
+
+        // Per-row lease columns. A non-null LockedBy + future LockExpiresAt indicates
+        // a worker is mid-flush on this row; concurrent flushers see those rows as
+        // unavailable and skip them. Pre-migration documents missing these fields
+        // deserialize to null and look unlocked, which is the right default for any
+        // row that was inserted before the lease feature shipped.
+        [BsonIgnoreIfNull]
+        public Guid? LockedBy { get; set; }
+        [BsonIgnoreIfNull]
+        public DateTime? LockExpiresAt { get; set; }
+    }
+
+    /// <summary>
+    /// Snapshot type returned by <see cref="GetSnapshotAsync"/> that carries the
+    /// per-call session id used to claim the rows. <see cref="RemoveSnapshotAsync"/>
+    /// reads this id back so the delete only matches rows still locked under the
+    /// same session — defending against the cross-process race where another worker
+    /// re-claims after this session's lease expires.
+    /// </summary>
+    private sealed class LeasedAggregatorSnapshot : IAggregatorSnapshot
+    {
+        public required IReadOnlyList<IHasCorrelationId> ResolvedMessages { get; init; }
+        public required IReadOnlyList<Guid> ResolvedIds { get; init; }
+        public required int UnresolvedCount { get; init; }
+        public required Guid LeaseSessionId { get; init; }
     }
 }
