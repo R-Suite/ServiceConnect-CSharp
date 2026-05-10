@@ -149,6 +149,16 @@ public sealed class ServiceConnectBuilder
             throw new InvalidOperationException(
                 $"BusConfiguration.ConsumerCount must be at least 1 (got {bus.ConsumerCount}).");
         }
+
+        // DisposeTimeout flows into Task.WaitAsync / SemaphoreSlim.WaitAsync which throw
+        // ArgumentOutOfRangeException for any negative value other than Timeout.InfiniteTimeSpan.
+        // Catch the misconfiguration at startup rather than at host teardown where the AOORE
+        // escapes ProcessManagerTimeoutService.DisposeAsync's narrower catch.
+        if (bus.DisposeTimeout != Timeout.InfiniteTimeSpan && bus.DisposeTimeout <= TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.DisposeTimeout must be positive or Timeout.InfiniteTimeSpan (got {bus.DisposeTimeout}).");
+        }
     }
 
     /// <summary>
