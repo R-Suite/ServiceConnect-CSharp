@@ -238,6 +238,39 @@ public sealed class Consumer : IConsumer
     }
 
     /// <summary>
+    /// Issues a graceful BasicCancel to every consumer host so the broker stops delivering,
+    /// then waits for in-flight handler invocations to drain. Does not tear down the
+    /// channel/connection — that happens on <see cref="DisposeAsync"/>. Idempotent.
+    /// </summary>
+    public async Task StopConsumingAsync(CancellationToken cancellationToken = default)
+    {
+        // Stop in parallel so aggregate latency is O(graceful-shutdown-timeout) rather than
+        // O(N * timeout). Per-host failures stay isolated via the inner try/catch so a
+        // single host's error cannot short-circuit the rest via Task.WhenAll's aggregate-
+        // exception path.
+        var stopTasks = _clients
+            .OfType<RabbitMqConsumerHost>()
+            .Select(async host =>
+            {
+                try
+                {
+                    await host.StopAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error stopping consumer host - continuing");
+                }
+            })
+            .ToArray();
+
+        await Task.WhenAll(stopTasks).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Stops active consumer hosts and releases RabbitMQ resources owned by this instance.
     /// </summary>
     public async ValueTask DisposeAsync()

@@ -68,6 +68,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // IsShuttingDown check before either calls BeginShutdown, then both run teardown.
     // CompareExchange ensures exactly one dispose proceeds; the other returns early.
     private int _disposeStarted;
+
+    // CAS gate for StopAsync. The graceful-stop flow (BasicCancel + drain) is idempotent
+    // at each step, but the wrapper guard keeps repeated calls cheap and avoids redundant
+    // log warnings on re-cancel attempts.
+    private int _stopStarted;
     private CancellationTokenSource _shutdownPublishCts = new();
     // Consumer-lifetime token: created at StartConsumingAsync, cancelled on DisposeAsync.
     // Delivery callbacks hand this to handlers so they observe *consumer* teardown rather
@@ -475,6 +480,74 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Issues a graceful stop without tearing down the channel: BasicCancel on the consumer
+    /// tag so the broker stops delivering, then drains in-flight handler invocations through
+    /// the admission gate. Idempotent — repeated calls return early. Safe to run before
+    /// <see cref="DisposeAsync"/>; DisposeAsync repeats the BeginShutdown / BasicCancel /
+    /// drain trio (idempotent ops) and then proceeds to close the channel and unsubscribe
+    /// handlers.
+    /// </summary>
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.CompareExchange(ref _stopStarted, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _admissionGate.BeginShutdown();
+
+        var deadline = _timeProvider.GetUtcNow().AddMilliseconds(_gracefulShutdownTimeoutMs);
+
+        // Unsubscribe the consumer-tag recovery handler BEFORE BasicCancelAsync so a
+        // concurrent recovery event cannot swap _consumerTag while BasicCancelAsync is
+        // using it. DisposeAsync re-runs this unsubscribe; it's null-safe and idempotent.
+        if (_subscribedUnderlyingConnection is not null)
+        {
+            _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
+        }
+
+        if (_model != null && _consumerTag != null)
+        {
+            try
+            {
+                if (!await WaitForShutdownOperationAsync(
+                        _model.BasicCancelAsync(_consumerTag, false, cancellationToken),
+                        deadline).ConfigureAwait(false))
+                {
+                    _logger.LogWarning("Timed out cancelling consumer during graceful stop");
+                }
+            }
+            catch (ObjectDisposedException) { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error cancelling consumer during graceful stop");
+            }
+        }
+
+        var drainRemaining = deadline - _timeProvider.GetUtcNow();
+        if (drainRemaining > TimeSpan.Zero)
+        {
+            using var drainCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            drainCts.CancelAfter(drainRemaining, _timeProvider);
+            try
+            {
+                await _admissionGate.DrainAsync(drainCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (drainCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                // Drain timeout — same path DisposeAsync takes; let DisposeAsync's own
+                // deadline-driven branch handle the publish-CTS cancellation, since stop
+                // alone shouldn't tear down outbound channels.
+                Volatile.Write(ref _shutdownTimedOut, 1);
+            }
+        }
+        else
+        {
+            Volatile.Write(ref _shutdownTimedOut, 1);
+        }
     }
 
     public async ValueTask DisposeAsync()

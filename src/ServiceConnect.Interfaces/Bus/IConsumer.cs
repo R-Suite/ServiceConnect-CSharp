@@ -21,4 +21,19 @@ public interface IConsumer : IAsyncDisposable
     /// Starts consuming messages from the specified queue for the given message types.
     /// </summary>
     Task StartConsumingAsync(string queueName, IReadOnlyList<string> messageTypes, ConsumerEventHandler eventHandler, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Issues a graceful stop: instructs the broker to stop delivering messages to
+    /// this consumer and drains any in-flight handler invocations. Does NOT tear
+    /// down the underlying channel/connection — that happens on
+    /// <see cref="IAsyncDisposable.DisposeAsync"/>. Idempotent.
+    /// </summary>
+    /// <remarks>
+    /// The default-interface-method is a no-op so existing third-party
+    /// <see cref="IConsumer"/> implementations remain source-compatible. Custom
+    /// transports that want graceful shutdown semantics should override this — without
+    /// an override, <c>Bus.StopConsumingAsync</c> only flips the consuming flag and
+    /// the broker keeps delivering until DI disposal.
+    /// </remarks>
+    Task StopConsumingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

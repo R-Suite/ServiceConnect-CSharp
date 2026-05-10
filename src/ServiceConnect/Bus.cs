@@ -643,11 +643,17 @@ public sealed class Bus : IBus
                 semaphoreAcquired = true;
             }
 
+            // Capture the consumer reference under the state lock and the "was actually
+            // consuming" flag, then issue a graceful broker stop OUTSIDE the lock. Holding
+            // _stateLock around an awaited broker call would block other lifecycle queries
+            // (IsConsuming, IsCancelledByBroker) for the full graceful-shutdown timeout.
+            IConsumer? consumerToStop = null;
             lock (_stateLock)
             {
                 _logger.LogInformation("Bus stopping message consumption.");
                 if (_consuming)
                 {
+                    consumerToStop = _consumer;
                     _consuming = false;
                     // Stop is terminal: the IConsumer singleton is owned by DI and is reused
                     // across the host's lifetime, but once the bus has signalled stop we do
@@ -655,6 +661,29 @@ public sealed class Bus : IBus
                     // attempted restarts throw a clear error instead of silently failing.
                     // A defensive stop on a bus that never started must leave it restartable.
                     _stopped = true;
+                }
+            }
+
+            // Issue the graceful broker stop. The transport BasicCancels each consumer
+            // host and drains in-flight handler invocations; without this, the broker
+            // keeps delivering messages until DI disposes the consumer (which can be
+            // arbitrarily later than BusHostedService.StopAsync returns) and the
+            // dispatch pipeline keeps running between BusHostedService.StopAsync and
+            // IConsumer.DisposeAsync. Third-party IConsumer impls inherit the no-op
+            // default-interface-method, in which case this is a documented no-op.
+            if (consumerToStop is not null)
+            {
+                try
+                {
+                    await consumerToStop.StopConsumingAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "IConsumer.StopConsumingAsync threw during Bus.StopConsumingAsync; broker delivery may continue until consumer dispose.");
                 }
             }
             // _consumer.DisposeAsync() is intentionally NOT called here. IConsumer is registered
