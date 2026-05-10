@@ -236,8 +236,18 @@ public sealed class ProcessManagerTimeoutService(
         if (_pollingTask != null)
         {
 #pragma warning disable VSTHRD003 // _pollingTask was started by StartAsync on this instance.
-            try { await _pollingTask.ConfigureAwait(false); }
+            // Bound the wait so a non-cooperative ITimeoutStore (sync-over-async wedge,
+            // hung network call, etc.) cannot wedge DI shutdown. On timeout the polling
+            // task is left to GC; any in-flight Send/Remove will complete or be torn
+            // down by the cancelled CTS captured above.
+            try { await _pollingTask.WaitAsync(config.DisposeTimeout).ConfigureAwait(false); }
             catch (OperationCanceledException) { }
+            catch (TimeoutException)
+            {
+                logger.LogWarning(
+                    "Polling task did not complete within {Timeout}; abandoning the await and continuing dispose.",
+                    config.DisposeTimeout);
+            }
 #pragma warning restore VSTHRD003
         }
         cts?.Dispose();
