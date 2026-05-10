@@ -223,51 +223,80 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
 
         if (state.Stream.IsComplete())
         {
-            // Race: two final-packet deliveries can both observe IsComplete() == true.
-            // Only the caller that wins TryRemove transitions the dict entry from
-            // "present" to "removed"; the loser sees a stale state and must idempotent-ack.
-            if (!_activeStreams.TryRemove(new KeyValuePair<string, ActiveStreamState>(sequenceId, state)))
-            {
-                return HandledTask;
-            }
-
-            Interlocked.Decrement(ref _streamCount);
-
-            if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))
-            {
-                _logger.LogWarning("Completed stream {SequenceId} missing FullTypeName header", sequenceId);
-                return HandledTask;
-            }
-
-            var fullTypeName = HeaderDecoder.Decode(ftnRaw);
-            if (!_typeRegistry.TryResolve(fullTypeName!, out var resolvedType))
-            {
-                _logger.LogWarning("Unregistered type '{TypeName}' for completed stream. Rejecting", fullTypeName);
-                return HandledTask;
-            }
-
-            if (!_streamHandlerRegistry.TryGet(resolvedType, out var descriptor))
-            {
-                _logger.LogWarning("No IStreamHandler registered for {MessageType}", resolvedType.FullName);
-                return HandledTask;
-            }
-
-            var handler = _scopeAccessor.Current.GetService(descriptor.HandlerInterfaceType);
-            if (handler == null)
-            {
-                _logger.LogWarning("No IStreamHandler registered for {MessageType}", resolvedType.FullName);
-                return HandledTask;
-            }
-
-            // The serializer's ReadOnlySequence overload reads across segments via
-            // Utf8JsonReader without flattening — keeps the streaming path zero-copy.
-            var assembledSequence = state.Stream.ReadSequence();
-            var originalMessage = _serializer.Deserialize(in assembledSequence, resolvedType);
-
-            return InvokeHandlerAsync(descriptor, handler, originalMessage!, state.Stream, sequenceId, cancellationToken);
+            return TryDispatchCompletedStream(state, sequenceId, headers, cancellationToken);
         }
 
         return HandledTask;
+    }
+
+    // Resolves headers/handler, claims dispatch via CAS, and invokes the handler. Split
+    // out of ProcessAsync to keep that method under the analyzer line-count threshold;
+    // the dispatch lifecycle (poison-evict, claim, throw-clear-flag, success-remove) is
+    // its own concern and is easier to reason about in isolation.
+    private Task<ProcessResult> TryDispatchCompletedStream(
+        ActiveStreamState state,
+        string sequenceId,
+        IDictionary<string, object> headers,
+        CancellationToken cancellationToken)
+    {
+        // Resolve headers and handler BEFORE claiming dispatch. Failures here are poison
+        // (no handler registered, type resolution failed) — evict and idempotent-ack so
+        // successive packets / redeliveries don't re-buffer the same broken stream.
+        if (!headers.TryGetValue(HeaderKeys.FullTypeName, out var ftnRaw))
+        {
+            _logger.LogWarning("Completed stream {SequenceId} missing FullTypeName header", sequenceId);
+            EvictActiveStream(sequenceId);
+            return HandledTask;
+        }
+
+        var fullTypeName = HeaderDecoder.Decode(ftnRaw);
+        if (!_typeRegistry.TryResolve(fullTypeName!, out var resolvedType))
+        {
+            _logger.LogWarning("Unregistered type '{TypeName}' for completed stream. Rejecting", fullTypeName);
+            EvictActiveStream(sequenceId);
+            return HandledTask;
+        }
+
+        if (!_streamHandlerRegistry.TryGet(resolvedType, out var descriptor))
+        {
+            _logger.LogWarning("No IStreamHandler registered for {MessageType}", resolvedType.FullName);
+            EvictActiveStream(sequenceId);
+            return HandledTask;
+        }
+
+        var handler = _scopeAccessor.Current.GetService(descriptor.HandlerInterfaceType);
+        if (handler == null)
+        {
+            _logger.LogWarning("No IStreamHandler registered for {MessageType}", resolvedType.FullName);
+            EvictActiveStream(sequenceId);
+            return HandledTask;
+        }
+
+        // Claim dispatch via CAS on DispatchInFlight. Two concurrent final-packet
+        // deliveries (e.g. broker redelivery via connection recovery while the original
+        // is still running) race here; the loser idempotent-acks. We refresh
+        // LastSeenUtc on the claim so the eviction sweep cannot reclaim the entry while
+        // a long-running handler holds it — the sweep also skips DispatchInFlight=true
+        // entries explicitly, this is belt-and-braces for the sweep's value snapshot.
+        if (state.DispatchInFlight)
+        {
+            return HandledTask;
+        }
+
+        var inFlight = state with { DispatchInFlight = true, LastSeenUtc = _timeProvider.GetUtcNow() };
+        if (!_activeStreams.TryUpdate(sequenceId, inFlight, state))
+        {
+            // Lost CAS: a concurrent touch or dispatch claim changed the entry. The
+            // winner is responsible for the dispatch; we idempotent-ack.
+            return HandledTask;
+        }
+
+        // The serializer's ReadOnlySequence overload reads across segments via
+        // Utf8JsonReader without flattening — keeps the streaming path zero-copy.
+        var assembledSequence = state.Stream.ReadSequence();
+        var originalMessage = _serializer.Deserialize(in assembledSequence, resolvedType);
+
+        return InvokeHandlerAsync(descriptor, handler, originalMessage!, state.Stream, sequenceId, cancellationToken);
     }
 
     private void EvictStaleStreams()
@@ -275,6 +304,14 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         var cutoff = _timeProvider.GetUtcNow() - StreamTimeout;
         foreach (var kvp in _activeStreams)
         {
+            // Skip entries whose handler is actively dispatching: those are not stale
+            // partial streams, they're complete streams with an in-flight handler, and the
+            // dispatch path is the only writer that should remove them (on success) or
+            // clear the flag (on throw, to allow redelivery).
+            if (kvp.Value.DispatchInFlight)
+            {
+                continue;
+            }
             if (kvp.Value.LastSeenUtc < cutoff)
             {
                 if (_activeStreams.TryRemove(kvp))
@@ -346,16 +383,60 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+            // Cancellation isn't a handler defect — clear the dispatch flag so a fresh
+            // dispatch can retry. The broker redelivers the final packet; we do not lose
+            // the assembled prior packets.
+            ClearDispatchFlag(sequenceId);
             throw;
         }
         catch (Exception ex)
         {
+            // Handler threw — the broker redelivers the final packet. Leave the entry in
+            // place so the redelivery re-invokes the handler against the already-assembled
+            // stream rather than starting over with only the final packet (which would be
+            // unrecoverable data loss). Clear the in-flight flag so the next dispatch can
+            // claim. The eviction sweep skips DispatchInFlight=true entries, and we
+            // refreshed LastSeenUtc at claim time, so the entry has another StreamTimeout
+            // window after this throw before the sweep can reclaim it.
             _logger.LogError(ex,
-                "Stream handler {HandlerType} threw an unhandled exception for stream {SequenceId}",
+                "Stream handler {HandlerType} threw for stream {SequenceId}; clearing dispatch flag for redelivery",
                 handler.GetType().FullName, sequenceId);
+            ClearDispatchFlag(sequenceId);
             throw;
         }
+
+        // Handler succeeded — remove the entry. Key-based TryRemove (not value-based)
+        // because a late packet that touched the entry during handler execution refreshed
+        // LastSeenUtc, producing a different ActiveStreamState record; a value-comparing
+        // remove would miss that and leak the entry / counter slot. Touch preserves
+        // DispatchInFlight=true (record-copy), so the eviction sweep already skipped this
+        // entry, and the only writer that removes is this success path — making key-based
+        // removal safe from double-decrement.
+        if (_activeStreams.TryRemove(sequenceId, out _))
+        {
+            Interlocked.Decrement(ref _streamCount);
+        }
         return ProcessResult.Handled;
+    }
+
+    // Best-effort clear of the DispatchInFlight flag after handler cancellation or throw.
+    // Loops to absorb concurrent touch updates that preserve DispatchInFlight via record-
+    // copy. A concurrent eviction (the sweep skips DispatchInFlight=true entries, but a
+    // disposal could clear the dictionary) means TryGetValue returns false and we no-op.
+    private void ClearDispatchFlag(string sequenceId)
+    {
+        while (_activeStreams.TryGetValue(sequenceId, out var current))
+        {
+            if (!current.DispatchInFlight)
+            {
+                return;
+            }
+            var cleared = current with { DispatchInFlight = false };
+            if (_activeStreams.TryUpdate(sequenceId, cleared, current))
+            {
+                return;
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -377,5 +458,11 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     // the eviction sweep's KVP-based TryRemove compares records by structural equality,
     // so a concurrent touch produces an unequal record and the sweep no-ops on the stale
     // value (in-place mutation would stay structurally equal and defeat the check).
-    private sealed record ActiveStreamState(MessageBusReadStream Stream, DateTimeOffset LastSeenUtc);
+    //
+    // DispatchInFlight: latched true under CAS by the dispatcher when a complete stream is
+    // about to invoke the handler; preserved across touch (record-copy) so a concurrent
+    // packet's touch does not race-clear it; cleared on handler throw / cancel so a
+    // redelivery can re-invoke against the already-assembled stream rather than losing
+    // the prior packets.
+    private sealed record ActiveStreamState(MessageBusReadStream Stream, DateTimeOffset LastSeenUtc, bool DispatchInFlight = false);
 }
