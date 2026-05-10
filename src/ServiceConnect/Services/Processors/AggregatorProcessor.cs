@@ -32,6 +32,24 @@ internal sealed class AggregatorProcessor(
     private int _flushId;
     private int _disposed;
 
+    private static string ExtractIdempotencyKey(IDictionary<string, object> headers)
+    {
+        if (headers.TryGetValue(HeaderKeys.MessageId, out var raw))
+        {
+            var decoded = HeaderDecoder.Decode(raw);
+            if (!string.IsNullOrEmpty(decoded))
+            {
+                return decoded;
+            }
+        }
+        // Producer didn't set a message id (legacy / third-party transport). Falling back
+        // to a fresh GUID disables idempotency for this delivery — the insert always
+        // proceeds — but keeps the contract honoured so downstream code paths don't
+        // branch on null. The retry-redelivery race the key defends against does not
+        // apply when the producer doesn't tag messages with a stable identifier.
+        return Guid.NewGuid().ToString();
+    }
+
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
         IDictionary<string, object> headers, Envelope envelope,
@@ -68,7 +86,15 @@ internal sealed class AggregatorProcessor(
             return ProcessResult.NotHandled;
         }
 
-        await persistor.InsertDataAsync(withCorrId, descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
+        // Use the broker MessageId as the idempotency key so a retry-queue redelivery
+        // between Insert and broker ack is suppressed at the persistor. The key is
+        // stable across all retry shapes (per-queue retry, broker connection-storm
+        // retry, handler-throw nack) because the broker republishes the same message
+        // with the same MessageId. Fall back to a fresh GUID if MessageId is missing
+        // (legacy producer or third-party transport): the insert proceeds without
+        // idempotency protection but does not block the dispatch.
+        var idempotencyKey = ExtractIdempotencyKey(headers);
+        await persistor.InsertDataAsync(withCorrId, descriptor.AggregatorName, idempotencyKey, cancellationToken).ConfigureAwait(false);
 
         // Use CountResolvedAsync so unresolved-only batches don't trigger empty flushes.
         // Pre-fix the gate consulted CountAsync (total rows) and an unresolved-only batch

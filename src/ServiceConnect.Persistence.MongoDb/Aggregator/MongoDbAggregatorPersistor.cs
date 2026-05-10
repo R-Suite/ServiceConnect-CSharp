@@ -118,9 +118,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     }
 
     /// <inheritdoc />
-    public async Task InsertDataAsync(IHasCorrelationId data, string name, CancellationToken cancellationToken = default)
+    public async Task InsertDataAsync(IHasCorrelationId data, string name, string idempotencyKey, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(data);
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
 
         try
         {
@@ -129,18 +130,37 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             var dataType = data.GetType();
             var dataBson = data.ToBsonDocument(dataType);
 
-            await _collection.InsertOneAsync(new AggregatorDocument
+            // Upsert keyed on (Name, IdempotencyKey) with SetOnInsert: a re-delivery of
+            // the same message lands in the update phase, finds the existing row, and
+            // applies no fields (SetOnInsert is no-op on an existing match). The unique
+            // partial index on (Name, IdempotencyKey) prevents two concurrent first-time
+            // inserts from a clustered consumer pair both creating rows; the loser's
+            // upsert raises DuplicateKey which we catch and treat as a successful no-op.
+            var filter = Builders<AggregatorDocument>.Filter.And(
+                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                Builders<AggregatorDocument>.Filter.Eq(x => x.IdempotencyKey, idempotencyKey));
+            var insertSequence = Interlocked.Increment(ref _insertSequence);
+            var update = Builders<AggregatorDocument>.Update
+                .SetOnInsert(x => x.Id, Guid.NewGuid())
+                .SetOnInsert(x => x.Name, name)
+                .SetOnInsert(x => x.IdempotencyKey, idempotencyKey)
+                .SetOnInsert(x => x.DataBson, dataBson)
+                .SetOnInsert(x => x.DataTypeName, dataType.FullName!)
+                .SetOnInsert(x => x.Version, 1)
+                .SetOnInsert(x => x.InsertedAtTicks, _timeProvider.GetUtcNow().UtcTicks)
+                .SetOnInsert(x => x.InsertSequence, insertSequence);
+            try
             {
-                Id = Guid.NewGuid(),
-                Name = name,
-                DataBson = dataBson,
-                // Store FullName rather than AssemblyQualifiedName so an assembly-version
-                // bump between store and read doesn't invalidate the lookup.
-                DataTypeName = dataType.FullName!,
-                Version = 1,
-                InsertedAtTicks = _timeProvider.GetUtcNow().UtcTicks,
-                InsertSequence = Interlocked.Increment(ref _insertSequence),
-            }, cancellationToken: cancellationToken).ConfigureAwait(false);
+                await _collection.UpdateOneAsync(filter, update,
+                    new UpdateOptions { IsUpsert = true },
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+            {
+                // Concurrent first-time insert by another worker for the same idempotency
+                // key. The other worker won the race; their row stands and ours is the
+                // intended duplicate-suppression. No-op.
+            }
         }
         catch (BsonException ex)
         {
@@ -466,8 +486,26 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                         .Ascending(x => x.Name)
                         .Ascending("DataBson.CorrelationId"));
 
+                // Unique partial index on (Name, IdempotencyKey). The partial filter
+                // excludes pre-migration rows whose IdempotencyKey is missing (legacy
+                // data continues to live alongside new inserts without violating the
+                // constraint). New inserts always populate the key, so the unique
+                // constraint catches concurrent first-time inserts from clustered
+                // workers — the loser raises DuplicateKey which InsertDataAsync
+                // catches and treats as a successful no-op.
+                var nameIdempotencyIndex = new CreateIndexModel<AggregatorDocument>(
+                    Builders<AggregatorDocument>.IndexKeys
+                        .Ascending(x => x.Name)
+                        .Ascending(x => x.IdempotencyKey),
+                    new CreateIndexOptions<AggregatorDocument>
+                    {
+                        Unique = true,
+                        PartialFilterExpression = Builders<AggregatorDocument>.Filter
+                            .Exists(x => x.IdempotencyKey, true),
+                    });
+
                 await _collection.Indexes.CreateManyAsync(
-                    [nameIndex, nameInsertOrderIndex, nameCorrelationIndex], cancellationToken).ConfigureAwait(false);
+                    [nameIndex, nameInsertOrderIndex, nameCorrelationIndex, nameIdempotencyIndex], cancellationToken).ConfigureAwait(false);
             }
             catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
             {
@@ -513,6 +551,16 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         public Guid? LockedBy { get; set; }
         [BsonIgnoreIfNull]
         public DateTime? LockExpiresAt { get; set; }
+
+        // Stable per-message identifier (typically the broker MessageId) used by
+        // InsertDataAsync's upsert to deduplicate a retry-queue redelivery while the
+        // row is still buffered. Pre-migration rows have no key and never match the
+        // upsert's compound filter, so legacy data is preserved without reprocessing.
+        // The unique partial index ensures only documents that have an IdempotencyKey
+        // participate in uniqueness; legacy null-keyed rows are excluded from the
+        // constraint.
+        [BsonIgnoreIfNull]
+        public string? IdempotencyKey { get; set; }
     }
 
     /// <summary>

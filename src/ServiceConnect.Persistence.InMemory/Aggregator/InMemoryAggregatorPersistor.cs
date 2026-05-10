@@ -32,22 +32,37 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
     private readonly object _memoryCacheLock = new();
 #endif
 
-    private sealed record Entry(Guid Id, IHasCorrelationId Data);
+    private sealed record Entry(Guid Id, IHasCorrelationId Data, string IdempotencyKey);
 
     /// <summary>
-    /// Adds an aggregator message to the named in-memory stream.
+    /// Adds an aggregator message to the named in-memory stream, idempotent on
+    /// <paramref name="idempotencyKey"/> while the message's row is still buffered.
     /// </summary>
-    public Task InsertDataAsync(IHasCorrelationId data, string name, CancellationToken cancellationToken = default)
+    public Task InsertDataAsync(IHasCorrelationId data, string name, string idempotencyKey, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(data);
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
         // Deep-clone before storing so later caller mutations do not bleed into the
         // buffer. Retrieval does the same on the outbound side.
         var stored = DeepClone.Clone(data);
         lock (_memoryCacheLock)
         {
             var list = GetOrCreateEntries(name);
-            list.Add(new Entry(Guid.NewGuid(), stored));
+            // Skip the insert if a buffered row already carries this idempotency key.
+            // The check is O(N) over the per-aggregator buffer; aggregators rarely
+            // exceed a few hundred rows in normal usage so a HashSet would not pay
+            // back its allocation. Once RemoveSnapshotAsync drains a row the key
+            // disappears with it; idempotency only protects the active window, which
+            // covers the retry-queue redelivery race InsertDataAsync exists to defend.
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (string.Equals(list[i].IdempotencyKey, idempotencyKey, StringComparison.Ordinal))
+                {
+                    return Task.CompletedTask;
+                }
+            }
+            list.Add(new Entry(Guid.NewGuid(), stored, idempotencyKey));
         }
         return Task.CompletedTask;
     }

@@ -6,12 +6,21 @@ namespace ServiceConnect.Interfaces;
 public interface IAggregatorPersistor
 {
     /// <summary>
-    /// Stores an aggregated message for the named aggregator instance.
+    /// Stores an aggregated message for the named aggregator instance, idempotent on
+    /// <paramref name="idempotencyKey"/> within the aggregator's active row set.
     /// </summary>
     /// <param name="data">The message payload to persist; must be an implementation of <see cref="IHasCorrelationId"/>.</param>
     /// <param name="name">The logical aggregator name.</param>
+    /// <param name="idempotencyKey">
+    /// A stable per-message identifier (typically the broker-side <c>MessageId</c>) used to
+    /// reject re-inserts of the same delivery. A retry-queue redelivery between Insert and
+    /// the dispatcher's broker ack will re-enter <c>InsertDataAsync</c> with the same key
+    /// while the prior insert's row is still buffered; the persistor must skip the second
+    /// write so the aggregator's <c>Execute</c> sees each delivery exactly once. Once the
+    /// row has been removed (snapshot dispatched), the key is no longer tracked.
+    /// </param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
-    Task InsertDataAsync(IHasCorrelationId data, string name, CancellationToken cancellationToken = default);
+    Task InsertDataAsync(IHasCorrelationId data, string name, string idempotencyKey, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Loads all persisted messages for the named aggregator.
