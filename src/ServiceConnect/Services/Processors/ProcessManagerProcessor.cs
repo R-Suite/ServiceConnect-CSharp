@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Services;
 
 namespace ServiceConnect.Services.Processors;
@@ -21,21 +22,35 @@ internal sealed class ProcessManagerProcessor(
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
 
-    // Per-correlation-id serialization. Two messages for the same saga that arrive
-    // concurrently both observe FindData==null and would otherwise both run the user's
-    // HandleAsync (with side effects: bus.Send, HTTP, etc.) and both call InsertDataAsync.
-    // The unique CorrelationId index ensures only one insert wins, but the loser's
-    // handler has already run its side effects against a saga state that is later
-    // overwritten on redelivery. Acquiring this semaphore around find→handle→persist
-    // turns the duplicate-creation race into a sequential second-find that observes
-    // the just-committed saga and takes the update path instead.
+    // Per-saga-key serialization. Two messages targeting the same saga that arrive
+    // concurrently must serialize through find→handle→persist or both observe
+    // FindData==null, both run the user's HandleAsync (with side effects: bus.Send,
+    // HTTP, etc.), and both call InsertDataAsync. The unique correlation index ensures
+    // only one insert wins, but the loser's handler has already run its side effects
+    // against a saga state that is later overwritten on redelivery.
+    //
+    // The lock key is the mapped property value the user's IProcessManagerPropertyMapper
+    // uses to find the saga (e.g. m => m.OrderId), NOT msg.CorrelationId — two messages
+    // can target the same saga with different message-CorrelationIds (the typical case
+    // when each outbound message has its own MessageId), so locking by msg.CorrelationId
+    // would not actually serialise the dispatch path. Composing the saga's data type into
+    // the key (alongside the mapped value) prevents distinct saga types that happen to
+    // use overlapping key spaces from blocking each other.
     //
     // Cleanup: each entry holds a refcount of in-flight callers under a monitor lock.
     // The last caller to release decrements to zero, marks the entry removed, and
     // detaches it from the dictionary. Concurrent acquirers re-check the Removed flag
-    // under the same lock and retry on a fresh entry, so an idle correlation id never
-    // leaks a stale SemaphoreSlim.
-    private readonly ConcurrentDictionary<Guid, CorrelationLock> _correlationLocks = new();
+    // under the same lock and retry on a fresh entry, so an idle key never leaks a
+    // stale SemaphoreSlim.
+    private readonly ConcurrentDictionary<SagaLockKey, CorrelationLock> _correlationLocks = new();
+
+    private readonly record struct SagaLockKey(Type DataType, object KeyValue)
+    {
+        public bool Equals(SagaLockKey other)
+            => DataType == other.DataType && Equals(KeyValue, other.KeyValue);
+        public override int GetHashCode()
+            => HashCode.Combine(DataType, KeyValue);
+    }
 
     private sealed class CorrelationLock
     {
@@ -92,7 +107,8 @@ internal sealed class ProcessManagerProcessor(
         // transport-level retry policy instead, which users can size against their tolerance
         // for side-effect replay.
         var msg = (Message)message;
-        var entry = AcquireCorrelationLock(msg.CorrelationId);
+        var lockKey = BuildLockKey(descriptor, mapper, msg, messageType);
+        var entry = AcquireCorrelationLock(lockKey);
         var semaphoreAcquired = false;
         try
         {
@@ -108,16 +124,60 @@ internal sealed class ProcessManagerProcessor(
             {
                 entry.Sem.Release();
             }
-            ReleaseCorrelationLock(msg.CorrelationId, entry);
+            ReleaseCorrelationLock(lockKey, entry);
         }
         return ProcessResult.Handled;
     }
 
-    private CorrelationLock AcquireCorrelationLock(Guid correlationId)
+    // Builds the saga-scope lock key from the user's mapper. Picks the mapping for the
+    // exact message type, falling back to the base Message wildcard if present (mirrors
+    // the persistor's match order). When no mapping resolves a usable value (mapping
+    // misconfigured, MessageProp throws, or the value is null), fall back to msg.CorrelationId
+    // — the find/persist path will surface the misconfiguration as its own typed exception
+    // shortly afterwards, and per-delivery serialisation against ANY stable key is better
+    // than no serialisation at all.
+    private static SagaLockKey BuildLockKey(
+        ProcessManagerDescriptor descriptor,
+        DefaultProcessManagerPropertyMapper mapper,
+        Message msg,
+        Type messageType)
+    {
+        ProcessManagerToMessageMap? mapping = null;
+        ProcessManagerToMessageMap? fallback = null;
+        foreach (var m in mapper.Mappings)
+        {
+            if (m.MessageType == messageType) { mapping = m; break; }
+            if (fallback == null && m.MessageType == typeof(Message))
+            {
+                fallback = m;
+            }
+        }
+        mapping ??= fallback;
+
+        if (mapping is not null)
+        {
+            try
+            {
+                var value = mapping.MessageProp.Invoke(msg);
+                if (value is not null)
+                {
+                    return new SagaLockKey(descriptor.DataType, value);
+                }
+            }
+            catch
+            {
+                // Fall through to CorrelationId fallback; FindData will rethrow with a typed wrapper.
+            }
+        }
+
+        return new SagaLockKey(descriptor.DataType, msg.CorrelationId);
+    }
+
+    private CorrelationLock AcquireCorrelationLock(SagaLockKey key)
     {
         while (true)
         {
-            var entry = _correlationLocks.GetOrAdd(correlationId, static _ => new CorrelationLock());
+            var entry = _correlationLocks.GetOrAdd(key, static _ => new CorrelationLock());
             lock (entry)
             {
                 if (!entry.Removed)
@@ -131,7 +191,7 @@ internal sealed class ProcessManagerProcessor(
         }
     }
 
-    private void ReleaseCorrelationLock(Guid correlationId, CorrelationLock entry)
+    private void ReleaseCorrelationLock(SagaLockKey key, CorrelationLock entry)
     {
         lock (entry)
         {
@@ -144,7 +204,7 @@ internal sealed class ProcessManagerProcessor(
                 // so a fresh entry installed by another thread (extremely unlikely under
                 // this lock, since GetOrAdd is atomic) is left untouched.
                 entry.Removed = true;
-                _correlationLocks.TryRemove(new KeyValuePair<Guid, CorrelationLock>(correlationId, entry));
+                _correlationLocks.TryRemove(new KeyValuePair<SagaLockKey, CorrelationLock>(key, entry));
             }
         }
     }
@@ -217,6 +277,39 @@ internal sealed class ProcessManagerProcessor(
                     // Cancellation during the best-effort persist; suppress and let the
                     // original handler exception propagate. Mutation may not be durable;
                     // the redelivery path still recovers — it just re-runs from stale state.
+                }
+                catch (ConcurrencyException)
+                {
+                    // The new-saga cross-process race lost: another writer inserted first.
+                    // The work is recoverable as Find→Update on the now-existing row, so try
+                    // once before giving up. If the second find still misses (extremely
+                    // unlikely — the winning insert is durable by the time we got the
+                    // ConcurrencyException), or the update also throws, fall through to the
+                    // generic catch below and let the original handler exception propagate.
+                    try
+                    {
+                        var freshFind = await descriptor.FindData(finder, mapper, message, cancellationToken).ConfigureAwait(false);
+                        if (freshFind is not null)
+                        {
+                            await descriptor.UpdateData(finder, freshFind, cancellationToken).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            logger.LogWarning(
+                                "Best-effort persist for {MessageType}: race winner's row not visible on re-find; partial saga state was not persisted",
+                                messageType.Name);
+                        }
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        // Cancellation cuts the recovery path; redelivery will re-run from stale state.
+                    }
+                    catch (Exception recoverEx)
+                    {
+                        logger.LogError(recoverEx,
+                            "Best-effort persist Find→Update recovery after concurrency loss also failed for {MessageType}; original exception will be rethrown",
+                            messageType.Name);
+                    }
                 }
                 catch (Exception persistEx)
                 {
