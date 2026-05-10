@@ -176,36 +176,15 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                 }
             }
 
-            // Validate the LastPacketNumber header BEFORE writing any bytes. A bad header
-            // (unparseable or above MaxPacketNumber) must reject the packet outright rather
-            // than commit its bytes to the active stream — bytes written here are not undone
-            // by the early return below, and an attacker repeatedly submitting packets with
-            // LastPacketNumber > MaxPacketNumber for the same sequence id would otherwise
-            // accumulate up to MessageBusReadStream's 100 MB cap before the eviction sweep
-            // reclaimed the entry.
-            long? validatedLastPacketNumber = null;
-            if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
+            // Validate the LastPacketNumber header BEFORE writing any bytes; an
+            // attacker-controlled header above the cap or unparseable must reject the
+            // packet without committing bytes. On rejection evict the active stream
+            // entry so the slot reclaims immediately rather than waiting for the
+            // 5-minute eviction sweep.
+            if (!TryReadLastPacketNumber(headers, sequenceId, out var validatedLastPacketNumber))
             {
-                var lpnString = HeaderDecoder.Decode(lpnRaw);
-                if (!long.TryParse(lpnString, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lastPacketNumber))
-                {
-                    _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
-                    if (_activeStreams.TryRemove(sequenceId, out _))
-                    {
-                        Interlocked.Decrement(ref _streamCount);
-                    }
-                    return HandledTask;
-                }
-                if (lastPacketNumber > MaxPacketNumber)
-                {
-                    _logger.LogWarning("Stream {SequenceId} LastPacketNumber {Value} exceeds maximum {Max}; discarding", sequenceId, lastPacketNumber, MaxPacketNumber);
-                    if (_activeStreams.TryRemove(sequenceId, out _))
-                    {
-                        Interlocked.Decrement(ref _streamCount);
-                    }
-                    return HandledTask;
-                }
-                validatedLastPacketNumber = lastPacketNumber;
+                EvictActiveStream(sequenceId);
+                return HandledTask;
             }
 
             // Write commits packet bytes only after we hold a touched entry. A late
@@ -304,6 +283,51 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                     _logger.LogWarning("Evicted incomplete stream {SequenceId} after timeout", kvp.Key);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Reads and validates the <c>LastPacketNumber</c> header. Returns <see langword="false"/>
+    /// when the header is present but unparseable or above <see cref="MaxPacketNumber"/>;
+    /// the caller treats false as a rejection signal and evicts the stream entry. Returns
+    /// <see langword="true"/> when the header is absent (<paramref name="value"/>=null) or
+    /// successfully parsed (<paramref name="value"/>=parsed value).
+    /// </summary>
+    private bool TryReadLastPacketNumber(IDictionary<string, object> headers, string sequenceId, out long? value)
+    {
+        value = null;
+        if (!headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
+        {
+            return true;
+        }
+
+        var lpnString = HeaderDecoder.Decode(lpnRaw);
+        if (!long.TryParse(lpnString, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lastPacketNumber))
+        {
+            _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
+            return false;
+        }
+
+        if (lastPacketNumber > MaxPacketNumber)
+        {
+            _logger.LogWarning("Stream {SequenceId} LastPacketNumber {Value} exceeds maximum {Max}; discarding", sequenceId, lastPacketNumber, MaxPacketNumber);
+            return false;
+        }
+
+        value = lastPacketNumber;
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the active-stream entry for <paramref name="sequenceId"/> and decrements the
+    /// admission counter so the slot is reclaimed for new streams immediately. Idempotent —
+    /// a no-op if the entry was already removed.
+    /// </summary>
+    private void EvictActiveStream(string sequenceId)
+    {
+        if (_activeStreams.TryRemove(sequenceId, out _))
+        {
+            Interlocked.Decrement(ref _streamCount);
         }
     }
 

@@ -101,10 +101,13 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
     {
         var (persistor, mockCollection, _) = CreateMockedPersistor();
 
+        // InsertDataAsync now upserts via UpdateOneAsync to enforce idempotency on the
+        // (Name, IdempotencyKey) compound; the mocked Bson failure surfaces from there.
         mockCollection
-            .Setup(c => c.InsertOneAsync(
-                It.IsAny<MongoDbAggregatorPersistor.AggregatorDocument>(),
-                It.IsAny<InsertOneOptions>(),
+            .Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<UpdateDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<UpdateOptions>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new BsonSerializationException("bson boom"));
 

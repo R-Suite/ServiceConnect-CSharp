@@ -46,19 +46,30 @@ public class MongoDbAggregatorPersistorSortSequenceTests
     [Fact]
     public async Task InsertData_AssignsMonotonicInsertSequence()
     {
-        // Capture every document passed to InsertOneAsync so we can verify the assigned
-        // InsertSequence values increase monotonically across consecutive inserts.
-        var captured = new List<MongoDbAggregatorPersistor.AggregatorDocument>();
+        // InsertDataAsync upserts via UpdateOneAsync with SetOnInsert(InsertSequence).
+        // Capture each rendered UpdateDefinition and extract the InsertSequence value
+        // from its $setOnInsert subdocument.
+        var captured = new List<UpdateDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>();
 
-        var (persistor, _, _) = CreateMockedPersistor(captureInsert: captured.Add);
+        var (persistor, _, _) = CreateMockedPersistor(captureUpsert: captured.Add);
 
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "first" }, "agg", Guid.NewGuid().ToString());
         await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "second" }, "agg", Guid.NewGuid().ToString());
 
         Assert.Equal(2, captured.Count);
-        Assert.True(
-            captured[1].InsertSequence > captured[0].InsertSequence,
-            $"Expected InsertSequence to be monotonically increasing; got {captured[0].InsertSequence} then {captured[1].InsertSequence}");
+        var seq0 = ExtractInsertSequence(captured[0]);
+        var seq1 = ExtractInsertSequence(captured[1]);
+        Assert.True(seq1 > seq0,
+            $"Expected InsertSequence to be monotonically increasing; got {seq0} then {seq1}");
+    }
+
+    private static long ExtractInsertSequence(UpdateDefinition<MongoDbAggregatorPersistor.AggregatorDocument> update)
+    {
+        var rendered = update.Render(
+            BsonSerializer.LookupSerializer<MongoDbAggregatorPersistor.AggregatorDocument>(),
+            BsonSerializer.SerializerRegistry);
+        var setOnInsert = rendered.AsBsonDocument["$setOnInsert"].AsBsonDocument;
+        return setOnInsert["InsertSequence"].ToInt64();
     }
 
     private static (MongoDbAggregatorPersistor persistor,
@@ -67,7 +78,7 @@ public class MongoDbAggregatorPersistorSortSequenceTests
         CreateMockedPersistor(
             Action<FindOptions<MongoDbAggregatorPersistor.AggregatorDocument,
                                MongoDbAggregatorPersistor.AggregatorDocument>>? captureOptions = null,
-            Action<MongoDbAggregatorPersistor.AggregatorDocument>? captureInsert = null)
+            Action<UpdateDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>? captureUpsert = null)
     {
         var mockDatabase = new Mock<IMongoDatabase>();
         var mockClient = new Mock<IMongoClient>();
@@ -98,15 +109,19 @@ public class MongoDbAggregatorPersistorSortSequenceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-        // InsertOneAsync capture
+        // UpdateOneAsync (upsert) capture for the InsertDataAsync code path.
         mockCollection
-            .Setup(c => c.InsertOneAsync(
-                It.IsAny<MongoDbAggregatorPersistor.AggregatorDocument>(),
-                It.IsAny<InsertOneOptions>(),
+            .Setup(c => c.UpdateOneAsync(
+                It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<UpdateDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<UpdateOptions>(),
                 It.IsAny<CancellationToken>()))
-            .Callback<MongoDbAggregatorPersistor.AggregatorDocument, InsertOneOptions, CancellationToken>(
-                (doc, _, _) => captureInsert?.Invoke(doc))
-            .Returns(Task.CompletedTask);
+            .Callback<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>,
+                      UpdateDefinition<MongoDbAggregatorPersistor.AggregatorDocument>,
+                      UpdateOptions,
+                      CancellationToken>(
+                (_, update, _, _) => captureUpsert?.Invoke(update))
+            .ReturnsAsync(new UpdateResult.Acknowledged(0, 1, null));
 
         // FindAsync: captures options (which embed the sort) and returns an empty cursor.
         var emptyDocs = new List<MongoDbAggregatorPersistor.AggregatorDocument>();

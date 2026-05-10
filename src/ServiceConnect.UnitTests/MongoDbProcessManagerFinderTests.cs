@@ -172,8 +172,25 @@ public class MongoDbProcessManagerFinderTests
             new MongoDB.Driver.Core.Servers.ServerId(
                 new MongoDB.Driver.Core.Clusters.ClusterId(),
                 new System.Net.DnsEndPoint("localhost", 27017)));
-        var writeError = new WriteError(ServerErrorCategory.DuplicateKey, 11000,
-            "E11000 duplicate key error: Data.CorrelationId_1", new MongoDB.Bson.BsonDocument());
+        // WriteError's constructor is internal in MongoDB.Driver 2.23.x; reflect into it
+        // so the test doesn't depend on driver-internal accessibility decisions. The
+        // production code under test only reads WriteError.Category, so the rest of the
+        // properties stay at their default-constructed values.
+        var writeErrorCtor = typeof(WriteError).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            .First(c =>
+            {
+                var ps = c.GetParameters();
+                return ps.Length >= 1 && ps[0].ParameterType == typeof(ServerErrorCategory);
+            });
+        var writeErrorArgs = writeErrorCtor.GetParameters().Select<System.Reflection.ParameterInfo, object?>(p => p.ParameterType switch
+        {
+            _ when p.ParameterType == typeof(ServerErrorCategory) => ServerErrorCategory.DuplicateKey,
+            _ when p.ParameterType == typeof(int) => 11000,
+            _ when p.ParameterType == typeof(string) => "E11000 duplicate key error: Data.CorrelationId_1",
+            _ when p.ParameterType == typeof(MongoDB.Bson.BsonDocument) => new MongoDB.Bson.BsonDocument(),
+            _ => p.HasDefaultValue ? p.DefaultValue : null
+        }).ToArray();
+        var writeError = (WriteError)writeErrorCtor.Invoke(writeErrorArgs);
         var dupEx = new MongoWriteException(connectionId, writeError, writeConcernError: null, innerException: null);
 
         collection.Setup(c => c.InsertOneAsync(

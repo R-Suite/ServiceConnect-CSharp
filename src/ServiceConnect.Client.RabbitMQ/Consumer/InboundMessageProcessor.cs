@@ -252,18 +252,11 @@ internal sealed class InboundMessageProcessor(
                 "Audit publish cancelled by shutdown for delivery {DeliveryTag}; continuing to ack the original message",
                 args.DeliveryTag);
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish audit message for delivery {DeliveryTag}; continuing to ack the original message", args.DeliveryTag);
-            // Audit queue is a single global destination per the spec — emitting
-            // messaging.destination.name here would imply per-queue audit topology
-            // that doesn't exist. Tag only system + error.type.
-            ServiceConnectMeter.AddAuditDrop(new TagList
-            {
-                { "messaging.system", "rabbitmq" },
-                { "error.type", ExceptionTypeMapper.Map(ex) },
-            });
-        }
+        // Non-cancellation failures are now swallowed inside MessageAuditPublisher itself,
+        // which logs at Warning and increments the messaging.serviceconnect.audit.drops
+        // counter. The defensive catch that previously lived here would now be dead code;
+        // a future regression that lets an exception escape the publisher should propagate
+        // and surface as a loud nack rather than be silently swallowed twice.
     }
 
     // Avoid StringBuilder allocation inside DateTime.ToString("O").

@@ -530,8 +530,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         var drainRemaining = deadline - _timeProvider.GetUtcNow();
         if (drainRemaining > TimeSpan.Zero)
         {
-            using var drainCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            drainCts.CancelAfter(drainRemaining, _timeProvider);
+            // Construct the deadline CTS with the host's TimeProvider (matches the existing
+            // DisposeAsync drain pattern) and link the caller's cancellation token via
+            // Register so either source cancels the drain.
+            using var drainCts = new CancellationTokenSource(drainRemaining, _timeProvider);
+            using var linkReg = cancellationToken.Register(static cts => ((CancellationTokenSource)cts!).Cancel(), drainCts);
             try
             {
                 await _admissionGate.DrainAsync(drainCts.Token).ConfigureAwait(false);

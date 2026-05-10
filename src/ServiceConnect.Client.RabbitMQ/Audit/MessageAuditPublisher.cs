@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using ServiceConnect.Diagnostics;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 
@@ -91,6 +93,15 @@ internal sealed class MessageAuditPublisher
             _logger.LogWarning(ex,
                 "Audit publish failed for message {MessageType}; original delivery is acked normally.",
                 messageType ?? "<unknown>");
+            // Audit drops are observable through the messaging.serviceconnect.audit.drops
+            // counter so operators can alert on broker-side audit failures without parsing
+            // logs. The audit queue is a single global destination per the spec — no
+            // messaging.destination.name tag.
+            ServiceConnectMeter.AddAuditDrop(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "error.type", ExceptionTypeMapper.Map(ex) },
+            });
         }
     }
 }

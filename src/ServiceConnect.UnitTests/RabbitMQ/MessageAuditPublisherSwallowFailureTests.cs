@@ -42,20 +42,30 @@ public class MessageAuditPublisherSwallowFailureTests
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("broker quota exceeded"));
 
-        var loggerMock = new Mock<ILogger<MessageAuditPublisher>>();
-        var publisher = new MessageAuditPublisher(MakeQueueCfg().Object, loggerMock.Object);
+        // MessageAuditPublisher is internal, so Castle DynamicProxy can't proxy
+        // ILogger<MessageAuditPublisher> from the test assembly. Use a hand-rolled
+        // capturing logger instead of Mock<ILogger<>> to keep the test self-contained.
+        var capturingLogger = new CapturingLogger<MessageAuditPublisher>();
+        var publisher = new MessageAuditPublisher(MakeQueueCfg().Object, capturingLogger);
         var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "SomeMessage" };
 
         // Must not throw — audit failure is swallowed.
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
 
-        loggerMock.Verify(l => l.Log(
-            LogLevel.Warning,
-            It.IsAny<EventId>(),
-            It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("Audit publish failed")),
-            It.IsAny<Exception?>(),
-            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+        Assert.Contains(capturingLogger.Entries, e =>
+            e.Level == LogLevel.Warning && e.Message.Contains("Audit publish failed", StringComparison.Ordinal));
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, formatter(state, exception), exception));
+        }
     }
 
     [Fact]

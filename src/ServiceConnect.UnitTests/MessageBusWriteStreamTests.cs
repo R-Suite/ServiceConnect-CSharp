@@ -224,7 +224,7 @@ public class MessageBusWriteStreamTests
 
         var stream = new MessageBusWriteStream(producer.Object, "dest", typeof(FakeStreamMsg));
 
-        var writeTask = stream.WriteAsync(new byte[] { 1, 2, 3 }).AsTask();
+        var writeTask = stream.WriteAsync(new byte[] { 1, 2, 3 });
 
         // Wait until the write has reserved its slot and is parked in SendBytesAsync.
         await sendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
