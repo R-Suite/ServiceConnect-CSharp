@@ -82,7 +82,9 @@ public class InMemoryProcessManagerFinderTests
         await processManagerFinder.InsertDataAsync(data, CancellationToken.None);
 
         // Act / Assert
-        await Assert.ThrowsAsync<PersistenceException>(() => processManagerFinder.InsertDataAsync(dataWithDuplicateId, CancellationToken.None));
+        // ConcurrencyException matches the Mongo finder's contract for duplicate-key insert
+        // so callers can compensate uniformly across persistors.
+        await Assert.ThrowsAsync<ConcurrencyException>(() => processManagerFinder.InsertDataAsync(dataWithDuplicateId, CancellationToken.None));
     }
 
     [Fact]

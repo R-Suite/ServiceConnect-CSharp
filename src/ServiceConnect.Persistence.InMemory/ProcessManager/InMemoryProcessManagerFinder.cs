@@ -198,7 +198,12 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             string key = data.CorrelationId.ToString();
             if (_state.SagaProvider.Contains(key))
             {
-                throw new PersistenceException($"ProcessManagerData with CorrelationId {key} already exists in the cache.");
+                // Concurrent first-message delivery for the same CorrelationId. Surface as
+                // ConcurrencyException to match MongoDbProcessManagerFinder so callers (and
+                // ProcessManagerProcessor's retry loop, which only retries on
+                // ConcurrencyException) see a consistent contract across persistors.
+                throw new ConcurrencyException(
+                    $"Concurrent insert detected for CorrelationId '{data.CorrelationId}'; another writer committed first.");
             }
 
             // Saga state has no TTL: lifetime is managed explicitly via Delete.

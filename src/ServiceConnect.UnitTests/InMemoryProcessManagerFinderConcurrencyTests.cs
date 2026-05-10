@@ -54,10 +54,11 @@ public class InMemoryProcessManagerFinderConcurrencyTests
     }
 
     [Fact]
-    public async Task ParallelInsert_SameCorrelationId_OneSucceedsRestThrowPersistence()
+    public async Task ParallelInsert_SameCorrelationId_OneSucceedsRestThrowConcurrency()
     {
-        // The InMemory finder rejects duplicate ids with PersistenceException; under a
-        // race only one inserter may win.
+        // The InMemory finder rejects duplicate ids with ConcurrencyException — matching
+        // the Mongo finder so callers (and ProcessManagerProcessor's retry loop, which
+        // only retries on ConcurrencyException) see a consistent contract across persistors.
         var finder = new InMemoryProcessManagerFinder(new ProcessManagerPredicateCache(), new InMemoryPersistenceState(TimeProvider.System));
         var corrId = Guid.NewGuid();
         const int contenders = 16;
@@ -74,7 +75,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
                     CancellationToken.None);
                 Interlocked.Increment(ref successes);
             }
-            catch (PersistenceException)
+            catch (ConcurrencyException)
             {
                 Interlocked.Increment(ref conflicts);
             }
