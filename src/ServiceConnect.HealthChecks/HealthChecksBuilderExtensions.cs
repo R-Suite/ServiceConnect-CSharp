@@ -52,6 +52,20 @@ public static class HealthChecksBuilderExtensions
     /// The factory runs on every probe; the underlying <see cref="IBus"/> singleton
     /// is cached by the supplied <see cref="IServiceProvider"/>.
     /// </summary>
+    /// <remarks>
+    /// The check also opportunistically resolves <see cref="IConsumer"/> from the
+    /// supplied <see cref="IServiceProvider"/> so the broker-cancelled short-circuit
+    /// works for third-party <see cref="IBus"/> implementations that don't surface
+    /// <see cref="IBus.IsCancelledByBroker"/> via the default-interface-method
+    /// (the DIM returns <see langword="false"/> by default; a custom <see cref="IBus"/>
+    /// that doesn't override it would otherwise sit in the recovery grace window
+    /// indefinitely after a permanent broker-cancellation). When no
+    /// <see cref="IConsumer"/> is registered the consumer is null and the check
+    /// falls back to the bus DIM only — first-party Bus implementations do override
+    /// the DIM correctly, so the only path with no broker-cancel signal is a
+    /// third-party host that registers neither <see cref="IConsumer"/> nor an
+    /// override of <see cref="IBus.IsCancelledByBroker"/>.
+    /// </remarks>
     public static IHealthChecksBuilder AddServiceConnectBus(
         this IHealthChecksBuilder builder,
         string name,
@@ -70,7 +84,11 @@ public static class HealthChecksBuilderExtensions
         // (b) preserves the recovery-grace state (instance-scoped _lastHealthyTicks is
         // stable across probes against the same SP).
         var cache = new PerProviderCache<BusConsumingHealthCheck>(
-            sp => new BusConsumingHealthCheck(busFactory(sp)));
+            sp => new BusConsumingHealthCheck(
+                busFactory(sp),
+                sp.GetService<IConsumer>(),
+                recoveryGraceWindow: TimeSpan.FromSeconds(30),
+                timeProvider: TimeProvider.System));
         return builder.Add(new HealthCheckRegistration(
             name,
             cache.Resolve,
