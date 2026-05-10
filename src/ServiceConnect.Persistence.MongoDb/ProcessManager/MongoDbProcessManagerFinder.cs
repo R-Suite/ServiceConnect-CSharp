@@ -210,6 +210,17 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
         {
             await insertDelegate(this, data, collectionName, cancellationToken).ConfigureAwait(false);
         }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            // Concurrent first-message delivery for the same CorrelationId. The unique index
+            // on CorrelationId signals the loser; surface as ConcurrencyException so the
+            // caller can re-find the just-committed row and take the update path. The base
+            // MongoException catch would otherwise collapse this into a permanent
+            // PersistenceException that ProcessManagerProcessor's retry loop can't recover
+            // from (it only retries on ConcurrencyException).
+            throw new ConcurrencyException(
+                $"Concurrent insert detected for CorrelationId '{data.CorrelationId}'; another writer committed first.", ex);
+        }
         catch (MongoException ex)
         {
             throw new PersistenceException(

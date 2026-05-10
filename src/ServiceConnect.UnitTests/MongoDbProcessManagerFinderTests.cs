@@ -120,8 +120,10 @@ public class MongoDbProcessManagerFinderTests
     }
 
     [Fact]
-    public async Task InsertDataAsync_ThrowsPersistenceException_WhenDuplicateCorrelationIdExists()
+    public async Task InsertDataAsync_ThrowsPersistenceException_WhenGenericMongoErrorOccurs()
     {
+        // Generic MongoException (network failure, command error other than DuplicateKey, etc.)
+        // surfaces as PersistenceException — the caller cannot recover via re-find.
         var finder = CreateFinder(out var database, out _);
         var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
         var data = new TestProcessManagerData();
@@ -140,9 +142,49 @@ public class MongoDbProcessManagerFinderTests
                 It.IsAny<MongoDbData<TestProcessManagerData>>(),
                 It.IsAny<InsertOneOptions>(),
                 It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new TestMongoException("duplicate"));
+            .ThrowsAsync(new TestMongoException("network failure"));
 
         await Assert.ThrowsAsync<PersistenceException>(() => finder.InsertDataAsync(data, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertDataAsync_ThrowsConcurrencyException_WhenMongoWriteExceptionHasDuplicateKey()
+    {
+        // The unique CorrelationId index signals a concurrent first-message race for the
+        // same saga: the loser's InsertOne raises MongoWriteException with
+        // ServerErrorCategory.DuplicateKey. ProcessManagerProcessor's retry loop only
+        // recovers from ConcurrencyException, so this code path must be rethrown as one.
+        var finder = CreateFinder(out var database, out _);
+        var collection = new Mock<IMongoCollection<MongoDbData<TestProcessManagerData>>>();
+        var data = new TestProcessManagerData();
+
+        var indexedCollections = (System.Collections.Concurrent.ConcurrentDictionary<string, bool>)typeof(MongoDbProcessManagerFinder)
+            .GetField("_indexedCollections", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(finder)!;
+        indexedCollections.TryAdd(MongoDbProcessManagerFinder.SanitizeCollectionName(typeof(TestProcessManagerData).FullName!), true);
+
+        database.Setup(db => db.GetCollection<MongoDbData<TestProcessManagerData>>(
+                MongoDbProcessManagerFinder.SanitizeCollectionName(typeof(TestProcessManagerData).FullName!),
+                It.IsAny<MongoCollectionSettings>()))
+            .Returns(collection.Object);
+
+        var connectionId = new MongoDB.Driver.Core.Connections.ConnectionId(
+            new MongoDB.Driver.Core.Servers.ServerId(
+                new MongoDB.Driver.Core.Clusters.ClusterId(),
+                new System.Net.DnsEndPoint("localhost", 27017)));
+        var writeError = new WriteError(ServerErrorCategory.DuplicateKey, 11000,
+            "E11000 duplicate key error: Data.CorrelationId_1", new MongoDB.Bson.BsonDocument());
+        var dupEx = new MongoWriteException(connectionId, writeError, writeConcernError: null, innerException: null);
+
+        collection.Setup(c => c.InsertOneAsync(
+                It.IsAny<MongoDbData<TestProcessManagerData>>(),
+                It.IsAny<InsertOneOptions>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(dupEx);
+
+        var thrown = await Assert.ThrowsAsync<ConcurrencyException>(
+            () => finder.InsertDataAsync(data, CancellationToken.None));
+        Assert.Same(dupEx, thrown.InnerException);
     }
 
     [Fact]
