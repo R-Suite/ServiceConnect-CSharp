@@ -87,6 +87,12 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
             _cache[key!] = new CacheItem(value!, priority, null);
             _slidingTime.TryRemove(key!, out _);
             DisposeTimer(key!);
+            // Bump the generation so any in-flight TryPurgeItem callback from a prior
+            // timed-Add cycle observes a mismatch and skips eviction. Without the bump,
+            // a callback past its generation check sees _slidingTime empty (cleared just
+            // above), falls through to Remove(key), and silently evicts the freshly-
+            // installed value.
+            _generations.AddOrUpdate(key!, 1L, (_, prior) => prior + 1L);
         }
     }
 
@@ -125,12 +131,25 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
             return;
         }
 
-        var removed = _cache.TryRemove(key!, out _);
-        _slidingTime.TryRemove(key!, out _);
-        DisposeTimer(key!);
+        bool removed;
+        // _addLock is held so a concurrent Add (timed or no-expiry) cannot interleave
+        // its mutations between this Remove's TryRemove on _cache and its cleanup of
+        // _slidingTime / _timers. Without the lock, an Add running end-to-end while
+        // Remove sat between operations would have its sliding entry and timer stripped
+        // by Remove, leaving _cache holding the new value with no expiry tracking.
+        lock (_addLock)
+        {
+            removed = _cache.TryRemove(key!, out _);
+            _slidingTime.TryRemove(key!, out _);
+            DisposeTimer(key!);
+            // Bump the generation so any in-flight TryPurgeItem callback for the
+            // departing entry's prior generation sees a mismatch and bails before
+            // calling Remove recursively.
+            _generations.AddOrUpdate(key!, 1L, (_, prior) => prior + 1L);
+        }
 
-        // Fire KeyRemoved only when the key was actually present so subscribers
-        // never observe removal events for keys that were never in the cache.
+        // Fire KeyRemoved outside the lock — subscribers may take their own locks or
+        // perform I/O and we don't want to widen _addLock's contention surface.
         if (removed)
         {
             KeyRemoved?.Invoke(this, new KeyRemovedEventArgs(key!));
@@ -214,15 +233,26 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
                 continue;
             }
 
+            bool removedThis;
             // KVP-overload TryRemove succeeds only when the value reference still
             // matches the one observed during the scan. A concurrent re-Add that
             // upgraded the priority replaces the dictionary slot with a fresh
             // CacheItem reference, so this remove correctly fails and leaves the
-            // upgraded entry in place.
-            if (_cache.TryRemove(cacheItem))
+            // upgraded entry in place. The lock then ensures a concurrent Add for
+            // a different key cannot interleave its timer install with our cleanup.
+            lock (_addLock)
             {
-                _slidingTime.TryRemove(cacheItem.Key, out _);
-                DisposeTimer(cacheItem.Key);
+                removedThis = _cache.TryRemove(cacheItem);
+                if (removedThis)
+                {
+                    _slidingTime.TryRemove(cacheItem.Key, out _);
+                    DisposeTimer(cacheItem.Key);
+                    _generations.AddOrUpdate(cacheItem.Key, 1L, (_, prior) => prior + 1L);
+                }
+            }
+
+            if (removedThis)
+            {
                 removed++;
                 KeyRemoved?.Invoke(this, new KeyRemovedEventArgs(cacheItem.Key));
             }

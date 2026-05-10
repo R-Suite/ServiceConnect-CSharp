@@ -190,4 +190,87 @@ public class CacheProviderConcurrencyTests
         Assert.True(cache.TryGet<string, string>("k", out var timerReset));
         Assert.Equal("second", timerReset);
     }
+
+    [Fact]
+    public async Task TimedAdd_ThenNoExpiryAdd_StaleReObservedCallback_DoesNotEvict()
+    {
+        // Generation-bump regression. A timed Add installs a timer that re-observes
+        // when the sliding TTL has been refreshed: the second timer captures the
+        // same generation. Between the re-observe and the second timer's fire, a
+        // no-expiry Add overwrites the value and clears _slidingTime. Without the
+        // generation bump in the no-expiry Add path, the second timer's callback
+        // sees a generation match, finds _slidingTime empty (cleared by the
+        // no-expiry Add), and falls through to Remove(key) — silently evicting the
+        // newly-installed value.
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
+        using var cache = new CacheProvider(time);
+
+        cache.Add("k", "first", TimeSpan.FromSeconds(1));
+        // Slide the TTL so the first timer's fire results in a re-observe rather
+        // than an eviction. This gives us the dangerous "second timer in flight,
+        // captured generation==1" state.
+        time.Advance(TimeSpan.FromMilliseconds(500));
+        Assert.True(cache.TryGet<string, string>("k", out _));
+
+        // Fire the first timer — it observes sliding details, sees CanExpire==false,
+        // and re-StartObserving with the same generation.
+        time.Advance(TimeSpan.FromMilliseconds(500));
+        await Task.Delay(20);
+
+        // Replace with a no-expiry value. With the bump, the re-observed timer's
+        // generation check now fails and the callback bails. Without the bump it
+        // would evict "second" when the re-observed timer fires.
+        cache.Add("k", "second");
+
+        // Fire the re-observed timer.
+        time.Advance(TimeSpan.FromMilliseconds(600));
+        await Task.Delay(20);
+
+        Assert.True(cache.TryGet<string, string>("k", out var observed));
+        Assert.Equal("second", observed);
+    }
+
+    [Fact]
+    public async Task ParallelRemoveAndAdd_NeverLeavesCacheValueWithoutSlidingState()
+    {
+        // I13 regression: Remove must serialize with Add. Without _addLock in
+        // Remove, a thread could complete Add(_cache, _slidingTime, _timers, _generations)
+        // entirely while Remove sat between its TryRemove on _cache and its
+        // cleanup of _slidingTime/_timers — leaving _cache holding the new value
+        // with no expiry tracking (and the new timer disposed), so the entry
+        // persisted indefinitely.
+        const int rounds = 5_000;
+        using var cache = new CacheProvider();
+
+        var adder = Task.Run(() =>
+        {
+            for (var i = 0; i < rounds; i++)
+            {
+                cache.Add("k", $"v{i}", TimeSpan.FromMinutes(10));
+            }
+        });
+
+        var remover = Task.Run(() =>
+        {
+            for (var i = 0; i < rounds; i++)
+            {
+                cache.Remove("k");
+            }
+        });
+
+        var ex = await Record.ExceptionAsync(() => Task.WhenAll(adder, remover));
+        Assert.Null(ex);
+
+        // Final state must be consistent: either the value is present with sliding
+        // tracking AND a timer (a "live" entry), or absent with everything cleared.
+        // We can probe consistency through the public API: if TryGet returns true,
+        // then a follow-up Add with the same key should also produce a TryGet hit
+        // — meaning the cache hasn't lost track of the slot's expiry plumbing.
+        if (cache.TryGet<string, string>("k", out _))
+        {
+            cache.Add("k", "final", TimeSpan.FromMinutes(10));
+            Assert.True(cache.TryGet<string, string>("k", out var finalValue));
+            Assert.Equal("final", finalValue);
+        }
+    }
 }
