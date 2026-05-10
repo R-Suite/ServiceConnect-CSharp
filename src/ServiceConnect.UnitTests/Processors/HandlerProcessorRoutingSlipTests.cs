@@ -71,7 +71,8 @@ public class HandlerProcessorRoutingSlipTests
             RoutingSlipBusConfig,
             MinimalQueueConfig,
             new ConsumeContextPool(),
-            new ConsumeContextAccessor());
+            new ConsumeContextAccessor(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
 
         var msg = new SlipTestMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>
@@ -114,7 +115,8 @@ public class HandlerProcessorRoutingSlipTests
             RoutingSlipBusConfig,
             MinimalQueueConfig,
             new ConsumeContextPool(),
-            new ConsumeContextAccessor());
+            new ConsumeContextAccessor(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
 
         var msg = new SlipTestMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>
@@ -147,7 +149,7 @@ public class HandlerProcessorRoutingSlipTests
     [InlineData("has\nnewline")]
     [InlineData("has\rnewline")]
     [InlineData("has\ttab")]
-    public async Task ForwardRoutingSlip_MalformedDestination_ThrowsInvalidOperation(string badDestination)
+    public async Task ForwardRoutingSlip_MalformedDestination_LogsAndReturnsHandled(string badDestination)
     {
         var handler = new SlipTestHandler();
         var mockBus = new Mock<IBus>();
@@ -164,7 +166,8 @@ public class HandlerProcessorRoutingSlipTests
             RoutingSlipBusConfig,
             MinimalQueueConfig,
             new ConsumeContextPool(),
-            new ConsumeContextAccessor());
+            new ConsumeContextAccessor(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
 
         var msg = new SlipTestMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>
@@ -173,10 +176,14 @@ public class HandlerProcessorRoutingSlipTests
         };
         var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => processor.ProcessAsync(new byte[] { 1 }, typeof(SlipTestMsg), msg, headers, envelope));
-
-        Assert.Contains("Invalid routing-slip destination", ex.Message);
+        // Handlers already succeeded; the malformed-destination validation throws
+        // InvalidOperationException inside ForwardRoutingSlipAsync, which is caught
+        // and logged so the message is acked rather than re-running on retry.
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(SlipTestMsg), msg, headers, envelope);
+        Assert.Equal(ProcessResult.Handled, result);
+        mockBus.Verify(
+            b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     /// <summary>
@@ -202,7 +209,8 @@ public class HandlerProcessorRoutingSlipTests
             RoutingSlipBusConfig,
             MinimalQueueConfig,
             new ConsumeContextPool(),
-            new ConsumeContextAccessor());
+            new ConsumeContextAccessor(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
 
         var msg = new SlipTestMsg(Guid.NewGuid());
         var headers = new Dictionary<string, object>
@@ -241,7 +249,8 @@ public class HandlerProcessorRoutingSlipTests
             RoutingSlipBusConfig,
             MinimalQueueConfig,
             new ConsumeContextPool(),
-            new ConsumeContextAccessor());
+            new ConsumeContextAccessor(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
 
         var msg = new SlipTestMsg(Guid.NewGuid());
         // Destination is well-formed and would normally be forwarded.
@@ -257,6 +266,56 @@ public class HandlerProcessorRoutingSlipTests
         // The AggregateException propagates before ForwardRoutingSlipAsync is reached.
         mockBus.Verify(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
+
+    /// <summary>
+    /// When handlers succeed and the slip-forward then fails, ProcessAsync must return
+    /// Handled — the dispatcher acks the broker and the message does not re-enter the
+    /// retry queue. Without this, the slip-forward failure surfaces as Success=false,
+    /// the broker redelivers the message, and the handlers run again on every retry
+    /// until the budget is exhausted — duplicating side effects that already succeeded.
+    /// </summary>
+    [Fact]
+    public async Task ForwardRoutingSlip_HandlerSucceedsButForwardFails_ReturnsHandledAndSwallowsFailure()
+    {
+        var handler = new SlipTestHandler();
+        var mockBus = new Mock<IBus>();
+        // RouteAsync throws a transient transport error after handlers succeed.
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+               .ThrowsAsync(new InvalidOperationException("transient broker disconnect"));
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<SlipTestMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(
+            BuildRegistry(typeof(SlipTestMsg)),
+            NewScope(provider),
+            new Lazy<IBus>(() => mockBus.Object),
+            RoutingSlipBusConfig,
+            MinimalQueueConfig,
+            new ConsumeContextPool(),
+            new ConsumeContextAccessor(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+
+        var msg = new SlipTestMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.RoutingSlip] = "remote-service-q"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        // The slip-forward throws but ProcessAsync must NOT propagate it: the handler
+        // already ran successfully and a re-run on retry would duplicate side effects.
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(SlipTestMsg), msg, headers, envelope);
+        Assert.Equal(ProcessResult.Handled, result);
+
+        // RouteAsync was actually attempted (proving the failure path was exercised).
+        mockBus.Verify(
+            b => b.RouteAsync(It.IsAny<SlipTestMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
 }
 
 file class SlipTestMsg(Guid correlationId) : Message(correlationId);

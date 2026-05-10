@@ -107,7 +107,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(serviceProvider.GetRequiredService<IBus>), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
+            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(serviceProvider.GetRequiredService<IBus>), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance)
         };
 
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
@@ -701,7 +701,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(sp.GetRequiredService<IBus>), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
+            new HandlerProcessor(handlerRegistry, scopeAccessor, new Lazy<IBus>(sp.GetRequiredService<IBus>), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance)
         };
         var registry = CreateRegistryWithTypes(typeof(FakeMessage1), typeof(PolyBaseMessage), typeof(PolyDerivedMessage));
         var dispatcher = new MessageDispatcher(
@@ -810,7 +810,7 @@ public class MessageDispatcherTests
         var processors = new List<IMessageProcessor>
         {
             new ReplyProcessor(_replyManager),
-            new HandlerProcessor(BuildHandlerRegistry(), scopeAccessor, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor())
+            new HandlerProcessor(BuildHandlerRegistry(), scopeAccessor, new Lazy<IBus>(() => new Mock<IBus>().Object), new BusConfiguration(), new QueueConfiguration(), new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance)
         };
         var dispatcher = new MessageDispatcher(
             _mockSerializer.Object,

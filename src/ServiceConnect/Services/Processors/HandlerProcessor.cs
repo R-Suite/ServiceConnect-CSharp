@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
@@ -16,6 +17,7 @@ internal sealed class HandlerProcessor(
     IQueueConfiguration queueConfig,
     ConsumeContextPool contextPool,
     ConsumeContextAccessor consumeContextAccessor,
+    ILogger<HandlerProcessor> logger,
     IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null) : IMessageProcessor
 {
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
@@ -102,7 +104,28 @@ internal sealed class HandlerProcessor(
                         handlerExceptions);
                 }
 
-                await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, cancellationToken).ConfigureAwait(false);
+                // Slip-forward is decoupled from handler success. A failure here previously
+                // surfaced as Success=false out of the dispatcher, putting the message on the
+                // retry queue so the handler ran again on every redelivery until the retry
+                // budget was exhausted — duplicating side effects that already succeeded.
+                // Slip-forward is at-most-once on transient failure; a redelivered slip would
+                // also re-run the handler, which is the wrong trade-off for any handler with
+                // observable side effects (Send, HTTP, mutation). Cancellation still
+                // propagates so cooperative shutdown is unaffected.
+                try
+                {
+                    await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex,
+                        "Routing-slip forward failed for {MessageType} after handlers succeeded; slip dropped to avoid handler re-run on retry.",
+                        messageType.Name);
+                }
             }
         }
         finally
