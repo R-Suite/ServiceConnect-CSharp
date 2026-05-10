@@ -61,7 +61,12 @@ internal sealed class MessageAuditPublisher
             return;
         }
 
-        var props = new BasicProperties(args.BasicProperties) { Headers = HeaderHelpers.ToNullableHeaders(headers) };
+        // Field-by-field copy via BasicPropertiesCopier rather than the BasicProperties
+        // copy-constructor: the ctor's "any malformed source field throws" risk would
+        // otherwise propagate out of PublishAuditIfEnabledAsync — caught upstream and
+        // acked silently — silently dropping audits whenever an inbound delivery had a
+        // quirky property. MessageRetryHandler avoids the ctor for the same reason.
+        var props = BasicPropertiesCopier.CreateCopy(args.BasicProperties, HeaderHelpers.ToNullableHeaders(headers));
         // Audit is best-effort: the message has already been processed successfully, so a
         // failure to publish the audit copy must not propagate back into the consumer pipeline
         // (which would nack-with-requeue and re-run the handler against an idempotent surface).

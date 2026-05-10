@@ -82,27 +82,11 @@ internal sealed class MessageRetryHandler(
                 { "messaging.serviceconnect.retry.target", retryQueueName },
             });
 
-            // Explicit copy avoids the copy-constructor's "any malformed source field throws" risk.
-            // The set of fields here mirrors the AMQP BASIC properties RabbitMQ.Client exposes;
-            // adding a field to BasicProperties without updating this copy is a silent regression —
-            // MessageRetryHandlerCopyPropsTests guards against that.
-            var props = new BasicProperties
-            {
-                ContentType = args.BasicProperties.ContentType,
-                ContentEncoding = args.BasicProperties.ContentEncoding,
-                DeliveryMode = args.BasicProperties.DeliveryMode,
-                Priority = args.BasicProperties.Priority,
-                CorrelationId = args.BasicProperties.CorrelationId,
-                ReplyTo = args.BasicProperties.ReplyTo,
-                Expiration = args.BasicProperties.Expiration,
-                MessageId = args.BasicProperties.MessageId,
-                Timestamp = args.BasicProperties.Timestamp,
-                Type = args.BasicProperties.Type,
-                UserId = args.BasicProperties.UserId,
-                AppId = args.BasicProperties.AppId,
-                ClusterId = args.BasicProperties.ClusterId,
-                Headers = HeaderHelpers.ToNullableHeaders(headers),
-            };
+            // Explicit copy avoids the BasicProperties copy-constructor's "any malformed
+            // source field throws" risk. See BasicPropertiesCopier for the full rationale
+            // and field set; MessageRetryHandlerCopyPropsTests guards against silent
+            // regressions when RabbitMQ.Client adds new BASIC fields.
+            var props = BasicPropertiesCopier.CreateCopy(args.BasicProperties, HeaderHelpers.ToNullableHeaders(headers));
             // mandatory:true so publisher confirms surface unroutable returns as PublishException;
             // otherwise the broker silently drops the message and we lose the failure signal.
             // The catch in InboundMessageProcessor logs Error and acks-to-break-the-loop on PublishException.
@@ -157,24 +141,8 @@ internal sealed class MessageRetryHandler(
             _logger.LogError(ex, "Rejecting permanently invalid inbound message with MessageId {MessageId}", args.BasicProperties.MessageId);
         }
 
-        // Same field-by-field copy as the retry-publish path — see comment there.
-        var errorProps = new BasicProperties
-        {
-            ContentType = args.BasicProperties.ContentType,
-            ContentEncoding = args.BasicProperties.ContentEncoding,
-            DeliveryMode = args.BasicProperties.DeliveryMode,
-            Priority = args.BasicProperties.Priority,
-            CorrelationId = args.BasicProperties.CorrelationId,
-            ReplyTo = args.BasicProperties.ReplyTo,
-            Expiration = args.BasicProperties.Expiration,
-            MessageId = args.BasicProperties.MessageId,
-            Timestamp = args.BasicProperties.Timestamp,
-            Type = args.BasicProperties.Type,
-            UserId = args.BasicProperties.UserId,
-            AppId = args.BasicProperties.AppId,
-            ClusterId = args.BasicProperties.ClusterId,
-            Headers = HeaderHelpers.ToNullableHeaders(headers),
-        };
+        // Same field-by-field copy as the retry-publish path — see BasicPropertiesCopier.
+        var errorProps = BasicPropertiesCopier.CreateCopy(args.BasicProperties, HeaderHelpers.ToNullableHeaders(headers));
         // mandatory:true — see comment in HandleFailureAsync. PublishException on unroutable
         // surfaces through the InboundMessageProcessor catch; logged at Error and acked to
         // prevent unbounded redelivery.

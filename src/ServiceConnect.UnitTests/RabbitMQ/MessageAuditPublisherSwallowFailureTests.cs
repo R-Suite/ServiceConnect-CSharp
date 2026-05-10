@@ -74,4 +74,60 @@ public class MessageAuditPublisherSwallowFailureTests
         await Assert.ThrowsAsync<OperationCanceledException>(
             () => publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers));
     }
+
+    [Fact]
+    public async Task PublishAuditIfEnabledAsync_PreservesAllSourceBasicProperties()
+    {
+        // The audit path uses BasicPropertiesCopier (field-by-field copy) rather than the
+        // BasicProperties copy-constructor, mirroring MessageRetryHandler. Adding a new
+        // AMQP BASIC field to the copier without updating this assertion is a silent
+        // regression — the field would be dropped from every audit publish.
+        BasicProperties? capturedProps = null;
+        var channel = new Mock<IChannel>();
+        channel.Setup(c => c.BasicPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, string, bool, BasicProperties, ReadOnlyMemory<byte>, CancellationToken>(
+                (_, _, _, p, _, _) => capturedProps = p)
+            .Returns(ValueTask.CompletedTask);
+
+        var sourceProps = new BasicProperties
+        {
+            ContentType = "application/json",
+            ContentEncoding = "utf-8",
+            DeliveryMode = DeliveryModes.Persistent,
+            Priority = (byte)5,
+            CorrelationId = "corr-audit",
+            ReplyTo = "reply.queue",
+            Expiration = "60000",
+            MessageId = "msg-audit",
+            Timestamp = new AmqpTimestamp(1234567890),
+            Type = "AuditMsg",
+            UserId = "guest",
+            AppId = "test-app",
+            ClusterId = "cluster-1",
+        };
+        var args = new BasicDeliverEventArgs("ct", 1, false, "", "q", sourceProps, new byte[] { 1, 2, 3 });
+
+        var publisher = new MessageAuditPublisher(MakeQueueCfg().Object, NullLogger<MessageAuditPublisher>.Instance);
+        var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "AuditMsg" };
+
+        await publisher.PublishAuditIfEnabledAsync(channel.Object, args, headers);
+
+        Assert.NotNull(capturedProps);
+        Assert.Equal("application/json", capturedProps.ContentType);
+        Assert.Equal("utf-8", capturedProps.ContentEncoding);
+        Assert.Equal(DeliveryModes.Persistent, capturedProps.DeliveryMode);
+        Assert.Equal((byte)5, capturedProps.Priority);
+        Assert.Equal("corr-audit", capturedProps.CorrelationId);
+        Assert.Equal("reply.queue", capturedProps.ReplyTo);
+        Assert.Equal("60000", capturedProps.Expiration);
+        Assert.Equal("msg-audit", capturedProps.MessageId);
+        Assert.Equal(new AmqpTimestamp(1234567890), capturedProps.Timestamp);
+        Assert.Equal("AuditMsg", capturedProps.Type);
+        Assert.Equal("guest", capturedProps.UserId);
+        Assert.Equal("test-app", capturedProps.AppId);
+        Assert.Equal("cluster-1", capturedProps.ClusterId);
+    }
 }
