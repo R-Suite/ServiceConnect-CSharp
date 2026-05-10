@@ -83,18 +83,26 @@ public interface IAggregatorPersistor
     /// produce no work.
     /// </summary>
     /// <remarks>
-    /// The default implementation delegates to <see cref="GetSnapshotAsync"/> and
-    /// returns <c>ResolvedMessages.Count</c>. First-party persistors override this with
-    /// a cheap typed query (e.g. Mongo: <c>$in</c> on registered type names; InMemory:
-    /// pass-through to <see cref="CountAsync"/> because every stored record is a
-    /// deserialised <see cref="IHasCorrelationId"/> and therefore always resolved).
+    /// <para>
+    /// The default implementation delegates to <see cref="CountAsync"/>. This is correct
+    /// for any persistor whose stored records are always type-resolvable (e.g. an in-memory
+    /// store that holds deserialised <see cref="IHasCorrelationId"/> instances) and for
+    /// any deployment where every registered type still has a live CLR mapping. It is a
+    /// safe fall-back, NOT optimal: a persistor with a meaningful resolved/unresolved split
+    /// (e.g. Mongo across a type-rename rollout) should override with a cheap typed
+    /// predicate to avoid flushing on rows that would only count toward the gate.
+    /// </para>
+    /// <para>
+    /// Implementers MUST NOT override with a method that mutates state. This method runs
+    /// on every <c>InsertDataAsync</c> as the batch-size flush gate; an implementation that
+    /// claims a lease (e.g. by delegating to <see cref="GetSnapshotAsync"/> on a
+    /// snapshot-claims-lease persistor) would rotate the lease on every insert and break
+    /// the per-flush lease invariant.
+    /// </para>
     /// </remarks>
     /// <param name="name">The logical aggregator name.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
     /// <returns>The number of stored records whose CLR type is currently resolvable.</returns>
-    async Task<int> CountResolvedAsync(string name, CancellationToken cancellationToken = default)
-    {
-        var snapshot = await GetSnapshotAsync(name, cancellationToken).ConfigureAwait(false);
-        return snapshot.ResolvedMessages.Count;
-    }
+    Task<int> CountResolvedAsync(string name, CancellationToken cancellationToken = default) =>
+        CountAsync(name, cancellationToken);
 }
