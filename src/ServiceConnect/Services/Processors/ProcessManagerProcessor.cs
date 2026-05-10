@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -19,6 +20,29 @@ internal sealed class ProcessManagerProcessor(
 {
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
+
+    // Per-correlation-id serialization. Two messages for the same saga that arrive
+    // concurrently both observe FindData==null and would otherwise both run the user's
+    // HandleAsync (with side effects: bus.Send, HTTP, etc.) and both call InsertDataAsync.
+    // The unique CorrelationId index ensures only one insert wins, but the loser's
+    // handler has already run its side effects against a saga state that is later
+    // overwritten on redelivery. Acquiring this semaphore around find→handle→persist
+    // turns the duplicate-creation race into a sequential second-find that observes
+    // the just-committed saga and takes the update path instead.
+    //
+    // Cleanup: each entry holds a refcount of in-flight callers under a monitor lock.
+    // The last caller to release decrements to zero, marks the entry removed, and
+    // detaches it from the dictionary. Concurrent acquirers re-check the Removed flag
+    // under the same lock and retry on a fresh entry, so an idle correlation id never
+    // leaks a stale SemaphoreSlim.
+    private readonly ConcurrentDictionary<Guid, CorrelationLock> _correlationLocks = new();
+
+    private sealed class CorrelationLock
+    {
+        public readonly SemaphoreSlim Sem = new(1, 1);
+        public int Outstanding;
+        public bool Removed;
+    }
 
     public async Task<ProcessResult> ProcessAsync(
         ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
@@ -67,8 +91,62 @@ internal sealed class ProcessManagerProcessor(
         // Letting the ConcurrencyException propagate hands the decision to the configured
         // transport-level retry policy instead, which users can size against their tolerance
         // for side-effect replay.
-        await RunPipelineOnceAsync(scope, finder, descriptor, mapper, handler, (Message)message, messageType, headers, cancellationToken).ConfigureAwait(false);
+        var msg = (Message)message;
+        var entry = AcquireCorrelationLock(msg.CorrelationId);
+        var semaphoreAcquired = false;
+        try
+        {
+            await entry.Sem.WaitAsync(cancellationToken).ConfigureAwait(false);
+            semaphoreAcquired = true;
+            await RunPipelineOnceAsync(scope, finder, descriptor, mapper, handler, msg, messageType, headers, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Refcount must be released even if WaitAsync threw before we got the
+            // semaphore, otherwise Outstanding leaks and the entry is never removed.
+            if (semaphoreAcquired)
+            {
+                entry.Sem.Release();
+            }
+            ReleaseCorrelationLock(msg.CorrelationId, entry);
+        }
         return ProcessResult.Handled;
+    }
+
+    private CorrelationLock AcquireCorrelationLock(Guid correlationId)
+    {
+        while (true)
+        {
+            var entry = _correlationLocks.GetOrAdd(correlationId, static _ => new CorrelationLock());
+            lock (entry)
+            {
+                if (!entry.Removed)
+                {
+                    entry.Outstanding++;
+                    return entry;
+                }
+                // The entry was removed between GetOrAdd and our lock; retry to either
+                // observe a freshly-added one or create a new entry of our own.
+            }
+        }
+    }
+
+    private void ReleaseCorrelationLock(Guid correlationId, CorrelationLock entry)
+    {
+        lock (entry)
+        {
+            entry.Outstanding--;
+            if (entry.Outstanding == 0)
+            {
+                // Last caller out: mark removed under the lock so any concurrent acquirer
+                // observes Removed=true on its recheck and retries with a fresh entry.
+                // TryRemove(KVP) only succeeds if the dict still maps to this exact entry,
+                // so a fresh entry installed by another thread (extremely unlikely under
+                // this lock, since GetOrAdd is atomic) is left untouched.
+                entry.Removed = true;
+                _correlationLocks.TryRemove(new KeyValuePair<Guid, CorrelationLock>(correlationId, entry));
+            }
+        }
     }
 
     private async Task RunPipelineOnceAsync(

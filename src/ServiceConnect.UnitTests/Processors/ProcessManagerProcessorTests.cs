@@ -237,6 +237,142 @@ public class ProcessManagerProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_TwoConcurrentDispatchesSameCorrelationId_SerializeFindHandleInsertUpdate()
+    {
+        // Two messages for the same saga arriving concurrently must be serialized through
+        // the find→handle→persist cycle. Without per-correlation serialization both observe
+        // FindData==null, both run user HandleAsync (with side effects), and both call
+        // InsertDataAsync — the loser nacks on the unique CorrelationId index. With the
+        // per-correlation lock, dispatch 2 waits until dispatch 1 commits, then sees the
+        // just-inserted row and takes the update path. Result: exactly one Insert, exactly
+        // one Update, two distinct handler invocations.
+        var (services, _, mockFinder) = CreateBaseServices();
+        var handler = new PmTestHandler();
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTestHandler)
+        });
+
+        // FindData behaviour: returns null until the first InsertData has run, then returns
+        // the inserted row on every subsequent call. A simple flag (set by the InsertData
+        // mock) flips behaviour atomically — no need for SetupSequence which couples ordering.
+        IProcessManagerData? insertedRow = null;
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
+                It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => insertedRow is null
+                ? null
+                : new PmTestPersistenceData { Data = (PmTestData)insertedRow });
+
+        // Gate the first InsertData. Dispatch 1 enters InsertData and parks; dispatch 2
+        // arrives, takes the per-correlation lock wait, and is held until 1 completes.
+        var insertEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInsert = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        mockFinder.Setup(f => f.InsertDataAsync(It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IProcessManagerData d, CancellationToken _) =>
+            {
+                insertEntered.TrySetResult();
+                await releaseInsert.Task.ConfigureAwait(false);
+                insertedRow = d;
+            });
+        mockFinder.Setup(f => f.UpdateDataAsync(It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var provider = services.BuildServiceProvider();
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+
+        var correlationId = Guid.NewGuid();
+
+        // Dispatch 1: enters first, parks inside InsertData.
+        var dispatch1 = Task.Run(() => processor.ProcessAsync(
+            new byte[] { 1 }, typeof(PmTestMessage),
+            new PmTestMessage(correlationId) { Content = "first" },
+            new Dictionary<string, object>(), new Envelope()));
+
+        await insertEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Dispatch 2: starts now. The per-correlation lock blocks it until dispatch 1
+        // releases. If the lock is missing (the bug), dispatch 2 also calls FindData
+        // (which still returns null, since insertedRow is set only after the gate is
+        // released) and then races into a second InsertData call.
+        var dispatch2 = Task.Run(() => processor.ProcessAsync(
+            new byte[] { 1 }, typeof(PmTestMessage),
+            new PmTestMessage(correlationId) { Content = "second" },
+            new Dictionary<string, object>(), new Envelope()));
+
+        // Give dispatch 2 a chance to enter ProcessAsync and park on the lock. Without the
+        // lock it would race ahead to FindData/InsertData and the test would still pass for
+        // the wrong reason — so we briefly observe that it has NOT yet completed.
+        await Task.Delay(100);
+        Assert.False(dispatch2.IsCompleted, "Dispatch 2 should be blocked behind the per-correlation lock until dispatch 1 commits.");
+
+        // Release dispatch 1.
+        releaseInsert.SetResult();
+
+        await Task.WhenAll(dispatch1, dispatch2).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, handler.InvokeCount);
+        mockFinder.Verify(f => f.InsertDataAsync(It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()), Times.Once);
+        mockFinder.Verify(f => f.UpdateDataAsync(It.IsAny<IPersistenceData<PmTestData>>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_DistinctCorrelationIds_DoNotSerializeAgainstEachOther()
+    {
+        // Different correlation ids must not block each other — the per-correlation lock
+        // is per-id, not a single global mutex.
+        var (services, _, mockFinder) = CreateBaseServices();
+        var handler = new PmTestHandler();
+        services.AddSingleton<IProcessHandler<PmTestData, PmTestMessage>>(handler);
+
+        var registry = BuildRegistry(new HandlerReference
+        {
+            MessageType = typeof(PmTestMessage),
+            HandlerType = typeof(PmTestHandler)
+        });
+
+        mockFinder.Setup(f => f.FindDataAsync<PmTestData>(
+                It.IsAny<IProcessManagerPropertyMapper>(), It.IsAny<Message>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IPersistenceData<PmTestData>?)null);
+
+        // Both InsertData calls park until the test releases them; with two distinct ids
+        // both should park simultaneously, proving they don't serialize.
+        var bothInserting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int insertingCount = 0;
+        mockFinder.Setup(f => f.InsertDataAsync(It.IsAny<IProcessManagerData>(), It.IsAny<CancellationToken>()))
+            .Returns(async (IProcessManagerData d, CancellationToken _) =>
+            {
+                if (Interlocked.Increment(ref insertingCount) == 2)
+                {
+                    bothInserting.TrySetResult();
+                }
+                await release.Task.ConfigureAwait(false);
+            });
+
+        var provider = services.BuildServiceProvider();
+        var (accessor, scopeHandle) = BuildScopeAccessor(provider);
+        using var _scopePm = scopeHandle;
+        var processor = new ProcessManagerProcessor(registry, accessor, new Lazy<IBus>(() => new Mock<IBus>().Object), NullLogger<ProcessManagerProcessor>.Instance, DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor());
+
+        var d1 = Task.Run(() => processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage),
+            new PmTestMessage(Guid.NewGuid()), new Dictionary<string, object>(), new Envelope()));
+        var d2 = Task.Run(() => processor.ProcessAsync(new byte[] { 1 }, typeof(PmTestMessage),
+            new PmTestMessage(Guid.NewGuid()), new Dictionary<string, object>(), new Envelope()));
+
+        // If the lock were global, only one would reach InsertData; bothInserting would
+        // never fire and the WaitAsync would time out.
+        await bothInserting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        release.SetResult();
+        await Task.WhenAll(d1, d2).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
     public async Task ProcessAsync_CancelledToken_ThrowsOce()
     {
         var (services, _, _) = CreateBaseServices();
