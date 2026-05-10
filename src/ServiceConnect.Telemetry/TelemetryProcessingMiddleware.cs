@@ -29,6 +29,7 @@ internal sealed class TelemetryProcessingMiddleware(
         ArgumentNullException.ThrowIfNull(next);
 
         Activity? activity = null;
+        IDisposable? inboundFallback = null;
         if (ServiceConnectActivitySource.IsConsumeTelemetryEnabled(_options))
         {
             var args = new ConsumeEventArgs
@@ -45,6 +46,15 @@ internal sealed class TelemetryProcessingMiddleware(
                 Headers = new Dictionary<string, object>(headers, StringComparer.Ordinal),
             };
             activity = ServiceConnectActivitySource.Consume(args, _options, _attributes);
+        }
+        else if (ServiceConnectActivitySource.IsPublishTelemetryEnabled(_options) || ServiceConnectActivitySource.IsSendTelemetryEnabled(_options))
+        {
+            // Consume telemetry is disabled but the handler may still publish or send. Without
+            // intervention, Activity.Current is null when the handler invokes Bus.Send/Publish,
+            // so the new publish/send activity becomes a fresh trace root and the downstream
+            // consumer cannot stitch the graph across this hop. Extract the inbound traceparent
+            // into an AsyncLocal so the publish/send paths use it as their parent context.
+            inboundFallback = TryStashInboundTraceFallback(headers);
         }
 
         try
@@ -71,6 +81,35 @@ internal sealed class TelemetryProcessingMiddleware(
         finally
         {
             activity?.Dispose();
+            inboundFallback?.Dispose();
         }
     }
+
+    private static IDisposable? TryStashInboundTraceFallback(IDictionary<string, object> headers)
+    {
+        // Mirror the propagator's W3C extract: read traceparent and (optional) tracestate
+        // from the inbound headers and stash the raw strings so the publish-side fallback
+        // can write them verbatim into outgoing headers. Header values arrive byte[]-encoded
+        // from the RabbitMQ transport; HeaderDecoder unwraps both byte[] and string forms.
+        if (!headers.TryGetValue(TraceParentHeaderKey, out var traceParentObj))
+        {
+            return null;
+        }
+        var traceParent = HeaderDecoder.Decode(traceParentObj);
+        if (string.IsNullOrEmpty(traceParent))
+        {
+            return null;
+        }
+
+        string? traceState = null;
+        if (headers.TryGetValue(TraceStateHeaderKey, out var traceStateObj))
+        {
+            traceState = HeaderDecoder.Decode(traceStateObj);
+        }
+
+        return ServiceConnectActivitySource.SetInboundTraceFallback(traceParent, traceState);
+    }
+
+    private const string TraceParentHeaderKey = "traceparent";
+    private const string TraceStateHeaderKey = "tracestate";
 }

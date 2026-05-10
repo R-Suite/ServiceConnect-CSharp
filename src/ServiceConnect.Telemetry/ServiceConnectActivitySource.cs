@@ -413,14 +413,85 @@ public static class ServiceConnectActivitySource
     /// <see cref="Consume"/>'s extract side; without injection, each consume span becomes a
     /// new trace root and the end-to-end graph cannot be stitched across the broker.
     /// </summary>
+    /// <remarks>
+    /// When <see cref="Activity.Current"/> is null, falls back to the inbound-context snapshot
+    /// stashed by <see cref="TelemetryProcessingMiddleware"/> when consume telemetry is disabled
+    /// but publish telemetry is enabled. Without that fallback, a configuration of
+    /// <c>EnableConsumeTelemetry=false ∧ EnablePublishTelemetry=true</c> would silently snap
+    /// the trace at every consume hop because the consume side never produces an
+    /// <c>Activity.Current</c> for the publish side to read.
+    /// </remarks>
     private static void InjectTraceContext(Activity? activity, IDictionary<string, string> headers)
     {
-        if (activity is null)
+        if (activity is not null)
         {
+            DistributedContextPropagator.Current.Inject(activity, headers, InjectHeader);
             return;
         }
 
-        DistributedContextPropagator.Current.Inject(activity, headers, InjectHeader);
+        if (_inboundTraceFallback.Value is { } fallback)
+        {
+            // Pass through the original publisher's traceparent verbatim. Downstream
+            // consumers see the original publisher as their parent, skipping our
+            // untraced consume hop — preferable to starting a fresh trace.
+            headers[TraceParentHeaderName] = fallback.TraceParent;
+            if (!string.IsNullOrEmpty(fallback.TraceState))
+            {
+                headers[TraceStateHeaderName] = fallback.TraceState!;
+            }
+        }
+    }
+
+    // W3C field names. DistributedContextPropagator uses these for its W3C propagator,
+    // which is the default and effectively standard. Hard-coding here keeps the fallback
+    // path independent of the propagator instance — if a user installs a non-W3C
+    // propagator, the fallback still emits W3C, which is the dominant on-wire format.
+    private const string TraceParentHeaderName = "traceparent";
+    private const string TraceStateHeaderName = "tracestate";
+
+    private static readonly AsyncLocal<InboundTraceSnapshot?> _inboundTraceFallback = new();
+
+    internal readonly record struct InboundTraceSnapshot(string TraceParent, string? TraceState);
+
+    /// <summary>
+    /// Stashes the inbound traceparent/tracestate so a publish on the same logical message
+    /// flow can continue the trace even when consume telemetry is disabled. The middleware
+    /// must clear the value in a finally to avoid bleeding context into unrelated work.
+    /// </summary>
+    internal static IDisposable SetInboundTraceFallback(string traceParent, string? traceState)
+    {
+        var prior = _inboundTraceFallback.Value;
+        _inboundTraceFallback.Value = new InboundTraceSnapshot(traceParent, traceState);
+        return new InboundTraceFallbackScope(prior);
+    }
+
+    private sealed class InboundTraceFallbackScope(InboundTraceSnapshot? prior) : IDisposable
+    {
+        private InboundTraceSnapshot? _prior = prior;
+        private int _disposed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+            _inboundTraceFallback.Value = _prior;
+            _prior = default;
+        }
+    }
+
+    private static ActivityContext TryResolveFallbackParentContext()
+    {
+        if (_inboundTraceFallback.Value is not { } fallback)
+        {
+            return default;
+        }
+        if (!ActivityContext.TryParse(fallback.TraceParent, fallback.TraceState, out var context))
+        {
+            return default;
+        }
+        return context;
     }
 
     private static int _warnedAboutCarrierShape;
@@ -477,6 +548,16 @@ public static class ServiceConnectActivitySource
         if (!enabled || !activitySource.HasListeners())
         {
             return null;
+        }
+
+        // If the caller didn't supply a parent context and Activity.Current is null
+        // (consume telemetry disabled but publish on, no ambient activity), fall back
+        // to the inbound-trace AsyncLocal so the new activity is parented on the
+        // original publisher's traceId. Without this, the new activity becomes a fresh
+        // trace root and downstream consumers cannot stitch the graph across this hop.
+        if (parentContext == default && Activity.Current is null)
+        {
+            parentContext = TryResolveFallbackParentContext();
         }
 
         Activity? activity = activitySource.StartActivity(activityName, kind, parentContext);
