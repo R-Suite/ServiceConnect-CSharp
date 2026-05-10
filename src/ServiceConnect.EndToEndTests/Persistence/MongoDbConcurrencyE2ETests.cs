@@ -87,12 +87,13 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task ProcessManagerFinder_ParallelInsertSameCorrelationId_OneSucceeds_RestThrowPersistence()
+    public async Task ProcessManagerFinder_ParallelInsertSameCorrelationId_OneSucceeds_RestThrowConcurrency()
     {
         // The compound (CorrelationId, Version) unique index combined with the
         // initial-version=1 row turns concurrent first-inserts into a duplicate-key
-        // error. The persistor surfaces those as PersistenceException; under a fan-in
-        // race exactly one inserter must win.
+        // error. The persistor now surfaces those as ConcurrencyException so callers
+        // can re-find the just-committed row and take the update path; under a fan-in
+        // race exactly one inserter wins, the rest get ConcurrencyException.
         var finder = CreateFinder();
         var corrId = Guid.NewGuid();
         const int contenders = 12;
@@ -107,7 +108,7 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
                 await finder.InsertDataAsync(new TestData { CorrelationId = corrId, Name = "first" });
                 Interlocked.Increment(ref successes);
             }
-            catch (PersistenceException)
+            catch (ServiceConnect.Interfaces.Exceptions.ConcurrencyException)
             {
                 Interlocked.Increment(ref conflicts);
             }
