@@ -255,6 +255,50 @@ public sealed class ProducerSendAsyncFanoutTests
     }
 
     // -------------------------------------------------------------------------
+    // Test 6 — ObjectDisposedException short-circuits the fan-out instead of
+    //          retrying once per endpoint. With prior failures present it
+    //          aggregates them with the ODE; with no priors the ODE propagates raw.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task SendAsync_DisposedProducer_ShortCircuitsWithSingleObjectDisposedException()
+    {
+        // Every endpoint raises ObjectDisposedException. Without short-circuiting we'd see
+        // an AggregateException of three identical ODEs; with the typed catch, the very first
+        // ODE aborts the loop and propagates raw.
+        var (producer, _) = BuildProducerWithChannel((_, _, _, _, _, _) =>
+            throw new ObjectDisposedException("Producer"));
+
+        var ex = await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => producer.SendAsync(typeof(TestMessage), Body, Headers, CancellationToken.None));
+
+        Assert.Equal("Producer", ex.ObjectName);
+    }
+
+    [Fact]
+    public async Task SendAsync_PriorEndpointFailure_ThenObjectDisposed_AggregatesBoth()
+    {
+        // q1 fails (TimeoutException). q2 hits ObjectDisposedException. The fan-out must
+        // abort and surface an AggregateException with both — the prior failure is preserved.
+        var (producer, _) = BuildProducerWithChannel((_, rk, _, _, _, _) =>
+        {
+            return rk switch
+            {
+                "q1" => throw new TimeoutException("q1: broker ack timed out"),
+                "q2" => throw new ObjectDisposedException("Producer"),
+                _ => ValueTask.CompletedTask,
+            };
+        });
+
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => producer.SendAsync(typeof(TestMessage), Body, Headers, CancellationToken.None));
+
+        Assert.Equal(2, ex.InnerExceptions.Count);
+        Assert.Contains(ex.InnerExceptions, e => e is TimeoutException);
+        Assert.Contains(ex.InnerExceptions, e => e is ObjectDisposedException);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 

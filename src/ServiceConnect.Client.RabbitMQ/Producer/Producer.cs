@@ -364,6 +364,23 @@ public sealed class Producer : IProducer
                 }
                 throw;
             }
+            catch (ObjectDisposedException ex)
+            {
+                // The producer is permanently dead; retrying against further endpoints would
+                // emit N redundant failure metrics and produce an AggregateException of N
+                // identical ODEs. Aggregate any prior failures with this ODE and abort the
+                // fan-out so the caller sees a single ODE-shaped failure on a disposed
+                // producer.
+                endpointFailure = ex;
+                if (endpointFailures is { Count: > 0 })
+                {
+                    endpointFailures.Add(ex);
+                    throw new AggregateException(
+                        $"One or more endpoints failed during fan-out send for message type '{type.FullName}', and the producer was disposed mid-fan-out.",
+                        endpointFailures);
+                }
+                throw;
+            }
             catch (Exception ex)
             {
                 endpointFailure = ex;
