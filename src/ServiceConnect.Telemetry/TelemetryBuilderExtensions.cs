@@ -33,16 +33,30 @@ public static class TelemetryBuilderExtensions
 
         builder.AddRegistration(services =>
         {
-            services.AddSingleton(options);
+            // TryAddSingleton across the board so a second AddTelemetry call (or two
+            // feature modules each calling it) does not double-register the middleware
+            // or the options. The options instance from the first call wins; that
+            // matches the "first registration wins" semantics of TryAdd.
+            services.TryAddSingleton(options);
             services.TryAddSingleton<IMessagingSystemAttributes, RabbitMqMessagingSystemAttributes>();
-            services.AddSingleton<TelemetrySendMiddleware>();
-            services.AddSingleton<TelemetryProcessingMiddleware>();
+            services.TryAddSingleton<TelemetrySendMiddleware>();
+            services.TryAddSingleton<TelemetryProcessingMiddleware>();
         });
 
         builder.ConfigurePipeline(p =>
         {
-            p.SendMessageMiddleware.Insert(0, typeof(TelemetrySendMiddleware));
-            p.MessageProcessingMiddleware.Insert(0, typeof(TelemetryProcessingMiddleware));
+            // Guard against duplicate Insert on a second AddTelemetry call. Without the
+            // guard each pipeline gets a duplicate entry and emits two activities per
+            // message (corrupting OTel cardinality and double-counting publish/consume
+            // duration histograms).
+            if (!p.SendMessageMiddleware.Contains(typeof(TelemetrySendMiddleware)))
+            {
+                p.SendMessageMiddleware.Insert(0, typeof(TelemetrySendMiddleware));
+            }
+            if (!p.MessageProcessingMiddleware.Contains(typeof(TelemetryProcessingMiddleware)))
+            {
+                p.MessageProcessingMiddleware.Insert(0, typeof(TelemetryProcessingMiddleware));
+            }
         });
 
         return builder;
