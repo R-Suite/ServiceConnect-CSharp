@@ -102,11 +102,19 @@ internal sealed class RabbitMqHeaderValidator(
         // byte cap entirely. The helper returns null as a sentinel for "exceeded budget
         // mid-descent" so callers short-circuit without computing the full size of an
         // adversarial payload.
+        //
+        // Rule 5 (aggregate): each header value individually fits the per-value cap, but the
+        // sum of all values is also bounded by _maxInboundMessageSize. Without this an
+        // adversary could pack MaxHeaderCount × MaxHeaderValueBytes (default 64 × 8 KiB =
+        // 512 KiB) into headers and bypass the body cap entirely. Capping the aggregate at
+        // the body cap keeps header capacity proportional to body capacity.
         if (inboundHeaders != null)
         {
+            long aggregate = 0;
             foreach (var kvp in inboundHeaders)
             {
-                if (ComputeHeaderValueByteCost(kvp.Value, _maxHeaderValueBytes) is null)
+                var cost = ComputeHeaderValueByteCost(kvp.Value, _maxHeaderValueBytes);
+                if (cost is null)
                 {
                     await _retryHandler.HandleTerminalFailureAsync(
                         publishChannel,
@@ -116,6 +124,18 @@ internal sealed class RabbitMqHeaderValidator(
                             $"Inbound header '{kvp.Key}' exceeds configured per-value limit {_maxHeaderValueBytes} bytes (or its nested AMQP table/array does)."),
                         _shutdownPublishTokenFactory()).ConfigureAwait(false);
                     return HeaderValidationResult.Reject("oversized header value");
+                }
+                aggregate += cost.Value;
+                if (aggregate > _maxInboundMessageSize)
+                {
+                    await _retryHandler.HandleTerminalFailureAsync(
+                        publishChannel,
+                        args,
+                        copiedHeaders,
+                        new InvalidOperationException(
+                            $"Inbound header aggregate size {aggregate} bytes exceeds the message-size budget of {_maxInboundMessageSize} bytes."),
+                        _shutdownPublishTokenFactory()).ConfigureAwait(false);
+                    return HeaderValidationResult.Reject("oversized header aggregate");
                 }
             }
         }

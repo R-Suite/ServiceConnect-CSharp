@@ -138,6 +138,65 @@ public sealed class RabbitMqHeaderValidatorTests
     }
 
     [Fact]
+    public async Task ValidateAsync_HeaderAggregateExceedsMessageSize_RejectsAsOversizedAggregate()
+    {
+        // Each individual header value fits the per-value cap, but the sum of values is
+        // greater than the body cap. Without the aggregate rule an adversarial producer
+        // could pack 64 × 8 KiB = 512 KiB into headers and bypass the body cap entirely.
+        // Body cap = 8 KiB, per-value cap = 1 KiB, count = 16 → aggregate ≈ 16 KiB > 8 KiB.
+        const long bodyCap = 8 * 1024;
+        const int perValueCap = 1024;
+        const int headerCount = 16;
+
+        var (validator, publishChannel, capturedExceptions) = BuildValidator(
+            maxBodySize: bodyCap,
+            maxHeaderCount: 64, // higher than headerCount so Rule 3 doesn't fire first
+            maxHeaderValueBytes: perValueCap);
+
+        var headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [HeaderKeys.FullTypeName] = "Foo.Bar",
+        };
+        // Each filler value fits inside per-value cap (well under 1 KiB) but the sum
+        // overshoots the body cap.
+        for (var i = 0; i < headerCount; i++)
+        {
+            headers[$"X-Filler-{i}"] = new string('x', perValueCap - 8);
+        }
+        var args = MakeArgs(headers);
+
+        var result = await validator.ValidateAsync(args, publishChannel.Object, CopyHeaders(args), CancellationToken.None);
+
+        Assert.False(result.Accepted);
+        Assert.Equal("oversized header aggregate", result.RejectReason);
+        var ex = Assert.Single(capturedExceptions);
+        Assert.Contains("aggregate size", ex, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("message-size budget", ex, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_HeaderAggregateAtBodyBudget_StillAccepts()
+    {
+        // A small handful of small headers sum to far less than the body cap and must
+        // still be accepted. Pins the boundary that the aggregate rule trips only when
+        // headers actually overshoot the budget.
+        var (validator, publishChannel, capturedExceptions) = BuildValidator();
+
+        var args = MakeArgs(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [HeaderKeys.FullTypeName] = "Foo.Bar",
+            ["X-One"] = "1",
+            ["X-Two"] = "2",
+            ["X-Three"] = "3",
+        });
+
+        var result = await validator.ValidateAsync(args, publishChannel.Object, CopyHeaders(args), CancellationToken.None);
+
+        Assert.True(result.Accepted);
+        Assert.Empty(capturedExceptions);
+    }
+
+    [Fact]
     public async Task ValidateAsync_AllRulesPass_AcceptsWithoutPublishing()
     {
         var (validator, publishChannel, capturedExceptions) = BuildValidator();
