@@ -408,16 +408,23 @@ public sealed class Bus : IBus
         }
         for (int i = 0; i < snapshot.Length; i++)
         {
-            if (string.IsNullOrWhiteSpace(snapshot[i]))
-            {
-                throw new ArgumentException(
-                    $"Destination at index {i} is null or whitespace; routing requires a non-empty queue name.",
-                    nameof(destinations));
-            }
-            if (snapshot[i].Contains(','))
+            // Comma is the in-header separator for the routing-slip; reject explicitly so
+            // the error names the structural cause rather than the generic "reserved char".
+            if (snapshot[i] != null && snapshot[i].Contains(','))
             {
                 throw new ArgumentException(
                     $"Destination at index {i} contains a comma ('{snapshot[i]}'); commas are reserved as the routing-slip separator.",
+                    nameof(destinations));
+            }
+            // Receive-side ForwardRoutingSlipAsync rejects the same set of characters / lengths
+            // and logs+drops the message. Mirror the validator on the send side so producers
+            // fail fast with a typed ArgumentException instead of stalling on an in-flight
+            // message that nack/dead-letters at the next hop with no caller signal.
+            var failure = RoutingSlipDestinationValidator.GetFailureReason(snapshot[i]);
+            if (failure is not null)
+            {
+                throw new ArgumentException(
+                    $"Destination at index {i} ('{snapshot[i]}') is invalid: {failure}.",
                     nameof(destinations));
             }
         }

@@ -140,9 +140,6 @@ internal sealed class HandlerProcessor(
     // characters that are either structural in AMQP routing or commonly used in
     // injection attempts. This guards against attacker-controlled RoutingSlip headers
     // redirecting traffic to arbitrary queues.
-    private const int MaxRoutingSlipDestinationLength = 128;
-    private static readonly char[] ForbiddenRoutingSlipChars = ['*', '#', '\0', '\r', '\n', '\t', '"', '\''];
-
     // Cache compiled delegates for IBus.RouteAsync<T> keyed by message type.
     // Building a delegate via Expression.Lambda avoids repeated MakeGenericMethod + Invoke
     // overhead on every routed message.
@@ -218,7 +215,7 @@ internal sealed class HandlerProcessor(
             if (!IsValidRoutingSlipDestination(trimmed))
             {
                 throw new InvalidOperationException(
-                    $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {MaxRoutingSlipDestinationLength} characters, and must not contain AMQP wildcards or control characters.");
+                    $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {RoutingSlipDestinationValidator.MaxDestinationLength} characters, and must not contain AMQP wildcards or control characters.");
             }
 
             destinations.Add(trimmed);
@@ -234,23 +231,6 @@ internal sealed class HandlerProcessor(
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidRoutingSlipDestination(string destination)
-    {
-        if (string.IsNullOrWhiteSpace(destination))
-        {
-            return false;
-        }
-
-        if (destination.Length > MaxRoutingSlipDestinationLength)
-        {
-            return false;
-        }
-
-        if (destination.IndexOfAny(ForbiddenRoutingSlipChars) >= 0)
-        {
-            return false;
-        }
-
-        return true;
-    }
+    private static bool IsValidRoutingSlipDestination(string destination) =>
+        RoutingSlipDestinationValidator.IsValid(destination);
 }
