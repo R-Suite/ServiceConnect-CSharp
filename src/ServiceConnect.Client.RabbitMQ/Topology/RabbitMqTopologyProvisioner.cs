@@ -6,7 +6,11 @@ namespace ServiceConnect.Client.RabbitMQ;
 
 /// <summary>
 /// Encapsulates RabbitMQ topology provisioning (exchanges, queues, bindings).
-/// Catches AMQP PRECONDITION_FAILED errors and re-throws them on initial setup.
+/// Always re-throws AMQP <see cref="OperationInterruptedException"/> (PRECONDITION_FAILED,
+/// NOT_FOUND, etc.). Such errors close the underlying channel; swallowing them would
+/// leave the caller publishing/consuming on a dead channel and surface much later as
+/// an opaque <c>AlreadyClosedException</c>. The <c>isInitialSetup</c> parameter on each
+/// method is retained for source-compat with v6 callers but is no longer consulted.
 /// </summary>
 /// <remarks>
 /// Initializes a new topology provisioner.
@@ -19,7 +23,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
     /// <summary>
     /// Declares an exchange with standard durable/non-auto-delete settings.
     /// Deduplicated exchange declaration.
-    /// Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Always re-throws AMQP errors — see class summary for the channel-state rationale.
     /// </summary>
     public async Task ConfigureDeclareExchangeAsync(
         IChannel channel,
@@ -40,16 +44,13 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring exchange {ExchangeName}: {Message}", exchangeName, ex.Message);
-            if (isInitialSetup)
-            {
-                throw;
-            }
+            throw;
         }
     }
 
     /// <summary>
     /// Declares the main consumer queue.
-    /// Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Always re-throws AMQP errors — see class summary for the channel-state rationale.
     /// </summary>
     public async Task ConfigureDeclareQueueAsync(
         IChannel channel,
@@ -74,17 +75,14 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring queue {QueueName}: {Message}", queueName, ex.Message);
-            if (isInitialSetup)
-            {
-                throw;
-            }
+            throw;
         }
     }
 
     /// <summary>
     /// Declares a utility queue (error/audit), its exchange, and binding.
     /// Deduplicated utility queue setup.
-    /// Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Always re-throws AMQP errors — see class summary for the channel-state rationale.
     /// </summary>
     public async Task ConfigureDeclareUtilityQueueAsync(
         IChannel channel,
@@ -106,10 +104,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring exchange {ExchangeName}: {Message}", name, ex.Message);
-            if (isInitialSetup)
-            {
-                throw;
-            }
+            throw;
         }
 
         try
@@ -119,10 +114,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring queue {QueueName}: {Message}", name, ex.Message);
-            if (isInitialSetup)
-            {
-                throw;
-            }
+            throw;
         }
 
         if (!string.IsNullOrEmpty(name))
@@ -144,7 +136,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
 
     /// <summary>
     /// Declares the retry topology: dead-letter exchange, queue binding, and retry queue.
-    /// Swallows OperationInterruptedException unless isInitialSetup is true.
+    /// Always re-throws AMQP errors — see class summary for the channel-state rationale.
     /// </summary>
     public async Task ConfigureRetryTopologyAsync(
         IChannel channel,
@@ -169,10 +161,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring dead letter exchange - {Message}", ex.Message);
-            if (isInitialSetup)
-            {
-                throw;
-            }
+            throw;
         }
 
         try
@@ -182,10 +171,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error binding dead letter queue - {Message}", ex.Message);
-            if (isInitialSetup)
-            {
-                throw;
-            }
+            throw;
         }
 
         Dictionary<string, object?> arguments = new(retryQueueArguments, StringComparer.Ordinal);
@@ -206,10 +192,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         catch (OperationInterruptedException ex)
         {
             _logger.LogWarning("Error declaring queue {Message}", ex.Message);
-            if (isInitialSetup)
-            {
-                throw;
-            }
+            throw;
         }
     }
 

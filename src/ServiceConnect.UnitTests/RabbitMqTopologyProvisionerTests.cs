@@ -50,7 +50,7 @@ public class RabbitMqTopologyProvisionerTests
     }
 
     [Fact]
-    public async Task ConfigureDeclareExchangeAsync_SwallowsOperationInterruptedException_WhenNotInitialSetup()
+    public async Task ConfigureDeclareExchangeAsync_RethrowsOperationInterruptedException_RegardlessOfIsInitialSetup()
     {
         var channel = MockChannel();
         channel.Setup(c => c.ExchangeDeclareAsync(
@@ -62,10 +62,11 @@ public class RabbitMqTopologyProvisionerTests
 
         var provisioner = new RabbitMqTopologyProvisioner(NullLogger.Instance);
 
-        var ex = await Record.ExceptionAsync(() =>
+        // Channel-closing AMQP errors must always propagate so the caller can recreate
+        // the channel rather than continue with a dead one — isInitialSetup is preserved
+        // for source-compat but no longer suppresses the throw.
+        await Assert.ThrowsAsync<OperationInterruptedException>(() =>
             provisioner.ConfigureDeclareExchangeAsync(channel.Object, "test.exchange", ExchangeType.Fanout, isInitialSetup: false));
-
-        Assert.Null(ex);
     }
 
     [Fact]
@@ -138,7 +139,7 @@ public class RabbitMqTopologyProvisionerTests
     }
 
     [Fact]
-    public async Task ConfigureDeclareUtilityQueueAsync_SwallowsOperationInterruptedException_WhenNotInitialSetup()
+    public async Task ConfigureDeclareUtilityQueueAsync_RethrowsOperationInterruptedException_RegardlessOfIsInitialSetup()
     {
         var channel = MockChannel();
         channel.Setup(c => c.ExchangeDeclareAsync(
@@ -151,10 +152,8 @@ public class RabbitMqTopologyProvisionerTests
         var provisioner = new RabbitMqTopologyProvisioner(NullLogger.Instance);
         var args = new Dictionary<string, object?>();
 
-        var ex = await Record.ExceptionAsync(() =>
+        await Assert.ThrowsAsync<OperationInterruptedException>(() =>
             provisioner.ConfigureDeclareUtilityQueueAsync(channel.Object, "error.queue", args, isInitialSetup: false));
-
-        Assert.Null(ex);
     }
 
     [Fact]
