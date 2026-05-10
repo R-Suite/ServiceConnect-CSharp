@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ServiceConnect.Interfaces;
 
@@ -24,11 +25,21 @@ namespace ServiceConnect.HealthChecks;
 /// </remarks>
 public sealed class BusConsumingHealthCheck : IHealthCheck
 {
+    // Per-IBus recovery state. The bus is a DI singleton (stable identity across
+    // probes), so a ConditionalWeakTable keyed on it bridges the per-probe re-alloc
+    // that PerProviderCache + HealthCheckService impose: each probe runs against a
+    // fresh IServiceScope.ServiceProvider, so the cache produces a new check instance
+    // per probe; without an external state table, the instance-scoped LastHealthyTicks
+    // resets to 0 every probe and the grace window never triggers. CWT keys by
+    // reference identity and tracks GC reachability, so a rebuilt SP-with-new-IBus
+    // gets a fresh state and the prior state becomes GC-eligible.
+    private static readonly ConditionalWeakTable<IBus, HealthCheckRecoveryState> RecoveryStateByBus = [];
+
     private readonly IBus _bus;
     private readonly IConsumer? _consumer;
     private readonly TimeSpan _recoveryGraceWindow;
     private readonly TimeProvider _timeProvider;
-    private long _lastHealthyTicks;  // 0 == never-observed-Healthy.
+    private readonly HealthCheckRecoveryState _recoveryState;
 
     /// <summary>
     /// Default 30-second recovery grace; system <see cref="TimeProvider"/>; no consumer
@@ -70,6 +81,7 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
         _consumer = consumer;
         _recoveryGraceWindow = recoveryGraceWindow;
         _timeProvider = timeProvider;
+        _recoveryState = RecoveryStateByBus.GetValue(bus, static _ => new HealthCheckRecoveryState());
     }
 
     /// <inheritdoc />
@@ -83,7 +95,7 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
         {
             // Stamp the last-Healthy timestamp on every Healthy observation so the grace
             // window measures from "most recent Healthy" rather than "first ever Healthy".
-            Volatile.Write(ref _lastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
+            Volatile.Write(ref _recoveryState.LastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
             return Task.FromResult(HealthCheckResult.Healthy("Bus is consuming."));
         }
 
@@ -99,10 +111,21 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
                 "Bus is not consuming (broker cancelled the consumer)."));
         }
 
+        // Intentional shutdown is a permanent failure — bypass grace. The grace window is
+        // meant to absorb transient disconnects where reconnect can recover; once the bus
+        // has been stopped or disposed there is no recovery to wait for, so a probe that
+        // reports Healthy here would mask a permanently-dead bus for the grace duration.
+        if (_bus.IsStopped)
+        {
+            var stoppedFailureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy;
+            return Task.FromResult(new HealthCheckResult(stoppedFailureStatus,
+                "Bus is not consuming (stopped or disposed)."));
+        }
+
         // Recovery grace: if we've observed Healthy at some point AND we're within the
-        // grace window, return Healthy with a note. Pre-fix any momentary disconnect
-        // would flip Unhealthy on the next probe and crash-loop the pod.
-        var lastHealthy = Volatile.Read(ref _lastHealthyTicks);
+        // grace window, return Healthy with a note. Per-bus state survives the per-probe
+        // re-alloc so a momentary disconnect does not flip Unhealthy and crash-loop the pod.
+        var lastHealthy = Volatile.Read(ref _recoveryState.LastHealthyTicks);
         if (lastHealthy != 0 && _recoveryGraceWindow > TimeSpan.Zero)
         {
             var age = _timeProvider.GetUtcNow() - new DateTimeOffset(lastHealthy, TimeSpan.Zero);

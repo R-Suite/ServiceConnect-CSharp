@@ -102,6 +102,15 @@ public sealed class Bus : IBus
     public bool IsCancelledByBroker => _consumer?.IsCancelledByBroker ?? false;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// True once StopConsumingAsync has flipped _stopped, OR DisposeAsync has flipped
+    /// _disposed. Both transitions are latched (never reset), so this signal correctly
+    /// distinguishes "intentional shutdown" from "transient disconnect / pre-start" — the
+    /// health check uses it to bypass the recovery-grace window on shutdown.
+    /// </remarks>
+    public bool IsStopped => Volatile.Read(ref _stopped) || Volatile.Read(ref _disposed) != 0;
+
+    /// <inheritdoc />
     public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
@@ -660,7 +669,9 @@ public sealed class Bus : IBus
                     // not restart consumption on this Bus instance. Mark the bus stopped so
                     // attempted restarts throw a clear error instead of silently failing.
                     // A defensive stop on a bus that never started must leave it restartable.
-                    _stopped = true;
+                    // Volatile.Write so IsStopped readers (the health check) observe the
+                    // latch without acquiring _stateLock.
+                    Volatile.Write(ref _stopped, true);
                 }
             }
 

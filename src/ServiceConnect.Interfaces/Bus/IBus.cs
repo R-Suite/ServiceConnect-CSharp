@@ -146,6 +146,18 @@ public interface IBus : IAsyncDisposable
     bool IsCancelledByBroker => false;
 
     /// <summary>
+    /// Gets whether the bus has been stopped or is being disposed. Distinct from
+    /// <see cref="IsConsuming"/>: that getter also flips false during a transient broker
+    /// disconnect (which the health check's recovery-grace window absorbs), whereas this
+    /// flag flips true permanently once <see cref="StopConsumingAsync"/> or
+    /// <see cref="IAsyncDisposable.DisposeAsync"/> has run, signalling that there is no
+    /// recovery to wait for. <c>BusConsumingHealthCheck</c> uses it to bypass grace and
+    /// report <c>Unhealthy</c> immediately on intentional shutdown. Default implementation
+    /// returns <see langword="false"/>; framework-supplied buses override.
+    /// </summary>
+    bool IsStopped => false;
+
+    /// <summary>
     /// Schedules a <see cref="TimeoutMessage"/> to be delivered to the current queue
     /// after the specified delay. The message's <c>CorrelationId</c> will equal
     /// <paramref name="correlationId"/>, which is the standard key for Process

@@ -24,6 +24,7 @@ public sealed class Consumer : IConsumer
     private readonly IBusConfiguration _busConfiguration;
     private readonly ConcurrentBag<IAsyncDisposable> _clients = [];
     private int _started; // 0 = not started, 1 = started; access only via Interlocked
+    private int _stopped; // 0 = active, 1 = stopped or disposed; latched for IsStopped readers
     private readonly bool _durable;
     private readonly int _retryDelay;
     private readonly bool _exclusive;
@@ -77,6 +78,9 @@ public sealed class Consumer : IConsumer
     /// </summary>
     public bool IsCancelledByBroker => _clients.OfType<RabbitMqConsumerHost>().Any(c => c.IsCancelledByBroker);
 
+    /// <inheritdoc />
+    public bool IsStopped => Volatile.Read(ref _stopped) != 0;
+
     /// <summary>
     /// Declares the required RabbitMQ topology and starts consuming messages for the configured queue.
     /// </summary>
@@ -102,6 +106,11 @@ public sealed class Consumer : IConsumer
             throw new InvalidOperationException(
                 "Consumer is already consuming. Call DisposeAsync before starting again.");
         }
+
+        // Clear the stopped latch — DisposeAsync sets it for IsStopped readers, and a
+        // DisposeAsync → StartConsumingAsync cycle (supported by the _started reset in
+        // DisposeAsync) must report the freshly-started consumer as not-stopped.
+        Interlocked.Exchange(ref _stopped, 0);
 
         try
         {
@@ -244,6 +253,10 @@ public sealed class Consumer : IConsumer
     /// </summary>
     public async Task StopConsumingAsync(CancellationToken cancellationToken = default)
     {
+        // Latch IsStopped on entry so a probe firing during the drain reports the consumer
+        // as permanently stopped rather than waiting out the recovery-grace window.
+        Interlocked.Exchange(ref _stopped, 1);
+
         // Stop in parallel so aggregate latency is O(graceful-shutdown-timeout) rather than
         // O(N * timeout). Per-host failures stay isolated via the inner try/catch so a
         // single host's error cannot short-circuit the rest via Task.WhenAll's aggregate-
@@ -275,6 +288,10 @@ public sealed class Consumer : IConsumer
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        // Latch IsStopped first so a health probe firing during disposal reports the
+        // consumer as permanently stopped rather than waiting out the recovery-grace window.
+        Interlocked.Exchange(ref _stopped, 1);
+
         // Each host's DisposeAsync is independently bounded by its own gracefulShutdownTimeout.
         // Sequential disposal made aggregate latency O(N * timeout); parallel makes it O(timeout).
         // Per-host failures (including any OCE — this dispose path is fire-and-forget cleanup)

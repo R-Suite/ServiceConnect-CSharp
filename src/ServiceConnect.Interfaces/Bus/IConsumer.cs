@@ -36,4 +36,15 @@ public interface IConsumer : IAsyncDisposable
     /// the broker keeps delivering until DI disposal.
     /// </remarks>
     Task StopConsumingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    /// <summary>
+    /// Gets whether the consumer has been stopped or is being disposed. Distinct from
+    /// <see cref="IsConnected"/>: that getter also flips false during a transient broker
+    /// disconnect, whereas this flag flips true permanently once
+    /// <see cref="StopConsumingAsync"/> or <see cref="IAsyncDisposable.DisposeAsync"/>
+    /// has run, signalling that there is no recovery to wait for.
+    /// <c>ConsumerConnectionHealthCheck</c> uses it to bypass the recovery-grace window
+    /// on intentional shutdown. Default implementation returns <see langword="false"/>.
+    /// </summary>
+    bool IsStopped => false;
 }

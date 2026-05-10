@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ServiceConnect.Interfaces;
 
@@ -18,10 +19,15 @@ namespace ServiceConnect.HealthChecks;
 /// </remarks>
 public sealed class ConsumerConnectionHealthCheck : IHealthCheck
 {
+    // Per-IConsumer recovery state. Mirrors BusConsumingHealthCheck — see the comment
+    // there for the per-probe re-allocation rationale that motivates the external
+    // ConditionalWeakTable.
+    private static readonly ConditionalWeakTable<IConsumer, HealthCheckRecoveryState> RecoveryStateByConsumer = [];
+
     private readonly IConsumer _consumer;
     private readonly TimeSpan _recoveryGraceWindow;
     private readonly TimeProvider _timeProvider;
-    private long _lastHealthyTicks;  // 0 == never-observed-Healthy.
+    private readonly HealthCheckRecoveryState _recoveryState;
 
     /// <summary>
     /// Default 30-second recovery grace; system <see cref="TimeProvider"/>.
@@ -56,6 +62,7 @@ public sealed class ConsumerConnectionHealthCheck : IHealthCheck
         _consumer = consumer;
         _recoveryGraceWindow = recoveryGraceWindow;
         _timeProvider = timeProvider;
+        _recoveryState = RecoveryStateByConsumer.GetValue(consumer, static _ => new HealthCheckRecoveryState());
     }
 
     /// <inheritdoc />
@@ -79,11 +86,21 @@ public sealed class ConsumerConnectionHealthCheck : IHealthCheck
 
         if (_consumer.IsConnected)
         {
-            Volatile.Write(ref _lastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
+            Volatile.Write(ref _recoveryState.LastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
             return Task.FromResult(HealthCheckResult.Healthy("Consumer connection is open."));
         }
 
-        var lastHealthy = Volatile.Read(ref _lastHealthyTicks);
+        // Intentional shutdown is a permanent failure — bypass grace. The grace window
+        // is meant to absorb transient disconnects where reconnect can recover; once the
+        // consumer has been stopped or disposed there is no recovery to wait for.
+        if (_consumer.IsStopped)
+        {
+            var stoppedFailureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy;
+            return Task.FromResult(new HealthCheckResult(stoppedFailureStatus,
+                "Consumer connection is closed (stopped or disposed)."));
+        }
+
+        var lastHealthy = Volatile.Read(ref _recoveryState.LastHealthyTicks);
         if (lastHealthy != 0 && _recoveryGraceWindow > TimeSpan.Zero)
         {
             var age = _timeProvider.GetUtcNow() - new DateTimeOffset(lastHealthy, TimeSpan.Zero);
