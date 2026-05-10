@@ -146,9 +146,16 @@ public static class Retry
         var cappedAttempt = Math.Min(retryAttempt, 52);
         var backoff = baseInterval.TotalMilliseconds * Math.Pow(2, cappedAttempt);
         var clampedBackoffMs = Math.Min(backoff, MaxDelayMs);
-        var exponentialDelay = TimeSpan.FromMilliseconds(clampedBackoffMs);
-        var jitterMs = Random.Shared.Next(0, (int)Math.Min(baseInterval.TotalMilliseconds, 1000));
-        var totalDelay = exponentialDelay + TimeSpan.FromMilliseconds(jitterMs);
-        return TimeSpan.FromMilliseconds(Math.Min(totalDelay.TotalMilliseconds, MaxDelayMs));
+
+        // Scale jitter from the clamped delay so the spread survives at the cap.
+        // A jitter sourced from baseInterval (≤1000 ms) re-capped to MaxDelayMs would mean
+        // every retry past the cap waits exactly MaxDelayMs — synchronised retry storms
+        // after a connection-storm. 10 % of the clamped delay scales naturally with the
+        // backoff; the final value is bounded by MaxDelayMs * 1.1 so the jitter band sits
+        // immediately above the cap rather than collapsing to it.
+        var jitterCeiling = Math.Max(1, (int)(clampedBackoffMs * 0.1));
+        var jitterMs = Random.Shared.Next(0, jitterCeiling);
+        var totalMs = clampedBackoffMs + jitterMs;
+        return TimeSpan.FromMilliseconds(Math.Min(totalMs, MaxDelayMs * 1.1));
     }
 }
