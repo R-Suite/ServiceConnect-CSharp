@@ -186,10 +186,14 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             var batchFilter = dueUnlockedFilter &
                               Builders<TimeoutData>.Filter.In(x => x.Id, candidateIds);
 
-            // Track whether the lease claim succeeded so the OCE handler below knows
-            // whether there is anything to release. Initialised false: if UpdateMany
-            // throws (or is cancelled before it starts), there is nothing to clean up.
-            var leaseClaimed = false;
+            // Mark the intent to claim the lease BEFORE the UpdateMany await. If the call
+            // commits server-side but the awaiter resumes into a cancellation (OCE thrown
+            // before any post-await statement runs), the catch below would otherwise skip
+            // the release and orphan the lease until the reaper reclaims it. Setting the
+            // flag pre-await means a release attempt always fires on any throw between here
+            // and the read-back; the release filter is gated on LockedBy == sessionId so
+            // attempting to release a claim that never actually committed is a no-op.
+            var leaseClaimed = true;
             var due = new List<TimeoutData>();
             try
             {
@@ -201,7 +205,6 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 {
                     await collection.UpdateManyAsync(batchFilter, lockUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
-                leaseClaimed = true;
 
                 // Read back exactly the rows we just claimed (LockedBy == sessionId, lease still valid).
                 // The LockExpiresAt > utcNow guard prevents a race where the lease expired between

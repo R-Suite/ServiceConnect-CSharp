@@ -95,8 +95,13 @@ public class MongoDbTimeoutStoreCancelOrphanTests
     }
 
     [Fact]
-    public async Task GetTimeoutsBatch_CancelBeforeUpdateMany_DoesNotAttemptRelease()
+    public async Task GetTimeoutsBatch_CancelDuringUpdateMany_AttemptsBestEffortRelease()
     {
+        // Cancellation observed by the claim's await may have arrived either before or after
+        // the server actually committed the lock-update — the caller cannot tell. The store
+        // marks intent to claim before the await and always runs a best-effort release on
+        // throw; the release filter is gated on LockedBy == sessionId so a release call for
+        // a claim that never committed is a server-side no-op.
         var (store, collection, _) = BuildStore();
 
         var updateManyCalls = 0;
@@ -105,12 +110,22 @@ public class MongoDbTimeoutStoreCancelOrphanTests
                 It.IsAny<UpdateDefinition<TimeoutData>>(),
                 It.IsAny<UpdateOptions>(),
                 It.IsAny<CancellationToken>()))
-            .Callback(() => updateManyCalls++)
-            .ThrowsAsync(new OperationCanceledException("simulated"));
+            .Returns<FilterDefinition<TimeoutData>, UpdateDefinition<TimeoutData>, UpdateOptions, CancellationToken>(
+                (_, _, _, ct) =>
+                {
+                    updateManyCalls++;
+                    if (updateManyCalls == 1)
+                    {
+                        throw new OperationCanceledException("simulated");
+                    }
+                    // Release call must use CancellationToken.None so cancellation can't preempt cleanup.
+                    Assert.Equal(CancellationToken.None, ct);
+                    return Task.FromResult<UpdateResult>(new UpdateResult.Acknowledged(0, 0, null));
+                });
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => store.GetTimeoutsBatchAsync());
 
-        Assert.Equal(1, updateManyCalls); // only the failed claim attempt
+        Assert.Equal(2, updateManyCalls); // failed claim + best-effort release
     }
 
     [Fact]
