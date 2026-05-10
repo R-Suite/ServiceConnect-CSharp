@@ -98,7 +98,14 @@ public static partial class ServiceCollectionExtensions
         // Resolve Lazy<IBus> through the accessor rather than capturing the root
         // IServiceProvider — capturing the root SP inside the factory risks deadlock
         // if any transitive dependency dereferences Value during Bus construction.
-        services.TryAddSingleton(sp => new Lazy<IBus>(() => sp.GetRequiredService<BusAccessor>().GetOrThrow()));
+        // Fallback: when a caller pre-registered IBus before AddServiceConnect ran, the
+        // TryAddSingleton<IBus> below skips and BusAccessor.Set never fires; defer to the
+        // container's IBus resolution so the deferred reference still works for that case.
+        services.TryAddSingleton(sp => new Lazy<IBus>(() =>
+        {
+            var accessor = sp.GetRequiredService<BusAccessor>();
+            return accessor.Bus ?? sp.GetRequiredService<IBus>();
+        }));
         services.TryAddSingleton<IBus>(sp =>
         {
             sp.GetRequiredService<IRegistryInitializer>().Initialize();
@@ -123,13 +130,20 @@ public static partial class ServiceCollectionExtensions
             sp.GetRequiredService<BusAccessor>().Set(bus);
             return bus;
         });
-        services.AddSingleton<IHostedService, BusHostedService>();
-        services.AddSingleton<IHostedService>(sp =>
+        // TryAddEnumerable so a second AddServiceConnect call (e.g. two feature modules
+        // each calling it) does not start two BusHostedService instances — the second
+        // StartConsumingAsync would throw "Already consuming" and kill host startup —
+        // nor two ProcessManagerTimeoutService instances both polling the same store.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, BusHostedService>());
+        // TryAddEnumerable dedups by implementation type, so the factory-bound descriptor
+        // needs a concrete TImplementation. Use the typed factory overload so a repeat
+        // AddServiceConnect call doesn't double-register ProcessManagerTimeoutService.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ProcessManagerTimeoutService>(sp =>
             new ProcessManagerTimeoutService(
                 sp.GetRequiredService<IBusConfiguration>(),
                 sp.GetRequiredService<Lazy<IBus>>(),
                 sp.GetService<ITimeoutStore>(),
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ProcessManagerTimeoutService>>(),
-                sp.GetService<TimeProvider>()));
+                sp.GetService<TimeProvider>())));
     }
 }
