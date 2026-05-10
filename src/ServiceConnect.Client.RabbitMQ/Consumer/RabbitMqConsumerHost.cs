@@ -225,6 +225,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _consumer.ShutdownAsync += OnConsumerShutdownAsync;
         _consumer.UnregisteredAsync += OnConsumerUnregisteredAsync;
         _model.ChannelShutdownAsync += OnChannelShutdownAsync;
+        // Publish channel needs an independent shutdown subscriber: RabbitMQ.Client v7 does
+        // NOT auto-recreate channels closed by a broker protocol error (404 NOT_FOUND on a
+        // deleted retry/error exchange, 406 PRECONDITION_FAILED on topology drift). Without
+        // this hook a dead publish channel goes unobserved, retry/audit/terminal-failure
+        // publishes throw AlreadyClosedException on every delivery, the host nacks-with-requeue,
+        // and the broker hot-loops the same delivery against the same dead channel.
+        _publishChannel.ChannelShutdownAsync += OnPublishChannelShutdownAsync;
         _subscribedUnderlyingConnection = _connection.UnderlyingConnection;
         if (_subscribedUnderlyingConnection is not null)
         {
@@ -427,9 +434,38 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
     private Task OnChannelShutdownAsync(object? sender, ShutdownEventArgs args)
     {
+        // Broker- or peer-initiated channel close (e.g. queue deleted via management UI;
+        // 404/406 against the consumer channel) is NOT auto-recovered by RabbitMQ.Client v7
+        // and consumption stops silently otherwise. Flip the broker-cancelled flag so
+        // BusConsumingHealthCheck and ConsumerConnectionHealthCheck flip Unhealthy and
+        // operators see the failure rather than green-dashboarding a stalled consumer.
+        // ShutdownInitiator.Application is our own DisposeAsync / StopAsync — those must
+        // not flip the flag (they're intentional shutdown, not broker cancellation).
+        if (args.Initiator != ShutdownInitiator.Application)
+        {
+            Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
+        }
         _logger.LogWarning(
-            "AMQP channel shutdown for queue '{Queue}': {ReplyCode} {ReplyText}",
-            _queueName, args.ReplyCode, args.ReplyText);
+            "AMQP channel shutdown for queue '{Queue}': {ReplyCode} {ReplyText} (initiator: {Initiator})",
+            _queueName, args.ReplyCode, args.ReplyText, args.Initiator);
+        return Task.CompletedTask;
+    }
+
+    private Task OnPublishChannelShutdownAsync(object? sender, ShutdownEventArgs args)
+    {
+        // Publish channel close is invisible to the consumer's IsConsuming/IsCancelledByBroker
+        // chain unless we explicitly raise it. A non-Application close means the broker (or
+        // peer protocol error) tore the channel down; downstream retry/audit publishes will
+        // throw AlreadyClosedException and the message gets nacked-with-requeue forever.
+        // Flip the broker-cancelled flag so the health checks surface the failure and the
+        // pod is removed from rotation rather than burning CPU on a redelivery hot-loop.
+        if (args.Initiator != ShutdownInitiator.Application)
+        {
+            Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
+        }
+        _logger.LogWarning(
+            "AMQP publish-channel shutdown for queue '{Queue}': {ReplyCode} {ReplyText} (initiator: {Initiator})",
+            _queueName, args.ReplyCode, args.ReplyText, args.Initiator);
         return Task.CompletedTask;
     }
 
@@ -648,6 +684,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         if (_model is not null)
         {
             _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
+        }
+        if (_publishChannel is not null)
+        {
+            _publishChannel.ChannelShutdownAsync -= OnPublishChannelShutdownAsync;
         }
 
         // Unsubscribe against the SAME IConnection reference we subscribed to. Re-fetching
