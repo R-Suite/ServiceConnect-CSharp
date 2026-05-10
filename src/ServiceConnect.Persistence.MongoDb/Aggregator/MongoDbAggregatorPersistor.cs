@@ -204,24 +204,59 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             var claimUpdate = Builders<AggregatorDocument>.Update
                 .Set(x => x.LockedBy, sessionId)
                 .Set(x => x.LockExpiresAt, leaseDeadline);
-            await _collection.UpdateManyAsync(claimFilter, claimUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            // Read back exactly the rows this session just claimed. The LockExpiresAt > utcNow
-            // guard rejects rows whose lease expired between the claim and read in pathological
-            // clock-jump cases.
-            var filter = Builders<AggregatorDocument>.Filter.And(
-                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
-                Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, sessionId),
-                Builders<AggregatorDocument>.Filter.Gt(x => x.LockExpiresAt, utcNow));
-            // Sort by InsertedAtTicks (insertion-order), then InsertSequence (per-process
-            // monotonic counter for same-tick ties), then Id as a final stable tie-break
-            // for cross-process ties. Without an explicit sort MongoDB returns documents
-            // in cursor order, which is not guaranteed to match insertion order.
-            var sort = Builders<AggregatorDocument>.Sort
-                .Ascending(x => x.InsertedAtTicks)
-                .Ascending(x => x.InsertSequence)
-                .Ascending(x => x.Id);  // final tie-break for cross-process ties
-            var docs = await _collection.Find(filter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var leaseClaimed = false;
+            List<AggregatorDocument> docs;
+            try
+            {
+                await _collection.UpdateManyAsync(claimFilter, claimUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+                leaseClaimed = true;
+
+                // Read back exactly the rows this session just claimed. The LockExpiresAt > utcNow
+                // guard rejects rows whose lease expired between the claim and read in pathological
+                // clock-jump cases.
+                var filter = Builders<AggregatorDocument>.Filter.And(
+                    Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                    Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, sessionId),
+                    Builders<AggregatorDocument>.Filter.Gt(x => x.LockExpiresAt, utcNow));
+                // Sort by InsertedAtTicks (insertion-order), then InsertSequence (per-process
+                // monotonic counter for same-tick ties), then Id as a final stable tie-break
+                // for cross-process ties. Without an explicit sort MongoDB returns documents
+                // in cursor order, which is not guaranteed to match insertion order.
+                var sort = Builders<AggregatorDocument>.Sort
+                    .Ascending(x => x.InsertedAtTicks)
+                    .Ascending(x => x.InsertSequence)
+                    .Ascending(x => x.Id);  // final tie-break for cross-process ties
+                docs = await _collection.Find(filter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // Any failure between successful claim and successful read-back orphans the
+                // lease — held by a sessionId no caller will use. Best-effort release lets the
+                // next poll see the rows immediately rather than waiting on lease-expiry.
+                // Release uses CancellationToken.None — the cancelling token (or a transient
+                // MongoException) must not preempt cleanup. Mirrors MongoDbTimeoutStore.
+                if (leaseClaimed)
+                {
+                    try
+                    {
+                        var releaseFilter = Builders<AggregatorDocument>.Filter.And(
+                            Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                            Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, sessionId));
+                        var releaseUpdate = Builders<AggregatorDocument>.Update
+                            .Set(x => x.LockedBy, (Guid?)null)
+                            .Set(x => x.LockExpiresAt, (DateTime?)null);
+                        await _collection.UpdateManyAsync(releaseFilter, releaseUpdate, cancellationToken: CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        _logger.LogWarning(releaseEx,
+                            "Best-effort aggregator lease release after error failed for session {SessionId}; lease-expiry will reclaim.",
+                            sessionId);
+                    }
+                }
+                throw;
+            }
 
             var messages = new List<IHasCorrelationId>(docs.Count);
             var ids = new List<Guid>(docs.Count);
@@ -372,7 +407,19 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             {
                 filter &= Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, leased.LeaseSessionId);
             }
-            await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
+            var deleteResult = await _collection.DeleteManyAsync(filter, cancellationToken).ConfigureAwait(false);
+            if (deleteResult.IsAcknowledged && deleteResult.DeletedCount < snapshot.ResolvedIds.Count)
+            {
+                // Lease rotated to another worker mid-handler — the original handler ran
+                // past its LeaseDuration and the rows were re-claimed by a peer who has
+                // already dispatched. Log at Warning so operators can observe the
+                // at-least-once delivery and size handler latency vs. LeaseDuration. Aggregator
+                // handlers must be idempotent when handler runtime can exceed the lease.
+                var sessionTag = snapshot is LeasedAggregatorSnapshot ls ? ls.LeaseSessionId.ToString() : "<no-lease>";
+                _logger.LogWarning(
+                    "Aggregator '{Name}' RemoveSnapshotAsync deleted {Deleted}/{Expected} rows for session {SessionId}; the lease rotated mid-dispatch and the missing rows were re-dispatched by a peer (at-least-once delivery).",
+                    name, deleteResult.DeletedCount, snapshot.ResolvedIds.Count, sessionTag);
+            }
         }
         catch (BsonException ex)
         {
