@@ -15,7 +15,7 @@ public class InMemoryAggregatorPersistorLockHoldTests
         // end-to-end with cloning inside the lock.
         var persistor = new InMemoryAggregatorPersistor();
         var data = new TestAggregatorMessage { CorrelationId = Guid.NewGuid(), Payload = "x" };
-        await persistor.InsertDataAsync(data, "test");
+        await persistor.InsertDataAsync(data, "test", Guid.NewGuid().ToString());
 
         var snapshot = await persistor.GetSnapshotAsync("test");
 

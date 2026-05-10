@@ -19,7 +19,7 @@ public class AggregatorProcessorUnresolvedGateTests
         // or call GetSnapshotAsync: the batch-size gate must read CountResolvedAsync, so
         // an all-unresolved bucket never trips the flush path.
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(10); // would trigger gate if read
@@ -68,7 +68,7 @@ public class AggregatorProcessorUnresolvedGateTests
         // Sanity check: the resolved-count gate still fires when records are resolvable.
         var snapshotMessage = new AggUnrTestMessage(Guid.NewGuid()) { Value = "y" };
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(5);

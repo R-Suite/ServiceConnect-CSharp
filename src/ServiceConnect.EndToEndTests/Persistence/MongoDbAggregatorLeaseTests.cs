@@ -58,8 +58,8 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
         var persistorA = BuildPersistor(dbName, clock, registry);
         var persistorB = BuildPersistor(dbName, clock, registry);
 
-        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-test");
-        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 2 }, "lease-test");
+        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-test", Guid.NewGuid().ToString());
+        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 2 }, "lease-test", Guid.NewGuid().ToString());
 
         var snapshotA = await persistorA.GetSnapshotAsync("lease-test");
         Assert.Equal(2, snapshotA.ResolvedMessages.Count);
@@ -86,7 +86,7 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
         var persistorA = BuildPersistor(dbName, clock, registry);
         var persistorB = BuildPersistor(dbName, clock, registry);
 
-        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-exp");
+        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-exp", Guid.NewGuid().ToString());
 
         var first = await persistorA.GetSnapshotAsync("lease-exp");
         Assert.Single(first.ResolvedMessages);
@@ -113,7 +113,7 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
         var persistorA = BuildPersistor(dbName, clock, registry);
         var persistorB = BuildPersistor(dbName, clock, registry);
 
-        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-rot");
+        await persistorA.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-rot", Guid.NewGuid().ToString());
 
         var snapshotA = await persistorA.GetSnapshotAsync("lease-rot");
         Assert.Single(snapshotA.ResolvedIds);
@@ -145,8 +145,8 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
         registry.Register(typeof(LeaseTestMessage));
         var persistor = BuildPersistor(dbName, TimeProvider.System, registry);
 
-        await persistor.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-happy");
-        await persistor.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 2 }, "lease-happy");
+        await persistor.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "lease-happy", Guid.NewGuid().ToString());
+        await persistor.InsertDataAsync(new LeaseTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 2 }, "lease-happy", Guid.NewGuid().ToString());
 
         var snapshot = await persistor.GetSnapshotAsync("lease-happy");
         Assert.Equal(2, snapshot.ResolvedMessages.Count);

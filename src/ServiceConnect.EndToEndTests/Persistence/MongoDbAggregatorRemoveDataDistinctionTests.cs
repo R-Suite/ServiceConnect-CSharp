@@ -69,7 +69,7 @@ public class MongoDbAggregatorRemoveDataDistinctionTests(PersistenceFixture fixt
         var item = new SharedItem { CorrelationId = Guid.NewGuid(), Value = "shared" };
         var persistor = BuildPersistor(dbName, registry);
 
-        await persistor.InsertDataAsync(item, "shared-name");
+        await persistor.InsertDataAsync(item, "shared-name", Guid.NewGuid().ToString());
 
         var ex = await Assert.ThrowsAsync<ConcurrencyException>(() =>
             persistor.RemoveDataAsync("shared-name", Guid.NewGuid()));

@@ -51,8 +51,8 @@ public class MongoDbAggregatorInsertOrderTests(PersistenceFixture fixture)
         registry.Register(typeof(OrderTestMessage));
         var persistor = BuildPersistor(dbName, clock, registry);
 
-        await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "test-name");
-        await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 2 }, "test-name");
+        await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 1 }, "test-name", Guid.NewGuid().ToString());
+        await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = 2 }, "test-name", Guid.NewGuid().ToString());
 
         var snapshot = await persistor.GetSnapshotAsync("test-name");
         var sequences = snapshot.ResolvedMessages.Cast<OrderTestMessage>().Select(m => m.Sequence).ToArray();
@@ -74,7 +74,7 @@ public class MongoDbAggregatorInsertOrderTests(PersistenceFixture fixture)
 
         for (var i = 1; i <= 100; i++)
         {
-            await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = i }, "test-name");
+            await persistor.InsertDataAsync(new OrderTestMessage { CorrelationId = Guid.NewGuid(), Sequence = i }, "test-name", Guid.NewGuid().ToString());
         }
 
         var snapshot = await persistor.GetSnapshotAsync("test-name");

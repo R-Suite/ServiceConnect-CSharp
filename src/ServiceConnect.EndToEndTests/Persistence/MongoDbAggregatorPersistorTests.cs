@@ -56,8 +56,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
 
         var persistor = CreatePersistor(registry: registry);
 
-        await persistor.InsertDataAsync(item1, "batch1");
-        await persistor.InsertDataAsync(item2, "batch1");
+        await persistor.InsertDataAsync(item1, "batch1", Guid.NewGuid().ToString());
+        await persistor.InsertDataAsync(item2, "batch1", Guid.NewGuid().ToString());
 
         var result = await persistor.GetDataAsync("batch1");
 
@@ -72,8 +72,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
 
-        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item1", CorrelationId = correlationId1 }, "batch2");
-        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item2", CorrelationId = correlationId2 }, "batch2");
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item1", CorrelationId = correlationId1 }, "batch2", Guid.NewGuid().ToString());
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item2", CorrelationId = correlationId2 }, "batch2", Guid.NewGuid().ToString());
 
         var count = await persistor.CountAsync("batch2");
 
@@ -88,8 +88,8 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         var correlationId1 = Guid.NewGuid();
         var correlationId2 = Guid.NewGuid();
 
-        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item1", CorrelationId = correlationId1 }, "batch3");
-        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item2", CorrelationId = correlationId2 }, "batch3");
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item1", CorrelationId = correlationId1 }, "batch3", Guid.NewGuid().ToString());
+        await persistor.InsertDataAsync(new AggregatorTestItem { Value = "item2", CorrelationId = correlationId2 }, "batch3", Guid.NewGuid().ToString());
 
         await persistor.RemoveDataAsync("batch3", correlationId1);
 
@@ -134,7 +134,7 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         foreach (var name in names)
         {
             var item = new AggregatorLabelItem { CorrelationId = Guid.NewGuid(), Label = name };
-            await persistor.InsertDataAsync(item, "ordered");
+            await persistor.InsertDataAsync(item, "ordered", Guid.NewGuid().ToString());
             time.Advance(TimeSpan.FromMilliseconds(25));
         }
 
@@ -160,7 +160,7 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         var item = new AggregatorTestItem { CorrelationId = Guid.NewGuid(), Value = "test" };
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => persistor.InsertDataAsync(item, "l9-batch", cts.Token));
+            () => persistor.InsertDataAsync(item, "l9-batch", Guid.NewGuid().ToString(), cts.Token));
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
             NullLogger<MongoDbAggregatorPersistor>.Instance, registry);
 
         // First write triggers EnsureIndexesAsync; must NOT throw despite the conflict.
-        var ex = await Record.ExceptionAsync(() => persistor.InsertDataAsync(item, "batch-conflict"));
+        var ex = await Record.ExceptionAsync(() => persistor.InsertDataAsync(item, "batch-conflict", Guid.NewGuid().ToString()));
         Assert.Null(ex);
     }
 
@@ -225,7 +225,7 @@ public class MongoDbAggregatorPersistorTests(PersistenceFixture fixture)
         var existing = new AggregatorTestItem { CorrelationId = Guid.NewGuid(), Value = "existing" };
         var persistor = CreatePersistor(registry: registry);
 
-        await persistor.InsertDataAsync(existing, "batch-mismatch");
+        await persistor.InsertDataAsync(existing, "batch-mismatch", Guid.NewGuid().ToString());
 
         await Assert.ThrowsAsync<ConcurrencyException>(
             () => persistor.RemoveDataAsync("batch-mismatch", Guid.NewGuid(), CancellationToken.None));

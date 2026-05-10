@@ -72,7 +72,7 @@ public class MongoDbAggregatorPersistorIndexInitTests
         const int concurrency = 8;
         var tasks = Enumerable.Range(0, concurrency)
             .Select(_ => Task.Run(() => persistor.InsertDataAsync(
-                new TestData { CorrelationId = Guid.NewGuid() }, "test")))
+                new TestData { CorrelationId = Guid.NewGuid() }, "test", Guid.NewGuid().ToString())))
             .ToArray();
 
         // Let the tasks get started and queue up against EnsureIndexesAsync.

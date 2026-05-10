@@ -21,7 +21,7 @@ public class InMemoryAggregatorPersistorLockHoldTests
         // and must be reflected in a subsequent snapshot.
         using var persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
-        await persistor.InsertDataAsync(new AggregatorTestData(corrId) { Value = "original" }, "s");
+        await persistor.InsertDataAsync(new AggregatorTestData(corrId) { Value = "original" }, "s", Guid.NewGuid().ToString());
 
         // Take snapshot before any remove.
         var snapshot = await persistor.GetSnapshotAsync("s");
@@ -47,7 +47,7 @@ public class InMemoryAggregatorPersistorLockHoldTests
         using var persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
         await persistor.InsertDataAsync(
-            new InMemoryAggregatorPersistorTests.AggWithNested(corrId) { Tags = { "before" } }, "s");
+            new InMemoryAggregatorPersistorTests.AggWithNested(corrId) { Tags = { "before" } }, "s", Guid.NewGuid().ToString());
 
         var snapshot = await persistor.GetSnapshotAsync("s");
         var snapshotItem = Assert.IsType<InMemoryAggregatorPersistorTests.AggWithNested>(

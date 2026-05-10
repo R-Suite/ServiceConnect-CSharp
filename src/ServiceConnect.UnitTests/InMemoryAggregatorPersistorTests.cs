@@ -36,7 +36,7 @@ public class InMemoryAggregatorPersistorTests
         var data = new AggregatorTestData(Guid.NewGuid()) { Value = "TestData" };
 
         // Act
-        await aggregatorPersistor.InsertDataAsync(data, "key1", CancellationToken.None);
+        await aggregatorPersistor.InsertDataAsync(data, "key1", Guid.NewGuid().ToString(), CancellationToken.None);
 
         // Assert
         var result = await aggregatorPersistor.GetDataAsync("key1", CancellationToken.None);
@@ -51,7 +51,7 @@ public class InMemoryAggregatorPersistorTests
         var corrId = Guid.NewGuid();
         IAggregatorPersistor aggregatorPersistor = new InMemoryAggregatorPersistor();
         var data = new AggregatorTestData(corrId);
-        await aggregatorPersistor.InsertDataAsync(data, "key1", CancellationToken.None);
+        await aggregatorPersistor.InsertDataAsync(data, "key1", Guid.NewGuid().ToString(), CancellationToken.None);
 
         // Act
         await aggregatorPersistor.RemoveDataAsync("key1", corrId, CancellationToken.None);
@@ -77,8 +77,8 @@ public class InMemoryAggregatorPersistorTests
         var data1 = new AggregatorTestData(Guid.NewGuid()) { Value = "first" };
         var data2 = new AggregatorTestData(Guid.NewGuid()) { Value = "second" };
 
-        await persistor.InsertDataAsync(data1, "mykey", CancellationToken.None);
-        await persistor.InsertDataAsync(data2, "mykey", CancellationToken.None);
+        await persistor.InsertDataAsync(data1, "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(data2, "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
 
         var result = await persistor.GetDataAsync("mykey", CancellationToken.None);
         Assert.Equal(2, result.Count);
@@ -91,8 +91,8 @@ public class InMemoryAggregatorPersistorTests
         var data1 = new AggregatorTestData(Guid.NewGuid()) { Value = "alpha" };
         var data2 = new AggregatorTestData(Guid.NewGuid()) { Value = "beta" };
 
-        await persistor.InsertDataAsync(data1, "key-a", CancellationToken.None);
-        await persistor.InsertDataAsync(data2, "key-b", CancellationToken.None);
+        await persistor.InsertDataAsync(data1, "key-a", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(data2, "key-b", Guid.NewGuid().ToString(), CancellationToken.None);
 
         Assert.Single(await persistor.GetDataAsync("key-a", CancellationToken.None));
         Assert.Single(await persistor.GetDataAsync("key-b", CancellationToken.None));
@@ -114,7 +114,7 @@ public class InMemoryAggregatorPersistorTests
     public async Task Count_AfterInsertingOneItem_ReturnsOne()
     {
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
 
         int count = await persistor.CountAsync("mykey", CancellationToken.None);
 
@@ -125,9 +125,9 @@ public class InMemoryAggregatorPersistorTests
     public async Task Count_AfterInsertingMultipleItems_ReturnsCorrectCount()
     {
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
 
         int count = await persistor.CountAsync("mykey", CancellationToken.None);
 
@@ -139,8 +139,8 @@ public class InMemoryAggregatorPersistorTests
     {
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
-        await persistor.InsertDataAsync(new AggregatorTestData(corrId), "mykey", CancellationToken.None);
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(corrId), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
 
         await persistor.RemoveDataAsync("mykey", corrId, CancellationToken.None);
 
@@ -151,8 +151,8 @@ public class InMemoryAggregatorPersistorTests
     public async Task RemoveAllAsync_ClearsAllItemsForKey()
     {
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "mykey", Guid.NewGuid().ToString(), CancellationToken.None);
 
         await persistor.RemoveAllAsync("mykey", CancellationToken.None);
 
@@ -199,7 +199,7 @@ public class InMemoryAggregatorPersistorTests
         // The (name, correlationId) row not matching any entry — even when the name bucket exists —
         // is the exact case that was silently no-op'ing. Mirror the MongoDb contract.
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "batch-mismatch", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "batch-mismatch", Guid.NewGuid().ToString(), CancellationToken.None);
 
         await Assert.ThrowsAsync<ConcurrencyException>(
             () => persistor.RemoveDataAsync("batch-mismatch", Guid.NewGuid(), CancellationToken.None));
@@ -212,7 +212,7 @@ public class InMemoryAggregatorPersistorTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "test", cts.Token));
+            () => persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "test", Guid.NewGuid().ToString(), cts.Token));
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class InMemoryAggregatorPersistorTests
         // of how long the window stays open.
         var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 4, 21, 12, 0, 0, TimeSpan.Zero));
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor(timeProvider);
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "buffered" }, "slow-stream", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()) { Value = "buffered" }, "slow-stream", Guid.NewGuid().ToString(), CancellationToken.None);
 
         timeProvider.Advance(TimeSpan.FromDays(3));
 
@@ -287,7 +287,7 @@ public class InMemoryAggregatorPersistorTests
         var data = new AggWithNested(Guid.NewGuid());
         data.Tags.Add("original");
 
-        await persistor.InsertDataAsync(data, "nested-key", CancellationToken.None);
+        await persistor.InsertDataAsync(data, "nested-key", Guid.NewGuid().ToString(), CancellationToken.None);
         data.Tags.Add("after-insert-mutation");
 
         var result = await persistor.GetDataAsync("nested-key", CancellationToken.None);
@@ -303,7 +303,7 @@ public class InMemoryAggregatorPersistorTests
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
         var data = new AggWithNested(Guid.NewGuid());
         data.Tags.Add("original");
-        await persistor.InsertDataAsync(data, "nested-key", CancellationToken.None);
+        await persistor.InsertDataAsync(data, "nested-key", Guid.NewGuid().ToString(), CancellationToken.None);
 
         var first = (AggWithNested)(await persistor.GetDataAsync("nested-key", CancellationToken.None))[0];
         first.Tags.Add("mutated-by-caller");
@@ -332,7 +332,7 @@ public class InMemoryAggregatorPersistorTests
         var persistor = new InMemoryAggregatorPersistor();
         var dto = new ThirdPartyDto { CorrelationId = Guid.NewGuid(), Payload = "payload-A" };
 
-        await persistor.InsertDataAsync(dto, "stream-A");
+        await persistor.InsertDataAsync(dto, "stream-A", Guid.NewGuid().ToString());
         await persistor.RemoveDataAsync("stream-A", dto.CorrelationId);
 
         Assert.Equal(0, await persistor.CountAsync("stream-A"));

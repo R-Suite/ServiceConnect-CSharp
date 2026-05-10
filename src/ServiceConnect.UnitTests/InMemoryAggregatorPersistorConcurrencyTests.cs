@@ -35,6 +35,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
                 await persistor.InsertDataAsync(
                     new AggregatorTestData(Guid.NewGuid()) { Value = $"w{w}-{i}" },
                     "shared",
+                    Guid.NewGuid().ToString(),
                     CancellationToken.None);
             }
         })).ToArray();
@@ -61,6 +62,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
                 await persistor.InsertDataAsync(
                     new AggregatorTestData(Guid.NewGuid()) { Value = $"s{s}-{i}" },
                     $"stream-{s}",
+                    Guid.NewGuid().ToString(),
                     CancellationToken.None);
             }
         })).ToArray();
@@ -90,7 +92,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
             {
                 await persistor.InsertDataAsync(
                     new AggregatorTestData(Guid.NewGuid()) { Value = $"i{i}" },
-                    "key", CancellationToken.None);
+                    "key", Guid.NewGuid().ToString(), CancellationToken.None);
             }
         });
 
@@ -127,7 +129,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
         // would be the bug we're guarding against.
         using var persistor = new InMemoryAggregatorPersistor();
         var corrId = Guid.NewGuid();
-        await persistor.InsertDataAsync(new AggregatorTestData(corrId) { Value = "single" }, "key", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(corrId) { Value = "single" }, "key", Guid.NewGuid().ToString(), CancellationToken.None);
 
         const int contenders = 16;
         var successes = 0;
@@ -171,7 +173,7 @@ public class InMemoryAggregatorPersistorConcurrencyTests
             {
                 await persistor.InsertDataAsync(
                     new AggregatorTestData(Guid.NewGuid()) { Value = i.ToString() },
-                    "stream", CancellationToken.None);
+                    "stream", Guid.NewGuid().ToString(), CancellationToken.None);
             }
         });
 

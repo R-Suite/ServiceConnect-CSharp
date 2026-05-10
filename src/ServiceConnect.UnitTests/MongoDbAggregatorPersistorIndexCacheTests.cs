@@ -24,8 +24,8 @@ public class MongoDbAggregatorPersistorIndexCacheTests
         var (persistor, _, indexes) = BuildPersistorWithIndexCapture();
         var data = new AggregatorTestData(Guid.NewGuid());
 
-        await persistor.InsertDataAsync(data, "test-name");
-        await persistor.InsertDataAsync(data, "test-name");
+        await persistor.InsertDataAsync(data, "test-name", Guid.NewGuid().ToString());
+        await persistor.InsertDataAsync(data, "test-name", Guid.NewGuid().ToString());
 
         indexes.Verify(m => m.CreateManyAsync(
             It.IsAny<IEnumerable<CreateIndexModel<MongoDbAggregatorPersistor.AggregatorDocument>>>(),
@@ -51,8 +51,8 @@ public class MongoDbAggregatorPersistorIndexCacheTests
             .ReturnsAsync(["ok"]);  // second call should be skipped via the cache
 
         var data = new AggregatorTestData(Guid.NewGuid());
-        await persistor.InsertDataAsync(data, "test-name");   // benign 85 → flag flips
-        await persistor.InsertDataAsync(data, "test-name");   // skipped via cache
+        await persistor.InsertDataAsync(data, "test-name", Guid.NewGuid().ToString());   // benign 85 → flag flips
+        await persistor.InsertDataAsync(data, "test-name", Guid.NewGuid().ToString());   // skipped via cache
 
         indexes.Verify(m => m.CreateManyAsync(
             It.IsAny<IEnumerable<CreateIndexModel<MongoDbAggregatorPersistor.AggregatorDocument>>>(),
@@ -78,8 +78,8 @@ public class MongoDbAggregatorPersistorIndexCacheTests
 
         var data = new AggregatorTestData(Guid.NewGuid());
         // Non-benign MongoCommandException is wrapped in PersistenceException.
-        await Assert.ThrowsAsync<PersistenceException>(() => persistor.InsertDataAsync(data, "test-name"));
-        await Assert.ThrowsAsync<PersistenceException>(() => persistor.InsertDataAsync(data, "test-name"));
+        await Assert.ThrowsAsync<PersistenceException>(() => persistor.InsertDataAsync(data, "test-name", Guid.NewGuid().ToString()));
+        await Assert.ThrowsAsync<PersistenceException>(() => persistor.InsertDataAsync(data, "test-name", Guid.NewGuid().ToString()));
 
         // Flag should NOT have flipped — both calls retry index creation.
         indexes.Verify(m => m.CreateManyAsync(

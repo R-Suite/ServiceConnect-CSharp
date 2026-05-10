@@ -16,7 +16,7 @@ public class MongoDbAggregatorPersistorNullDataTests
         var persistor = CreatePersistor();
 
         var ex = await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            persistor.InsertDataAsync(data: null!, name: "agg"));
+            persistor.InsertDataAsync(data: null!, name: "agg", idempotencyKey: Guid.NewGuid().ToString()));
 
         Assert.Equal("data", ex.ParamName);
     }

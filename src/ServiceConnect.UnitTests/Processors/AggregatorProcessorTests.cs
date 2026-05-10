@@ -67,7 +67,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -132,7 +132,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -188,7 +188,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -233,7 +233,7 @@ public class AggregatorProcessorTests
         // dispatched AND nothing is deleted — the unresolved records must
         // survive for a later attempt once the types become resolvable.
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         // Under the resolved-aware gate, an unresolved-only buffer reports
         // CountResolvedAsync = 0; the gate does not fire, GetSnapshotAsync is never
@@ -289,7 +289,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -336,7 +336,7 @@ public class AggregatorProcessorTests
         var flushCanProceed = new TaskCompletionSource();
 
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
@@ -422,7 +422,7 @@ public class AggregatorProcessorTests
         };
         foreach (var m in initial)
         {
-            await persistor.InsertDataAsync(m, name);
+            await persistor.InsertDataAsync(m, name, Guid.NewGuid().ToString());
         }
 
         var snapshot = await persistor.GetSnapshotAsync(name);
@@ -430,7 +430,7 @@ public class AggregatorProcessorTests
         // Simulate a concurrent insert that arrives *after* the snapshot but *before*
         // the remove — this is the race the plan's snapshot API is designed to close.
         var late = new AggTestMessage(Guid.NewGuid()) { Value = "late" };
-        await persistor.InsertDataAsync(late, name);
+        await persistor.InsertDataAsync(late, name, Guid.NewGuid().ToString());
 
         await persistor.RemoveSnapshotAsync(name, snapshot);
 
@@ -466,7 +466,7 @@ public class AggregatorProcessorTests
 
         var insertCount = 0;
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => ++insertCount);
@@ -546,7 +546,7 @@ public class AggregatorProcessorTests
 
         var getSnapshotCalled = new TaskCompletionSource();
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -622,7 +622,7 @@ public class AggregatorProcessorTests
         var flushTcs = new TaskCompletionSource();
 
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -808,7 +808,7 @@ public class AggregatorProcessorTests
 
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock
-            .Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock
             .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -858,7 +858,7 @@ public class AggregatorProcessorTests
 
         var persistorMock = new Mock<IAggregatorPersistor>();
         persistorMock
-            .Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock
             .Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -921,7 +921,7 @@ public class AggregatorProcessorTests
 
         var probeMessage = new ScopeProbeAggMessage(Guid.NewGuid());
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -979,7 +979,7 @@ public class AggregatorProcessorTests
 
         var probeMessage = new EcCaptureProbeMessage(Guid.NewGuid());
         var persistorMock = new Mock<IAggregatorPersistor>();
-        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         // Below batch size so ProcessAsync goes to the timer path, not the immediate flush.
         persistorMock.Setup(p => p.CountAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))

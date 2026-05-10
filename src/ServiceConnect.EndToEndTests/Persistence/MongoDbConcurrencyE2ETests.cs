@@ -239,7 +239,8 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
             {
                 await persistor.InsertDataAsync(
                     new AggregatorItem { CorrelationId = Guid.NewGuid(), Value = $"w{w}-i{i}" },
-                    "shared-batch");
+                    "shared-batch",
+                    Guid.NewGuid().ToString());
             }
         })).ToArray();
 
@@ -259,7 +260,7 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
 
         var persistor = CreateAggregator(registry, out _);
         var item = new AggregatorItem { CorrelationId = Guid.NewGuid(), Value = "single" };
-        await persistor.InsertDataAsync(item, "race-batch");
+        await persistor.InsertDataAsync(item, "race-batch", Guid.NewGuid().ToString());
 
         const int contenders = 12;
         var successes = 0;

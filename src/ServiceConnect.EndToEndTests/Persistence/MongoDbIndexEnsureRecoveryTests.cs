@@ -98,7 +98,7 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         var item = new IndexRecoveryItem { Value = "first", CorrelationId = Guid.NewGuid() };
 
         // First write: causes EnsureIndexesAsync to create the indexes and flip _indexed=1.
-        await persistor.InsertDataAsync(item, "batch1");
+        await persistor.InsertDataAsync(item, "batch1", Guid.NewGuid().ToString());
 
         var firstIndexes = await ListIndexNamesAsync(client, dbName, collectionName);
         Assert.Contains("Name_1", firstIndexes);
@@ -109,7 +109,7 @@ public class MongoDbIndexEnsureRecoveryTests(PersistenceFixture fixture)
         // Second write on the same persistor instance: the cache flag short-circuits
         // the ensure path, so the indexes are NOT recreated. The test pins this contract.
         var item2 = new IndexRecoveryItem { Value = "second", CorrelationId = Guid.NewGuid() };
-        await persistor.InsertDataAsync(item2, "batch1");
+        await persistor.InsertDataAsync(item2, "batch1", Guid.NewGuid().ToString());
 
         var secondIndexes = await ListIndexNamesAsync(client, dbName, collectionName);
         Assert.DoesNotContain("Name_1", secondIndexes);

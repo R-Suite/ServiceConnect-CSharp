@@ -109,7 +109,7 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
             .ThrowsAsync(new BsonSerializationException("bson boom"));
 
         var ex = await Assert.ThrowsAsync<PersistenceException>(() =>
-            persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "test-name"));
+            persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "test-name", Guid.NewGuid().ToString()));
 
         Assert.IsAssignableFrom<BsonException>(ex.InnerException);
     }

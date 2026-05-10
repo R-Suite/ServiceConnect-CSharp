@@ -27,9 +27,9 @@ public class InMemoryAggregatorPersistorCountResolvedTests
     public async Task CountResolvedAsync_AllInsertedRecordsAreResolved()
     {
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-resolved", CancellationToken.None);
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-resolved", CancellationToken.None);
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-resolved", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-resolved", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-resolved", Guid.NewGuid().ToString(), CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-resolved", Guid.NewGuid().ToString(), CancellationToken.None);
 
         var total = await persistor.CountAsync("agg-resolved");
         var resolved = await persistor.CountResolvedAsync("agg-resolved");
@@ -52,7 +52,7 @@ public class InMemoryAggregatorPersistorCountResolvedTests
     public async Task CountResolvedAsync_PreCancelledToken_ThrowsOCE()
     {
         IAggregatorPersistor persistor = new InMemoryAggregatorPersistor();
-        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-cancel", CancellationToken.None);
+        await persistor.InsertDataAsync(new AggregatorTestData(Guid.NewGuid()), "agg-cancel", Guid.NewGuid().ToString(), CancellationToken.None);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
