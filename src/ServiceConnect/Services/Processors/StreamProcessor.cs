@@ -176,27 +176,47 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                 }
             }
 
-            // Write commits packet bytes only after we hold a touched entry. A late
-            // eviction between this CAS and the Write is bounded — bytes still land in
-            // a stream instance that was indexed at touch time, and the eviction sweep's
-            // next pass skips this entry because LastSeenUtc was just refreshed.
-            state.Stream.Write(messageBytes, packetNumber);
-
+            // Validate the LastPacketNumber header BEFORE writing any bytes. A bad header
+            // (unparseable or above MaxPacketNumber) must reject the packet outright rather
+            // than commit its bytes to the active stream — bytes written here are not undone
+            // by the early return below, and an attacker repeatedly submitting packets with
+            // LastPacketNumber > MaxPacketNumber for the same sequence id would otherwise
+            // accumulate up to MessageBusReadStream's 100 MB cap before the eviction sweep
+            // reclaimed the entry.
+            long? validatedLastPacketNumber = null;
             if (headers.TryGetValue(HeaderKeys.LastPacketNumber, out var lpnRaw))
             {
                 var lpnString = HeaderDecoder.Decode(lpnRaw);
                 if (!long.TryParse(lpnString, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lastPacketNumber))
                 {
                     _logger.LogWarning("Stream packet has invalid LastPacketNumber header '{Value}'; discarding", lpnString);
+                    if (_activeStreams.TryRemove(sequenceId, out _))
+                    {
+                        Interlocked.Decrement(ref _streamCount);
+                    }
                     return HandledTask;
                 }
-                // Cap LastPacketNumber to prevent attacker-controlled unbounded state.
                 if (lastPacketNumber > MaxPacketNumber)
                 {
                     _logger.LogWarning("Stream {SequenceId} LastPacketNumber {Value} exceeds maximum {Max}; discarding", sequenceId, lastPacketNumber, MaxPacketNumber);
+                    if (_activeStreams.TryRemove(sequenceId, out _))
+                    {
+                        Interlocked.Decrement(ref _streamCount);
+                    }
                     return HandledTask;
                 }
-                state.Stream.SetLastPacketNumber(lastPacketNumber);
+                validatedLastPacketNumber = lastPacketNumber;
+            }
+
+            // Write commits packet bytes only after we hold a touched entry. A late
+            // eviction between this CAS and the Write is bounded — bytes still land in
+            // a stream instance that was indexed at touch time, and the eviction sweep's
+            // next pass skips this entry because LastSeenUtc was just refreshed.
+            state.Stream.Write(messageBytes, packetNumber);
+
+            if (validatedLastPacketNumber is { } lpn)
+            {
+                state.Stream.SetLastPacketNumber(lpn);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -181,6 +181,57 @@ public class StreamProcessorTests
         Assert.Equal(ProcessResult.Handled, result);
     }
 
+    // Repeated cap-violating packets must not accumulate state. Validation runs before
+    // Stream.Write commits bytes, and rejection actively removes the entry plus decrements
+    // the count so the slot reclaims immediately rather than waiting on the eviction sweep.
+    [Fact]
+    public async Task ProcessAsync_RepeatedLastPacketNumberCapViolations_DoNotLeakActiveStreams()
+    {
+        var processor = BuildProcessor();
+
+        for (int i = 0; i < 50; i++)
+        {
+            var sequenceId = Guid.NewGuid().ToString();
+            var headers = new Dictionary<string, object>
+            {
+                [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+                [HeaderKeys.SequenceId] = sequenceId,
+                [HeaderKeys.PacketNumber] = "0",
+                [HeaderKeys.LastPacketNumber] = "100001",
+            };
+            var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+            var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
+            Assert.Equal(ProcessResult.Handled, result);
+        }
+
+        // Each rejected packet's stream slot must reclaim immediately. A leak would leave
+        // 50 entries resident, each holding up to 100 MB of writeable state until the
+        // 5-minute eviction sweep — the DoS vector this fix closes.
+        Assert.Equal(0, processor.ActiveStreamCount);
+    }
+
+    // Garbage in the LastPacketNumber header must not commit bytes either.
+    [Fact]
+    public async Task ProcessAsync_UnparseableLastPacketNumber_DiscardsAndReclaimsSlot()
+    {
+        var processor = BuildProcessor();
+        var sequenceId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+            [HeaderKeys.LastPacketNumber] = "not-a-number",
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(object), null, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+        Assert.Equal(0, processor.ActiveStreamCount);
+    }
+
     // LastPacketNumber at exactly the limit (100_000) is accepted.
     [Fact]
     public async Task ProcessAsync_LastPacketNumberAtMax_IsAccepted()
