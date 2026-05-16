@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RabbitMQ.Client;
