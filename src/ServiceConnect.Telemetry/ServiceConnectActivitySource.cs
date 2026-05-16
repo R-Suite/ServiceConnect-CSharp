@@ -25,7 +25,7 @@ public static class ServiceConnectActivitySource
     /// the assembly in a collectible <c>AssemblyLoadContext</c>; for normal long-running
     /// processes the source lives for process lifetime and disposal is unnecessary.
     /// </summary>
-    public static void Shutdown() => _activitySource.Dispose();
+    internal static void Shutdown() => _activitySource.Dispose();
 
     /// <summary>
     /// Starts a publish-side activity. Returns <c>null</c> when no listeners are

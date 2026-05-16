@@ -111,5 +111,5 @@ public static class ServiceConnectMeter
     /// for process lifetime and disposal is unnecessary. Mirrors
     /// <c>ServiceConnectActivitySource.Shutdown()</c>.
     /// </summary>
-    public static void Shutdown() => _meter.Dispose();
+    internal static void Shutdown() => _meter.Dispose();
 }
