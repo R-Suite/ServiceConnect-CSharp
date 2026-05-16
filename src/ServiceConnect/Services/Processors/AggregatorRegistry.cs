@@ -63,7 +63,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
                     "shutdown logic to avoid IAsyncDisposable.");
             }
 
-            var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, scope.ServiceProvider);
+            var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, href.HandlerType, scope.ServiceProvider);
             builder[href.MessageType] = (descriptor, href.HandlerType);
 
             if (logger.IsEnabled(LogLevel.Debug))
@@ -100,7 +100,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         return baseType;
     }
 
-    private static AggregatorDescriptor BuildDescriptor(Type messageType, Type aggregatorBaseType, IServiceProvider sp)
+    private static AggregatorDescriptor BuildDescriptor(Type messageType, Type aggregatorBaseType, Type handlerType, IServiceProvider sp)
     {
         object aggregator;
         try
@@ -133,7 +133,13 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         return new AggregatorDescriptor(
             MessageType: messageType,
             AggregatorBaseType: aggregatorBaseType,
-            AggregatorName: aggregatorBaseType.FullName!,
+            // Use the concrete handler type's FullName, not the closed generic base type.
+            // The closed generic base (e.g. Aggregator<OrderCreated>) embeds the assembly-qualified
+            // name of the message type argument, whose Version= component rotates on every assembly
+            // version bump and silently orphans persisted aggregator state. The concrete handler
+            // class (e.g. MyOrderAggregator) has no generic arguments in its FullName and is
+            // version-independent.
+            AggregatorName: handlerType.FullName!,
             BatchSize: batchSize,
             Timeout: timeout,
             BuildTypedList: CompileBuildTypedList(messageType),

@@ -21,7 +21,32 @@ public class AggregatorRegistryTests
         Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
         Assert.Equal(typeof(ArgFoo), descriptor!.MessageType);
         Assert.Equal(typeof(Aggregator<ArgFoo>), descriptor.AggregatorBaseType);
-        Assert.Equal(typeof(Aggregator<ArgFoo>).FullName, descriptor.AggregatorName);
+        // AggregatorName is the concrete handler type's FullName, not the closed generic base.
+        Assert.Equal(typeof(ArgFooAggregator).FullName, descriptor.AggregatorName);
+    }
+
+    [Fact]
+    public void AggregatorName_DoesNotContainAssemblyQualifiedNoise()
+    {
+        // Closed generic base types (e.g. Aggregator<ArgFoo>) embed the assembly-qualified name
+        // of their type argument in FullName, including Version=, Culture=, PublicKeyToken=.
+        // Those components rotate on assembly version bumps and would orphan persisted state.
+        // The name must be derived from the concrete handler type instead.
+        var refs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ArgFoo), HandlerType = typeof(ArgFooAggregator) }
+        };
+        var sp = BuildServiceProvider<ArgFoo, ArgFooAggregator>();
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
+
+        Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
+
+        Assert.DoesNotContain("Version=", descriptor!.AggregatorName);
+        Assert.DoesNotContain("PublicKeyToken=", descriptor.AggregatorName);
+        Assert.DoesNotContain("Culture=", descriptor.AggregatorName);
+
+        // The name is the concrete handler's FullName, stable across hypothetical version bumps.
+        Assert.Equal(typeof(ArgFooAggregator).FullName, descriptor.AggregatorName);
     }
 
     [Fact]

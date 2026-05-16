@@ -776,9 +776,9 @@ public class AggregatorProcessorTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), messages[2], headers, envelope));
 
-        // Derive the stream name exactly as the processor does so CountAsync targets the right key.
-        var aggregatorBaseType = typeof(ThrowingAggregator).BaseType!;
-        var streamName = aggregatorBaseType.FullName!;
+        // AggregatorName is derived from the concrete handler type's FullName (not the closed
+        // generic base), so derive the stream name the same way.
+        var streamName = typeof(ThrowingAggregator).FullName!;
 
         // The messages must still be in the persistor so they can be retried.
         var remaining = await persistor.CountAsync(streamName);
