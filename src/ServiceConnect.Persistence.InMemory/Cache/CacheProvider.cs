@@ -20,7 +20,7 @@ internal sealed class CacheProvider(TimeProvider? timeProvider = null) : ICacheP
     // race where an in-flight TryPurgeItem could evict the new value via Remove(key).
     // ITimer.Dispose does not wait for in-flight callbacks, so a callback that
     // already read _slidingTime[key] before the new Add overwrote it would otherwise
-    // observe the old ExpireAt, return CanExpire==true, and remove the new value.
+    // observe a stale expiry window, return CanExpire==true, and remove the new value.
     // ConcurrentDictionary's AddOrUpdate atomicity ensures the bump and the timer
     // installation are observed together by stale callbacks via TryGetValue.
     private readonly ConcurrentDictionary<object, long> _generations = new();
