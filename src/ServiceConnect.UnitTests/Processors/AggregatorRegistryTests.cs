@@ -164,11 +164,14 @@ public class AggregatorRegistryTests
         Assert.True(registry.TryGet(typeof(ArgFoo), out var descriptor));
 
         var raw = new List<object> { new ArgFoo(Guid.NewGuid()) { Val = "a" }, new ArgFoo(Guid.NewGuid()) { Val = "b" } };
-        var typed = descriptor!.BuildTypedList(raw);
+        var typedObj = descriptor!.BuildTypedList(raw);
 
-        Assert.IsType<List<ArgFoo>>(typed);
+        // BuildTypedList returns IReadOnlyList<ArgFoo> boxed as object; the underlying runtime
+        // type is List<ArgFoo> (which implements IReadOnlyList<ArgFoo>).
+        Assert.IsType<List<ArgFoo>>(typedObj);
+        var typed = Assert.IsAssignableFrom<IReadOnlyList<ArgFoo>>(typedObj);
         Assert.Equal(2, typed.Count);
-        Assert.Equal("a", ((ArgFoo)typed[0]!).Val);
+        Assert.Equal("a", typed[0].Val);
     }
 
     [Fact]

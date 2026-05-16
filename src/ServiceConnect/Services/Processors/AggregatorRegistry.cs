@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
@@ -141,9 +140,14 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
             InvokeExecuteAsync: CompileInvokeExecuteAsync(aggregatorBaseType, messageType));
     }
 
-    private static Func<IList<object>, IList> CompileBuildTypedList(Type messageType)
+    private static Func<IList<object>, object> CompileBuildTypedList(Type messageType)
     {
-        // Build: (IList<object> raw) => { var list = new List<TMsg>(); for (var i = 0; i < raw.Count; i++) list.Add((TMsg)raw[i]); return list; }
+        // Build: (IList<object> raw) => { var list = new List<TMsg>(); for (var i = 0; i < raw.Count; i++) list.Add((TMsg)raw[i]); return (IReadOnlyList<TMsg>)list; }
+        // The block's return type is IReadOnlyList<TMsg> so the descriptor's contract is satisfied
+        // at expression-tree construction time: only a value that IS an IReadOnlyList<TMsg> can
+        // be returned. The lambda is stored as Func<IList<object>, object>; the box is a no-op
+        // reference cast since IReadOnlyList<TMsg> is a reference type.
+        var readOnlyListType = typeof(IReadOnlyList<>).MakeGenericType(messageType);
         var listType = typeof(List<>).MakeGenericType(messageType);
 
         var rawParam = Expression.Parameter(typeof(IList<object>), "raw");
@@ -158,7 +162,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         var breakLabel = Expression.Label("break");
 
         var block = Expression.Block(
-            typeof(IList),
+            readOnlyListType,
             [listVar, indexVar],
             Expression.Assign(listVar, Expression.New(listCtor)),
             Expression.Assign(indexVar, Expression.Constant(0)),
@@ -170,9 +174,9 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
                         Expression.PostIncrementAssign(indexVar)),
                     Expression.Break(breakLabel)),
                 breakLabel),
-            Expression.Convert(listVar, typeof(IList)));
+            Expression.Convert(listVar, readOnlyListType));
 
-        return Expression.Lambda<Func<IList<object>, IList>>(block, rawParam).Compile();
+        return Expression.Lambda<Func<IList<object>, object>>(block, rawParam).Compile();
     }
 
     private static Func<object, object, CancellationToken, Task> CompileInvokeExecuteAsync(Type aggregatorBaseType, Type messageType)
