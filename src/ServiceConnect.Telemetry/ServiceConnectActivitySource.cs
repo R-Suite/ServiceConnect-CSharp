@@ -170,7 +170,12 @@ public static class ServiceConnectActivitySource
                 string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
                     ? HeaderDecoder.Decode(ciVal) : null;
 
-                activity.DisplayName = Truncate((string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " process", options.MaxTagValueLength);
+                // Truncate the destination first, then append the suffix. Concatenating first
+                // and truncating second would chop off the " process" suffix when the
+                // destination is at MaxTagValueLength — losing the operation signal in the
+                // span display.
+                var truncatedDest = Truncate(string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress, options.MaxTagValueLength);
+                activity.DisplayName = truncatedDest + " process";
 
                 if (messageId is not null)
                 {
