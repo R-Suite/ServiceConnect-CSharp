@@ -408,7 +408,7 @@ public class HandlerProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_OceInHandlerExceptions_WithCancelledCt_PreferesOceOverAggregateException()
+    public async Task ProcessAsync_OceInHandlerExceptions_WithCancelledCt_PrefersOceOverAggregateException()
     {
         // Verifies the Shape-A post-loop path: OCE from handler B ends up in handlerExceptions
         // because the when-guard evaluated false at catch time, but the dispatch CT is cancelled
@@ -421,7 +421,7 @@ public class HandlerProcessorTests
         // Handler A throws a plain fault so handlerExceptions is non-null by the time handler B runs.
         var handlerA = new ThrowingHpHandler("fail-A");
         // Handler B: cancels the dispatch CTS, then throws OCE for the unrelated token.
-        // The when-guard (dispatcchCT.IsCancellationRequested) evaluates true at the point handler B
+        // The when-guard (dispatchCt.IsCancellationRequested) evaluates true at the point handler B
         // throws because handler B itself cancels the dispatch CTS first — so this test actually
         // exercises the in-loop rethrow, not Shape A. Shape A is the safety net for the race.
         // Both paths must produce OCE, not AggregateException.
