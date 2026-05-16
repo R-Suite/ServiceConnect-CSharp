@@ -1200,6 +1200,25 @@ public class BusTests
         await bus.StopConsumingAsync(CancellationToken.None); // cleanup
     }
 
+    [Fact]
+    public async Task StartConsumingAsync_AfterStop_ThrowsInvalidOperationException()
+    {
+        // The bus permanently latches _stopped after StopConsumingAsync. A second
+        // StartConsumingAsync call must throw — documented contract; container/
+        // orchestrator reuse of the instance after stop must surface immediately.
+        var mockConsumer = new Mock<IConsumer>();
+        mockConsumer
+            .Setup(x => x.StartConsumingAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<ConsumerEventHandler>()))
+            .Returns(Task.CompletedTask);
+
+        await using var bus = CreateBusWithConsumer(mockConsumer.Object);
+
+        await bus.StartConsumingAsync(CancellationToken.None);
+        await bus.StopConsumingAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => bus.StartConsumingAsync(CancellationToken.None));
+    }
+
     // --- Helper ---
 
     private Bus CreateBusWithConsumer(IConsumer consumer) =>
