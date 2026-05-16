@@ -455,9 +455,9 @@ public class ServiceCollectionExtensionsTests
     [Fact]
     public void AddServiceConnect_MissingConfigureQueues_Throws()
     {
-        // When the user never calls ConfigureQueues, QueueName stays at its default
-        // empty string. AddServiceConnect must surface an actionable error immediately
-        // rather than failing with an opaque AMQP error at broker-connect time.
+        // QueueName defaults to the empty string when the user never calls ConfigureQueues.
+        // AddServiceConnect surfaces an actionable error at startup so the failure does not
+        // surface only at broker-connect time as an opaque AMQP error.
         var services = new ServiceCollection();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
