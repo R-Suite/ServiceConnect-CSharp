@@ -421,6 +421,30 @@ public class MessageBusWriteStreamTests
         // Unblock the stalled write so the background task can complete cleanly.
         tcs.SetResult(true);
     }
+
+    [Fact]
+    public async Task DisposeAsync_WhenCloseGateIsWedged_CompletesAfterTimeout()
+    {
+        // Verify that DisposeAsync does not park indefinitely when _closeInProgress is
+        // already held by a wedged holder. DisposeAsync must exit once the close budget
+        // elapses rather than spinning forever on CancellationToken.None.
+        //
+        // Uses the internal constructor to inject a short timeout (200 ms) so the test
+        // completes in well under a second instead of waiting the full 30-second budget.
+        var closeField = typeof(MessageBusWriteStream)
+            .GetField("_closeInProgress", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var stream = new MessageBusWriteStream(
+            _producer.Object, "dest", typeof(FakeStreamMsg),
+            TimeProvider.System, TimeSpan.FromMilliseconds(200));
+
+        // Wedge the single-flight gate: simulate a holder that will never release.
+        closeField.SetValue(stream, 1);
+
+        // DisposeAsync must return — the 200 ms CTS fires and the OCE is swallowed.
+        // Guard with a 5-second hard deadline so a regression parks xUnit rather than hanging.
+        await stream.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+    }
 }
 
 file class FakeStreamMsg : Message

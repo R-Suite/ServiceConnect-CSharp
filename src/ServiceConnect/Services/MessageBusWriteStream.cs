@@ -35,7 +35,10 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
     // but hadn't yet Interlocked.Increment-ed would publish *after* the close packet with
     // a number past LastPacketNumber — the reader drops it.
     private int _inFlightWrites;
-    private static readonly TimeSpan CloseDrainTimeout = TimeSpan.FromSeconds(30);
+    // Default close budget used in production. The instance field allows tests to
+    // inject a short value via the internal constructor without affecting other instances.
+    private static readonly TimeSpan DefaultCloseDrainTimeout = TimeSpan.FromSeconds(30);
+    private readonly TimeSpan _closeDrainTimeout;
 
     /// <summary>
     /// Creates a write stream that targets a single endpoint and message type.
@@ -58,11 +61,21 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
     /// provider in tests to control the timeout without relying on wall-clock time.
     /// </param>
     public MessageBusWriteStream(IProducer producer, string endpoint, Type messageType, TimeProvider timeProvider)
+        : this(producer, endpoint, messageType, timeProvider, DefaultCloseDrainTimeout) { }
+
+    /// <summary>
+    /// Creates a write stream with an explicit close-drain budget.
+    /// Intended for test use to exercise timeout paths without wall-clock waits.
+    /// </summary>
+    internal MessageBusWriteStream(
+        IProducer producer, string endpoint, Type messageType,
+        TimeProvider timeProvider, TimeSpan closeDrainTimeout)
     {
         _producer = producer ?? throw new ArgumentNullException(nameof(producer));
         _endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
         _messageType = messageType ?? throw new ArgumentNullException(nameof(messageType));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _closeDrainTimeout = closeDrainTimeout;
         _sequenceId = FormatGuid(Guid.NewGuid());
         // Type-reserved headers (FullTypeName / TypeName / MessageType) are stamped by
         // the producer from _messageType — they must not be seeded here, since the
@@ -204,7 +217,7 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
             // passed its _closeStarted gate must complete (success or exception) before
             // we assign the close-packet number — otherwise its packet would ship with a
             // number beyond LastPacketNumber and the reader would silently drop it.
-            var deadline = _timeProvider.GetUtcNow().UtcDateTime + CloseDrainTimeout;
+            var deadline = _timeProvider.GetUtcNow().UtcDateTime + _closeDrainTimeout;
             var drainSpin = new SpinWait();
             while (Volatile.Read(ref _inFlightWrites) > 0)
             {
@@ -278,7 +291,19 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
-        await CloseAsync().ConfigureAwait(false);
+        // CloseAsync with no token leaves the single-flight spin gate running indefinitely
+        // if the in-flight CloseAsync holder is wedged. Apply the same _closeDrainTimeout
+        // used by the drain itself so the spin cannot park the disposing thread forever.
+        using var cts = new CancellationTokenSource(_closeDrainTimeout);
+        try
+        {
+            await CloseAsync(cts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Best-effort close: the gate holder is wedged. Releasing the stream here
+            // matches the pattern other transports use when the close budget elapses.
+        }
     }
 
     private static string FormatGuid(Guid value)
