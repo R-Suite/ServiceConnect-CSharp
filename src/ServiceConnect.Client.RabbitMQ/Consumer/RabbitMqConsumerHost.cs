@@ -584,6 +584,14 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
         }
 
+        // Match the unsubscribe order in DisposeAsync: a stale consumer tag from a prior
+        // auto-recovery can trip a Library-initiator channel close during BasicCancelAsync,
+        // which would otherwise flip _consumerCancelledByBroker and lie to the health check.
+        if (_model is not null)
+        {
+            _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
+        }
+
         // Snapshot _consumerTag under an acquire fence — pairs with the release-fence
         // write in OnConsumerTagChangedAfterRecoveryAsync. Without the fence the JIT can
         // hoist the read across the unsubscribe boundary above, racing a recovery event
