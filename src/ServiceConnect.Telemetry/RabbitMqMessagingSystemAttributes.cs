@@ -20,11 +20,13 @@ public sealed class RabbitMqMessagingSystemAttributes : IMessagingSystemAttribut
     {
         ArgumentNullException.ThrowIfNull(transport);
 
-        // Host may be a comma-separated cluster list (e.g. "rabbit1,rabbit2"). The OTel
-        // server.address attribute represents a single endpoint, so use the first entry.
+        // Host may be a comma- or semicolon-separated cluster list (e.g. "rabbit1,rabbit2"
+        // or "rabbit1;rabbit2"). The OTel server.address attribute represents a single
+        // endpoint, so use the first entry.
         var host = transport.Host ?? string.Empty;
-        var commaIndex = host.IndexOf(',', StringComparison.Ordinal);
-        _serverAddress = commaIndex >= 0 ? host[..commaIndex].Trim() : host.Trim();
+        var idx = host.IndexOfAny([',', ';']);
+        var first = idx >= 0 ? host[..idx] : host;
+        _serverAddress = first.Trim();
 
         // Port lives in ClientSettings because ITransportConfiguration does not expose it
         // directly. Fall back to 0 when unconfigured (the factory defaults to the AMQP
