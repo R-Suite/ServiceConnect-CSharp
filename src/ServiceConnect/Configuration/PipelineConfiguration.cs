@@ -13,18 +13,19 @@ namespace ServiceConnect.Configuration;
 /// distinct from <see cref="List{T}"/> — so callers that resolve <see cref="IPipelineConfiguration"/>
 /// from DI cannot cast the returned <see cref="IReadOnlyList{T}"/> back to <see cref="List{T}"/>
 /// and bypass the builder by appending filters / middleware post-startup. The internal
-/// <see cref="IList{T}"/> view stays mutable because the concrete <see cref="PipelineConfiguration"/>
-/// class is internal and unreachable through DI; only same-assembly code (the builder) can
-/// reach it during the configure callback.
+/// <see cref="IList{T}"/> view is backed by a <see cref="GuardedList{T}"/> that throws on
+/// mutation once the configuration is frozen.
 /// </remarks>
 internal sealed class PipelineConfiguration : IPipelineConfiguration
 {
-    private readonly List<Type> _beforeConsumingFilters = [];
-    private readonly List<Type> _afterConsumingFilters = [];
-    private readonly List<Type> _onConsumedSuccessfullyFilters = [];
-    private readonly List<Type> _outgoingFilters = [];
-    private readonly List<Type> _messageProcessingMiddleware = [];
-    private readonly List<Type> _sendMessageMiddleware = [];
+    private bool _frozen;
+
+    private readonly GuardedList<Type> _beforeConsumingFilters;
+    private readonly GuardedList<Type> _afterConsumingFilters;
+    private readonly GuardedList<Type> _onConsumedSuccessfullyFilters;
+    private readonly GuardedList<Type> _outgoingFilters;
+    private readonly GuardedList<Type> _messageProcessingMiddleware;
+    private readonly GuardedList<Type> _sendMessageMiddleware;
 
     private readonly ReadOnlyCollection<Type> _beforeConsumingFiltersView;
     private readonly ReadOnlyCollection<Type> _afterConsumingFiltersView;
@@ -35,18 +36,32 @@ internal sealed class PipelineConfiguration : IPipelineConfiguration
 
     public PipelineConfiguration()
     {
+        // GuardedList wraps a List<T> and delegates freeze-checking to () => _frozen.
         // Cache the read-only wrappers so the IPipelineConfiguration getters don't
         // allocate a fresh ReadOnlyCollection on every dispatch. Each wrapper is a live
         // view over its underlying List<T>; the builder's in-callback Add reflects
         // through. Post-builder mutation through the IReadOnlyList view is blocked
         // because the runtime type is ReadOnlyCollection<T>, not List<T>.
-        _beforeConsumingFiltersView = _beforeConsumingFilters.AsReadOnly();
-        _afterConsumingFiltersView = _afterConsumingFilters.AsReadOnly();
-        _onConsumedSuccessfullyFiltersView = _onConsumedSuccessfullyFilters.AsReadOnly();
-        _outgoingFiltersView = _outgoingFilters.AsReadOnly();
-        _messageProcessingMiddlewareView = _messageProcessingMiddleware.AsReadOnly();
-        _sendMessageMiddlewareView = _sendMessageMiddleware.AsReadOnly();
+        _beforeConsumingFilters = new GuardedList<Type>(this, nameof(BeforeConsumingFilters));
+        _afterConsumingFilters = new GuardedList<Type>(this, nameof(AfterConsumingFilters));
+        _onConsumedSuccessfullyFilters = new GuardedList<Type>(this, nameof(OnConsumedSuccessfullyFilters));
+        _outgoingFilters = new GuardedList<Type>(this, nameof(OutgoingFilters));
+        _messageProcessingMiddleware = new GuardedList<Type>(this, nameof(MessageProcessingMiddleware));
+        _sendMessageMiddleware = new GuardedList<Type>(this, nameof(SendMessageMiddleware));
+
+        _beforeConsumingFiltersView = _beforeConsumingFilters.Inner.AsReadOnly();
+        _afterConsumingFiltersView = _afterConsumingFilters.Inner.AsReadOnly();
+        _onConsumedSuccessfullyFiltersView = _onConsumedSuccessfullyFilters.Inner.AsReadOnly();
+        _outgoingFiltersView = _outgoingFilters.Inner.AsReadOnly();
+        _messageProcessingMiddlewareView = _messageProcessingMiddleware.Inner.AsReadOnly();
+        _sendMessageMiddlewareView = _sendMessageMiddleware.Inner.AsReadOnly();
     }
+
+    /// <summary>
+    /// Latches this configuration so further list-mutation calls throw <see cref="InvalidOperationException"/>.
+    /// Called by <see cref="BusConfiguration.Freeze"/> after the user's configure callback returns.
+    /// </summary>
+    internal void Freeze() => _frozen = true;
 
     /// <summary>
     /// Gets the filters that run before handler invocation.
@@ -79,4 +94,44 @@ internal sealed class PipelineConfiguration : IPipelineConfiguration
     IReadOnlyList<Type> IPipelineConfiguration.OutgoingFilters => _outgoingFiltersView;
     IReadOnlyList<Type> IPipelineConfiguration.MessageProcessingMiddleware => _messageProcessingMiddlewareView;
     IReadOnlyList<Type> IPipelineConfiguration.SendMessageMiddleware => _sendMessageMiddlewareView;
+
+    // Wraps a List<T> so all mutating IList<T> operations check the owning
+    // PipelineConfiguration's _frozen flag before proceeding. Read-only operations
+    // (indexer getter, Count, Contains, CopyTo, GetEnumerator) pass through without
+    // the freeze check because they're safe at any time.
+    private sealed class GuardedList<T>(PipelineConfiguration owner, string listName) : IList<T>
+    {
+        internal readonly List<T> Inner = [];
+        private readonly PipelineConfiguration _owner = owner;
+        private readonly string _listName = listName;
+
+        private void ThrowIfFrozen()
+        {
+            if (_owner._frozen)
+            {
+                throw new InvalidOperationException(
+                    $"PipelineConfiguration.{_listName} is frozen — the list cannot be modified after AddServiceConnect has returned. " +
+                    "Configure all pipeline filters and middleware inside the AddServiceConnect callback.");
+            }
+        }
+
+        public T this[int index]
+        {
+            get => Inner[index];
+            set { ThrowIfFrozen(); Inner[index] = value; }
+        }
+
+        public int Count => Inner.Count;
+        public bool IsReadOnly => false;
+        public void Add(T item) { ThrowIfFrozen(); Inner.Add(item); }
+        public void Clear() { ThrowIfFrozen(); Inner.Clear(); }
+        public bool Contains(T item) => Inner.Contains(item);
+        public void CopyTo(T[] array, int arrayIndex) => Inner.CopyTo(array, arrayIndex);
+        public IEnumerator<T> GetEnumerator() => Inner.GetEnumerator();
+        public int IndexOf(T item) => Inner.IndexOf(item);
+        public void Insert(int index, T item) { ThrowIfFrozen(); Inner.Insert(index, item); }
+        public bool Remove(T item) { ThrowIfFrozen(); return Inner.Remove(item); }
+        public void RemoveAt(int index) { ThrowIfFrozen(); Inner.RemoveAt(index); }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => Inner.GetEnumerator();
+    }
 }

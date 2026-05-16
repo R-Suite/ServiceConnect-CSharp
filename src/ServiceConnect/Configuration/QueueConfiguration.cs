@@ -9,20 +9,45 @@ namespace ServiceConnect.Configuration;
 /// </summary>
 internal sealed class QueueConfiguration : IQueueConfiguration
 {
+    private bool _frozen;
+    private string _queueName = "";
+    private string _errorQueueName = "errors";
+    private string _auditQueueName = "audit";
+    private string _auditRoutingKey = string.Empty;
+    private bool _auditingEnabled;
+    private bool _disableErrors;
+    private bool _purgeQueueOnStartup;
+
+    /// <summary>
+    /// Latches this configuration so further setter calls throw <see cref="InvalidOperationException"/>.
+    /// Called by <see cref="BusConfiguration.Freeze"/> after the user's configure callback returns.
+    /// </summary>
+    internal void Freeze() => _frozen = true;
+
+    private void ThrowIfFrozen([System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+    {
+        if (_frozen)
+        {
+            throw new InvalidOperationException(
+                $"QueueConfiguration is frozen — '{memberName}' cannot be modified after AddServiceConnect has returned. " +
+                "Configure all properties inside the AddServiceConnect callback.");
+        }
+    }
+
     /// <inheritdoc />
-    public string QueueName { get; set; } = "";
+    public string QueueName { get => _queueName; set { ThrowIfFrozen(); _queueName = value; } }
     /// <inheritdoc />
-    public string ErrorQueueName { get; set; } = "errors";
+    public string ErrorQueueName { get => _errorQueueName; set { ThrowIfFrozen(); _errorQueueName = value; } }
     /// <inheritdoc />
-    public string AuditQueueName { get; set; } = "audit";
+    public string AuditQueueName { get => _auditQueueName; set { ThrowIfFrozen(); _auditQueueName = value; } }
     /// <inheritdoc />
-    public string AuditRoutingKey { get; set; } = string.Empty;
+    public string AuditRoutingKey { get => _auditRoutingKey; set { ThrowIfFrozen(); _auditRoutingKey = value; } }
     /// <inheritdoc />
-    public bool AuditingEnabled { get; set; }
+    public bool AuditingEnabled { get => _auditingEnabled; set { ThrowIfFrozen(); _auditingEnabled = value; } }
     /// <inheritdoc />
-    public bool DisableErrors { get; set; }
+    public bool DisableErrors { get => _disableErrors; set { ThrowIfFrozen(); _disableErrors = value; } }
     /// <inheritdoc />
-    public bool PurgeQueueOnStartup { get; set; }
+    public bool PurgeQueueOnStartup { get => _purgeQueueOnStartup; set { ThrowIfFrozen(); _purgeQueueOnStartup = value; } }
 
     // Keyed by message-type AssemblyQualifiedName so two types sharing a FullName
     // (same namespace+name in different assemblies) don't collide into one bucket
@@ -53,6 +78,7 @@ internal sealed class QueueConfiguration : IQueueConfiguration
     /// <inheritdoc />
     public void AddQueueMapping(Type messageType, string queue)
     {
+        ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(messageType);
         if (string.IsNullOrWhiteSpace(queue))
         {
@@ -70,6 +96,7 @@ internal sealed class QueueConfiguration : IQueueConfiguration
     /// <inheritdoc />
     public void AddQueueMapping(Type messageType, IList<string> queues)
     {
+        ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(messageType);
         ArgumentNullException.ThrowIfNull(queues);
 

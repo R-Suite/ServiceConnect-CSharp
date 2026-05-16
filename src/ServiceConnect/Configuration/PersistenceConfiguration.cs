@@ -15,14 +15,35 @@ namespace ServiceConnect.Configuration;
 /// </remarks>
 internal sealed class PersistenceConfiguration : IPersistenceConfiguration
 {
+    private bool _frozen;
+    private string _connectionString = string.Empty;
+    private string _databaseName = "RMessageBusPersistentStore";
+    private string _aggregatorCollectionName = "Aggregator";
+
+    /// <summary>
+    /// Latches this configuration so further setter calls throw <see cref="System.InvalidOperationException"/>.
+    /// Called by <see cref="BusConfiguration.Freeze"/> after the user's configure callback returns.
+    /// </summary>
+    internal void Freeze() => _frozen = true;
+
+    private void ThrowIfFrozen([System.Runtime.CompilerServices.CallerMemberName] string? memberName = null)
+    {
+        if (_frozen)
+        {
+            throw new System.InvalidOperationException(
+                $"PersistenceConfiguration is frozen — '{memberName}' cannot be modified after AddServiceConnect has returned. " +
+                "Configure all properties inside the AddServiceConnect callback.");
+        }
+    }
+
     /// <summary>
     /// Provider-specific connection string. Required; no default. Misconfiguration
     /// surfaces as <see cref="System.InvalidOperationException"/> at first persistence
     /// use rather than silently targeting localhost.
     /// </summary>
-    public string ConnectionString { get; set; } = string.Empty;
+    public string ConnectionString { get => _connectionString; set { ThrowIfFrozen(); _connectionString = value; } }
     /// <inheritdoc />
-    public string DatabaseName { get; set; } = "RMessageBusPersistentStore";
+    public string DatabaseName { get => _databaseName; set { ThrowIfFrozen(); _databaseName = value; } }
     /// <inheritdoc />
-    public string AggregatorCollectionName { get; set; } = "Aggregator";
+    public string AggregatorCollectionName { get => _aggregatorCollectionName; set { ThrowIfFrozen(); _aggregatorCollectionName = value; } }
 }

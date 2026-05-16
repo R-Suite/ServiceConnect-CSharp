@@ -7,11 +7,11 @@ namespace ServiceConnect.Configuration;
 /// Mutable implementation of <see cref="IBusConfiguration"/> used during application startup.
 /// </summary>
 /// <remarks>
-/// The configuration is frozen by <c>AddServiceConnect</c> at the end of the configure callback,
-/// so callers that resolve <see cref="IBusConfiguration"/> from DI cannot mutate <c>DisposeTimeout</c>,
-/// <c>MaxRoutingSlipHops</c>, or other top-level fields and bypass the builder validators that
-/// guard runtime invariants. Sub-configurations (Transport, Queues, Persistence, Pipeline) are
-/// not yet frozen — registering them post-freeze remains the responsibility of those types.
+/// The configuration is frozen by <c>AddServiceConnect</c> at the end of the configure callback.
+/// Callers that resolve <see cref="IBusConfiguration"/> or any sub-configuration interface from DI
+/// cannot mutate top-level fields (<c>DisposeTimeout</c>, <c>MaxRoutingSlipHops</c>, etc.) or any
+/// sub-configuration property (Transport, Queues, Persistence, Pipeline). All mutation must occur
+/// inside the <c>AddServiceConnect</c> configure callback.
 /// </remarks>
 internal sealed class BusConfiguration : IBusConfiguration
 {
@@ -74,10 +74,17 @@ internal sealed class BusConfiguration : IBusConfiguration
     public PipelineConfiguration Pipeline { get; } = new PipelineConfiguration();
 
     /// <summary>
-    /// Latches this configuration so further setter calls throw <see cref="InvalidOperationException"/>.
+    /// Latches this configuration and all sub-configurations so further setter calls throw <see cref="InvalidOperationException"/>.
     /// Called by <c>AddServiceConnect</c> after the user's configure callback returns.
     /// </summary>
-    internal void Freeze() => _frozen = true;
+    internal void Freeze()
+    {
+        _frozen = true;
+        ((TransportConfiguration)Transport).Freeze();
+        ((QueueConfiguration)Queues).Freeze();
+        ((PersistenceConfiguration)Persistence).Freeze();
+        Pipeline.Freeze();
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfFrozen([CallerMemberName] string? propertyName = null)
