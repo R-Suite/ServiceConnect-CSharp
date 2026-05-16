@@ -109,4 +109,26 @@ public class BusHostedServiceTests
 
         _mockBus.Verify(b => b.StopConsumingAsync(), Times.Once);
     }
+
+    [Fact]
+    public async Task StartAsync_AfterStop_ThrowsInvalidOperationException()
+    {
+        // The bus permanently latches _stopped after StopConsumingAsync. A second
+        // StartAsync on the same instance must propagate the InvalidOperationException
+        // that IBus.StartConsumingAsync throws rather than swallowing it.
+        _mockConfig.Setup(c => c.AutoStartConsuming).Returns(true);
+        _mockConfig.Setup(c => c.ValidateReplyDestinations).Returns(true);
+        _mockBus.Setup(b => b.StartConsumingAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        _mockBus.Setup(b => b.StopConsumingAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var sut = CreateSut();
+        await sut.StartAsync(CancellationToken.None);
+        await sut.StopAsync(CancellationToken.None);
+
+        // Simulate the latched-stopped state: a fresh StartConsumingAsync call after stop throws.
+        _mockBus.Setup(b => b.StartConsumingAsync(It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Bus has been stopped and cannot be restarted."));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.StartAsync(CancellationToken.None));
+    }
 }

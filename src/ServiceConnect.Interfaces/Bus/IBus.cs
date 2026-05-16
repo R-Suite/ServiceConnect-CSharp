@@ -184,12 +184,29 @@ public interface IBus : IAsyncDisposable
 
     /// <summary>
     /// Starts consuming messages from the configured queue.
-    /// <para>
-    /// Throws <see cref="InvalidOperationException"/> if the bus is already consuming,
-    /// or if the bus has previously been stopped — stop is terminal, so consumers must
-    /// dispose the bus and create a new instance to resume consumption.
-    /// </para>
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Single-use lifecycle.</b> The bus is single-use with respect to its consuming state.
+    /// Once <see cref="StopConsumingAsync"/> has been called (or <see cref="IAsyncDisposable.DisposeAsync"/>
+    /// has run), the internal stopped flag is latched permanently and this method throws
+    /// <see cref="InvalidOperationException"/> on any subsequent call. There is no reset path.
+    /// </para>
+    /// <para>
+    /// To resume consumption after a stop, dispose the current bus instance and resolve (or
+    /// construct) a fresh one. In a DI container, this typically means ending the DI lifetime
+    /// scope that owns the bus singleton and starting a new one — <em>not</em> calling
+    /// <c>StartConsumingAsync</c> again on the same instance.
+    /// </para>
+    /// <para>
+    /// Also throws <see cref="InvalidOperationException"/> if the bus is already consuming
+    /// (i.e. a concurrent or duplicate <c>StartConsumingAsync</c> call is in progress or has
+    /// already completed).
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The bus is already consuming, or has previously been stopped.
+    /// </exception>
     Task StartConsumingAsync(CancellationToken cancellationToken = default);
 
     /// <summary>

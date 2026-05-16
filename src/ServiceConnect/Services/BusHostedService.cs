@@ -8,6 +8,20 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Hosted-service adapter that starts and stops bus consumption with the application host.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Single-use lifecycle.</b> The underlying <see cref="IBus"/> permanently latches its
+/// stopped flag after <see cref="StopAsync"/> completes. If the host or an orchestrator
+/// recycles this service — calling <see cref="StartAsync"/> again on the same instance
+/// without disposing the bus — <see cref="IBus.StartConsumingAsync"/> will throw
+/// <see cref="InvalidOperationException"/>, which surfaces to the host as a startup failure.
+/// </para>
+/// <para>
+/// The correct recovery path is to let the DI container dispose the bus (and this hosted
+/// service) and resolve fresh instances for the new application lifetime. Do not attempt to
+/// restart the same <see cref="IBus"/> instance after a stop.
+/// </para>
+/// </remarks>
 internal sealed class BusHostedService(
     IBus bus,
     IBusConfiguration config,
