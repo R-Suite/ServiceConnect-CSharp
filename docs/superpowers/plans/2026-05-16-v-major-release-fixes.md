@@ -943,20 +943,36 @@ encapsulated behind ITransportConfiguration."
 **Files:**
 - Modify: [src/ServiceConnect.Interfaces/Configuration/IQueueConfiguration.cs:27-34](src/ServiceConnect.Interfaces/Configuration/IQueueConfiguration.cs#L27-L34) and [src/ServiceConnect/Configuration/QueueConfiguration.cs:19](src/ServiceConnect/Configuration/QueueConfiguration.cs#L19)
 
-Pick one of two options (raise with user before applying):
+**Decision (locked in 2026-05-16):** Remove the knob from the public API.
 
-**Option A — Remove the knob** (preferred for v-major if the feature isn't on the roadmap):
-- Delete `AuditRoutingKey` from the interface and implementation.
+- [ ] **Step 1: Remove `AuditRoutingKey` from the interface**
 
-**Option B — Throw on non-empty value**:
-- Add a `ThrowIfFrozen`-style guard in the setter that throws when value is non-empty: `throw new NotSupportedException("AuditRoutingKey is not yet implemented.")`
+Delete the property from [src/ServiceConnect.Interfaces/Configuration/IQueueConfiguration.cs:27-34](src/ServiceConnect.Interfaces/Configuration/IQueueConfiguration.cs#L27-L34) and from [src/ServiceConnect/Configuration/QueueConfiguration.cs:19](src/ServiceConnect/Configuration/QueueConfiguration.cs#L19).
 
-- [ ] **Step 1: Confirm direction with user, then apply**
-
-- [ ] **Step 2: Commit**
+- [ ] **Step 2: Grep for any remaining usage**
 
 ```bash
-git commit -m "refactor(config): [remove|guard] unimplemented AuditRoutingKey knob"
+grep -rn "AuditRoutingKey" src/ examples/ website/
+```
+
+Expected: zero hits after the deletion. If anything matches, follow up and remove the reference.
+
+- [ ] **Step 3: Build and run tests**
+
+```bash
+dotnet build src/ServiceConnect/ src/ServiceConnect.Interfaces/
+dotnet test src/ServiceConnect.UnitTests
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/ServiceConnect.Interfaces/Configuration/IQueueConfiguration.cs src/ServiceConnect/Configuration/QueueConfiguration.cs
+git commit -m "refactor(config): remove unimplemented AuditRoutingKey knob
+
+Shipping a documented-as-ignored configuration knob in the v-major
+public API is a trap. If the feature ships later it can be reintroduced
+without breaking change at that point."
 ```
 
 ---
@@ -1164,13 +1180,11 @@ For each option, document:
 - Code complexity (TopologyRecovery hides reconnect plumbing; app-level keeps it explicit)
 - Observability (TopologyRecovery logs at the RabbitMQ.Client level; app-level uses our logger / metrics)
 
-- [ ] **Step 2: Pick one and remove the other**
+- [ ] **Step 2: Disable `TopologyRecoveryEnabled` (Option A, locked in 2026-05-16)**
 
-**Option A — Disable `TopologyRecoveryEnabled`:** the application owns recovery entirely. Better observability, explicit failure modes. Higher reconnect latency.
+In [ConnectionFactoryBuilder.cs:47](src/ServiceConnect.Client.RabbitMQ/Connection/ConnectionFactoryBuilder.cs#L47), set `TopologyRecoveryEnabled = false`. Application-level recovery already redeclares topology on each reconnect and the producer's exchange-declaration cache is keyed on connection generation; library-level recovery duplicates this work and silently fails under topology drift (e.g. PRECONDITION_FAILED on a redeclare with mismatched arguments).
 
-**Option B — Remove application-level redeclaration:** delete redeclaration from `Consumer.StartConsumingAsync` and `ProducerConnection.EnsureExchangeDeclaredAsync`. Trust the client library. Loses our cache-invalidation logic; need to verify the library's redeclaration order against consumer bindings.
-
-Recommended starting point: **Option A** — the application already has explicit recovery, the producer's exchange-declaration cache is keyed on connection generation, and the failure modes are visible to our logger. Disabling library recovery removes the duplication without losing functionality.
+Update the surrounding comment to describe the design: the application owns recovery; library recovery is intentionally off so failures surface through our logger and metrics.
 
 - [ ] **Step 3: Apply + add a regression test**
 

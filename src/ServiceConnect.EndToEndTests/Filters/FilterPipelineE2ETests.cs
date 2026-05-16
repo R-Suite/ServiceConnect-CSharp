@@ -43,6 +43,7 @@ public class FilterPipelineE2ETests
         services.AddSingleton<BlockingFilter>();
         services.AddServiceConnect(builder =>
         {
+            builder.ConfigureQueues(q => q.QueueName = "outgoing-filter-block-test");
             builder.AddOutgoingFilter<BlockingFilter>();
             builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });
@@ -74,6 +75,7 @@ public class FilterPipelineE2ETests
         services.AddSingleton<HeaderAddingFilter>();
         services.AddServiceConnect(builder =>
         {
+            builder.ConfigureQueues(q => q.QueueName = "outgoing-filter-headers-test");
             builder.AddOutgoingFilter<HeaderAddingFilter>();
             builder.ConfigureBus(c => c.ScanForMessageHandlers = false);
         });

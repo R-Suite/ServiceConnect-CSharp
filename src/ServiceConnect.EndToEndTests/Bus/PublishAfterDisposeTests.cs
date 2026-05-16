@@ -14,7 +14,9 @@ public class PublishAfterDisposeTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IProducer>(new Mock<IProducer>().Object);
-        services.AddServiceConnect(b => b.ConfigureBus(c => c.ScanForMessageHandlers = false));
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "publish-after-dispose-test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
 
         var provider = services.BuildServiceProvider();
         IBus bus;

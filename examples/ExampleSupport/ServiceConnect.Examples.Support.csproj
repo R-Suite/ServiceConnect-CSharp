@@ -6,7 +6,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
     <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
-    <PackageReference Include="MongoDB.Driver" Version="2.23.1" />
+    <PackageReference Include="MongoDB.Driver" Version="3.8.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/ServiceConnect/ServiceConnect.csproj" />
