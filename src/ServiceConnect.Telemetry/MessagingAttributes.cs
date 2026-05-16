@@ -71,4 +71,14 @@ public static class MessagingAttributes
     /// Attribute name for the network protocol name.
     /// </summary>
     public const string ProtocolName = "network.protocol.name";
+
+    /// <summary>
+    /// Attribute name for the broker host name or IP address.
+    /// </summary>
+    public const string ServerAddress = "server.address";
+
+    /// <summary>
+    /// Attribute name for the broker TCP port.
+    /// </summary>
+    public const string ServerPort = "server.port";
 }

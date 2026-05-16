@@ -142,7 +142,7 @@ public static class ServiceConnectActivitySource
             ActivityKind.Consumer,
             options.EnableConsumeTelemetry,
             attributes,
-            "receive",
+            "process",
             parentContext);
 
         if (activity is null)
@@ -170,7 +170,7 @@ public static class ServiceConnectActivitySource
                 string? correlationId = eventArgs.Headers.TryGetValue(HeaderKeys.CorrelationId, out var ciVal)
                     ? HeaderDecoder.Decode(ciVal) : null;
 
-                activity.DisplayName = Truncate((string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " receive", options.MaxTagValueLength);
+                activity.DisplayName = Truncate((string.IsNullOrWhiteSpace(destinationAddress) ? "anonymous" : destinationAddress) + " process", options.MaxTagValueLength);
 
                 if (messageId is not null)
                 {
@@ -599,13 +599,12 @@ public static class ServiceConnectActivitySource
         if (activity.IsAllDataRequested)
         {
             // Map the implementation-specific operation name to the OTel-defined operation type.
-            // OTel defines "publish" | "receive" | "process". ServiceConnect's send-side spans
-            // (used by Send and Request operations) are still classified as "publish" per the
-            // existing convention at the call site (see Send method's operation="publish" pass).
-            // The "process" type is reserved for downstream processors and isn't emitted here.
+            // OTel defines "publish" | "receive" | "process". Consume spans use "process"
+            // because ServiceConnect emits them during handler dispatch, not during broker
+            // polling ("receive" is the broker-poll side). Send-side spans are "publish".
             var operationType = operation switch
             {
-                "receive" => "receive",
+                "process" => "process",
                 _ => "publish",  // "publish", "send", "request" all map to OTel "publish"
             };
 
@@ -614,6 +613,21 @@ public static class ServiceConnectActivitySource
                 .SetTag(MessagingAttributes.ProtocolName, attributes.ProtocolName)
                 .SetTag(MessagingAttributes.MessagingOperationType, operationType)
                 .SetTag(MessagingAttributes.MessagingOperationName, operation);
+
+            // server.address and server.port are required by the OTel messaging semconv for
+            // correlation across multi-broker deployments. Emit only when the value is known;
+            // skipping an empty address avoids polluting spans with a meaningless empty string.
+            var serverAddress = attributes.ServerAddress;
+            if (!string.IsNullOrEmpty(serverAddress))
+            {
+                activity.SetTag(MessagingAttributes.ServerAddress, serverAddress);
+            }
+
+            var serverPort = attributes.ServerPort;
+            if (serverPort > 0)
+            {
+                activity.SetTag(MessagingAttributes.ServerPort, serverPort);
+            }
         }
 
         return activity;

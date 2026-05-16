@@ -219,12 +219,12 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
-        Assert.Equal("svc.inbox receive", activity!.DisplayName);
+        Assert.Equal("svc.inbox process", activity!.DisplayName);
         Assert.Equal("svc.inbox", activity.GetTagItem(MessagingDestination));
         Assert.Equal("msg-42", activity.GetTagItem(MessageId));
         Assert.Equal("rabbitmq", activity.GetTagItem(MessagingSystem));
-        Assert.Equal("receive", activity.GetTagItem(MessagingOperationType));
-        Assert.Equal("receive", activity.GetTagItem(MessagingOperationName));
+        Assert.Equal("process", activity.GetTagItem(MessagingOperationType));
+        Assert.Equal("process", activity.GetTagItem(MessagingOperationName));
         Assert.Equal(3, activity.GetTagItem(MessagingBodySize));
     }
 
@@ -240,7 +240,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
-        Assert.Equal("anonymous receive", activity!.DisplayName);
+        Assert.Equal("anonymous process", activity!.DisplayName);
         Assert.Equal(true, activity.GetTagItem(MessagingDestinationAnonymous));
     }
 
@@ -326,6 +326,154 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         Assert.NotNull(activity);
         Assert.Equal(correlationId, activity!.GetTagItem(MessageConversationId));
+    }
+
+    // ---------------- server.address / server.port ----------------
+
+    [Fact]
+    public void Publish_WithServerAddress_StampsServerAddressAndPortTags()
+    {
+        // Attributes that supply a real broker address must surface server.address and
+        // server.port so OTel backends can correlate spans across broker nodes.
+        var attrsWithEndpoint = new RabbitMqMessagingSystemAttributes(
+            new StubTransport { Host = "rabbit.internal", Port = 5672 });
+
+        var args = new PublishEventArgs
+        {
+            Exchange = "orders",
+            Message = new Message(Guid.NewGuid()),
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, attrsWithEndpoint);
+
+        Assert.NotNull(activity);
+        Assert.Equal("rabbit.internal", activity!.GetTagItem(MessagingAttributes.ServerAddress));
+        Assert.Equal(5672, activity.GetTagItem(MessagingAttributes.ServerPort));
+    }
+
+    [Fact]
+    public void Consume_WithServerAddress_StampsServerAddressAndPortTags()
+    {
+        var attrsWithEndpoint = new RabbitMqMessagingSystemAttributes(
+            new StubTransport { Host = "rabbit.internal", Port = 5672 });
+
+        var args = new ConsumeEventArgs
+        {
+            Message = [1, 2, 3],
+            Headers = new Dictionary<string, object>
+            {
+                [HeaderKeys.DestinationAddress] = System.Text.Encoding.UTF8.GetBytes("svc.inbox"),
+            }
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, attrsWithEndpoint);
+
+        Assert.NotNull(activity);
+        Assert.Equal("rabbit.internal", activity!.GetTagItem(MessagingAttributes.ServerAddress));
+        Assert.Equal(5672, activity.GetTagItem(MessagingAttributes.ServerPort));
+    }
+
+    [Fact]
+    public void Send_WithServerAddress_StampsServerAddressAndPortTags()
+    {
+        var attrsWithEndpoint = new RabbitMqMessagingSystemAttributes(
+            new StubTransport { Host = "rabbit.internal", Port = 5672 });
+
+        var args = new SendEventArgs
+        {
+            EndPoint = "svc.queue",
+            Message = new Message(Guid.NewGuid()),
+        };
+
+        using var activity = ServiceConnectActivitySource.Send(args, _options, attrsWithEndpoint);
+
+        Assert.NotNull(activity);
+        Assert.Equal("rabbit.internal", activity!.GetTagItem(MessagingAttributes.ServerAddress));
+        Assert.Equal(5672, activity.GetTagItem(MessagingAttributes.ServerPort));
+    }
+
+    [Fact]
+    public void Publish_WithDefaultAttributes_OmitsServerAddressAndPortTags()
+    {
+        // When ServerAddress is empty and ServerPort is 0 (default impl values),
+        // the tags must not be emitted rather than emitting empty-string / 0.
+        var args = new PublishEventArgs
+        {
+            Exchange = "orders",
+            Message = new Message(Guid.NewGuid()),
+        };
+
+        using var activity = ServiceConnectActivitySource.Publish(args, _options, _attrs);
+
+        Assert.NotNull(activity);
+        Assert.Null(activity!.GetTagItem(MessagingAttributes.ServerAddress));
+        Assert.Null(activity.GetTagItem(MessagingAttributes.ServerPort));
+    }
+
+    [Fact]
+    public void RabbitMqAttributes_MultiHostString_UsesFirstHost()
+    {
+        // Cluster host strings like "rabbit1,rabbit2" must emit only the first entry as
+        // server.address, matching the single-value OTel semconv expectation.
+        var attrs = new RabbitMqMessagingSystemAttributes(
+            new StubTransport { Host = "rabbit1,rabbit2", Port = 5672 });
+
+        Assert.Equal("rabbit1", attrs.ServerAddress);
+    }
+
+    [Fact]
+    public void Consume_OperationType_IsProcess_NotReceive()
+    {
+        // Consume spans represent handler dispatch ("process"), not broker polling ("receive").
+        var args = new ConsumeEventArgs
+        {
+            Message = [1],
+            Headers = new Dictionary<string, object>
+            {
+                [HeaderKeys.DestinationAddress] = System.Text.Encoding.UTF8.GetBytes("queue-a"),
+            }
+        };
+
+        using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
+
+        Assert.NotNull(activity);
+        Assert.Equal("process", activity!.GetTagItem(MessagingOperationType));
+        Assert.Equal("process", activity.GetTagItem(MessagingOperationName));
+    }
+
+    // Stub transport used in server-address/port tests.
+    private sealed class StubTransport : ServiceConnect.Interfaces.Configuration.ITransportConfiguration
+    {
+        private readonly Dictionary<string, object> _settings = [];
+
+        public required string Host { get; set; }
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+        public string? VirtualHost { get; set; }
+        public int RetryDelay { get; set; }
+        public int MaxRetries { get; set; }
+        public ushort PrefetchCount { get; set; }
+        public int GracefulShutdownTimeoutMilliseconds { get; set; }
+        public bool SslEnabled { get; set; }
+        public bool SuppressPlaintextWarning { get; set; }
+        public System.Net.Security.SslPolicyErrors AcceptablePolicyErrors { get; set; }
+        public string? ServerName { get; set; }
+        public string? CertPath { get; set; }
+        public string? CertPassphrase { get; set; }
+        public System.Security.Cryptography.X509Certificates.X509CertificateCollection? Certs { get; set; }
+        public System.Security.Authentication.SslProtocols SslProtocol { get; set; }
+        public System.Net.Security.LocalCertificateSelectionCallback? CertificateSelectionCallback { get; set; }
+        public System.Net.Security.RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
+        public IReadOnlyDictionary<string, object> ClientSettings => _settings;
+        public void SetClientSetting(string key, object value) => _settings[key] = value;
+
+        // Convenience setter: routes the port into ClientSettings["Port"] where
+        // RabbitMqMessagingSystemAttributes reads it.
+        public int Port
+        {
+            get => _settings.TryGetValue("Port", out var v) ? Convert.ToInt32(v) : 0;
+            set => _settings["Port"] = value;
+        }
     }
 
     // ---------------- Send ----------------

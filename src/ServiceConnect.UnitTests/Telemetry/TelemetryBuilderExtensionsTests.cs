@@ -142,6 +142,11 @@ public sealed class TelemetryBuilderExtensionsTests
             reg(services);
         }
 
+        // RabbitMqMessagingSystemAttributes requires ITransportConfiguration to resolve its
+        // server.address and server.port values; register a stub so DI can satisfy the ctor.
+        services.AddSingleton<ServiceConnect.Interfaces.Configuration.ITransportConfiguration>(
+            new StubTransportConfiguration());
+
         var resolved = services.BuildServiceProvider().GetRequiredService<IMessagingSystemAttributes>();
         Assert.IsType<RabbitMqMessagingSystemAttributes>(resolved);
     }
@@ -166,5 +171,29 @@ public sealed class TelemetryBuilderExtensionsTests
     {
         public string MessagingSystem => "kafka";
         public string ProtocolName => "kafka";
+    }
+
+    private sealed class StubTransportConfiguration : ServiceConnect.Interfaces.Configuration.ITransportConfiguration
+    {
+        public string Host { get; set; } = "localhost";
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+        public string? VirtualHost { get; set; }
+        public int RetryDelay { get; set; }
+        public int MaxRetries { get; set; }
+        public ushort PrefetchCount { get; set; }
+        public int GracefulShutdownTimeoutMilliseconds { get; set; }
+        public bool SslEnabled { get; set; }
+        public bool SuppressPlaintextWarning { get; set; }
+        public System.Net.Security.SslPolicyErrors AcceptablePolicyErrors { get; set; }
+        public string? ServerName { get; set; }
+        public string? CertPath { get; set; }
+        public string? CertPassphrase { get; set; }
+        public System.Security.Cryptography.X509Certificates.X509CertificateCollection? Certs { get; set; }
+        public System.Security.Authentication.SslProtocols SslProtocol { get; set; }
+        public System.Net.Security.LocalCertificateSelectionCallback? CertificateSelectionCallback { get; set; }
+        public System.Net.Security.RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
+        public IReadOnlyDictionary<string, object> ClientSettings { get; } = new Dictionary<string, object>();
+        public void SetClientSetting(string key, object value) { }
     }
 }
