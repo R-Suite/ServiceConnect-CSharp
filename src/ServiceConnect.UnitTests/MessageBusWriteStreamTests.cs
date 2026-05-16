@@ -445,6 +445,36 @@ public class MessageBusWriteStreamTests
         // Guard with a 5-second hard deadline so a regression parks xUnit rather than hanging.
         await stream.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
     }
+
+    [Fact]
+    public async Task DisposeAsync_WhenDrainTimesOut_DoesNotLeakTimeoutException()
+    {
+        var producer = new Mock<IProducer>();
+        // SendBytesAsync never completes within the test window — simulates a stalled writer.
+        var tcs = new TaskCompletionSource();
+        producer
+            .Setup(p => p.SendBytesAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Returns(tcs.Task);
+
+        var stream = new MessageBusWriteStream(
+            producer.Object,
+            "ep",
+            typeof(byte[]),
+            TimeProvider.System,
+            TimeSpan.FromMilliseconds(100));  // short drain timeout for test
+
+        // Start a write that won't complete.
+        _ = stream.WriteAsync(new byte[] { 1 });
+
+        // Give the write a moment to register in _inFlightWrites.
+        await Task.Delay(20);
+
+        // DisposeAsync must NOT throw despite the drain timeout firing.
+        await stream.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Release the producer mock so the test ends cleanly.
+        tcs.SetResult();
+    }
 }
 
 file class FakeStreamMsg : Message

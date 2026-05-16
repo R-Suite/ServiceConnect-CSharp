@@ -304,6 +304,12 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
             // Best-effort close: the gate holder is wedged. Releasing the stream here
             // matches the pattern other transports use when the close budget elapses.
         }
+        catch (TimeoutException)
+        {
+            // CloseAsync's drain spin throws TimeoutException when in-flight writes
+            // don't drain inside _closeDrainTimeout. DisposeAsync is best-effort —
+            // surfacing this through `await using` would defeat that intent.
+        }
     }
 
     private static string FormatGuid(Guid value)
