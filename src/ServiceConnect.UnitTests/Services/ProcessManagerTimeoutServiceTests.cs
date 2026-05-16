@@ -628,6 +628,122 @@ public class ProcessManagerTimeoutServiceTests
     }
 
     [Fact]
+    public async Task PollOnce_RemoveFailsTransiently_ReturnsSentCountNotZero()
+    {
+        // When RemoveDispatchedTimeoutAsync throws on every item, PollOnceAsync must still
+        // return sentCount (the number of successful sends) so the catch-up loop in PollLoop
+        // can continue draining the backlog at full rate instead of exiting after one batch.
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts =
+            [
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "test-queue",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>()
+                }
+            ],
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("store unavailable"));
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        var result = await sut.PollOnceAsync();
+
+        // Sent one item successfully; result must reflect the send count, not zero.
+        Assert.Equal(1, result);
+        // Send was called — message was delivered.
+        _mockBus.Verify(b => b.SendAsync(
+            It.IsAny<TimeoutMessage>(), It.IsAny<SendOptions>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        // Remove was attempted.
+        _mockFinder.Verify(f => f.RemoveDispatchedTimeoutAsync(timeoutId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        // Release must NOT be called — the message was sent; this is not a send failure.
+        _mockFinder.Verify(f => f.ReleaseDispatchedTimeoutAsync(timeoutId, It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task PollOnce_RemoveFailsTransiently_LogsWarningPerItem()
+    {
+        // A warning must be emitted for each remove failure so the operator can observe
+        // store degradation without the loop silently slowing down.
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var loggerMock = new Mock<ILogger<ProcessManagerTimeoutService>>();
+        var timeoutId1 = Guid.NewGuid();
+        var timeoutId2 = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts =
+            [
+                new TimeoutData
+                {
+                    Id = timeoutId1,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "q",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>()
+                },
+                new TimeoutData
+                {
+                    Id = timeoutId2,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "q",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>()
+                }
+            ],
+        };
+
+        var store = new Mock<ITimeoutStore>();
+        store.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+             .ReturnsAsync(batch);
+        _mockBus.Setup(bus => bus.SendAsync(
+                It.IsAny<TimeoutMessage>(),
+                It.IsAny<SendOptions>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        store.Setup(f => f.RemoveDispatchedTimeoutAsync(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("store unavailable"));
+
+        var sut = new ProcessManagerTimeoutService(
+            _mockConfig.Object,
+            new Lazy<IBus>(() => _mockBus.Object),
+            store.Object,
+            loggerMock.Object);
+
+        var result = await sut.PollOnceAsync();
+
+        // Both items were sent — result is 2.
+        Assert.Equal(2, result);
+        // One warning logged per remove failure.
+        loggerMock.Verify(l => l.Log(
+            LogLevel.Warning,
+            It.IsAny<EventId>(),
+            It.IsAny<It.IsAnyType>(),
+            It.IsAny<InvalidOperationException>(),
+            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
     public async Task StopAsyncAndDisposeAsync_ConcurrentlyRaced_DoesNotDoubleDisposeCts()
     {
         // Both StopAsync and DisposeAsync take responsibility for _cts.Dispose(); both must

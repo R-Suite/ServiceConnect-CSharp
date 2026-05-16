@@ -135,12 +135,16 @@ internal sealed class ProcessManagerTimeoutService(
                 return 0;
             }
 
-            // Count only rows where SendAsync was actually attempted. Skips (margin gate
-            // and post-send lease-expiry) MUST NOT count toward the catch-up "did we
-            // dispatch a non-empty batch" signal — otherwise the catch-up loop keeps
-            // re-polling against a backlog of skip-eligible rows whose lease another
-            // worker has already re-claimed, burning DB roundtrips on a phantom queue.
-            var dispatchedCount = 0;
+            // sentCount drives the catch-up loop: it increments on every successful
+            // SendAsync regardless of whether the subsequent Remove succeeded. Decoupling
+            // it from the remove path means a transiently-failing store does not starve
+            // the catch-up loop — sends still fire at full batch rate while the row stays
+            // in the store for the next poll to re-attempt removal.
+            //
+            // Skips (margin gate and post-send lease-expiry) must NOT count — otherwise
+            // the catch-up loop keeps re-polling against a backlog of skip-eligible rows
+            // whose lease another worker has already re-claimed.
+            var sentCount = 0;
             foreach (var timeout in batch.DueTimeouts)
             {
                 try
@@ -170,6 +174,10 @@ internal sealed class ProcessManagerTimeoutService(
                         }, cancellationToken).ConfigureAwait(false);
                     }
 
+                    // Send succeeded: increment the catch-up signal before attempting Remove so
+                    // a remove failure cannot suppress it.
+                    sentCount++;
+
                     // Post-send lease check. SendAsync may have taken longer than the remaining
                     // lease; if so a peer poller may have already re-acquired and re-dispatched
                     // this row. Skip Remove and let the lease-expiry sweep reclaim the row on
@@ -189,12 +197,26 @@ internal sealed class ProcessManagerTimeoutService(
                     // Pass the captured lease owner only when one is set — the store treats null
                     // as the unconditional id-only path and a non-null Guid as lease-checked.
                     Guid? lockOwner = timeout.LockedBy != Guid.Empty ? timeout.LockedBy : null;
-                    // See learn/operations/cancellation: token propagation rule. StopAsync becomes
-                    // bounded by the lifecycle token's deadline. A cancel-during-remove leaves the
-                    // timeout "dispatched but not removed" — next poll redispatches, consistent with
-                    // the existing at-least-once timeout semantics.
-                    await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, lockOwner, cancellationToken).ConfigureAwait(false);
-                    dispatchedCount++;
+                    // A remove failure is not a send failure: the message was already delivered.
+                    // Swallow non-OCE remove errors and log a warning so the row stays in the
+                    // store for the next poll to re-attempt removal (at-least-once semantics).
+                    // Token propagation: StopAsync becomes bounded by the lifecycle token's
+                    // deadline. A cancel-during-remove leaves the timeout "dispatched but not
+                    // removed" — next poll redispatches, consistent with at-least-once semantics.
+                    try
+                    {
+                        await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, lockOwner, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception removeEx)
+                    {
+                        logger.LogWarning(removeEx,
+                            "Remove failed for timeout {TimeoutId} after successful send; row remains for next poll.",
+                            timeout.Id);
+                    }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -212,7 +234,7 @@ internal sealed class ProcessManagerTimeoutService(
                 }
             }
 
-            return dispatchedCount;
+            return sentCount;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
