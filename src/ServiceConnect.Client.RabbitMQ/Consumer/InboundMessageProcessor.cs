@@ -173,6 +173,14 @@ internal sealed class InboundMessageProcessor(
             {
                 throw;
             }
+            catch (global::RabbitMQ.Client.Exceptions.OperationInterruptedException)
+            {
+                // Non-ACE channel interruption (e.g. broker-initiated 404/406 surfacing as the
+                // base type) — propagate so the outer dispatch nacks-with-requeue. The generic
+                // catch below is for permanent topology faults (unroutable mandatory publish,
+                // serialization drift); a torn channel must not be classified as permanent.
+                throw;
+            }
             catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
             {
                 throw;
@@ -232,6 +240,14 @@ internal sealed class InboundMessageProcessor(
         {
             throw;
         }
+        catch (global::RabbitMQ.Client.Exceptions.OperationInterruptedException)
+        {
+            // Non-ACE channel interruption (e.g. broker-initiated 404/406 surfacing as the
+            // base type) — propagate so the outer dispatch nacks-with-requeue. The generic
+            // catch below is for permanent topology faults (unroutable mandatory publish,
+            // serialization drift); a torn channel must not be classified as permanent.
+            throw;
+        }
         catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
         {
             throw;
@@ -276,6 +292,14 @@ internal sealed class InboundMessageProcessor(
         {
             throw;
         }
+        catch (global::RabbitMQ.Client.Exceptions.OperationInterruptedException)
+        {
+            // Non-ACE channel interruption (e.g. broker-initiated 404/406 surfacing as the
+            // base type) — propagate so the outer dispatch nacks-with-requeue. The generic
+            // catch below is for permanent topology faults (unroutable mandatory publish,
+            // serialization drift); a torn channel must not be classified as permanent.
+            throw;
+        }
         catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
         {
             throw;
@@ -300,6 +324,13 @@ internal sealed class InboundMessageProcessor(
             }
             catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
             {
+                throw;
+            }
+            catch (global::RabbitMQ.Client.Exceptions.OperationInterruptedException)
+            {
+                // Non-ACE channel interruption — propagate so the outer dispatch
+                // nacks-with-requeue. A torn channel must not be classified as a
+                // permanent fallback failure.
                 throw;
             }
             catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)

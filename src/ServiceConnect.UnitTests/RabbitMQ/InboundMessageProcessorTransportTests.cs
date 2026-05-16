@@ -120,7 +120,7 @@ public sealed class InboundMessageProcessorTransportTests
             shutdownPublishToken: () => CancellationToken.None);
     }
 
-    // ── Task 8 — retry-publish transport discriminator ────────────────────────
+    // ── Retry-publish transport discriminator ────────────────────────────────
 
     [Fact]
     public async Task ProcessAsync_RetryPublishThrowsAlreadyClosed_RethrowsForBrokerRedelivery()
@@ -175,7 +175,7 @@ public sealed class InboundMessageProcessorTransportTests
         Assert.True(processed);
     }
 
-    // ── Task 9 — terminal-failure-publish transport discriminator ─────────────
+    // ── Terminal-failure-publish transport discriminator ──────────────────────
 
     [Fact]
     public async Task ProcessAsync_TerminalFailurePublishThrowsAlreadyClosed_RethrowsForBrokerRedelivery()
@@ -222,6 +222,50 @@ public sealed class InboundMessageProcessorTransportTests
         var processor = MakeTerminalPublishProcessor(channelMock, transportException, loggerMock);
 
         var thrown = await Assert.ThrowsAsync<BrokerUnreachableException>(() =>
+            processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None));
+
+        Assert.Same(transportException, thrown);
+    }
+
+    // ── OperationInterruptedException propagation (base type of AlreadyClosedException) ──
+
+    [Fact]
+    public async Task ProcessAsync_RetryPublishThrowsOperationInterrupted_RethrowsForBrokerRedelivery()
+    {
+        // OperationInterruptedException is the base class of AlreadyClosedException.
+        // A plain base-type throw (e.g. broker-initiated 404/406) must propagate out
+        // of ProcessAsync so the outer dispatch nacks-with-requeue; it must not be
+        // swallowed by the generic catch and silently acked.
+        var channelMock = new Mock<IChannel>();
+        var loggerMock = new Mock<ILogger>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+
+        var transportException = new OperationInterruptedException(
+            new ShutdownEventArgs(ShutdownInitiator.Library, 0, "test interruption"));
+
+        var processor = MakeRetryPublishProcessor(channelMock, transportException, loggerMock);
+
+        var thrown = await Assert.ThrowsAsync<OperationInterruptedException>(() =>
+            processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None));
+
+        Assert.Same(transportException, thrown);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_TerminalFailurePublishThrowsOperationInterrupted_RethrowsForBrokerRedelivery()
+    {
+        // Same invariant for the terminal-failure (NotHandled=true) path: a plain
+        // OperationInterruptedException must propagate, not be swallowed and acked.
+        var channelMock = new Mock<IChannel>();
+        var loggerMock = new Mock<ILogger>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+
+        var transportException = new OperationInterruptedException(
+            new ShutdownEventArgs(ShutdownInitiator.Library, 0, "test interruption"));
+
+        var processor = MakeTerminalPublishProcessor(channelMock, transportException, loggerMock);
+
+        var thrown = await Assert.ThrowsAsync<OperationInterruptedException>(() =>
             processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None));
 
         Assert.Same(transportException, thrown);
