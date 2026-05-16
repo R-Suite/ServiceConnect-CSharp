@@ -122,7 +122,10 @@ internal sealed class PipelineConfiguration : IPipelineConfiguration
         }
 
         public int Count => Inner.Count;
-        public bool IsReadOnly => false;
+        // Reflects the current freeze state: callers that probe IsReadOnly before
+        // mutating (e.g. serializers, framework utilities) get a truthful answer
+        // and avoid an unexpected InvalidOperationException on subsequent Add/Clear/etc.
+        public bool IsReadOnly => _owner._frozen;
         public void Add(T item) { ThrowIfFrozen(); Inner.Add(item); }
         public void Clear() { ThrowIfFrozen(); Inner.Clear(); }
         public bool Contains(T item) => Inner.Contains(item);
