@@ -111,6 +111,26 @@ public sealed class TelemetryBuilderExtensionsTests
     }
 
     [Fact]
+    public void AddTelemetry_OptionsAreFrozenAfterRegistration_MutationThrows()
+    {
+        var builder = new ServiceConnectBuilder();
+        builder.AddTelemetry(o => o.MaxTagValueLength = 100);
+
+        var services = new ServiceCollection();
+        foreach (var reg in builder.AdditionalRegistrations)
+        {
+            reg(services);
+        }
+
+        var options = services.BuildServiceProvider().GetRequiredService<ServiceConnectInstrumentationOptions>();
+
+        Assert.Equal(100, options.MaxTagValueLength);
+        Assert.Throws<InvalidOperationException>(() => options.MaxTagValueLength = 50);
+        Assert.Throws<InvalidOperationException>(() => options.EnablePublishTelemetry = false);
+        Assert.Throws<InvalidOperationException>(() => options.EnrichWithMessage = null);
+    }
+
+    [Fact]
     public void AddTelemetry_NoUserAttributesRegistration_DefaultsToRabbitMq()
     {
         var builder = new ServiceConnectBuilder();

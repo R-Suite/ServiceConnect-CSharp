@@ -29,6 +29,7 @@ public static class TelemetryBuilderExtensions
 
         var options = new ServiceConnectInstrumentationOptions();
         configure?.Invoke(options);
+        options.Freeze();
 
         builder.AddRegistration(services =>
         {
