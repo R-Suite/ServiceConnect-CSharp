@@ -744,6 +744,47 @@ public class ProcessManagerTimeoutServiceTests
     }
 
     [Fact]
+    public async Task PollOnce_EmptyDestinationRow_DoesNotIncrementSentCount()
+    {
+        // A row with an empty Destination has no message to send, so it must not count
+        // toward sentCount and must not drive the catch-up loop forward. The row is still
+        // removed below, but send count stays at zero.
+        _mockConfig.Setup(c => c.EnableProcessManagerTimeouts).Returns(true);
+
+        var timeoutId = Guid.NewGuid();
+        var batch = new TimeoutsBatch
+        {
+            DueTimeouts =
+            [
+                new TimeoutData
+                {
+                    Id = timeoutId,
+                    ProcessManagerId = Guid.NewGuid(),
+                    Destination = "",
+                    Time = DateTimeOffset.UtcNow.AddMinutes(-1),
+                    Headers = new Dictionary<string, object>(),
+                    Locked = false
+                }
+            ],
+        };
+
+        _mockFinder.Setup(f => f.GetTimeoutsBatchAsync(It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(batch);
+        _mockFinder.Setup(f => f.RemoveDispatchedTimeoutAsync(timeoutId, (Guid?)null, It.IsAny<CancellationToken>()))
+                   .Returns(Task.CompletedTask);
+
+        var sut = CreateSut(_mockFinder.Object);
+
+        var result = await sut.PollOnceAsync();
+
+        // No send was made for an empty-destination row.
+        Assert.Equal(0, result);
+        _mockBus.Verify(b => b.SendAsync(
+            It.IsAny<TimeoutMessage>(), It.IsAny<SendOptions>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task StopAsyncAndDisposeAsync_ConcurrentlyRaced_DoesNotDoubleDisposeCts()
     {
         // Both StopAsync and DisposeAsync take responsibility for _cts.Dispose(); both must

@@ -172,11 +172,12 @@ internal sealed class ProcessManagerTimeoutService(
                             EndPoint = timeout.Destination,
                             Headers = TimeoutHeaderPersistence.BuildOutgoingHeaders(timeout.Headers, logger)
                         }, cancellationToken).ConfigureAwait(false);
-                    }
 
-                    // Send succeeded: increment the catch-up signal before attempting Remove so
-                    // a remove failure cannot suppress it.
-                    sentCount++;
+                        // Send succeeded: increment the catch-up signal. Empty-destination rows
+                        // skip both the send and the catch-up bump — they are removed below but
+                        // do not drive the loop forward.
+                        sentCount++;
+                    }
 
                     // Post-send lease check. SendAsync may have taken longer than the remaining
                     // lease; if so a peer poller may have already re-acquired and re-dispatched
