@@ -33,12 +33,21 @@ internal static class ConnectionFactoryBuilder
             ? ConvertSettingToInt32(RabbitMQSettingKeys.Port, portVal)
             : AmqpTcpEndpoint.UseDefaultPort;
 
+        // AutomaticRecoveryEnabled restores the TCP connection after a broker restart or
+        // network partition. TopologyRecoveryEnabled is deliberately off: the application
+        // redeclares all topology on every connect via Consumer.StartConsumingAsync
+        // (exchanges, queues, bindings) and ProducerConnection.EnsureExchangeDeclaredAsync
+        // (generation-keyed declare cache). Running both paths is the dangerous middle ground:
+        // under topology drift (e.g., an operator changed queue arguments), the library's
+        // recovery channel is closed by the broker with PRECONDITION_FAILED before consumer
+        // bindings are restored, producing a silent half-recovered state. Application-level
+        // recovery is the canonical path; library-level topology recovery is off.
         var factory = new ConnectionFactory
         {
             VirtualHost = "/",
             Port = port,
             AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = true,
+            TopologyRecoveryEnabled = false,
             RequestedHeartbeat = ResolveHeartbeat(transport, logger ?? NullLogger.Instance),
         };
 
