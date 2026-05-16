@@ -70,8 +70,12 @@ public static partial class ServiceCollectionExtensions
         services.TryAddSingleton<Services.Processors.ProcessManagerHandlerRegistry>(sp => new Services.Processors.ProcessManagerHandlerRegistry(
             sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.ProcessManagerHandlerRegistry>>()));
-        services.AddSingleton<IHandlerRegistry>(sp =>
-            sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>());
+        // TryAddEnumerable with the typed factory overload (ServiceDescriptor.Singleton<TService, TImpl>(factory))
+        // creates a descriptor whose ImplementationType is ProcessManagerHandlerRegistry, not null.
+        // TryAddEnumerable deduplicates on (ServiceType, ImplementationType), so this is idempotent
+        // on repeated calls while the factory still forwards to the shared concrete singleton.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHandlerRegistry, Services.Processors.ProcessManagerHandlerRegistry>(
+            sp => sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>()));
 
         // Register the same instance under IProcessManagerTypeRegistry so persistence
         // providers that need to pre-create per-saga structures (e.g. Mongo unique
@@ -83,15 +87,15 @@ public static partial class ServiceCollectionExtensions
         services.TryAddSingleton<Services.Processors.MessageHandlerRegistry>(sp => new Services.Processors.MessageHandlerRegistry(
             sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.MessageHandlerRegistry>>()));
-        services.AddSingleton<IHandlerRegistry>(sp =>
-            sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHandlerRegistry, Services.Processors.MessageHandlerRegistry>(
+            sp => sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>()));
 
         // Stream-handler descriptor registry (eagerly built, singleton)
         services.TryAddSingleton<Services.Processors.StreamHandlerRegistry>(sp => new Services.Processors.StreamHandlerRegistry(
             sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.StreamHandlerRegistry>>()));
-        services.AddSingleton<IHandlerRegistry>(sp =>
-            sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHandlerRegistry, Services.Processors.StreamHandlerRegistry>(
+            sp => sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>()));
 
         // Aggregator descriptor registry (eagerly built, materializes each aggregator once to capture BatchSize/Timeout).
         // Resolves via IServiceScopeFactory so transient/scoped aggregator dependencies are not
@@ -101,8 +105,8 @@ public static partial class ServiceCollectionExtensions
             sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<IServiceScopeFactory>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.AggregatorRegistry>>()));
-        services.AddSingleton<IHandlerRegistry>(sp =>
-            sp.GetRequiredService<Services.Processors.AggregatorRegistry>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHandlerRegistry, Services.Processors.AggregatorRegistry>(
+            sp => sp.GetRequiredService<Services.Processors.AggregatorRegistry>()));
     }
 
     /// <remarks>

@@ -500,6 +500,68 @@ public class ServiceCollectionExtensionsTests
         Assert.Contains(nameof(TestSendMiddleware), exception.Message);
         Assert.Contains("singleton", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void AddServiceConnect_RegistersFourDistinctIHandlerRegistryInstances()
+    {
+        // GetServices<IHandlerRegistry>() must return exactly four items — one per concrete
+        // registry type — and each must be a distinct object of a different concrete type.
+        var services = CreateServices();
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
+
+        using var provider = services.BuildServiceProvider();
+        var registries = provider.GetServices<IHandlerRegistry>().ToList();
+
+        Assert.Equal(4, registries.Count);
+        Assert.Contains(registries, r => r is ProcessManagerHandlerRegistry);
+        Assert.Contains(registries, r => r is MessageHandlerRegistry);
+        Assert.Contains(registries, r => r is StreamHandlerRegistry);
+        Assert.Contains(registries, r => r is AggregatorRegistry);
+
+        // All four are distinct instances.
+        Assert.Equal(4, registries.Select(r => r.GetType()).Distinct().Count());
+    }
+
+    [Fact]
+    public void AddServiceConnect_IHandlerRegistry_ForwardsToConcreteRegistration()
+    {
+        // Each IHandlerRegistry descriptor forwards to the concrete singleton, so resolving
+        // ProcessManagerHandlerRegistry directly returns the same instance as the IHandlerRegistry
+        // entry for that type, rather than a separately constructed duplicate.
+        var services = CreateServices();
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
+
+        using var provider = services.BuildServiceProvider();
+
+        var viaConcrete = provider.GetRequiredService<ProcessManagerHandlerRegistry>();
+        var viaInterface = provider.GetServices<IHandlerRegistry>().OfType<ProcessManagerHandlerRegistry>().Single();
+        Assert.Same(viaConcrete, viaInterface);
+
+        var viaConcreteMsg = provider.GetRequiredService<MessageHandlerRegistry>();
+        var viaInterfaceMsg = provider.GetServices<IHandlerRegistry>().OfType<MessageHandlerRegistry>().Single();
+        Assert.Same(viaConcreteMsg, viaInterfaceMsg);
+    }
+
+    [Fact]
+    public void AddServiceConnect_CalledTwice_Throws()
+    {
+        // The re-entry guard must prevent a second AddServiceConnect call. Without it,
+        // the four IHandlerRegistry factory descriptors would be duplicated in the
+        // container, making GetServices<IHandlerRegistry>() return 8 entries.
+        var services = CreateServices();
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ConfigureBus(c => c.ScanForMessageHandlers = false));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => b
+                .ConfigureQueues(q => q.QueueName = "test2")
+                .ConfigureBus(c => c.ScanForMessageHandlers = false)));
+    }
 }
 
 public sealed class H5Msg : Message
