@@ -118,14 +118,15 @@ public static partial class ServiceCollectionExtensions
     /// produces two separate references and both interfaces are registered.
     /// </para>
     /// <para>
-    /// For <see cref="HandlerInterfaceKind.MessageHandler"/> references, user pre-registrations are
-    /// detected by checking <paramref name="preExistingServiceTypes"/> — a snapshot taken before the
-    /// scan loop starts. If <c>IMessageHandler&lt;T&gt;</c> appears in that snapshot, the user registered
-    /// it and the scan-discovered handler is suppressed. Descriptors added by earlier iterations of
-    /// the scan loop itself are NOT in the snapshot, so multiple scan-discovered implementations of
-    /// the same interface are all registered. <c>TryAddEnumerable</c> dedupes on
-    /// <c>(ServiceType, ImplementationType)</c> so re-adding the same pair in a later scan pass
-    /// is a safe no-op.
+    /// For all four handler kinds, user pre-registrations are detected by checking
+    /// <paramref name="preExistingServiceTypes"/> — a snapshot taken before the scan loop starts.
+    /// If the service type for a handler kind (e.g. <c>IMessageHandler&lt;T&gt;</c>,
+    /// <c>IProcessHandler&lt;TData,T&gt;</c>, <c>IStreamHandler&lt;T&gt;</c>, or <c>Aggregator&lt;T&gt;</c>)
+    /// appears in that snapshot, the user registered it and the scan-discovered handler is suppressed.
+    /// Descriptors added by earlier iterations of the scan loop itself are NOT in the snapshot, so
+    /// multiple scan-discovered implementations of the same interface are all registered.
+    /// <c>TryAddEnumerable</c> dedupes on <c>(ServiceType, ImplementationType)</c> so re-adding
+    /// the same pair in a later scan pass is a safe no-op.
     /// </para>
     /// </remarks>
     private static void RegisterHandlerType(
@@ -187,11 +188,19 @@ public static partial class ServiceCollectionExtensions
                     .FirstOrDefault(i => i.IsGenericType
                         && i.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
                         && i.GetGenericArguments()[1] == handlerRef.MessageType);
-                if (processHandlerInterface != null)
+                if (processHandlerInterface == null)
                 {
-                    services.TryAddEnumerable(ServiceDescriptor.Transient(processHandlerInterface, handlerType));
+                    break;
                 }
 
+                // User pre-registration of IProcessHandler<TData, TMsg> takes precedence over
+                // a scan-discovered handler for the same interface — same rule as MessageHandler.
+                if (preExistingServiceTypes?.Contains(processHandlerInterface) == true)
+                {
+                    return;
+                }
+
+                services.TryAddEnumerable(ServiceDescriptor.Transient(processHandlerInterface, handlerType));
                 break;
             }
 
@@ -201,11 +210,19 @@ public static partial class ServiceCollectionExtensions
                     .FirstOrDefault(i => i.IsGenericType
                         && i.GetGenericTypeDefinition() == typeof(IStreamHandler<>)
                         && i.GetGenericArguments()[0] == handlerRef.MessageType);
-                if (streamHandlerInterface != null)
+                if (streamHandlerInterface == null)
                 {
-                    services.TryAddEnumerable(ServiceDescriptor.Transient(streamHandlerInterface, handlerType));
+                    break;
                 }
 
+                // User pre-registration of IStreamHandler<T> takes precedence over
+                // a scan-discovered handler for the same interface.
+                if (preExistingServiceTypes?.Contains(streamHandlerInterface) == true)
+                {
+                    return;
+                }
+
+                services.TryAddEnumerable(ServiceDescriptor.Transient(streamHandlerInterface, handlerType));
                 break;
             }
 
@@ -214,6 +231,13 @@ public static partial class ServiceCollectionExtensions
                 if (handlerType.BaseType is { IsGenericType: true } baseType
                     && baseType.GetGenericTypeDefinition() == typeof(Aggregator<>))
                 {
+                    // User pre-registration of Aggregator<T> (the closed base type) takes
+                    // precedence over a scan-discovered subclass for the same message type.
+                    if (preExistingServiceTypes?.Contains(baseType) == true)
+                    {
+                        return;
+                    }
+
                     services.TryAddEnumerable(ServiceDescriptor.Transient(baseType, handlerType));
                 }
 

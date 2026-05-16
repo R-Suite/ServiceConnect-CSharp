@@ -391,6 +391,51 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void RegisterHandlerType_PreRegisteredProcessHandler_DoesNotAddDuplicate()
+    {
+        // User pre-registers a process handler; the scan-discovered handler for the
+        // same IProcessHandler<TData, TMsg> service type must be suppressed.
+        var services = new ServiceCollection();
+        services.AddTransient<IProcessHandler<PreRegProcessData, PreRegProcessMsg>, PreRegUserProcessHandler>();
+
+        InvokeRegisterHandlerType(services, typeof(PreRegOtherProcessHandler), typeof(PreRegProcessMsg), HandlerInterfaceKind.ProcessHandler);
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(IProcessHandler<PreRegProcessData, PreRegProcessMsg>)).ToList();
+        Assert.Single(descriptors);
+        Assert.Equal(typeof(PreRegUserProcessHandler), descriptors[0].ImplementationType);
+    }
+
+    [Fact]
+    public void RegisterHandlerType_PreRegisteredStreamHandler_DoesNotAddDuplicate()
+    {
+        // User pre-registers a stream handler; the scan-discovered handler for the
+        // same IStreamHandler<T> service type must be suppressed.
+        var services = new ServiceCollection();
+        services.AddTransient<IStreamHandler<PreRegStreamMsg>, PreRegUserStreamHandler>();
+
+        InvokeRegisterHandlerType(services, typeof(PreRegOtherStreamHandler), typeof(PreRegStreamMsg), HandlerInterfaceKind.StreamHandler);
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(IStreamHandler<PreRegStreamMsg>)).ToList();
+        Assert.Single(descriptors);
+        Assert.Equal(typeof(PreRegUserStreamHandler), descriptors[0].ImplementationType);
+    }
+
+    [Fact]
+    public void RegisterHandlerType_PreRegisteredAggregatorByKind_DoesNotAddDuplicate()
+    {
+        // User pre-registers an aggregator via the Aggregator<T> base type; the scan-discovered
+        // subclass for the same Aggregator<T> service type must be suppressed.
+        var services = new ServiceCollection();
+        services.AddTransient<Aggregator<PreRegAggMsg>, PreRegUserAggregator>();
+
+        InvokeRegisterHandlerType(services, typeof(PreRegOtherAggregator), typeof(PreRegAggMsg), HandlerInterfaceKind.Aggregator);
+
+        var descriptors = services.Where(d => d.ServiceType == typeof(Aggregator<PreRegAggMsg>)).ToList();
+        Assert.Single(descriptors);
+        Assert.Equal(typeof(PreRegUserAggregator), descriptors[0].ImplementationType);
+    }
+
+    [Fact]
     public void AddServiceConnect_ScansExplicitAssembliesEvenWhenDiscoveryDisabled()
     {
         // ScanAssemblies(...) must be honoured even when ScanForMessageHandlers=false.
@@ -751,5 +796,67 @@ public sealed class PreRegUserHandler : IMessageHandler<PreRegMsg>
 public sealed class PreRegOtherHandler : IMessageHandler<PreRegMsg>
 {
     public Task HandleAsync(PreRegMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+// --- Fixture types for process-handler pre-registration suppression tests ---
+
+public sealed class PreRegProcessMsg : Message
+{
+    public PreRegProcessMsg() : base(Guid.NewGuid()) { }
+}
+
+public sealed class PreRegProcessData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+}
+
+public sealed class PreRegUserProcessHandler : IProcessHandler<PreRegProcessData, PreRegProcessMsg>
+{
+    public Task HandleAsync(PreRegProcessMsg message, PreRegProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+public sealed class PreRegOtherProcessHandler : IProcessHandler<PreRegProcessData, PreRegProcessMsg>
+{
+    public Task HandleAsync(PreRegProcessMsg message, PreRegProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+// --- Fixture types for stream-handler pre-registration suppression tests ---
+
+public sealed class PreRegStreamMsg : Message
+{
+    public PreRegStreamMsg() : base(Guid.NewGuid()) { }
+}
+
+public sealed class PreRegUserStreamHandler : IStreamHandler<PreRegStreamMsg>
+{
+    public Task ExecuteAsync(PreRegStreamMsg message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+public sealed class PreRegOtherStreamHandler : IStreamHandler<PreRegStreamMsg>
+{
+    public Task ExecuteAsync(PreRegStreamMsg message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+// --- Fixture types for aggregator pre-registration suppression tests ---
+
+public sealed class PreRegAggMsg : Message
+{
+    public PreRegAggMsg() : base(Guid.NewGuid()) { }
+}
+
+public sealed class PreRegUserAggregator : Aggregator<PreRegAggMsg>
+{
+    public override Task ExecuteAsync(IReadOnlyList<PreRegAggMsg> messages, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+public sealed class PreRegOtherAggregator : Aggregator<PreRegAggMsg>
+{
+    public override Task ExecuteAsync(IReadOnlyList<PreRegAggMsg> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
