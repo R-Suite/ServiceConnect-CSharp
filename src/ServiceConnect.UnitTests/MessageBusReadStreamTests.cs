@@ -161,4 +161,74 @@ public class MessageBusReadStreamTests
         Assert.Throws<ArgumentOutOfRangeException>(() => stream.Write("\t"u8.ToArray(), 999));
         Assert.False(stream.IsComplete());
     }
+
+    // --- Gap-detection regression tests ---
+
+    // Forces the internal received-count counter to a given value via reflection so that
+    // IsComplete() returns true while the packet dictionary has a gap. This tests the
+    // defensive throw inside Read()/ReadSequence() that fires even when IsComplete() is
+    // satisfied — guarding against any future regression that makes IsComplete() too
+    // permissive.
+    private static void ForceReceivedCount(MessageBusReadStream stream, int count)
+    {
+        var field = typeof(MessageBusReadStream)
+            .GetField("_receivedCount", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        field.SetValue(stream, count);
+    }
+
+    [Fact]
+    public void Read_ThrowsInvalidOperationException_WhenPacketIsMissing()
+    {
+        // Arrange: stream reports IsComplete() == true (via forced count) but packet 1 is absent.
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 3 }, 2);
+        ForceReceivedCount(stream, 3); // persuade IsComplete() to return true despite the gap
+
+        // Act + Assert
+        var ex = Assert.Throws<InvalidOperationException>(stream.Read);
+        Assert.Contains("missing packet 1", ex.Message);
+    }
+
+    [Fact]
+    public void ReadSequence_ThrowsInvalidOperationException_WhenPacketIsMissing()
+    {
+        // Arrange: same gap scenario as Read test above.
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 3 }, 2);
+        ForceReceivedCount(stream, 3);
+
+        // Act + Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => stream.ReadSequence());
+        Assert.Contains("missing packet 1", ex.Message);
+    }
+
+    [Fact]
+    public void Read_HappyPath_ContiguousPackets_ReturnsAllBytes()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 0x01, 0x02 }, 0);
+        stream.Write(new byte[] { 0x03 }, 1);
+        stream.Write(new byte[] { 0x04, 0x05 }, 2);
+
+        Assert.True(stream.IsComplete());
+        Assert.Equal(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 }, stream.Read());
+    }
+
+    [Fact]
+    public void ReadSequence_HappyPath_ContiguousPackets_ReturnsAllBytes()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 0x01, 0x02 }, 0);
+        stream.Write(new byte[] { 0x03 }, 1);
+        stream.Write(new byte[] { 0x04, 0x05 }, 2);
+
+        Assert.True(stream.IsComplete());
+        Assert.Equal(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 }, stream.ReadSequence().ToArray());
+    }
 }

@@ -162,10 +162,13 @@ internal sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadS
         using var ms = new MemoryStream(totalBytes > 0 ? (int)totalBytes : 0);
         for (long i = 0; i <= lastSnapshot; i++)
         {
-            if (_packets.TryGetValue(i, out var packet))
+            if (!_packets.TryGetValue(i, out var packet))
             {
-                ms.Write(packet, 0, packet.Length);
+                throw new InvalidOperationException(
+                    $"Stream {SequenceId} is missing packet {i}; cannot assemble. " +
+                    $"This indicates packet loss or out-of-order completion signalling.");
             }
+            ms.Write(packet, 0, packet.Length);
         }
         return ms.ToArray();
     }
@@ -192,7 +195,9 @@ internal sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadS
         {
             if (!_packets.TryGetValue(i, out var packet))
             {
-                continue;
+                throw new InvalidOperationException(
+                    $"Stream {SequenceId} is missing packet {i}; cannot assemble. " +
+                    $"This indicates packet loss or out-of-order completion signalling.");
             }
 
             if (first is null)
