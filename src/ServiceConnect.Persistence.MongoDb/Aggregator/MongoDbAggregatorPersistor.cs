@@ -564,8 +564,10 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         // Only LeasedAggregatorSnapshot rows hold a server-side lease; legacy snapshot
-        // shapes (or empty snapshots) have no lease to release.
-        if (snapshot is not LeasedAggregatorSnapshot leased || snapshot.ResolvedIds.Count == 0)
+        // shapes have no lease to release. The release filter is sessionId-gated, so
+        // calling it when ResolvedIds is empty (all-unresolved batch) is a server-side
+        // no-op when nothing was claimed — but correctly releases any rows that were.
+        if (snapshot is not LeasedAggregatorSnapshot leased)
         {
             return;
         }
