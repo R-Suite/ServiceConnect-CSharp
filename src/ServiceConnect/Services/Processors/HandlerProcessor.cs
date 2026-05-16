@@ -99,6 +99,19 @@ internal sealed class HandlerProcessor(
 
                 if (handlerExceptions is not null)
                 {
+                    // If the CT is cancelled and any collected exception is OCE, surface the
+                    // OCE directly so upstream dispatch applies shutdown semantics, not retry
+                    // semantics. This handles the race where the when-filter evaluated false
+                    // at catch time but the CT was cancelled by the time the loop drained.
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        var oce = handlerExceptions.OfType<OperationCanceledException>().FirstOrDefault();
+                        if (oce is not null)
+                        {
+                            throw oce;
+                        }
+                    }
+
                     throw new AggregateException(
                         $"{handlerExceptions.Count} handler(s) threw while dispatching {message.GetType().Name}.",
                         handlerExceptions);

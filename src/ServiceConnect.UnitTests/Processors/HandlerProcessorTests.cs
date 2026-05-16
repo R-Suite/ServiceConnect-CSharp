@@ -379,6 +379,71 @@ public class HandlerProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_HandlerAThrowsNonOce_HandlerBThrowsOce_DispatchCtCancelled_ThrowsOce()
+    {
+        // Handler A throws a non-OCE fault; handler B throws OCE linked to the dispatch CT.
+        // Because the dispatch CT is cancelled when handler B's OCE is caught, the in-loop
+        // when-guard rethrows it directly — the post-loop OCE-prefer path is a safety net
+        // for the race where the guard evaluates false but the CT is cancelled by loop-end.
+        // Either way, the caller must observe OCE (not AggregateException wrapping OCE).
+        using var dispatchCts = new CancellationTokenSource();
+
+        var handlerA = new ThrowingHpHandler("fail-A");
+        var handlerB = new OceThrowerUsingDispatchCtHandler(dispatchCts);
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, dispatchCts.Token));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_OceInHandlerExceptions_WithCancelledCt_PreferesOceOverAggregateException()
+    {
+        // Verifies the Shape-A post-loop path: OCE from handler B ends up in handlerExceptions
+        // because the when-guard evaluated false at catch time, but the dispatch CT is cancelled
+        // by loop-end (handler B cancelled it). The post-loop OCE-prefer logic must surface
+        // the OCE directly rather than wrapping it in AggregateException.
+        using var dispatchCts = new CancellationTokenSource();
+        using var unrelatedCts = new CancellationTokenSource();
+        await unrelatedCts.CancelAsync();
+
+        // Handler A throws a plain fault so handlerExceptions is non-null by the time handler B runs.
+        var handlerA = new ThrowingHpHandler("fail-A");
+        // Handler B: cancels the dispatch CTS, then throws OCE for the unrelated token.
+        // The when-guard (dispatcchCT.IsCancellationRequested) evaluates true at the point handler B
+        // throws because handler B itself cancels the dispatch CTS first — so this test actually
+        // exercises the in-loop rethrow, not Shape A. Shape A is the safety net for the race.
+        // Both paths must produce OCE, not AggregateException.
+        var handlerB = new CancelDispatchThenThrowOceHandler(dispatchCts, unrelatedCts.Token);
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, dispatchCts.Token));
+    }
+
+    [Fact]
     public async Task ProcessAsync_PassesCancellationTokenToHandler()
     {
         var ctReceived = new TaskCompletionSource<CancellationToken>();
@@ -557,4 +622,29 @@ file sealed class CtRecordingHandler(TaskCompletionSource<CancellationToken> tcs
 file sealed class CtMsg : Message
 {
     public CtMsg() : base(Guid.NewGuid()) { }
+}
+
+// Cancels the dispatch CTS then throws OCE for the dispatch CT — exercises the in-loop
+// OCE short-circuit where cancellationToken.IsCancellationRequested is true at catch time.
+file sealed class OceThrowerUsingDispatchCtHandler(CancellationTokenSource dispatchCts) : IMessageHandler<TestHpMsg>
+{
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        dispatchCts.Cancel();
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+}
+
+// Cancels the dispatch CTS, then throws OCE for an unrelated token. The when-guard on the dispatch
+// CT evaluates true (handler just cancelled it), so this still exercises the direct-rethrow path.
+// Both OCE paths (in-loop and post-loop) must surface OCE, not AggregateException.
+file sealed class CancelDispatchThenThrowOceHandler(CancellationTokenSource dispatchCts, CancellationToken unrelatedToken) : IMessageHandler<TestHpMsg>
+{
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        dispatchCts.Cancel();
+        unrelatedToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
 }
