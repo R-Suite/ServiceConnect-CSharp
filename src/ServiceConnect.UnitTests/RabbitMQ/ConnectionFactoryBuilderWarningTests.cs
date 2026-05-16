@@ -6,37 +6,32 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
+/// <summary>
+/// Verifies that ConnectionFactoryBuilder.Build no longer emits the plaintext-non-loopback warning
+/// (the warning was moved to the core layer; see ServiceConnectBuilderPlaintextWarningTests).
+/// </summary>
 public class ConnectionFactoryBuilderWarningTests
 {
     [Theory]
-    [InlineData("localhost", false)]
-    [InlineData("127.0.0.1", false)]
-    [InlineData("::1", false)]
-    [InlineData("10.0.0.5", true)]
-    [InlineData("rabbit.example.com", true)]
-    public void Build_WithSslDisabled_WarnsOnlyForNonLoopbackHosts(string host, bool warningExpected)
+    [InlineData("localhost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("10.0.0.5")]
+    [InlineData("rabbit.example.com")]
+    [InlineData("rabbitmq")]
+    public void Build_WithSslDisabled_EmitsNoWarning(string host)
     {
+        // The plaintext warning moved to the core layer (ServiceConnectBuilder.WarnIfPlaintextOnNonLoopbackHost
+        // called from BusHostedService.StartAsync). The adapter no longer duplicates it.
         var transport = new TransportConfiguration { Host = host, SslEnabled = false };
         var fakeLogger = new FakeLogger<ConnectionFactoryBuilderTag>();
 
         ConnectionFactoryBuilder.Build(transport, fakeLogger);
 
-        var records = fakeLogger.Collector.GetSnapshot();
-        if (warningExpected)
-        {
-            Assert.Single(records);
-            Assert.Equal(LogLevel.Warning, records[0].Level);
-            Assert.Equal(RabbitMqClientLog.PlaintextOnNonLoopbackHostEventId, records[0].Id.Id);
-            Assert.Contains(host, records[0].Message);
-        }
-        else
-        {
-            Assert.Empty(records);
-        }
+        Assert.Empty(fakeLogger.Collector.GetSnapshot());
     }
 
     [Fact]
-    public void Build_WithSslEnabled_DoesNotWarn_RegardlessOfHost()
+    public void Build_WithSslEnabled_EmitsNoWarning()
     {
         var transport = new TransportConfiguration
         {
@@ -51,21 +46,6 @@ public class ConnectionFactoryBuilderWarningTests
         Assert.Empty(fakeLogger.Collector.GetSnapshot());
     }
 
-    [Fact]
-    public void Build_WithMixedClusterHostList_WarnsOnFirstNonLoopbackEntry()
-    {
-        var transport = new TransportConfiguration { Host = "localhost,rabbit-2", SslEnabled = false };
-        var fakeLogger = new FakeLogger<ConnectionFactoryBuilderTag>();
-
-        ConnectionFactoryBuilder.Build(transport, fakeLogger);
-
-        var records = fakeLogger.Collector.GetSnapshot();
-        Assert.Single(records);
-        Assert.Equal(LogLevel.Warning, records[0].Level);
-        Assert.Contains("rabbit-2", records[0].Message);
-    }
-
-    /// <summary>Placeholder type so FakeLogger has a category — the actual ILogger
-    /// passed to ConnectionFactoryBuilder.Build is generic ILogger.</summary>
+    /// <summary>Placeholder type so FakeLogger has a category.</summary>
     public sealed class ConnectionFactoryBuilderTag { }
 }

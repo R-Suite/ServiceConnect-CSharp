@@ -11,12 +11,19 @@ public class BusHostedServiceTests
 {
     private readonly Mock<IBus> _mockBus = new();
     private readonly Mock<IBusConfiguration> _mockConfig = new();
+    private readonly Mock<ITransportConfiguration> _mockTransport = new();
     private readonly Mock<ILogger<BusHostedService>> _mockLogger = new();
 
     private ILogger<BusHostedService> Logger => _mockLogger.Object;
 
-    private BusHostedService CreateSut() =>
-        new(_mockBus.Object, _mockConfig.Object, Logger);
+    private BusHostedService CreateSut()
+    {
+        // Default transport: TLS on against loopback so no plaintext warning fires in these tests.
+        _mockTransport.SetupGet(t => t.SslEnabled).Returns(true);
+        _mockTransport.SetupGet(t => t.Host).Returns("localhost");
+        _mockTransport.SetupGet(t => t.SuppressPlaintextWarning).Returns(false);
+        return new(_mockBus.Object, _mockConfig.Object, _mockTransport.Object, Logger);
+    }
 
     [Fact]
     public async Task StartAsync_ValidateReplyDestinationsDisabled_LogsWarning()

@@ -20,19 +20,13 @@ internal static class ConnectionFactoryBuilder
     private static readonly TimeSpan DefaultHeartbeat = TimeSpan.FromSeconds(120);
 
     /// <summary>
-    /// Builds a <see cref="ConnectionFactory"/> from the transport configuration. When
-    /// <paramref name="logger"/> is supplied and <see cref="ITransportConfiguration.SslEnabled"/>
-    /// is <see langword="false"/> against a non-loopback host, emits a warning to surface the
-    /// likely-misconfiguration in production.
+    /// Builds a <see cref="ConnectionFactory"/> from the transport configuration.
     /// </summary>
     /// <param name="transport">Transport settings including SSL, credentials, and hosts.</param>
-    /// <param name="logger">Optional logger for the plaintext-non-loopback warning. When
-    /// <see langword="null"/>, no warning is emitted.</param>
+    /// <param name="logger">Optional logger for adapter-level diagnostics.</param>
     public static ConnectionFactory Build(ITransportConfiguration transport, ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
-
-        WarnIfPlaintextOnNonLoopbackHost(transport, logger ?? NullLogger.Instance);
 
         var explicitPortConfigured = transport.ClientSettings.TryGetValue(RabbitMQSettingKeys.Port, out var portVal);
         var port = explicitPortConfigured
@@ -133,33 +127,5 @@ internal static class ConnectionFactoryBuilder
         }
 
         return DefaultHeartbeat;
-    }
-
-    private static void WarnIfPlaintextOnNonLoopbackHost(ITransportConfiguration transport, ILogger logger)
-    {
-        if (transport.SslEnabled || string.IsNullOrEmpty(transport.Host))
-        {
-            return;
-        }
-
-        foreach (var entry in transport.Host.Split(','))
-        {
-            var trimmed = entry.Trim();
-            if (trimmed.Length == 0 || IsLoopback(trimmed))
-            {
-                continue;
-            }
-            RabbitMqClientLog.PlaintextOnNonLoopbackHost(logger, trimmed);
-            return; // one warning per Build call regardless of how many non-loopback entries
-        }
-    }
-
-    private static bool IsLoopback(string host)
-    {
-        if (IPAddress.TryParse(host, out var addr))
-        {
-            return IPAddress.IsLoopback(addr);
-        }
-        return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 }

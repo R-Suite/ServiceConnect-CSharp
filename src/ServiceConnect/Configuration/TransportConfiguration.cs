@@ -29,6 +29,7 @@ internal sealed class TransportConfiguration : ITransportConfiguration
     private ushort _prefetchCount = DefaultPrefetchCount;
     private int _gracefulShutdownTimeoutMilliseconds = DefaultGracefulShutdownTimeoutMilliseconds;
     private bool _sslEnabled = true;
+    private bool _suppressPlaintextWarning;
     private SslPolicyErrors _acceptablePolicyErrors = SslPolicyErrors.None;
     private string? _serverName;
     private string? _certPath;
@@ -114,6 +115,8 @@ internal sealed class TransportConfiguration : ITransportConfiguration
     public int GracefulShutdownTimeoutMilliseconds { get => _gracefulShutdownTimeoutMilliseconds; set { ThrowIfFrozen(); _gracefulShutdownTimeoutMilliseconds = value; } }
     /// <inheritdoc />
     public bool SslEnabled { get => _sslEnabled; set { ThrowIfFrozen(); _sslEnabled = value; } }
+    /// <inheritdoc />
+    public bool SuppressPlaintextWarning { get => _suppressPlaintextWarning; set { ThrowIfFrozen(); _suppressPlaintextWarning = value; } }
     /// <summary>
     /// Gets or sets the SSL policy errors that are acceptable.
     /// WARNING: Setting any value other than <see cref="SslPolicyErrors.None"/> weakens TLS security

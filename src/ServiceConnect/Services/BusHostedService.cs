@@ -11,6 +11,7 @@ namespace ServiceConnect.Services;
 internal sealed class BusHostedService(
     IBus bus,
     IBusConfiguration config,
+    ITransportConfiguration transport,
     ILogger<BusHostedService> logger,
     IReadOnlyList<HandlerScanWarning>? scanWarnings = null) : IHostedService
 {
@@ -34,6 +35,12 @@ internal sealed class BusHostedService(
                     warning.AssemblyName, warning.ExceptionType, warning.Detail);
             }
         }
+
+        // Adapter-independent plaintext check: warn when TLS is off against a non-loopback
+        // host so the safeguard survives adapter swaps. Docker Compose service names (e.g.
+        // "rabbitmq") that resolve to an internal network address but aren't loopback will
+        // fire here; set SuppressPlaintextWarning=true to silence intentional plaintext.
+        ServiceConnectBuilder.WarnIfPlaintextOnNonLoopbackHost(transport, logger);
 
         if (!config.ValidateReplyDestinations)
         {

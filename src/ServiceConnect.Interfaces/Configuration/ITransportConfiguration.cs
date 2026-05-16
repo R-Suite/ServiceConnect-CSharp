@@ -52,9 +52,18 @@ public interface ITransportConfiguration
     /// <remarks>
     /// To connect to a plaintext broker (e.g. a local RabbitMQ in Docker without TLS configured),
     /// set this to <see langword="false"/>; the framework logs a <c>Warning</c> when TLS is
-    /// disabled against a non-loopback host.
+    /// disabled against a non-loopback host unless <see cref="SuppressPlaintextWarning"/> is
+    /// set to <see langword="true"/>.
     /// </remarks>
     bool SslEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the plaintext-against-non-loopback-host warning
+    /// is suppressed. Set to <see langword="true"/> in environments where plaintext is intentional
+    /// (e.g. Docker Compose service names such as <c>"rabbitmq"</c> that resolve to an internal
+    /// network address but are not loopback). Defaults to <see langword="false"/>.
+    /// </summary>
+    bool SuppressPlaintextWarning { get; set; }
 
     /// <summary>
     /// Gets or sets the TLS policy errors that are tolerated during remote certificate validation.

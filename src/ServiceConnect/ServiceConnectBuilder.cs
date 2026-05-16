@@ -1,4 +1,6 @@
+using System.Net;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
@@ -92,6 +94,55 @@ public sealed class ServiceConnectBuilder
         {
             throw new InvalidOperationException($"TransportConfiguration.GracefulShutdownTimeoutMilliseconds must be non-negative (got {transport.GracefulShutdownTimeoutMilliseconds}).");
         }
+    }
+
+    /// <summary>
+    /// Emits a warning via <paramref name="logger"/> when TLS is disabled against a
+    /// non-loopback host and <see cref="ITransportConfiguration.SuppressPlaintextWarning"/>
+    /// is not set. Called at host startup so the configured <c>ILogger</c> is available.
+    /// </summary>
+    /// <remarks>
+    /// Loopback recognition covers: <c>"localhost"</c> (case-insensitive), IPv4 loopback
+    /// (127.x.x.x — via <see cref="IPAddress.IsLoopback"/>), IPv6 loopback (<c>::1</c>),
+    /// and the bracket form <c>[::1]</c> used in some URI host strings.
+    /// One warning per call regardless of how many non-loopback entries a cluster host list contains.
+    /// </remarks>
+    internal static void WarnIfPlaintextOnNonLoopbackHost(ITransportConfiguration transport, ILogger logger)
+    {
+        if (transport.SslEnabled || transport.SuppressPlaintextWarning || string.IsNullOrEmpty(transport.Host))
+        {
+            return;
+        }
+
+        foreach (var entry in transport.Host.Split(','))
+        {
+            var trimmed = entry.Trim();
+            if (trimmed.Length == 0 || IsLoopbackHost(trimmed))
+            {
+                continue;
+            }
+            ServiceConnectLog.PlaintextOnNonLoopbackHost(logger, trimmed);
+            return; // one warning per call regardless of how many non-loopback entries
+        }
+    }
+
+    // Recognises the standard loopback forms a transport host might carry:
+    //   - "localhost" (DNS name, case-insensitive)
+    //   - IPv4 loopback 127.x.x.x (covered by IPAddress.IsLoopback)
+    //   - IPv6 loopback ::1 (covered by IPAddress.IsLoopback)
+    //   - Bracket-wrapped IPv6 [::1] used in URI host components — strip brackets before parse
+    private static bool IsLoopbackHost(string host)
+    {
+        // Strip bracket wrapping before IP parse so "[::1]" resolves correctly.
+        var candidate = host.Length >= 2 && host[0] == '[' && host[^1] == ']'
+            ? host[1..^1]
+            : host;
+
+        if (IPAddress.TryParse(candidate, out var addr))
+        {
+            return IPAddress.IsLoopback(addr);
+        }
+        return string.Equals(candidate, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

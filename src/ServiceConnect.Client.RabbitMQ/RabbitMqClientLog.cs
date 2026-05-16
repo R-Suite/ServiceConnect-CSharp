@@ -7,24 +7,12 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// </summary>
 internal static partial class RabbitMqClientLog
 {
-    /// <summary>
-    /// Stable event id for the plaintext-on-non-loopback warning emitted at connection setup.
-    /// </summary>
-    public const int PlaintextOnNonLoopbackHostEventId = 1;
-
     public const int ConnectionOpenedEventId = 2;
     public const int ProducerConnectionOpenedEventId = 3;
     public const int ConnectionRecoveredEventId = 4;
     public const int ConnectionLostEventId = 5;
     public const int AckFailedEventId = 6;
     public const int NackFailedEventId = 7;
-
-    [LoggerMessage(
-        EventId = PlaintextOnNonLoopbackHostEventId,
-        EventName = "PlaintextOnNonLoopbackHost",
-        Level = LogLevel.Warning,
-        Message = "ServiceConnect transport is configured for plaintext (SslEnabled=false) against a non-loopback host '{Host}'. Production deployments should use TLS; set SslEnabled=true (the v8 default) and configure certificates. To suppress this warning in environments where plaintext is intentional, raise the ServiceConnect.Client.RabbitMQ category to Error.")]
-    public static partial void PlaintextOnNonLoopbackHost(ILogger logger, string host);
 
     [LoggerMessage(
         EventId = ConnectionOpenedEventId,
