@@ -6,7 +6,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// <summary>
 /// Builds RabbitMQ SSL options from ServiceConnect transport configuration.
 /// </summary>
-public static class SslConfigurationBuilder
+internal static class SslConfigurationBuilder
 {
     /// <summary>
     /// Creates an <see cref="SslOption"/> instance for RabbitMQ connections.
