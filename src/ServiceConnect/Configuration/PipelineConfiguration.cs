@@ -49,12 +49,12 @@ internal sealed class PipelineConfiguration : IPipelineConfiguration
         _messageProcessingMiddleware = new GuardedList<Type>(this, nameof(MessageProcessingMiddleware));
         _sendMessageMiddleware = new GuardedList<Type>(this, nameof(SendMessageMiddleware));
 
-        _beforeConsumingFiltersView = _beforeConsumingFilters.Inner.AsReadOnly();
-        _afterConsumingFiltersView = _afterConsumingFilters.Inner.AsReadOnly();
-        _onConsumedSuccessfullyFiltersView = _onConsumedSuccessfullyFilters.Inner.AsReadOnly();
-        _outgoingFiltersView = _outgoingFilters.Inner.AsReadOnly();
-        _messageProcessingMiddlewareView = _messageProcessingMiddleware.Inner.AsReadOnly();
-        _sendMessageMiddlewareView = _sendMessageMiddleware.Inner.AsReadOnly();
+        _beforeConsumingFiltersView = _beforeConsumingFilters.AsReadOnly();
+        _afterConsumingFiltersView = _afterConsumingFilters.AsReadOnly();
+        _onConsumedSuccessfullyFiltersView = _onConsumedSuccessfullyFilters.AsReadOnly();
+        _outgoingFiltersView = _outgoingFilters.AsReadOnly();
+        _messageProcessingMiddlewareView = _messageProcessingMiddleware.AsReadOnly();
+        _sendMessageMiddlewareView = _sendMessageMiddleware.AsReadOnly();
     }
 
     /// <summary>
@@ -101,9 +101,13 @@ internal sealed class PipelineConfiguration : IPipelineConfiguration
     // the freeze check because they're safe at any time.
     private sealed class GuardedList<T>(PipelineConfiguration owner, string listName) : IList<T>
     {
-        internal readonly List<T> Inner = [];
+        private readonly List<T> _inner = [];
         private readonly PipelineConfiguration _owner = owner;
         private readonly string _listName = listName;
+
+        // Returns a live read-only wrapper over the underlying list; the wrapper
+        // reflects subsequent additions made during the configuration callback.
+        internal ReadOnlyCollection<T> AsReadOnly() => _inner.AsReadOnly();
 
         private void ThrowIfFrozen()
         {
@@ -117,24 +121,24 @@ internal sealed class PipelineConfiguration : IPipelineConfiguration
 
         public T this[int index]
         {
-            get => Inner[index];
-            set { ThrowIfFrozen(); Inner[index] = value; }
+            get => _inner[index];
+            set { ThrowIfFrozen(); _inner[index] = value; }
         }
 
-        public int Count => Inner.Count;
+        public int Count => _inner.Count;
         // Reflects the current freeze state: callers that probe IsReadOnly before
         // mutating (e.g. serializers, framework utilities) get a truthful answer
         // and avoid an unexpected InvalidOperationException on subsequent Add/Clear/etc.
         public bool IsReadOnly => _owner._frozen;
-        public void Add(T item) { ThrowIfFrozen(); Inner.Add(item); }
-        public void Clear() { ThrowIfFrozen(); Inner.Clear(); }
-        public bool Contains(T item) => Inner.Contains(item);
-        public void CopyTo(T[] array, int arrayIndex) => Inner.CopyTo(array, arrayIndex);
-        public IEnumerator<T> GetEnumerator() => Inner.GetEnumerator();
-        public int IndexOf(T item) => Inner.IndexOf(item);
-        public void Insert(int index, T item) { ThrowIfFrozen(); Inner.Insert(index, item); }
-        public bool Remove(T item) { ThrowIfFrozen(); return Inner.Remove(item); }
-        public void RemoveAt(int index) { ThrowIfFrozen(); Inner.RemoveAt(index); }
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => Inner.GetEnumerator();
+        public void Add(T item) { ThrowIfFrozen(); _inner.Add(item); }
+        public void Clear() { ThrowIfFrozen(); _inner.Clear(); }
+        public bool Contains(T item) => _inner.Contains(item);
+        public void CopyTo(T[] array, int arrayIndex) => _inner.CopyTo(array, arrayIndex);
+        public IEnumerator<T> GetEnumerator() => _inner.GetEnumerator();
+        public int IndexOf(T item) => _inner.IndexOf(item);
+        public void Insert(int index, T item) { ThrowIfFrozen(); _inner.Insert(index, item); }
+        public bool Remove(T item) { ThrowIfFrozen(); return _inner.Remove(item); }
+        public void RemoveAt(int index) { ThrowIfFrozen(); _inner.RemoveAt(index); }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => _inner.GetEnumerator();
     }
 }
