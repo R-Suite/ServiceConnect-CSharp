@@ -297,7 +297,10 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
             var claimUpdate = new PipelineUpdateDefinition<AggregatorDocument>(
                 new BsonDocumentStagePipelineDefinition<AggregatorDocument, AggregatorDocument>([setStage]));
 
-            var leaseClaimed = false;
+            // Set before the await: if the UpdateMany commits server-side but the awaiter resumes
+            // into a cancellation, the catch path must still attempt release. The release filter
+            // is sessionId-gated so a release of an uncommitted claim is a server-side no-op.
+            var leaseClaimed = true;
             List<AggregatorDocument> docs;
             try
             {
@@ -309,7 +312,6 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 {
                     await _collection.UpdateManyAsync(claimFilter, claimUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
-                leaseClaimed = true;
 
                 // Read back exactly the rows this session just claimed. The LockExpiresAt > $$NOW
                 // guard (still server-anchored) rejects rows whose lease expired between the
